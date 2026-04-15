@@ -38,6 +38,6 @@ jobs:
           git add .
           git commit -m "deploy: $(date +'%Y-%m-%d %H:%M')"
           git push --force \
-            https://mayukhworks1:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/mayukhworks1/fintrack-api \
+            https://Mayukhj24:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Mayukhj24/fintrack-api \
             HEAD:main
-          echo "✅ Deployed to https://mayukhworks1-fintrack-api.hf.space"
+          echo "✅ Deployed to https://mayukhj24-fintrack-api.hf.space"
