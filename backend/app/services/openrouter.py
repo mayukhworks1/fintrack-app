@@ -5,10 +5,19 @@ from ..config import settings
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-SYSTEM_PROMPT = """You are FinTrackAI, an expert financial project management assistant.
-You help analyze project data from the Fintrack table which tracks client projects.
+# Try primary model first, fall back to confirmed working models
+FALLBACK_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",   # user's preferred
+    "nvidia/llama-3.3-nemotron-super-49b-v1:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
+]
 
-The Fintrack table fields:
+SYSTEM_PROMPT = """You are FinTrackAI, an expert financial project management assistant for a company that tracks client projects.
+
+You have LIVE access to the full Fintrack project database. When answering questions, always reference the actual data provided.
+
+The table tracks:
 - Client: Birla Open Minds, Maitrimetal, BG
 - Project Name: ZOHO, Pms, Innovine
 - Project Start Date, Duration (Months), Resource Count
@@ -16,24 +25,139 @@ The Fintrack table fields:
 - Amount Billed So far, Actual Profit, Profit percentage
 - Target Revenue, Input cost so far, Total Overhead Cost
 - Project Status: 🟢 Active, ✅ Completed, ⏸️ On Hold, 🔴 Cancelled
-- Health (computed), Target Achieved, Revenue per Resource
-- Resource contribution percentage
+- Health (🟢 Excellent/🟡 On Track/🔴 Critical), Target Achieved (Yes/No)
+- Revenue per Resource, Resource contribution percentage
 
 Rules:
 - Always format currency in Indian Rupees (₹)
-- Use lakhs/crores for large numbers (e.g. ₹2.5L, ₹1.2Cr)
-- Be concise, specific, and data-driven
-- When asked for comparisons, structure the response clearly
-- For risk analysis, be direct about which projects are underperforming"""
+- Use lakhs/crores for large numbers (e.g. ₹2.5L = ₹2,50,000; ₹1.2Cr = ₹1,20,00,000)
+- Be concise, specific, and always cite actual numbers from the data
+- When asked for comparisons, structure the response clearly with a ranking
+- For risk analysis, be direct about which projects are underperforming and why
+- If you don't find relevant data, say so clearly"""
 
 
 def _make_headers():
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://fintrack-app.vercel.app",
+        "HTTP-Referer": "https://fintrack-app-beta.vercel.app",
         "X-Title": "FinTrack AI",
     }
+
+
+def _format_records_context(records: list[dict]) -> str:
+    """Format all project records as structured context for the AI."""
+    if not records:
+        return "No project records found."
+
+    lines = ["=== LIVE PROJECT DATA ===\n"]
+    currency_fields = {
+        'Amount Billed So far', 'Actual Profit', 'Target Revenue',
+        'Input cost so far', 'Total Overhead Cost',
+        'Combined monthly salary of all the resources', 'Revenue per Resource',
+    }
+
+    for i, rec in enumerate(records, 1):
+        f = rec.get("fields", {})
+        lines.append(f"[Project {i}] {f.get('Client', '?')} / {f.get('Project Name', '?')}")
+        lines.append(f"  Status: {f.get('Project Status', 'N/A')}")
+        lines.append(f"  Health: {f.get('Health', 'N/A')}")
+        lines.append(f"  Duration: {f.get('Duration (Months)', 'N/A')} months")
+        lines.append(f"  Resources: {f.get('Resource Count', 'N/A')}")
+        lines.append(f"  Target Achieved: {f.get('Target Achieved', 'N/A')}")
+
+        for field in ['Amount Billed So far', 'Target Revenue', 'Actual Profit',
+                      'Input cost so far', 'Total Overhead Cost',
+                      'Combined monthly salary of all the resources']:
+            val = f.get(field)
+            if val is not None:
+                try:
+                    lines.append(f"  {field}: ₹{float(val):,.0f}")
+                except (ValueError, TypeError):
+                    lines.append(f"  {field}: {val}")
+
+        pct = f.get('Profit percentage')
+        if pct is not None:
+            lines.append(f"  Profit %: {float(pct):.2f}%")
+
+        contrib = f.get('Resource contribution percentage')
+        if contrib is not None:
+            lines.append(f"  Resource Contribution: {contrib}%")
+
+        lines.append("")  # blank line between projects
+
+    return "\n".join(lines)
+
+
+async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: float = 0.65) -> str:
+    """Try each model in FALLBACK_MODELS until one succeeds."""
+    primary = settings.openrouter_model
+    models_to_try = [primary] if primary not in FALLBACK_MODELS else []
+    models_to_try += [m for m in FALLBACK_MODELS if m != primary or not models_to_try]
+    # Deduplicate preserving order
+    seen = set()
+    ordered = []
+    for m in [primary] + FALLBACK_MODELS:
+        if m not in seen:
+            seen.add(m)
+            ordered.append(m)
+
+    last_error = None
+    async with httpx.AsyncClient() as http:
+        for model in ordered:
+            try:
+                r = await http.post(
+                    OPENROUTER_API_URL,
+                    headers=_make_headers(),
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 402:
+                    raise ValueError("OpenRouter quota exceeded — check your free tier limits at openrouter.ai")
+                if r.status_code == 401:
+                    raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
+                if r.status_code == 404:
+                    last_error = f"Model '{model}' not found on OpenRouter"
+                    continue
+                if r.status_code >= 400:
+                    data = r.json()
+                    err_msg = data.get("error", {}).get("message", r.text) if isinstance(data.get("error"), dict) else str(data.get("error", r.text))
+                    # If model-specific error, try next
+                    if r.status_code in (400, 404, 422) or "model" in err_msg.lower():
+                        last_error = f"Model '{model}' error: {err_msg}"
+                        continue
+                    raise ValueError(f"OpenRouter error ({r.status_code}): {err_msg}")
+
+                data = r.json()
+                if "error" in data:
+                    err = data["error"]
+                    err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    if "model" in err_msg.lower() or "not found" in err_msg.lower():
+                        last_error = f"Model '{model}' error: {err_msg}"
+                        continue
+                    raise ValueError(f"OpenRouter error: {err_msg}")
+
+                content = data["choices"][0]["message"]["content"]
+                if content and len(content.strip()) > 0:
+                    return content
+                last_error = f"Model '{model}' returned empty response"
+
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_error = f"Connection error with model '{model}': {str(e)}"
+                continue
+            except ValueError:
+                raise
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+    raise ValueError(f"All models failed. Last error: {last_error}")
 
 
 async def chat_with_ai(message: str, history: list[dict], context: str = "") -> str:
@@ -42,32 +166,12 @@ async def chat_with_ai(message: str, history: list[dict], context: str = "") -> 
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if context:
-        messages.append({"role": "system", "content": f"Live project data:\n{context}"})
+        messages.append({"role": "system", "content": context})
     for h in history[-12:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
-    async with httpx.AsyncClient() as http:
-        r = await http.post(
-            OPENROUTER_API_URL,
-            headers=_make_headers(),
-            json={
-                "model": settings.openrouter_model,
-                "messages": messages,
-                "max_tokens": 1024,
-                "temperature": 0.65,
-            },
-            timeout=60,
-        )
-        if r.status_code == 402:
-            raise ValueError("OpenRouter quota exceeded — check your free tier limits at openrouter.ai")
-        if r.status_code == 401:
-            raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
-        r.raise_for_status()
-        data = r.json()
-        if "error" in data:
-            raise ValueError(f"OpenRouter error: {data['error'].get('message', str(data['error']))}")
-        return data["choices"][0]["message"]["content"]
+    return await _try_chat(messages, max_tokens=1024, temperature=0.65)
 
 
 async def autofill_project(description: str) -> dict:
@@ -89,40 +193,29 @@ Return ONLY a valid JSON object (no explanation, no markdown):
   "resource_contribution_pct": number_0_to_100_or_null
 }}"""
 
-    async with httpx.AsyncClient() as http:
-        r = await http.post(
-            OPENROUTER_API_URL,
-            headers=_make_headers(),
-            json={
-                "model": settings.openrouter_model,
-                "messages": [
-                    {"role": "system", "content": "You are a JSON extraction assistant. Return only valid JSON with no markdown code blocks."},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": 512,
-                "temperature": 0.05,
-            },
-            timeout=45,
-        )
-        r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"].strip()
-        # Strip markdown code blocks if model added them
-        content = re.sub(r'^```(?:json)?\s*', '', content)
-        content = re.sub(r'\s*```$', '', content)
-        match = re.search(r'\{.*\}', content, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                pass
-        return {}
+    messages = [
+        {"role": "system", "content": "You are a JSON extraction assistant. Return only valid JSON with no markdown code blocks."},
+        {"role": "user", "content": prompt},
+    ]
+
+    content = await _try_chat(messages, max_tokens=512, temperature=0.05)
+    content = content.strip()
+    # Strip markdown code blocks if model added them
+    content = re.sub(r'^```(?:json)?\s*', '', content)
+    content = re.sub(r'\s*```$', '', content)
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return {}
 
 
 async def analyze_project(project_fields: dict) -> str:
     if not settings.openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY is not configured.")
 
-    # Format fields nicely
     lines = []
     currency_fields = {
         'Amount Billed So far', 'Actual Profit', 'Target Revenue',
@@ -133,7 +226,10 @@ async def analyze_project(project_fields: dict) -> str:
         if v is None:
             continue
         if k in currency_fields:
-            lines.append(f"  {k}: ₹{float(v):,.0f}")
+            try:
+                lines.append(f"  {k}: ₹{float(v):,.0f}")
+            except (ValueError, TypeError):
+                lines.append(f"  {k}: {v}")
         else:
             lines.append(f"  {k}: {v}")
 
@@ -148,7 +244,11 @@ Structure your response as:
 4. **Recommendations** (2-3 actionable items)
 5. **Target Status** (on/off track and why)"""
 
-    return await chat_with_ai(prompt, [])
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+    return await _try_chat(messages, max_tokens=1024, temperature=0.65)
 
 
 async def generate_report(summary: dict, records: list[dict]) -> str:
@@ -191,4 +291,8 @@ Write with these sections:
 
 Use bullet points, be specific with numbers, and keep it executive-level."""
 
-    return await chat_with_ai(prompt, [])
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+    return await _try_chat(messages, max_tokens=2048, temperature=0.65)

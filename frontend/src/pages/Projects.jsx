@@ -12,19 +12,26 @@ const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
 function SkeletonCard() {
   return (
     <div className="card space-y-3 animate-pulse" aria-hidden="true">
-      <div className="h-5 bg-surface-700 rounded w-3/4" />
-      <div className="h-4 bg-surface-700 rounded w-1/2" />
-      <div className="h-3 bg-surface-700 rounded w-full" />
-      <div className="h-3 bg-surface-700 rounded w-2/3" />
+      <div className="h-5 rounded w-3/4" style={{ background: 'var(--bg-input)' }} />
+      <div className="h-4 rounded w-1/2" style={{ background: 'var(--bg-input)' }} />
+      <div className="h-3 rounded w-full" style={{ background: 'var(--bg-input)' }} />
+      <div className="h-3 rounded w-2/3" style={{ background: 'var(--bg-input)' }} />
     </div>
+  )
+}
+
+function SyncDot({ syncing }) {
+  return (
+    <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing ? 'animate-pulse' : '')}
+      style={{ background: syncing ? '#facc15' : '#4ade80' }} aria-hidden="true" />
   )
 }
 
 export default function Projects() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate  = useNavigate()
-  const [search, setSearch]       = useState('')
-  const [searching, setSearching] = useState(false)
+  const [search, setSearch]             = useState('')
+  const [searching, setSearching]       = useState(false)
   const [searchResults, setSearchResults] = useState(null)
   const searchTimer = useRef(null)
 
@@ -73,20 +80,17 @@ export default function Projects() {
 
   return (
     <div className="p-6 space-y-5 animate-fade-in">
+
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Projects</h1>
-          <p className="text-gray-500 text-sm mt-0.5 flex items-center gap-2">
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-1)' }}>Projects</h1>
+          <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
             {displayed.length} project{displayed.length !== 1 ? 's' : ''}
-          {lastUpdated && (
-              <span className="text-gray-600 flex items-center gap-1.5">
-                ·
-                <span className={clsx(
-                  'w-1.5 h-1.5 rounded-full inline-block transition-colors',
-                  syncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'
-                )} aria-hidden="true" />
-                <span className={syncing ? 'text-yellow-500' : 'text-gray-600'}>
+            {lastUpdated && (
+              <span className="flex items-center gap-1.5">
+                · <SyncDot syncing={syncing} />
+                <span style={{ color: syncing ? '#facc15' : 'var(--text-3)' }}>
                   {syncing ? 'syncing…' : `live · ${updatedLabel}`}
                 </span>
               </span>
@@ -94,38 +98,54 @@ export default function Projects() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
+          <button onClick={refresh} disabled={loading} aria-label="Refresh"
+            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
+            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
             <RefreshCw size={16} className={clsx(loading && 'animate-spin')} />
           </button>
-          <button onClick={() => navigate('/projects/new')} className="btn-primary flex items-center gap-2">
-            <Plus size={16} aria-hidden="true" /> New Project
+          <button onClick={() => navigate('/projects/new')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
+            <Plus size={15} aria-hidden="true" /> New Project
           </button>
         </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
           <AlertCircle size={16} />
-          {error} — <button onClick={refresh} className="underline hover:no-underline">retry</button>
+          {error} — <button onClick={refresh} className="underline hover:no-underline ml-1">retry</button>
         </div>
       )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2.5" role="search" aria-label="Filter projects">
-        {/* Search */}
+        {/* Search input */}
         <div className="relative flex-1 min-w-48">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" aria-hidden="true" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'var(--text-3)' }} aria-hidden="true" />
           <input
-            className="input pl-9 pr-8 text-sm"
-            placeholder="Search projects..."
+            className="w-full rounded-xl pl-9 pr-8 py-2.5 text-sm outline-none transition-all"
+            style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-1)',
+            }}
+            placeholder="Search projects…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search projects"
           />
-          {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 animate-spin" aria-hidden="true" />}
+          {searching && (
+            <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin"
+              style={{ color: 'var(--text-3)' }} aria-hidden="true" />
+          )}
           {search && !searching && (
-            <button onClick={clearSearch} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+            <button onClick={clearSearch} aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+              style={{ color: 'var(--text-3)' }}>
               <X size={13} />
             </button>
           )}
@@ -133,7 +153,8 @@ export default function Projects() {
 
         {/* Status filter */}
         <select
-          className="input w-auto text-sm min-w-32"
+          className="rounded-xl px-3 py-2.5 text-sm outline-none min-w-32"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
           value={status}
           onChange={(e) => setFilter('status', e.target.value)}
           aria-label="Filter by status"
@@ -144,7 +165,8 @@ export default function Projects() {
 
         {/* Client filter */}
         <select
-          className="input w-auto text-sm min-w-36"
+          className="rounded-xl px-3 py-2.5 text-sm outline-none min-w-36"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
           value={client}
           onChange={(e) => setFilter('client', e.target.value)}
           aria-label="Filter by client"
@@ -157,7 +179,8 @@ export default function Projects() {
         {(status || client) && (
           <button
             onClick={() => setSearchParams({})}
-            className="btn-ghost text-sm flex items-center gap-1.5"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all hover:bg-white/5"
+            style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
             aria-label="Clear all filters"
           >
             <X size={13} aria-hidden="true" /> Clear
@@ -165,16 +188,18 @@ export default function Projects() {
         )}
       </div>
 
-      {/* Grid */}
+      {/* Project grid */}
       {loading && !records.length ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Loading projects">
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : displayed.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-gray-500 text-lg">No projects found</p>
-          <p className="text-gray-600 text-sm mt-1">Try adjusting your filters</p>
-          <button onClick={() => navigate('/projects/new')} className="btn-primary mt-5">
+          <p className="text-lg" style={{ color: 'var(--text-3)' }}>No projects found</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)', opacity: 0.7 }}>Try adjusting your filters</p>
+          <button onClick={() => navigate('/projects/new')}
+            className="mt-5 px-5 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
             + Create project
           </button>
         </div>

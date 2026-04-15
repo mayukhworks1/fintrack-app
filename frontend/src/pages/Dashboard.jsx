@@ -17,6 +17,15 @@ function SkeletonCard() {
   )
 }
 
+function SyncDot({ syncing }) {
+  return (
+    <span className={clsx(
+      'w-1.5 h-1.5 rounded-full inline-block transition-colors',
+      syncing ? 'animate-pulse' : ''
+    )} style={{ background: syncing ? '#facc15' : '#4ade80' }} aria-hidden="true" />
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
 
@@ -37,20 +46,18 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
+
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-0.5 flex items-center gap-2">
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-1)' }}>Dashboard</h1>
+          <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
             Financial overview
             {lastUpdated && (
-              <span className="text-gray-600 flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5">
                 ·
-                <span className={clsx(
-                  'w-1.5 h-1.5 rounded-full inline-block transition-colors',
-                  syncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'
-                )} aria-hidden="true" />
-                <span className={syncing ? 'text-yellow-500' : 'text-gray-600'}>
+                <SyncDot syncing={syncing} />
+                <span style={{ color: syncing ? '#facc15' : 'var(--text-3)' }}>
                   {syncing ? 'syncing…' : `live · ${updatedLabel}`}
                 </span>
               </span>
@@ -58,27 +65,25 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={refresh}
-            disabled={loading}
-            aria-label="Refresh data"
-            className="btn-icon"
-          >
+          <button onClick={refresh} disabled={loading} aria-label="Refresh data"
+            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
+            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
             <RefreshCw size={16} className={clsx(loading && 'animate-spin')} />
           </button>
           <button
             onClick={() => navigate('/projects/new')}
-            className="btn-primary flex items-center gap-2"
-            aria-label="Create new project"
-          >
-            <Plus size={16} aria-hidden="true" /> New Project
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}
+            aria-label="Create new project">
+            <Plus size={15} aria-hidden="true" /> New Project
           </button>
         </div>
       </div>
 
       {/* Error banner */}
       {error && (
-        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
           <AlertCircle size={16} aria-hidden="true" />
           {error} — <button onClick={refresh} className="underline hover:no-underline">retry</button>
         </div>
@@ -108,23 +113,25 @@ export default function Dashboard() {
               <button
                 key={status}
                 onClick={() => navigate(`/projects?status=${encodeURIComponent(status)}`)}
-                className="card text-center hover:border-brand-500/40 transition-colors focus-visible:ring-2 focus-visible:ring-brand-400 rounded-xl"
+                className="card text-center transition-all hover:scale-[1.02]"
+                style={{ cursor: 'pointer' }}
                 aria-label={`${count} ${status} projects`}
               >
-                <p className="text-2xl font-bold text-white">{count}</p>
-                <p className="text-xs text-gray-500 mt-1 truncate">{status}</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{count}</p>
+                <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>{status}</p>
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {/* Client & Health */}
+      {/* Client & Health breakdown */}
       {summary && (
         <section aria-label="Breakdown by client and health" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="card">
-            <h2 className="section-title mb-4 flex items-center gap-2">
-              <Activity size={16} className="text-brand-400" aria-hidden="true" /> By Client
+            <h2 className="text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2"
+              style={{ color: 'var(--text-3)' }}>
+              <Activity size={14} style={{ color: '#4ade80' }} aria-hidden="true" /> By Client
             </h2>
             <div className="space-y-3" role="list">
               {Object.entries(summary.by_client || {}).map(([client, count]) => {
@@ -132,11 +139,15 @@ export default function Dashboard() {
                 return (
                   <div key={client} role="listitem">
                     <div className="flex justify-between text-sm mb-1.5">
-                      <span className="text-gray-300">{client}</span>
-                      <span className="text-gray-500">{count} project{count > 1 ? 's' : ''}</span>
+                      <span style={{ color: 'var(--text-2)' }}>{client}</span>
+                      <span style={{ color: 'var(--text-3)' }}>{count} project{count > 1 ? 's' : ''}</span>
                     </div>
-                    <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${client}: ${pct}%`}>
-                      <div className="h-full bg-brand-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                    <div className="h-1.5 rounded-full overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}
+                      role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
+                      aria-label={`${client}: ${pct}%`}>
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #22c55e88, #22c55e)' }} />
                     </div>
                   </div>
                 )
@@ -145,12 +156,16 @@ export default function Dashboard() {
           </div>
 
           <div className="card">
-            <h2 className="section-title mb-4">By Health</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-3)' }}>
+              By Health
+            </h2>
             <div className="space-y-2" role="list">
               {Object.entries(summary.by_health || {}).map(([h, c]) => (
-                <div key={h} role="listitem" className="flex items-center justify-between py-2 border-b border-surface-700 last:border-0">
-                  <span className="text-sm text-gray-300">{h || 'Unknown'}</span>
-                  <span className="text-sm font-semibold text-white tabular-nums">{c}</span>
+                <div key={h} role="listitem"
+                  className="flex items-center justify-between py-2"
+                  style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-sm" style={{ color: 'var(--text-2)' }}>{h || 'Unknown'}</span>
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{c}</span>
                 </div>
               ))}
             </div>
@@ -160,9 +175,13 @@ export default function Dashboard() {
 
       {/* Recent projects */}
       <section aria-label="Top projects by billing">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="section-title">Top Projects by Billing</h2>
-          <button onClick={() => navigate('/projects')} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+            Top Projects by Billing
+          </h2>
+          <button onClick={() => navigate('/projects')}
+            className="text-xs font-medium transition-colors hover:opacity-80"
+            style={{ color: '#4ade80' }}>
             View all →
           </button>
         </div>
@@ -175,8 +194,12 @@ export default function Dashboard() {
             {recent.map((r) => <ProjectCard key={r.id} record={r} />)}
           </div>
         ) : (
-          <div className="text-center py-12 text-gray-500">
-            No projects yet. <button onClick={() => navigate('/projects/new')} className="text-brand-400 hover:text-brand-300 underline">Create one</button>
+          <div className="text-center py-12" style={{ color: 'var(--text-3)' }}>
+            No projects yet.{' '}
+            <button onClick={() => navigate('/projects/new')}
+              className="underline hover:no-underline" style={{ color: '#4ade80' }}>
+              Create one
+            </button>
           </div>
         )}
       </section>

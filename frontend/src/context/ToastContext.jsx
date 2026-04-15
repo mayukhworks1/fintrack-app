@@ -20,25 +20,48 @@ const STYLES = {
   info:    'border-brand-500/40 bg-brand-500/10 text-brand-400',
 }
 
+const BORDER_COLORS = {
+  success: 'rgba(34,197,94,0.4)',
+  error:   'rgba(239,68,68,0.4)',
+  warning: 'rgba(234,179,8,0.4)',
+  info:    'rgba(34,197,94,0.35)',
+}
+const BG_COLORS = {
+  success: 'rgba(34,197,94,0.1)',
+  error:   'rgba(239,68,68,0.1)',
+  warning: 'rgba(234,179,8,0.1)',
+  info:    'rgba(34,197,94,0.08)',
+}
+const TEXT_COLORS = {
+  success: '#4ade80',
+  error:   '#f87171',
+  warning: '#facc15',
+  info:    '#4ade80',
+}
+
 function ToastItem({ toast, dismiss }) {
   const Icon = ICONS[toast.type] || Info
+  const type = toast.type || 'info'
   return (
     <div
       role="alert"
       aria-live="assertive"
-      className={clsx(
-        'flex items-start gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm',
-        'animate-slide-in backdrop-blur-sm min-w-64 max-w-sm',
-        'bg-surface-800',
-        STYLES[toast.type]
-      )}
+      className="flex items-start gap-3 px-4 py-3 rounded-xl shadow-xl text-sm animate-slide-in min-w-64 max-w-sm"
+      style={{
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        background: BG_COLORS[type],
+        border: `1px solid ${BORDER_COLORS[type]}`,
+        boxShadow: `0 8px 32px rgba(0,0,0,0.4)`,
+      }}
     >
-      <Icon size={16} className="flex-shrink-0 mt-0.5" />
-      <span className="flex-1 text-gray-200 leading-snug">{toast.message}</span>
+      <Icon size={16} className="flex-shrink-0 mt-0.5" style={{ color: TEXT_COLORS[type] }} />
+      <span className="flex-1 leading-snug" style={{ color: 'var(--text-1)' }}>{toast.message}</span>
       <button
         onClick={() => dismiss(toast.id)}
         aria-label="Dismiss notification"
-        className="text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
+        className="flex-shrink-0 transition-colors"
+        style={{ color: 'var(--text-3)' }}
       >
         <X size={14} />
       </button>

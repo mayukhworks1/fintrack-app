@@ -20,7 +20,7 @@ function FormField({ label, required, children, hint }) {
         {label}{required && <span className="text-red-400 ml-1" aria-hidden="true">*</span>}
       </label>
       {children}
-      {hint && <p className="text-xs text-gray-600 mt-1">{hint}</p>}
+      {hint && <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{hint}</p>}
     </div>
   )
 }
@@ -161,7 +161,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
         </FormField>
       </div>
 
-      <div className="flex gap-3 pt-2 border-t border-surface-700">
+      <div className="flex gap-3 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
         <button type="submit" disabled={loading} className="btn-primary flex items-center gap-2">
           {loading && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
           {loading ? 'Saving…' : 'Save Project'}

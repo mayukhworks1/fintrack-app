@@ -1,20 +1,22 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
-  MessageSquareText, FileText, TrendingUp, Wifi, WifiOff
+  MessageSquareText, FileText, TrendingUp,
+  Sun, Moon, WifiOff
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useState, useEffect } from 'react'
+import { useTheme } from '../context/ThemeContext'
 
 const nav = [
-  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard,     end: true },
+  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
   { to: '/projects',  label: 'Projects',     icon: FolderKanban },
   { to: '/analytics', label: 'Analytics',    icon: BarChart3 },
   { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText },
   { to: '/report',    label: 'Report',       icon: FileText },
 ]
 
-function OnlineIndicator() {
+function OfflineBanner() {
   const [online, setOnline] = useState(navigator.onLine)
   useEffect(() => {
     const on = () => setOnline(true)
@@ -25,74 +27,108 @@ function OnlineIndicator() {
   }, [])
   if (online) return null
   return (
-    <div className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-      <WifiOff size={13} className="text-red-400 flex-shrink-0" />
-      <span className="text-xs text-red-400">Offline</span>
+    <div className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+      <WifiOff size={12} style={{ color: '#f87171' }} />
+      <span className="text-xs" style={{ color: '#f87171' }}>Offline</span>
     </div>
   )
 }
 
 export default function Layout({ children }) {
+  const { dark, toggle } = useTheme()
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside
-        className="w-56 bg-surface-800 border-r border-surface-700 flex flex-col flex-shrink-0"
+        className="w-56 flex flex-col flex-shrink-0 relative"
+        style={{
+          background: 'rgba(8,11,18,0.85)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderRight: '1px solid var(--border)',
+        }}
         aria-label="Main navigation"
       >
+        {/* Subtle gradient top */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-r-none">
+          <div style={{
+            position: 'absolute', top: -80, left: -40,
+            width: 200, height: 200,
+            background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)',
+          }} />
+        </div>
+
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-surface-700">
-          <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center flex-shrink-0" aria-hidden="true">
-            <TrendingUp size={15} className="text-white" />
+        <div className="flex items-center gap-3 px-4 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', boxShadow: '0 4px 12px rgba(34,197,94,0.35)' }}>
+            <TrendingUp size={16} className="text-white" />
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-white text-sm leading-tight">FinTrack</p>
-            <p className="text-xs text-gray-500 truncate">AI Finance Manager</p>
+            <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>FinTrack</p>
+            <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>AI Finance Manager</p>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-2.5 space-y-0.5" aria-label="App sections">
+        <nav className="flex-1 p-2.5 space-y-0.5" aria-label="Sections">
           {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink
-              key={to}
-              to={to}
-              end={end}
-              aria-label={label}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-brand-500/20 text-brand-400'
-                    : 'text-gray-400 hover:text-gray-100 hover:bg-surface-700'
-                )
-              }
+              key={to} to={to} end={end}
+              className={({ isActive }) => clsx(
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
+                isActive
+                  ? 'text-white'
+                  : 'hover:bg-white/5'
+              )}
+              style={({ isActive }) => isActive ? {
+                background: 'linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(34,197,94,0.05) 100%)',
+                border: '1px solid rgba(34,197,94,0.2)',
+                color: '#4ade80',
+              } : { color: 'var(--text-2)', border: '1px solid transparent' }}
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={16} aria-hidden="true" />
-                  <span>{label}</span>
-                  {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-400" aria-hidden="true" />}
+                  <Icon size={16} aria-hidden="true" style={isActive ? { color: '#4ade80' } : {}} />
+                  <span className="flex-1">{label}</span>
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ade80', boxShadow: '0 0 6px #4ade80' }} />}
                 </>
               )}
             </NavLink>
           ))}
         </nav>
 
-        <OnlineIndicator />
+        <OfflineBanner />
 
         {/* Footer */}
-        <div className="p-3 border-t border-surface-700">
-          <p className="text-xs text-gray-600 text-center">Powered by OpenRouter AI</p>
+        <div className="p-3" style={{ borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={toggle}
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all hover:bg-white/5"
+            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}
+            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <span className="flex items-center gap-2">
+              {dark ? <Sun size={14} /> : <Moon size={14} />}
+              {dark ? 'Light mode' : 'Dark mode'}
+            </span>
+            <div className="w-8 h-4 rounded-full relative transition-all"
+              style={{ background: dark ? 'rgba(255,255,255,0.1)' : 'rgba(34,197,94,0.4)' }}>
+              <div className="absolute top-0.5 w-3 h-3 rounded-full transition-all"
+                style={{
+                  background: dark ? 'rgba(255,255,255,0.4)' : '#22c55e',
+                  left: dark ? 2 : 'calc(100% - 14px)',
+                  boxShadow: dark ? 'none' : '0 0 6px rgba(34,197,94,0.6)',
+                }} />
+            </div>
+          </button>
+          <p className="text-xs text-center mt-2" style={{ color: 'var(--text-3)' }}>Powered by OpenRouter AI</p>
         </div>
       </aside>
 
       {/* Main */}
-      <main
-        id="main-content"
-        className="flex-1 overflow-y-auto bg-surface-900 animate-fade-in"
-        tabIndex={-1}
-      >
+      <main id="main-content" className="flex-1 overflow-y-auto animate-fade-in" style={{ background: 'var(--bg-base)' }}>
         {children}
       </main>
     </div>

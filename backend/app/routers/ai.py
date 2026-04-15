@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from ..services.teable import TeableService
-from ..services.openrouter import chat_with_ai, autofill_project, analyze_project, generate_report
+from ..services.openrouter import (
+    chat_with_ai, autofill_project, analyze_project, generate_report,
+    _format_records_context
+)
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -8,20 +11,27 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 @router.post("/chat")
 async def ai_chat(body: ChatRequest):
-    """Natural language chat about your Fintrack projects."""
+    """Natural language chat about your Fintrack projects with full live data context."""
     try:
         teable = TeableService()
-        # Fetch live summary as context
-        summary = await teable.get_summary()
-        context = (
-            f"Live data: {summary['total_projects']} projects, "
-            f"₹{summary['total_billed']:,.0f} total billed, "
-            f"₹{summary['total_profit']:,.0f} total profit, "
-            f"{summary['avg_profit_pct']:.1f}% avg profit. "
-            f"By status: {summary['by_status']}. "
-            f"By client: {summary['by_client']}. "
-            f"By health: {summary['by_health']}."
+        # Fetch both summary AND full records for rich context
+        summary, all_records = await teable.get_summary(), await teable.get_all_records()
+
+        # Build rich context: summary + every individual project record
+        summary_text = (
+            f"=== PORTFOLIO SUMMARY ===\n"
+            f"Total Projects: {summary['total_projects']}\n"
+            f"Total Billed: ₹{summary['total_billed']:,.0f}\n"
+            f"Total Profit: ₹{summary['total_profit']:,.0f}\n"
+            f"Avg Profit %: {summary['avg_profit_pct']:.2f}%\n"
+            f"By Status: {summary['by_status']}\n"
+            f"By Client: {summary['by_client']}\n"
+            f"By Health: {summary['by_health']}\n"
+            f"Targets Achieved: {summary.get('target_achieved_count', 0)}/{summary['total_projects']}\n"
         )
+        records_text = _format_records_context(all_records)
+        context = summary_text + "\n" + records_text
+
         history = [{"role": m.role, "content": m.content} for m in body.history]
         reply = await chat_with_ai(body.message, history, context)
         return {"reply": reply}
