@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: fintrack-api
+    runtime: python
+    pythonVersion: "3.11"
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: TEABLE_API_TOKEN
+        sync: false
+      - key: TEABLE_BASE_URL
+        value: https://app.teable.ai
+      - key: TEABLE_TABLE_ID
+        value: tbl4fi155DuWlh40By3
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: mistralai/mistral-7b-instruct:free
+      - key: FRONTEND_URL
+        sync: false
