@@ -19,22 +19,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check secrets are configured
+        run: |
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "⚠️  CLOUDFLARE_API_TOKEN not set — skipping deploy."
+            echo "Add it in: GitHub repo → Settings → Secrets → Actions"
+            exit 0
+          fi
+          echo "Secrets found, proceeding."
+
       - uses: actions/setup-node@v4
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package.json
 
       - name: Install dependencies
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         run: npm install
 
       - name: Build
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_AI_MODEL: ${{ secrets.VITE_AI_MODEL }}
+          VITE_AI_MODEL: Mistral 7B
         run: npm run build
 
       - name: Deploy to Cloudflare Pages
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
