@@ -1,4 +1,4 @@
-name: Deploy Backend → Render
+name: Deploy Backend → Koyeb
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy:
-    name: Trigger Render Deploy
+    name: Trigger Koyeb Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -18,17 +18,20 @@ jobs:
 
       - name: Check secret is configured
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
-            echo "⚠️  RENDER_DEPLOY_HOOK_URL secret not set — skipping deploy."
-            echo "Add it in: GitHub repo → Settings → Secrets → Actions"
+          if [ -z "${{ secrets.KOYEB_API_TOKEN }}" ]; then
+            echo "⚠️  KOYEB_API_TOKEN not set yet — skipping deploy."
             exit 0
           fi
           echo "Secret found, proceeding."
 
-      - name: Trigger Render deploy hook
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+      - name: Install Koyeb CLI
+        if: ${{ secrets.KOYEB_API_TOKEN != '' }}
+        run: curl -fsSL https://raw.githubusercontent.com/koyeb/koyeb-cli/master/install.sh | sh
+
+      - name: Deploy to Koyeb
+        if: ${{ secrets.KOYEB_API_TOKEN != '' }}
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
         run: |
-          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            --fail-with-body
-          echo "✅ Deploy triggered"
+          koyeb service redeploy fintrack/api
+          echo "✅ Deploy triggered on Koyeb"
