@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     teable_base_url: str = "https://app.teable.ai"
     teable_table_id: str = "tbl4fi155DuWlh40By3"
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "mistralai/mistral-7b-instruct:free"
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     frontend_url: str = "*"
 
     class Config:

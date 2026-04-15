@@ -39,7 +39,7 @@ export default function Projects() {
     }).then(d => d.records || [])
   , [status, client])
 
-  const { data: records = [], loading, error, refresh, lastUpdated } = useAutoRefresh(fetchProjects, 30_000, [status, client])
+  const { data: records = [], loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchProjects, 5_000, [status, client])
   const updatedLabel = useRelativeTime(lastUpdated)
 
   // Debounced search
@@ -78,10 +78,16 @@ export default function Projects() {
           <h1 className="text-2xl font-bold text-white">Projects</h1>
           <p className="text-gray-500 text-sm mt-0.5 flex items-center gap-2">
             {displayed.length} project{displayed.length !== 1 ? 's' : ''}
-            {lastUpdated && (
-              <span className="text-gray-600 flex items-center gap-1">
-                · <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" aria-hidden="true" />
-                synced {updatedLabel}
+          {lastUpdated && (
+              <span className="text-gray-600 flex items-center gap-1.5">
+                ·
+                <span className={clsx(
+                  'w-1.5 h-1.5 rounded-full inline-block transition-colors',
+                  syncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'
+                )} aria-hidden="true" />
+                <span className={syncing ? 'text-yellow-500' : 'text-gray-600'}>
+                  {syncing ? 'syncing…' : `live · ${updatedLabel}`}
+                </span>
               </span>
             )}
           </p>

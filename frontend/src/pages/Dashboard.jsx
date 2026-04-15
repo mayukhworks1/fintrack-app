@@ -27,7 +27,7 @@ export default function Dashboard() {
     ]).then(([summary, list]) => ({ summary, records: list.records || [] }))
   , [])
 
-  const { data, loading, error, refresh, lastUpdated } = useAutoRefresh(fetchAll, 30_000)
+  const { data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchAll, 5_000)
   const updatedLabel = useRelativeTime(lastUpdated)
 
   const summary = data?.summary
@@ -44,9 +44,15 @@ export default function Dashboard() {
           <p className="text-gray-500 text-sm mt-0.5 flex items-center gap-2">
             Financial overview
             {lastUpdated && (
-              <span className="text-gray-600 flex items-center gap-1">
-                · <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" aria-hidden="true" />
-                synced {updatedLabel}
+              <span className="text-gray-600 flex items-center gap-1.5">
+                ·
+                <span className={clsx(
+                  'w-1.5 h-1.5 rounded-full inline-block transition-colors',
+                  syncing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'
+                )} aria-hidden="true" />
+                <span className={syncing ? 'text-yellow-500' : 'text-gray-600'}>
+                  {syncing ? 'syncing…' : `live · ${updatedLabel}`}
+                </span>
               </span>
             )}
           </p>
