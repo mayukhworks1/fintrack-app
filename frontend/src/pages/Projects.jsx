@@ -39,7 +39,8 @@ export default function Projects() {
     }).then(d => d.records || [])
   , [status, client])
 
-  const { data: records = [], loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchProjects, 5_000, [status, client])
+  const { data: _data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchProjects, 5_000, [status, client])
+  const records = _data ?? []
   const updatedLabel = useRelativeTime(lastUpdated)
 
   // Debounced search

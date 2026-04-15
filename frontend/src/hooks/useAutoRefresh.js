@@ -6,7 +6,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
  * Returns { data, loading, error, refresh, lastUpdated, syncing }.
  */
 export function useAutoRefresh(fetchFn, intervalMs = 5_000, deps = []) {
-  const [data, setData]             = useState(null)
+  const [data, setData]             = useState(undefined)
   const [loading, setLoading]       = useState(true)
   const [syncing, setSyncing]       = useState(false)
   const [error, setError]           = useState(null)
