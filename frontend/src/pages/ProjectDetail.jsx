@@ -3,6 +3,56 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
 import { api } from '../services/api'
+
+// Shared clean AI text renderer (no ugly markdown symbols)
+function AiText({ text }) {
+  if (!text) return null
+  const lines = text.split('\n')
+  const elements = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (!line) { i++; continue }
+    if (/^\d+\.\s/.test(line)) {
+      const items = []
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s/, ''))
+        i++
+      }
+      elements.push(
+        <ol key={i} className="space-y-1.5 my-2 ml-1">
+          {items.map((item, j) => (
+            <li key={j} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
+                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j + 1}</span>
+              <span dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+            </li>
+          ))}
+        </ol>
+      )
+      continue
+    }
+    if (/^[A-Z][A-Za-z\s]{1,30}:\s?/.test(line)) {
+      const ci = line.indexOf(':')
+      const label = line.slice(0, ci)
+      const rest  = line.slice(ci + 1).trim()
+      elements.push(
+        <div key={i} className="mt-3 mb-1">
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
+          {rest && <span className="text-sm ml-2 leading-relaxed" style={{ color: 'var(--text-2)' }}
+            dangerouslySetInnerHTML={{ __html: rest.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />}
+        </div>
+      )
+    } else {
+      elements.push(
+        <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}
+          dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+      )
+    }
+    i++
+  }
+  return <div className="space-y-1.5">{elements}</div>
+}
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 
@@ -251,9 +301,7 @@ export default function ProjectDetail() {
               <h2 className="font-semibold mb-3 flex items-center gap-2" style={{ color: '#4ade80' }}>
                 <Sparkles size={15} aria-hidden="true" /> AI Analysis
               </h2>
-              <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                {analysis}
-              </div>
+              <AiText text={analysis} />
             </div>
           )}
         </div>

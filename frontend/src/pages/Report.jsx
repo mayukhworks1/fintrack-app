@@ -2,6 +2,63 @@ import { useState } from 'react'
 import { FileText, Loader2, Download, RefreshCw, Sparkles, Database } from 'lucide-react'
 import { api } from '../services/api'
 
+function AiText({ text }) {
+  if (!text) return null
+  const lines = text.split('\n')
+  const elements = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (!line) { i++; continue }
+    if (/^\d+\.\s/.test(line)) {
+      const items = []
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s/, ''))
+        i++
+      }
+      elements.push(
+        <ol key={i} className="space-y-1.5 my-2 ml-1">
+          {items.map((it, j) => (
+            <li key={j} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
+                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j+1}</span>
+              <span dangerouslySetInnerHTML={{ __html: it.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+            </li>
+          ))}
+        </ol>
+      )
+      continue
+    }
+    if (/^#{1,3}\s/.test(line)) {
+      const heading = line.replace(/^#{1,3}\s/, '')
+      elements.push(
+        <h3 key={i} className="text-sm font-bold mt-5 mb-2 pt-3"
+          style={{ color: '#22c55e', borderTop: '1px solid var(--border)' }}>
+          {heading.replace(/[`*_]/g,'')}
+        </h3>
+      )
+    } else if (/^[A-Z][A-Za-z\s]{1,30}:\s?/.test(line)) {
+      const ci = line.indexOf(':')
+      const label = line.slice(0, ci)
+      const rest  = line.slice(ci+1).trim()
+      elements.push(
+        <div key={i} className="mt-3 mb-1">
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
+          {rest && <span className="text-sm ml-2" style={{ color: 'var(--text-2)' }}
+            dangerouslySetInnerHTML={{ __html: rest.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />}
+        </div>
+      )
+    } else {
+      elements.push(
+        <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}
+          dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+      )
+    }
+    i++
+  }
+  return <div className="space-y-1.5">{elements}</div>
+}
+
 export default function Report() {
   const [report, setReport]   = useState('')
   const [loading, setLoading] = useState(false)
@@ -129,9 +186,7 @@ export default function Report() {
               {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}
             </span>
           </div>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-2)', fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: '0.8rem' }}>
-            {report}
-          </div>
+          <AiText text={report} />
         </div>
       )}
     </div>
