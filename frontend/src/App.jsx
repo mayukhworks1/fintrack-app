@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
@@ -10,14 +11,33 @@ import Report from './pages/Report'
 export default function App() {
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/ai" element={<AIAssistant />} />
-        <Route path="/report" element={<Report />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/"             element={<Dashboard />} />
+          <Route path="/projects"     element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/analytics"    element={<Analytics />} />
+          <Route path="/ai"           element={<AIAssistant />} />
+          <Route path="/report"       element={<Report />} />
+          <Route path="*"             element={<NotFound />} />
+        </Routes>
+      </ErrorBoundary>
     </Layout>
+  )
+}
+
+function NotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <p className="text-6xl font-bold mb-3" style={{ color: 'var(--text-3)' }}>404</p>
+      <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Page not found</p>
+      <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>
+        This route doesn't exist.
+      </p>
+      <a href="/" className="px-4 py-2 rounded-xl text-sm font-semibold"
+        style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff' }}>
+        Go home
+      </a>
+    </div>
   )
 }

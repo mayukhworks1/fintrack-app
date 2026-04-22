@@ -166,17 +166,37 @@ function TypingIndicator() {
   )
 }
 
+const WELCOME = {
+  role: 'assistant',
+  content: "Hi! I'm FinTrackAI. I have live access to all your Fintrack project data — every client, billing amount, profit margin, and target.\n\nWhat would you like to know?",
+}
+
+const STORAGE_KEY = 'fintrack-ai-history'
+
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return [WELCOME]
+}
+
 export default function AIAssistant() {
   const toast = useToast()
-  const [history, setHistory] = useState([{
-    role: 'assistant',
-    content: "Hi! I'm FinTrackAI. I have live access to all your Fintrack project data and can answer specific questions about clients, billing, profit margins, targets, and more.\n\nWhat would you like to know?",
-  }])
+  const [history, setHistory] = useState(loadHistory)
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [showAll, setShowAll]   = useState(false)
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
+
+  // Persist history to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(-40))) } catch {}
+  }, [history])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -208,7 +228,9 @@ export default function AIAssistant() {
   }
 
   const clearChat = () => {
-    setHistory([{ role: 'assistant', content: "Chat cleared! Ask me anything about your projects." }])
+    const fresh = [{ role: 'assistant', content: "Chat cleared. Ask me anything about your projects." }]
+    setHistory(fresh)
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)) } catch {}
     inputRef.current?.focus()
   }
 
@@ -317,10 +339,17 @@ export default function AIAssistant() {
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
-        <p className="text-xs text-center mt-2.5 flex items-center justify-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-          <Database size={10} style={{ color: '#4ade80' }} />
-          AI reads all live project records before every response
-        </p>
+        <div className="flex items-center justify-between mt-2" style={{ color: 'var(--text-3)' }}>
+          <span className="text-xs flex items-center gap-1.5">
+            <Database size={10} style={{ color: '#4ade80' }} />
+            AI reads all live project records before every response
+          </span>
+          {input.length > 0 && (
+            <span className="text-xs tabular-nums" style={{ color: input.length > 900 ? '#f87171' : 'var(--text-3)' }}>
+              {input.length}/1000
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

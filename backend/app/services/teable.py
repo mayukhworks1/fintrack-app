@@ -1,8 +1,33 @@
 import json
+import time
 from typing import Any, Optional
 import httpx
 from ..config import settings
 from ..models import FIELD_IDS
+
+# ── Simple in-memory cache (avoids hammering Teable on every 5s poll) ──────
+_cache: dict[str, tuple[float, Any]] = {}
+SUMMARY_TTL = 30   # seconds — summary recalculated at most every 30s
+RECORDS_TTL = 15   # seconds — record lists cached for 15s
+
+
+def _cache_get(key: str) -> Any | None:
+    if key in _cache:
+        ts, val = _cache[key]
+        if time.time() - ts < (SUMMARY_TTL if "summary" in key else RECORDS_TTL):
+            return val
+        del _cache[key]
+    return None
+
+
+def _cache_set(key: str, val: Any) -> None:
+    _cache[key] = (time.time(), val)
+
+
+def _cache_invalidate_prefix(prefix: str) -> None:
+    keys = [k for k in list(_cache.keys()) if k.startswith(prefix)]
+    for k in keys:
+        del _cache[k]
 
 
 class TeableService:
@@ -32,6 +57,23 @@ class TeableService:
             return None
         return {"conjunction": "and", "filterSet": filter_set}
 
+    async def _get(self, url: str, params: dict) -> dict:
+        """GET with retry (up to 3 attempts, exponential back-off)."""
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient() as http:
+                    r = await http.get(url, headers=self._headers, params=params, timeout=30)
+                    r.raise_for_status()
+                    return r.json()
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_err = e
+                if attempt < 2:
+                    await _async_sleep(0.5 * (2 ** attempt))
+            except httpx.HTTPStatusError as e:
+                raise  # don't retry 4xx
+        raise last_err or RuntimeError("Request failed after retries")
+
     async def list_records(
         self,
         status: Optional[str] = None,
@@ -41,16 +83,22 @@ class TeableService:
         take: int = 100,
         skip: int = 0,
     ) -> list[dict[str, Any]]:
+        cache_key = f"list:{status}:{client}:{order_by_field}:{order_dir}:{take}:{skip}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         params: dict[str, Any] = {"fieldKeyType": "name", "take": take, "skip": skip}
         f = self._build_filter(status=status, client=client)
         if f:
             params["filter"] = json.dumps(f)
         if order_by_field and order_by_field in FIELD_IDS:
             params["orderBy"] = json.dumps([{"fieldId": FIELD_IDS[order_by_field], "order": order_dir}])
-        async with httpx.AsyncClient() as http:
-            r = await http.get(self._record_url, headers=self._headers, params=params, timeout=30)
-            r.raise_for_status()
-            return r.json().get("records", [])
+
+        data = await self._get(self._record_url, params)
+        records = data.get("records", [])
+        _cache_set(cache_key, records)
+        return records
 
     async def get_record(self, record_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient() as http:
@@ -73,6 +121,8 @@ class TeableService:
             )
             r.raise_for_status()
             records = r.json().get("records", [])
+            _cache_invalidate_prefix("list:")
+            _cache_invalidate_prefix("summary")
             return records[0] if records else r.json()
 
     async def update_record(self, record_id: str, fields: dict) -> dict[str, Any]:
@@ -84,12 +134,16 @@ class TeableService:
                 timeout=30,
             )
             r.raise_for_status()
+            _cache_invalidate_prefix("list:")
+            _cache_invalidate_prefix("summary")
             return r.json()
 
     async def delete_record(self, record_id: str) -> bool:
         async with httpx.AsyncClient() as http:
             r = await http.delete(f"{self._record_url}/{record_id}", headers=self._headers, timeout=30)
             r.raise_for_status()
+            _cache_invalidate_prefix("list:")
+            _cache_invalidate_prefix("summary")
             return True
 
     async def search_records(self, query: str, take: int = 20) -> list[dict[str, Any]]:
@@ -114,17 +168,21 @@ class TeableService:
         return all_records
 
     async def get_summary(self) -> dict:
+        cached = _cache_get("summary")
+        if cached is not None:
+            return cached
+
         records = await self.get_all_records()
         total = len(records)
 
         total_billed = total_profit = total_input_cost = total_overhead = 0.0
-        profit_pcts, status_counts, client_counts, health_counts = [], {}, {}, {}
+        profit_pcts: list[float] = []
+        status_counts: dict[str, int] = {}
+        client_counts: dict[str, int] = {}
+        health_counts: dict[str, int] = {}
+        client_billed: dict[str, float] = {}
+        client_profit: dict[str, float] = {}
         target_achieved = 0
-
-        # Per-client financials
-        client_billed: dict[str, float]  = {}
-        client_profit: dict[str, float]  = {}
-
         best_rec  = {"name": None, "pct": None}
         worst_rec = {"name": None, "pct": None}
 
@@ -136,10 +194,10 @@ class TeableService:
             inp_cost = float(f.get("Input cost so far") or 0)
             overhead = float(f.get("Total Overhead Cost") or 0)
 
-            total_billed      += billed
-            total_profit      += profit
-            total_input_cost  += inp_cost
-            total_overhead    += overhead
+            total_billed     += billed
+            total_profit     += profit
+            total_input_cost += inp_cost
+            total_overhead   += overhead
 
             pct = f.get("Profit percentage")
             if pct is not None:
@@ -158,9 +216,9 @@ class TeableService:
             status_counts[st] = status_counts.get(st, 0) + 1
 
             cl = f.get("Client") or "Unknown"
-            client_counts[cl]  = client_counts.get(cl, 0) + 1
-            client_billed[cl]  = client_billed.get(cl, 0.0)  + billed
-            client_profit[cl]  = client_profit.get(cl, 0.0)  + profit
+            client_counts[cl] = client_counts.get(cl, 0) + 1
+            client_billed[cl] = client_billed.get(cl, 0.0) + billed
+            client_profit[cl] = client_profit.get(cl, 0.0) + profit
 
             h = f.get("Health") or "Unknown"
             health_counts[h] = health_counts.get(h, 0) + 1
@@ -170,35 +228,43 @@ class TeableService:
 
         avg_profit_pct = sum(profit_pcts) / len(profit_pcts) if profit_pcts else 0
 
-        # Projects at risk: negative profit OR health contains 🔴
         at_risk = []
         for r in records:
             f = r.get("fields", {})
-            pct = float(f.get("Profit percentage") or 0)
+            pct_v = float(f.get("Profit percentage") or 0)
             health = f.get("Health") or ""
-            if pct < 0 or "🔴" in health:
+            if pct_v < 0 or "🔴" in health:
                 at_risk.append({
                     "name":   f"{f.get('Client', '?')} / {f.get('Project Name', '?')}",
-                    "pct":    round(pct, 2),
+                    "pct":    round(pct_v, 2),
                     "health": health,
                     "status": f.get("Project Status", ""),
                 })
 
-        return {
-            "total_projects":       total,
-            "total_billed":         round(total_billed, 2),
-            "total_profit":         round(total_profit, 2),
-            "total_input_cost":     round(total_input_cost, 2),
-            "total_overhead":       round(total_overhead, 2),
-            "total_cost":           round(total_input_cost + total_overhead, 2),
-            "avg_profit_pct":       round(avg_profit_pct, 2),
+        result = {
+            "total_projects":        total,
+            "total_billed":          round(total_billed, 2),
+            "total_profit":          round(total_profit, 2),
+            "total_input_cost":      round(total_input_cost, 2),
+            "total_overhead":        round(total_overhead, 2),
+            "total_cost":            round(total_input_cost + total_overhead, 2),
+            "avg_profit_pct":        round(avg_profit_pct, 2),
             "target_achieved_count": target_achieved,
-            "by_status":            status_counts,
-            "by_client":            client_counts,
-            "by_health":            health_counts,
-            "client_billed":        {k: round(v, 2) for k, v in client_billed.items()},
-            "client_profit":        {k: round(v, 2) for k, v in client_profit.items()},
-            "best_project":         best_rec,
-            "worst_project":        worst_rec,
-            "at_risk":              at_risk,
+            "by_status":             status_counts,
+            "by_client":             client_counts,
+            "by_health":             health_counts,
+            "client_billed":         {k: round(v, 2) for k, v in client_billed.items()},
+            "client_profit":         {k: round(v, 2) for k, v in client_profit.items()},
+            "best_project":          best_rec,
+            "worst_project":         worst_rec,
+            "at_risk":               at_risk,
         }
+        _cache_set("summary", result)
+        return result
+
+
+# ── tiny async sleep helper ────────────────────────────────────────────────
+import asyncio
+
+async def _async_sleep(seconds: float) -> None:
+    await asyncio.sleep(seconds)
