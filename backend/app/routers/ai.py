@@ -33,8 +33,8 @@ async def ai_chat(body: ChatRequest):
         context = summary_text + "\n" + records_text
 
         history = [{"role": m.role, "content": m.content} for m in body.history]
-        reply = await chat_with_ai(body.message, history, context)
-        return {"reply": reply}
+        result = await chat_with_ai(body.message, history, context)
+        return {"reply": result["content"], "model": result["model_short"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -55,8 +55,12 @@ async def ai_analyze(body: AnalyzeRequest):
     try:
         teable = TeableService()
         record = await teable.get_record(body.record_id)
-        analysis = await analyze_project(record.get("fields", {}))
-        return {"analysis": analysis, "record_id": body.record_id}
+        result = await analyze_project(record.get("fields", {}))
+        return {
+            "analysis": result["content"],
+            "model": result["model_short"],
+            "record_id": body.record_id,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,7 +71,7 @@ async def ai_report():
     try:
         teable = TeableService()
         summary, records = await teable.get_summary(), await teable.get_all_records()
-        report = await generate_report(summary, records)
-        return {"report": report}
+        result = await generate_report(summary, records)
+        return {"report": result["content"], "model": result["model_short"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

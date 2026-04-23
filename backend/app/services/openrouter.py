@@ -83,20 +83,27 @@ def _format_records_context(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: float = 0.65) -> str:
-    """Try each model in FALLBACK_MODELS until one succeeds."""
+def _short_model_name(model_id: str) -> str:
+    """Strip provider prefix and :free suffix for UI display."""
+    return model_id.split("/")[-1].replace(":free", "")
+
+
+async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: float = 0.65) -> dict:
+    """Try each model in FALLBACK_MODELS until one succeeds.
+
+    Returns {"content": str, "model": str, "model_short": str}.
+    Raises ValueError on hard failure (quota/auth) or after exhausting all models.
+    """
     primary = settings.openrouter_model
-    models_to_try = [primary] if primary not in FALLBACK_MODELS else []
-    models_to_try += [m for m in FALLBACK_MODELS if m != primary or not models_to_try]
-    # Deduplicate preserving order
+    # Deduplicate preserving order — primary first, then fallbacks
     seen = set()
     ordered = []
     for m in [primary] + FALLBACK_MODELS:
-        if m not in seen:
+        if m and m not in seen:
             seen.add(m)
             ordered.append(m)
 
-    last_error = None
+    errors: list[str] = []
     async with httpx.AsyncClient() as http:
         for model in ordered:
             try:
@@ -115,15 +122,19 @@ async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: f
                     raise ValueError("OpenRouter quota exceeded — check your free tier limits at openrouter.ai")
                 if r.status_code == 401:
                     raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
-                if r.status_code == 404:
-                    last_error = f"Model '{model}' not found on OpenRouter"
+                if r.status_code == 429:
+                    errors.append(f"{_short_model_name(model)}: rate-limited")
                     continue
                 if r.status_code >= 400:
-                    data = r.json()
-                    err_msg = data.get("error", {}).get("message", r.text) if isinstance(data.get("error"), dict) else str(data.get("error", r.text))
-                    # If model-specific error, try next
+                    try:
+                        data = r.json()
+                        err = data.get("error", {})
+                        err_msg = err.get("message", r.text) if isinstance(err, dict) else str(err)
+                    except Exception:
+                        err_msg = r.text[:200]
+                    # Model-specific error → try next
                     if r.status_code in (400, 404, 422) or "model" in err_msg.lower():
-                        last_error = f"Model '{model}' error: {err_msg}"
+                        errors.append(f"{_short_model_name(model)}: {err_msg[:120]}")
                         continue
                     raise ValueError(f"OpenRouter error ({r.status_code}): {err_msg}")
 
@@ -132,28 +143,36 @@ async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: f
                     err = data["error"]
                     err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
                     if "model" in err_msg.lower() or "not found" in err_msg.lower():
-                        last_error = f"Model '{model}' error: {err_msg}"
+                        errors.append(f"{_short_model_name(model)}: {err_msg[:120]}")
                         continue
                     raise ValueError(f"OpenRouter error: {err_msg}")
 
-                content = data["choices"][0]["message"]["content"]
-                if content and len(content.strip()) > 0:
-                    return content
-                last_error = f"Model '{model}' returned empty response"
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if content and content.strip():
+                    return {
+                        "content": content,
+                        "model": model,
+                        "model_short": _short_model_name(model),
+                    }
+                errors.append(f"{_short_model_name(model)}: empty response")
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                last_error = f"Connection error with model '{model}': {str(e)}"
+                errors.append(f"{_short_model_name(model)}: timeout/network")
                 continue
             except ValueError:
                 raise
             except Exception as e:
-                last_error = str(e)
+                errors.append(f"{_short_model_name(model)}: {str(e)[:100]}")
                 continue
 
-    raise ValueError(f"All models failed. Last error: {last_error}")
+    raise ValueError(
+        "All AI models are unavailable right now. Tried: "
+        + "; ".join(errors) if errors else "No models configured."
+    )
 
 
-async def chat_with_ai(message: str, history: list[dict], context: str = "") -> str:
+async def chat_with_ai(message: str, history: list[dict], context: str = "") -> dict:
+    """Returns {"content": str, "model": str, "model_short": str}."""
     if not settings.openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY is not configured. Add it to HF Space secrets.")
 
@@ -191,8 +210,8 @@ Return ONLY a valid JSON object (no explanation, no markdown):
         {"role": "user", "content": prompt},
     ]
 
-    content = await _try_chat(messages, max_tokens=512, temperature=0.05)
-    content = content.strip()
+    result = await _try_chat(messages, max_tokens=512, temperature=0.05)
+    content = result["content"].strip()
     # Strip markdown code blocks if model added them
     content = re.sub(r'^```(?:json)?\s*', '', content)
     content = re.sub(r'\s*```$', '', content)
@@ -205,7 +224,7 @@ Return ONLY a valid JSON object (no explanation, no markdown):
     return {}
 
 
-async def analyze_project(project_fields: dict) -> str:
+async def analyze_project(project_fields: dict) -> dict:
     if not settings.openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY is not configured.")
 
@@ -244,7 +263,7 @@ Structure your response as:
     return await _try_chat(messages, max_tokens=1024, temperature=0.65)
 
 
-async def generate_report(summary: dict, records: list[dict]) -> str:
+async def generate_report(summary: dict, records: list[dict]) -> dict:
     if not settings.openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY is not configured.")
 
