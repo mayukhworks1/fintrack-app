@@ -54,7 +54,7 @@ function KpiCard({ label, value, sub, icon: Icon, color, trend }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold tabular-nums truncate" style={{ color: 'var(--text-1)' }}>{value}</p>
+        <p className="text-xl font-bold tabular-nums leading-tight" style={{ color: 'var(--text-1)' }}>{value}</p>
         {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
         {trend != null && (
           <p className="text-xs mt-1 font-semibold flex items-center gap-1"
@@ -130,7 +130,9 @@ export default function Dashboard() {
   const costRatio  = s && s.total_billed > 0 ? (s.total_cost   / s.total_billed) * 100 : 0
   const maxBilled  = s ? Math.max(...Object.values(s.client_billed || {}).map(Number), 1) : 1
   const atRisk     = s?.at_risk || []
-  const healthOk   = s ? (s.by_health?.['🟢 Excellent'] || 0) + (s.by_health?.['🟡 On Track'] || 0) : 0
+  const healthOk   = s ? Object.entries(s.by_health || {}).reduce(
+    (sum, [h, n]) => (h.includes('🟢') || h.includes('🟡') ? sum + n : sum), 0
+  ) : 0
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -258,7 +260,7 @@ export default function Dashboard() {
                 ? <div className="rounded-xl p-3" style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)' }}>
                     <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{s.best_project.name}</p>
                     <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: '#22c55e' }}>
-                      +{s.best_project.pct}%
+                      {s.best_project.pct >= 0 ? '+' : ''}{s.best_project.pct}%
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>profit margin</p>
                   </div>

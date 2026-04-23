@@ -42,7 +42,7 @@ jobs:
       - name: Build
         if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://mayukhj24-fintrack-api.hf.space' }}
           VITE_AI_MODEL: Nemotron 120B
         run: npm run build
 
