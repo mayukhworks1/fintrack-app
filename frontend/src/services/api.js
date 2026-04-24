@@ -2,6 +2,18 @@ const BASE_URL = import.meta.env.VITE_API_URL || ''
 const TIMEOUT_MS = 20_000
 const AI_TIMEOUT_MS = 90_000  // AI endpoints can take longer
 
+// ── Auth token helpers ───────────────────────────────────────────────────
+// Token is an opaque HMAC-signed string from the backend. We send it via
+// Authorization: Bearer. The password is NEVER stored client-side.
+const TOKEN_KEY = 'fintrack-auth-token'
+export function getAuthToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
+}
+export function setAuthToken(t) {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY) } catch {}
+}
+export function clearAuthToken() { setAuthToken('') }
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
@@ -21,11 +33,19 @@ async function request(path, options = {}, retries = 2) {
   }
 
   try {
+    const token = getAuthToken()
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...rest.headers },
+      headers: { 'Content-Type': 'application/json', ...authHeader, ...rest.headers },
       signal: controller.signal,
       ...rest,
     })
+
+    // Auto-logout on 401 from a protected endpoint (token expired / revoked)
+    if (res.status === 401 && token) {
+      clearAuthToken()
+      window.dispatchEvent(new CustomEvent('fintrack:auth-expired'))
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }))
@@ -97,4 +117,10 @@ export const api = {
       request('/api/ai/report', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
   health: () => request('/health', {}, 0),
+  auth: {
+    // Password is sent once over HTTPS, never stored client-side.
+    // Only the returned token persists in localStorage.
+    login:  (password) => request('/api/auth/login',  { method: 'POST', body: JSON.stringify({ password }) }),
+    verify: ()         => request('/api/auth/verify', {}, 0),
+  },
 }

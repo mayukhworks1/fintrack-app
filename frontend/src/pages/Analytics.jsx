@@ -6,15 +6,19 @@ import {
 import { RefreshCw, AlertCircle, TrendingUp, IndianRupee, BarChart3, Target } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { formatInr as inr, formatPct, formatInt } from '../utils/format'
 import clsx from 'clsx'
 
-const PALETTE = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4']
+// Toned down, less-saturated palette — same hues, lower value/chroma
+const PALETTE = ['#34a269', '#4f86c6', '#8e6fb8', '#c89457', '#c16a6a', '#5aa8b0']
 
-const inr = (n) => {
-  const v = Number(n || 0)
-  if (v >= 1e7) return `₹${(v / 1e7).toFixed(1)}Cr`
-  if (v >= 1e5) return `₹${(v / 1e5).toFixed(1)}L`
-  return `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+// Short axis-label formatter only for compact chart axes (NOT for displayed values)
+const axisInr = (v) => {
+  const n = Number(v || 0)
+  if (Math.abs(n) >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`
+  if (Math.abs(n) >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`
+  if (Math.abs(n) >= 1e3) return `₹${(n / 1e3).toFixed(0)}k`
+  return `₹${formatInt(n)}`
 }
 
 function SyncDot({ syncing }) {
@@ -146,20 +150,30 @@ export default function Analytics() {
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Revenue', value: inr(s?.total_billed),  color: '#22c55e', icon: IndianRupee },
-          { label: 'Net Profit',    value: inr(s?.total_profit),   color: '#60a5fa', icon: TrendingUp  },
-          { label: 'Total Cost',    value: inr(s?.total_cost),     color: '#c084fc', icon: BarChart3   },
-          { label: 'Overall Margin',value: `${margin.toFixed(1)}%`, color: margin >= 20 ? '#22c55e' : margin >= 0 ? '#f59e0b' : '#f87171', icon: Target },
-        ].map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="card text-center">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
-              style={{ background: `${color}18` }}>
-              <Icon size={15} style={{ color }} aria-hidden="true" />
+          { label: 'Total Revenue', value: inr(s?.total_billed),  icon: IndianRupee },
+          { label: 'Net Profit',    value: inr(s?.total_profit),  icon: TrendingUp  },
+          { label: 'Total Cost',    value: inr(s?.total_cost),    icon: BarChart3   },
+          { label: 'Overall Margin',value: formatPct(margin, 2),  icon: Target, accent: margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative' },
+        ].map(({ label, value, icon: Icon, accent }) => {
+          const valueColor =
+            accent === 'positive' ? '#22c55e'
+            : accent === 'warning' ? '#fbbf24'
+            : accent === 'negative' ? '#f87171'
+            : 'var(--text-1)'
+          return (
+            <div key={label} className="card text-center p-3 sm:p-4">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center mx-auto mb-2"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <Icon size={13} style={{ color: 'var(--text-2)' }} aria-hidden="true" />
+              </div>
+              <p className="text-[10px] sm:text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
+              <p className="font-semibold tabular-nums break-words leading-tight"
+                style={{ fontSize: 'clamp(0.95rem, 3vw, 1.125rem)', color: valueColor, wordBreak: 'break-word' }}>
+                {value}
+              </p>
             </div>
-            <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
-            <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{value}</p>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Revenue vs Cost vs Profit by project */}
@@ -168,11 +182,11 @@ export default function Analytics() {
           <BarChart data={revenueData} margin={{ top: 0, right: 8, left: 0, bottom: 55 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis dataKey="name" tick={{ fill: 'var(--text-3)', fontSize: 9 }} angle={-35} textAnchor="end" />
-            <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} />
+            <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} />
             <Tooltip {...tooltipStyle} formatter={(v, name) => [inr(v), name.charAt(0).toUpperCase() + name.slice(1)]} />
-            <Bar dataKey="revenue" fill="#22c55e" radius={[3,3,0,0]} name="revenue" />
-            <Bar dataKey="cost"    fill="#6366f1" radius={[3,3,0,0]} name="cost" />
-            <Bar dataKey="profit"  fill="#f59e0b" radius={[3,3,0,0]} name="profit" />
+            <Bar dataKey="revenue" fill={PALETTE[0]} radius={[3,3,0,0]} name="revenue" />
+            <Bar dataKey="cost"    fill={PALETTE[1]} radius={[3,3,0,0]} name="cost" />
+            <Bar dataKey="profit"  fill={PALETTE[3]} radius={[3,3,0,0]} name="profit" />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -186,10 +200,10 @@ export default function Analytics() {
             <BarChart data={clientData} margin={{ left: 0, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="name" tick={{ fill: 'var(--text-3)', fontSize: 11 }} />
-              <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} />
+              <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} />
               <Tooltip {...tooltipStyle} formatter={(v, name) => [inr(v), name.charAt(0).toUpperCase() + name.slice(1)]} />
-              <Bar dataKey="revenue" fill="#22c55e" radius={[3,3,0,0]} name="revenue" />
-              <Bar dataKey="profit"  fill="#3b82f6" radius={[3,3,0,0]} name="profit" />
+              <Bar dataKey="revenue" fill={PALETTE[0]} radius={[3,3,0,0]} name="revenue" />
+              <Bar dataKey="profit"  fill={PALETTE[1]} radius={[3,3,0,0]} name="profit" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -225,7 +239,7 @@ export default function Analytics() {
                   <div className="flex justify-between text-xs mb-1">
                     <span className="truncate max-w-[60%]" style={{ color: 'var(--text-2)' }}>{p.name}</span>
                     <span className="font-bold tabular-nums ml-2" style={{ color: isNeg ? '#f87171' : '#22c55e' }}>
-                      {isNeg ? '' : '+'}{p.profit.toFixed(1)}%
+                      {isNeg ? '' : '+'}{formatPct(p.profit, 2)}
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
@@ -250,7 +264,7 @@ export default function Analytics() {
                   <div className="flex justify-between text-sm mb-1.5">
                     <span style={{ color: 'var(--text-2)' }}>{name || 'Unknown'}</span>
                     <span className="font-semibold tabular-nums" style={{ color }}>
-                      {value} <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>({pct.toFixed(0)}%)</span>
+                      {value} <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>({formatPct(pct, 1)})</span>
                     </span>
                   </div>
                   <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
@@ -283,7 +297,7 @@ export default function Analytics() {
                       </td>
                       <td className="py-1.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(f['Amount Billed So far'])}</td>
                       <td className="py-1.5 font-semibold tabular-nums" style={{ color: p >= 0 ? '#22c55e' : '#f87171' }}>
-                        {p > 0 ? '+' : ''}{p.toFixed(1)}%
+                        {p > 0 ? '+' : ''}{formatPct(p, 2)}
                       </td>
                     </tr>
                   )

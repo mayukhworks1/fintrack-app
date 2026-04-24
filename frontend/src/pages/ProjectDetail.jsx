@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
 import { api } from '../services/api'
+import { formatInr, formatPct } from '../utils/format'
 
 // Shared clean AI text renderer (no ugly markdown symbols)
 function AiText({ text }) {
@@ -162,7 +163,7 @@ export default function ProjectDetail() {
 
   const f = record?.fields || {}
   const profitPct = Number(f['Profit percentage'] || 0)
-  const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
+  const fmt = (n) => formatInr(n)
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-5 animate-fade-in">
@@ -259,7 +260,7 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Key financial metrics">
             <MetricCard label="Amount Billed"  value={fmt(f['Amount Billed So far'])} />
             <MetricCard label="Actual Profit"  value={fmt(f['Actual Profit'])} />
-            <MetricCard label="Profit %"       value={`${profitPct.toFixed(1)}%`} highlight={profitPct > 0} />
+            <MetricCard label="Profit %"       value={formatPct(profitPct, 2)} highlight={profitPct > 0} />
             <MetricCard label="Target Revenue" value={fmt(f['Target Revenue'])} />
           </div>
 

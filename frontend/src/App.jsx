@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
@@ -7,8 +8,28 @@ import ProjectDetail from './pages/ProjectDetail'
 import Analytics from './pages/Analytics'
 import AIAssistant from './pages/AIAssistant'
 import Report from './pages/Report'
+import Login from './pages/Login'
+import { useAuth } from './context/AuthContext'
 
 export default function App() {
+  const { status } = useAuth()
+
+  // While verifying a stored token, show a quiet splash
+  if (status === 'loading') {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--bg-base)' }}
+      >
+        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
+      </div>
+    )
+  }
+
+  if (status !== 'authed') {
+    return <Login />
+  }
+
   return (
     <Layout>
       <ErrorBoundary>

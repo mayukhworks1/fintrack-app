@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight } from 'lucide-react'
+import { formatInr, formatPct } from '../utils/format'
 import clsx from 'clsx'
 
 function StatusBadge({ status }) {
@@ -80,7 +81,7 @@ export default function ProjectCard({ record }) {
         <div className="mb-4">
           <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-3)' }}>
             <span>Target progress</span>
-            <span style={{ color: targetPct >= 100 ? '#4ade80' : 'var(--text-2)' }}>{targetPct.toFixed(0)}%</span>
+            <span style={{ color: targetPct >= 100 ? '#4ade80' : 'var(--text-2)' }}>{formatPct(targetPct, 1)}</span>
           </div>
           <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
             <div className="h-full rounded-full transition-all duration-700"
@@ -98,8 +99,8 @@ export default function ProjectCard({ record }) {
       <div className="flex items-end justify-between pt-3" style={{ borderTop: '1px solid var(--border)' }}>
         <div>
           <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>Billed</p>
-          <p className="font-bold text-sm tabular-nums" style={{ color: 'var(--text-1)' }}>
-            ₹{billed.toLocaleString('en-IN')}
+          <p className="font-bold text-sm tabular-nums break-words" style={{ color: 'var(--text-1)' }}>
+            {formatInr(billed)}
           </p>
         </div>
         <div className="text-right">
@@ -107,7 +108,7 @@ export default function ProjectCard({ record }) {
           <p className="font-bold text-sm flex items-center gap-1 tabular-nums"
             style={{ color: isProfit ? '#4ade80' : '#f87171' }}>
             {isProfit ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {profitPct.toFixed(1)}%
+            {formatPct(profitPct, 2)}
           </p>
         </div>
       </div>

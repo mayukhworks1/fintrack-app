@@ -8,15 +8,8 @@ import {
 import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { formatInr as inr, formatPct } from '../utils/format'
 import clsx from 'clsx'
-
-/* ── Currency formatter ─────────────────────────────────────────── */
-const inr = (n) => {
-  const v = Number(n || 0)
-  if (v >= 1e7) return `₹${(v / 1e7).toFixed(1)}Cr`
-  if (v >= 1e5) return `₹${(v / 1e5).toFixed(1)}L`
-  return `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
 
 /* Count projects whose health does NOT contain 🔴 */
 const countHealthy = (byHealth = {}) =>
@@ -39,43 +32,44 @@ function SkeletonCard() {
   )
 }
 
-/* ── KPI card — NO truncate, value always fully visible ── */
-function KpiCard({ label, value, sub, icon: Icon, color, trend }) {
-  const palette = {
-    green:  { icon: '#22c55e', bg: 'rgba(34,197,94,0.12)',  glow: 'rgba(34,197,94,0.2)'  },
-    blue:   { icon: '#60a5fa', bg: 'rgba(59,130,246,0.12)', glow: 'rgba(59,130,246,0.2)' },
-    purple: { icon: '#c084fc', bg: 'rgba(168,85,247,0.12)', glow: 'rgba(168,85,247,0.2)' },
-    amber:  { icon: '#fbbf24', bg: 'rgba(251,191,36,0.12)', glow: 'rgba(251,191,36,0.2)' },
-    teal:   { icon: '#2dd4bf', bg: 'rgba(45,212,191,0.12)', glow: 'rgba(45,212,191,0.2)' },
-    red:    { icon: '#f87171', bg: 'rgba(239,68,68,0.12)',  glow: 'rgba(239,68,68,0.2)'  },
-  }
-  const c = palette[color] || palette.green
+/* ── KPI card — neutral palette, exact digits, mobile-readable ── */
+function KpiCard({ label, value, sub, icon: Icon, accent, trend }) {
+  // Neutral by default. `accent` is only used for semantic cues (positive/negative).
+  const accentColor =
+    accent === 'positive' ? '#22c55e'
+    : accent === 'warning' ? '#fbbf24'
+    : accent === 'negative' ? '#f87171'
+    : 'var(--text-2)'
   return (
-    <div className="card">
-      {/* Icon row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-          style={{ background: c.bg, boxShadow: `0 0 14px ${c.glow}` }}>
-          <Icon size={17} style={{ color: c.icon }} aria-hidden="true" />
+    <div className="card p-3 sm:p-5">
+      <div className="flex items-center justify-between mb-2 sm:mb-3">
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <Icon size={14} style={{ color: 'var(--text-2)' }} aria-hidden="true" />
         </div>
-        {trend != null && (
-          <span className="text-xs font-bold flex items-center gap-0.5"
+        {trend != null && Number.isFinite(trend) && (
+          <span className="text-[10px] sm:text-xs font-semibold flex items-center gap-0.5 tabular-nums"
             style={{ color: trend >= 0 ? '#22c55e' : '#f87171' }}>
-            {trend >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-            {Math.abs(trend).toFixed(1)}%
+            {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+            {formatPct(Math.abs(trend), 2)}
           </span>
         )}
       </div>
-      {/* Label */}
-      <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>
+      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-1"
+        style={{ color: 'var(--text-3)' }}>
         {label}
       </p>
-      {/* Value — large, never truncated */}
-      <p className="font-bold tabular-nums leading-none break-all" style={{ fontSize: 'clamp(1.25rem, 2vw, 1.6rem)', color: 'var(--text-1)' }}>
+      {/* Exact digits — break-word so long numbers wrap cleanly on mobile */}
+      <p className="font-semibold tabular-nums leading-tight break-words"
+        style={{
+          fontSize: 'clamp(1.0625rem, 3.6vw, 1.5rem)',
+          color: accentColor === 'var(--text-2)' ? 'var(--text-1)' : accentColor,
+          wordBreak: 'break-word',
+        }}>
         {value}
       </p>
       {sub && (
-        <p className="text-xs mt-1.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
+        <p className="text-[10px] sm:text-xs mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>
       )}
     </div>
   )
@@ -92,7 +86,7 @@ function RiskRow({ project }) {
       </div>
       <span className="text-sm font-bold tabular-nums flex-shrink-0"
         style={{ color: isNeg ? '#f87171' : '#fbbf24' }}>
-        {project.pct > 0 ? '+' : ''}{project.pct}%
+        {project.pct > 0 ? '+' : ''}{formatPct(project.pct, 2)}
       </span>
     </div>
   )
@@ -109,7 +103,7 @@ function ClientBar({ client, billed, profit, maxBilled }) {
         <div className="flex items-center gap-3 text-xs flex-shrink-0 ml-2">
           <span className="tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(billed)}</span>
           <span className="font-bold tabular-nums" style={{ color: margin >= 0 ? '#22c55e' : '#f87171' }}>
-            {margin.toFixed(1)}% margin
+            {formatPct(margin, 2)} margin
           </span>
         </div>
       </div>
@@ -199,39 +193,35 @@ export default function Dashboard() {
                   label="Total Revenue"
                   value={inr(s?.total_billed)}
                   icon={IndianRupee}
-                  color="green"
                 />
                 <KpiCard
                   label="Net Profit"
                   value={inr(s?.total_profit)}
                   icon={TrendingUp}
-                  color="blue"
+                  accent={(s?.total_profit ?? 0) >= 0 ? 'positive' : 'negative'}
                   trend={s?.avg_profit_pct}
                 />
                 <KpiCard
                   label="Total Cost"
                   value={inr(s?.total_cost)}
                   icon={Activity}
-                  color="purple"
-                  sub={s?.total_cost > 0 ? `${costRatio.toFixed(0)}% of revenue` : undefined}
+                  sub={s?.total_cost > 0 ? `${formatPct(costRatio, 1)} of revenue` : undefined}
                 />
                 <KpiCard
                   label="Profit Margin"
-                  value={`${margin.toFixed(1)}%`}
+                  value={formatPct(margin, 2)}
                   icon={Flame}
-                  color={margin >= 20 ? 'green' : margin >= 0 ? 'amber' : 'red'}
+                  accent={margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative'}
                 />
                 <KpiCard
                   label="Targets Hit"
                   value={`${s?.target_achieved_count ?? 0} / ${s?.total_projects ?? 0}`}
                   icon={Target}
-                  color="teal"
                 />
                 <KpiCard
                   label="Projects"
                   value={s?.total_projects ?? '—'}
                   icon={FolderKanban}
-                  color="amber"
                   sub={`${healthOk} healthy`}
                 />
               </>
@@ -299,7 +289,7 @@ export default function Dashboard() {
                       {s.best_project.name}
                     </p>
                     <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: '#22c55e' }}>
-                      {s.best_project.pct >= 0 ? '+' : ''}{s.best_project.pct}%
+                      {s.best_project.pct >= 0 ? '+' : ''}{formatPct(s.best_project.pct, 2)}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>profit margin</p>
                   </div>
@@ -322,7 +312,7 @@ export default function Dashboard() {
                     </p>
                     <p className="text-2xl font-bold mt-1 tabular-nums"
                       style={{ color: s.worst_project.pct < 0 ? '#f87171' : '#fbbf24' }}>
-                      {s.worst_project.pct > 0 ? '+' : ''}{s.worst_project.pct}%
+                      {s.worst_project.pct > 0 ? '+' : ''}{formatPct(s.worst_project.pct, 2)}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>profit margin</p>
                   </div>
@@ -344,12 +334,13 @@ export default function Dashboard() {
               return (
                 <button key={status}
                   onClick={() => navigate(`/projects?status=${encodeURIComponent(status)}`)}
-                  className="card text-center transition-all hover:scale-[1.02] active:scale-[0.99]"
+                  className="card text-center transition-all hover:scale-[1.02] active:scale-[0.99] p-3 sm:p-5"
                   aria-label={`${count} ${status} projects`}>
-                  <p className="text-3xl font-bold tabular-nums" style={{ color: accent }}>{count}</p>
-                  <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>{status}</p>
-                  <div className="mt-2 h-0.5 rounded-full mx-auto w-8"
-                    style={{ background: accent, opacity: 0.45 }} />
+                  <div className="flex items-center justify-center gap-1.5 mb-1">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: accent }} />
+                    <p className="text-[10px] sm:text-xs truncate" style={{ color: 'var(--text-3)' }}>{status}</p>
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{count}</p>
                 </button>
               )
             })}

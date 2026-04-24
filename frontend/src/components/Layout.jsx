@@ -2,10 +2,11 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
-  Sun, Moon, WifiOff, Menu, X
+  Sun, Moon, WifiOff, Menu, X, LogOut
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
+import { useAuth } from '../context/AuthContext'
 
 const nav = [
   { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
@@ -36,6 +37,7 @@ function OfflineBanner() {
 
 function SidebarContent({ onClose }) {
   const { dark, toggle } = useTheme()
+  const { logout } = useAuth()
   const location = useLocation()
 
   // Close drawer on navigation (mobile)
@@ -50,7 +52,7 @@ function SidebarContent({ onClose }) {
         style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 4px 14px rgba(34,197,94,0.4)' }}>
+            style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 2px 8px rgba(34,197,94,0.2)' }}>
             <TrendingUp size={16} className="text-white" aria-hidden="true" />
           </div>
           <div>
@@ -75,15 +77,15 @@ function SidebarContent({ onClose }) {
             key={to} to={to} end={end}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
             style={({ isActive }) => isActive
-              ? { background: 'linear-gradient(135deg,rgba(34,197,94,0.14),rgba(34,197,94,0.05))', border: '1px solid rgba(34,197,94,0.22)', color: '#22c55e' }
+              ? { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }
               : { color: 'var(--text-2)', border: '1px solid transparent' }
             }
           >
             {({ isActive }) => (
               <>
-                <Icon size={16} aria-hidden="true" style={{ color: isActive ? '#22c55e' : 'var(--text-3)' }} />
-                <span className="flex-1" style={{ color: isActive ? '#22c55e' : 'var(--text-2)' }}>{label}</span>
-                {isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e', boxShadow: '0 0 6px #22c55e' }} aria-hidden="true" />}
+                <Icon size={16} aria-hidden="true" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-3)' }} />
+                <span className="flex-1" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>{label}</span>
+                {isActive && <span className="w-1 h-1 rounded-full" style={{ background: '#22c55e' }} aria-hidden="true" />}
               </>
             )}
           </NavLink>
@@ -113,7 +115,18 @@ function SidebarContent({ onClose }) {
               style={{ background: dark ? 'rgba(255,255,255,0.55)' : '#16a34a', left: dark ? '3px' : 'calc(100% - 15px)', boxShadow: dark ? 'none' : '0 0 6px rgba(34,197,94,0.6)' }} />
           </div>
         </button>
-        <p className="text-xs text-center mt-2.5" style={{ color: 'var(--text-3)' }}>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs mt-2 transition-all"
+          style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'transparent' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.06)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          aria-label="Sign out"
+        >
+          <LogOut size={12} aria-hidden="true" />
+          <span>Sign out</span>
+        </button>
+        <p className="text-[10px] text-center mt-2.5" style={{ color: 'var(--text-3)' }}>
           Powered by OpenRouter AI
         </p>
       </div>
@@ -157,7 +170,7 @@ export default function Layout({ children }) {
         aria-label="Sidebar"
       >
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div style={{ position: 'absolute', top: -80, left: -40, width: 200, height: 200, background: 'radial-gradient(circle,rgba(34,197,94,0.07) 0%,transparent 70%)' }} />
+          <div style={{ position: 'absolute', top: -80, left: -40, width: 200, height: 200, background: 'radial-gradient(circle,rgba(34,197,94,0.03) 0%,transparent 70%)' }} />
         </div>
         <SidebarContent />
       </aside>
