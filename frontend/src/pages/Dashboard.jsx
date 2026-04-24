@@ -32,45 +32,43 @@ function SkeletonCard() {
   )
 }
 
-/* ── KPI card — neutral palette, exact digits, mobile-readable ── */
+/* ── KPI card — minimal, typographic ── */
 function KpiCard({ label, value, sub, icon: Icon, accent, trend }) {
-  // Neutral by default. `accent` is only used for semantic cues (positive/negative).
   const accentColor =
     accent === 'positive' ? '#22c55e'
     : accent === 'warning' ? '#fbbf24'
     : accent === 'negative' ? '#f87171'
-    : 'var(--text-2)'
+    : 'var(--text-1)'
   return (
-    <div className="card p-3 sm:p-5">
-      <div className="flex items-center justify-between mb-2 sm:mb-3">
-        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-          <Icon size={14} style={{ color: 'var(--text-2)' }} aria-hidden="true" />
-        </div>
+    <div className="card">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-medium uppercase tracking-wider"
+          style={{ color: 'var(--text-3)', letterSpacing: '0.06em' }}>
+          {label}
+        </p>
+        {Icon && <Icon size={13} style={{ color: 'var(--text-3)' }} aria-hidden="true" />}
+      </div>
+      <p className="font-semibold tabular-nums leading-none break-words"
+        style={{
+          fontSize: 'clamp(1.25rem, 3.6vw, 1.625rem)',
+          color: accentColor,
+          letterSpacing: '-0.02em',
+          wordBreak: 'break-word',
+        }}>
+        {value}
+      </p>
+      <div className="flex items-center gap-2 mt-2 min-h-[16px]">
         {trend != null && Number.isFinite(trend) && (
-          <span className="text-[10px] sm:text-xs font-semibold flex items-center gap-0.5 tabular-nums"
+          <span className="text-[11px] font-medium flex items-center gap-0.5 tabular-nums"
             style={{ color: trend >= 0 ? '#22c55e' : '#f87171' }}>
             {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
             {formatPct(Math.abs(trend), 2)}
           </span>
         )}
+        {sub && (
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{sub}</p>
+        )}
       </div>
-      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-1"
-        style={{ color: 'var(--text-3)' }}>
-        {label}
-      </p>
-      {/* Exact digits — break-word so long numbers wrap cleanly on mobile */}
-      <p className="font-semibold tabular-nums leading-tight break-words"
-        style={{
-          fontSize: 'clamp(1.0625rem, 3.6vw, 1.5rem)',
-          color: accentColor === 'var(--text-2)' ? 'var(--text-1)' : accentColor,
-          wordBreak: 'break-word',
-        }}>
-        {value}
-      </p>
-      {sub && (
-        <p className="text-[10px] sm:text-xs mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>
-      )}
     </div>
   )
 }
@@ -157,17 +155,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <button onClick={refresh} disabled={loading} aria-label="Refresh"
-            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-            style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'transparent' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <RefreshCw size={15} className={clsx(loading && 'animate-spin')} />
+          <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
+            <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
           </button>
-          <button onClick={() => navigate('/projects/new')}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
-            <Plus size={15} aria-hidden="true" />
+          <button onClick={() => navigate('/projects/new')} className="btn-primary">
+            <Plus size={14} aria-hidden="true" />
             <span className="hidden sm:inline">New Project</span>
             <span className="sm:hidden">New</span>
           </button>
@@ -234,10 +226,7 @@ export default function Dashboard() {
 
         {/* Client revenue */}
         <div className="card">
-          <h2 className="text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2"
-            style={{ color: 'var(--text-3)' }}>
-            <IndianRupee size={13} style={{ color: '#22c55e' }} aria-hidden="true" /> Revenue by Client
-          </h2>
+          <h2 className="section-title mb-4">Revenue by Client</h2>
           {loading && !data
             ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
             : <div className="space-y-4">
@@ -254,10 +243,7 @@ export default function Dashboard() {
 
         {/* Needs attention */}
         <div className="card">
-          <h2 className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-2"
-            style={{ color: 'var(--text-3)' }}>
-            <ShieldAlert size={13} style={{ color: '#f87171' }} aria-hidden="true" /> Needs Attention
-          </h2>
+          <h2 className="section-title mb-1">Needs Attention</h2>
           <p className="text-xs mb-4" style={{ color: 'var(--text-3)' }}>Negative profit or critical health</p>
           {loading && !data ? <SkeletonCard /> :
             atRisk.length === 0
@@ -277,10 +263,7 @@ export default function Dashboard() {
         <div className="card flex flex-col gap-4">
           {/* Top performer */}
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2"
-              style={{ color: 'var(--text-3)' }}>
-              <Award size={13} style={{ color: '#22c55e' }} aria-hidden="true" /> Top Performer
-            </p>
+            <p className="section-title mb-3">Top Performer</p>
             {loading && !data ? <SkeletonCard /> :
               s?.best_project?.name
                 ? <div className="rounded-xl p-3"
@@ -299,10 +282,7 @@ export default function Dashboard() {
 
           {/* Lowest margin */}
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2"
-              style={{ color: 'var(--text-3)' }}>
-              <TrendingDown size={13} style={{ color: '#f87171' }} aria-hidden="true" /> Lowest Margin
-            </p>
+            <p className="section-title mb-3">Lowest Margin</p>
             {loading && !data ? <SkeletonCard /> :
               s?.worst_project?.name
                 ? <div className="rounded-xl p-3"
@@ -351,12 +331,10 @@ export default function Dashboard() {
       {/* ── Top projects ── */}
       <section aria-label="Top projects by billing">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-            Top Projects by Revenue
-          </h2>
+          <h2 className="section-title">Top Projects by Revenue</h2>
           <button onClick={() => navigate('/projects')}
-            className="text-xs font-semibold flex items-center gap-1 transition-opacity hover:opacity-70"
-            style={{ color: '#22c55e' }}>
+            className="text-xs font-medium flex items-center gap-1 transition-opacity hover:opacity-70"
+            style={{ color: 'var(--accent)' }}>
             View all <ArrowRight size={12} aria-hidden="true" />
           </button>
         </div>

@@ -23,9 +23,9 @@ function HealthBar({ health, profitPct }) {
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-medium" style={{ color }}>● {label}</span>
       </div>
-      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <div className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${width}%`, background: `linear-gradient(90deg, ${color}88, ${color})` }} />
+      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+        <div className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${width}%`, background: color }} />
       </div>
     </div>
   )
@@ -83,13 +83,11 @@ export default function ProjectCard({ record }) {
             <span>Target progress</span>
             <span style={{ color: targetPct >= 100 ? '#4ade80' : 'var(--text-2)' }}>{formatPct(targetPct, 1)}</span>
           </div>
-          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <div className="h-full rounded-full transition-all duration-700"
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+            <div className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${targetPct}%`,
-                background: targetPct >= 100
-                  ? 'linear-gradient(90deg, #22c55e, #4ade80)'
-                  : 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+                background: targetPct >= 100 ? '#22c55e' : '#3b82f6',
               }} />
           </div>
         </div>

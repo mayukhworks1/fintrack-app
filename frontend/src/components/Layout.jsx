@@ -51,9 +51,9 @@ function SidebarContent({ onClose }) {
       <div className="flex items-center justify-between px-4 py-5"
         style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 2px 8px rgba(34,197,94,0.2)' }}>
-            <TrendingUp size={16} className="text-white" aria-hidden="true" />
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--accent)' }}>
+            <TrendingUp size={15} className="text-white" aria-hidden="true" />
           </div>
           <div>
             <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>FinTrack</p>
@@ -75,17 +75,16 @@ function SidebarContent({ onClose }) {
         {nav.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to} to={to} end={end}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium transition-colors"
             style={({ isActive }) => isActive
-              ? { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }
-              : { color: 'var(--text-2)', border: '1px solid transparent' }
+              ? { background: 'var(--bg-input)', color: 'var(--text-1)' }
+              : { color: 'var(--text-2)' }
             }
           >
             {({ isActive }) => (
               <>
-                <Icon size={16} aria-hidden="true" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-3)' }} />
-                <span className="flex-1" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>{label}</span>
-                {isActive && <span className="w-1 h-1 rounded-full" style={{ background: '#22c55e' }} aria-hidden="true" />}
+                <Icon size={15} aria-hidden="true" style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)' }} />
+                <span className="flex-1">{label}</span>
               </>
             )}
           </NavLink>
@@ -166,12 +165,9 @@ export default function Layout({ children }) {
       {/* ── Desktop sidebar (always visible ≥ lg) ── */}
       <aside
         className="hidden lg:flex w-56 flex-col flex-shrink-0 relative"
-        style={{ background: 'var(--bg-sidebar)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderRight: '1px solid var(--border)', transition: 'background 0.3s ease' }}
+        style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)' }}
         aria-label="Sidebar"
       >
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div style={{ position: 'absolute', top: -80, left: -40, width: 200, height: 200, background: 'radial-gradient(circle,rgba(34,197,94,0.03) 0%,transparent 70%)' }} />
-        </div>
         <SidebarContent />
       </aside>
 
@@ -190,8 +186,6 @@ export default function Layout({ children }) {
         className="lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
         style={{
           background: 'var(--bg-sidebar)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
           borderRight: '1px solid var(--border)',
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
         }}
@@ -206,10 +200,10 @@ export default function Layout({ children }) {
 
         {/* Mobile top bar */}
         <header className="lg:hidden flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)', backdropFilter: 'blur(16px)' }}>
+          style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)' }}>
+              style={{ background: 'var(--accent)' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
             <span className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>FinTrack</span>
