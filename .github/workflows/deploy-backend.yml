@@ -12,6 +12,10 @@ jobs:
   deploy:
     name: Push to HF Space
     runs-on: ubuntu-latest
+    # Promote secret to env so step-level `if:` can reference it.
+    # (GitHub forbids `secrets.*` inside `if:` conditions.)
+    env:
+      HAS_HF_TOKEN: ${{ secrets.HF_TOKEN != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +25,7 @@ jobs:
 
       - name: Check secret is configured
         run: |
-          if [ -z "${{ secrets.HF_TOKEN }}" ]; then
+          if [ "$HAS_HF_TOKEN" != "true" ]; then
             echo "⚠️  HF_TOKEN not set yet — skipping deploy."
             echo "Add it: GitHub repo → Settings → Secrets → Actions → New secret"
             exit 0
@@ -29,15 +33,17 @@ jobs:
           echo "✅ HF_TOKEN found, deploying..."
 
       - name: Push backend to Hugging Face Space
-        if: ${{ secrets.HF_TOKEN != '' }}
+        if: env.HAS_HF_TOKEN == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd backend
           git init
           git config user.email "ci@fintrack"
           git config user.name "FinTrack CI"
           git add .
-          git commit -m "deploy: $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "deploy: $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push --force \
-            https://Mayukhj24:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Mayukhj24/fintrack-api \
+            "https://Mayukhj24:${HF_TOKEN}@huggingface.co/spaces/Mayukhj24/fintrack-api" \
             HEAD:main
           echo "✅ Deployed to https://mayukhj24-fintrack-api.hf.space"
