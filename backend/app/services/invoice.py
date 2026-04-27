@@ -201,10 +201,11 @@ class InvoiceService:
         total_with_tax  = 0.0
         total_received  = 0.0
         total_outstanding = 0.0
-        by_status: dict[str, int]   = {}
-        by_project: dict[str, dict] = {}
-        pending_invoices: list[dict] = []
-        overdue_invoices: list[dict] = []
+        by_status: dict[str, int]        = {}
+        by_status_amounts: dict[str, float] = {}   # total Amount Raised per status
+        by_project: dict[str, dict]      = {}
+        pending_invoices: list[dict]     = []
+        overdue_invoices: list[dict]     = []
 
         for r in records:
             f = r.get("fields", {})
@@ -230,6 +231,8 @@ class InvoiceService:
                     total_outstanding += raised     # outstanding = pre-GST raised of Pending
 
             by_status[status] = by_status.get(status, 0) + 1
+            if not cancelled:
+                by_status_amounts[status] = round(by_status_amounts.get(status, 0.0) + raised, 2)
 
             if project not in by_project:
                 by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
@@ -272,6 +275,7 @@ class InvoiceService:
             "total_invoices":     len(records),
             "active_invoices":    len(records) - by_status.get("Cancelled", 0),
             "by_status":          by_status,
+            "by_status_amounts":  by_status_amounts,
             "by_project":         by_project,
             "pending_invoices":   pending_invoices[:10],
             "overdue_invoices":   overdue_invoices[:5],

@@ -464,9 +464,9 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
 /* ── Skeleton row ─────────────────────────────────────────────────────────── */
 function SkeletonRow() {
   return (
-    <tr aria-hidden="true" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-      {[80, 100, 90, 80, 100, 90, 90, 72, 72, 48, 56].map((w, i) => (
-        <td key={i} className="px-4 py-3.5">
+    <tr aria-hidden="true" className="tbl-row">
+      {[80, 100, 90, 80, 100, 90, 90, 72, 72, 48, 56, 60].map((w, i) => (
+        <td key={i} className="tbl-cell">
           <div className="skeleton h-3 rounded" style={{ width: w }} />
         </td>
       ))}
@@ -537,16 +537,15 @@ export default function Invoices() {
     else { setSortCol(col); setSortDir('desc') }
   }
 
-  function SortTh({ col, children }) {
+  // Inline sort-label used inside <th className="tbl-head">
+  function SortLabel({ col, children }) {
     const active = sortCol === col
     return (
-      <th onClick={() => handleSort(col)}
-        className="px-4 py-3 text-left cursor-pointer select-none whitespace-nowrap"
-        style={{ color: active ? 'var(--text-2)' : 'var(--text-3)' }}>
-        <span className="inline-flex items-center gap-1 section-title" style={{ color: 'inherit' }}>
-          {children}<ArrowUpDown size={10} style={{ opacity: active ? 0.9 : 0.25 }} />
-        </span>
-      </th>
+      <button onClick={() => handleSort(col)}
+        className="inline-flex items-center gap-1 cursor-pointer select-none section-title"
+        style={{ color: active ? 'var(--text-2)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
+        {children}<ArrowUpDown size={10} style={{ opacity: active ? 0.9 : 0.25 }} />
+      </button>
     )
   }
 
@@ -595,27 +594,43 @@ export default function Invoices() {
           semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
       </section>
 
-      {/* ── Status chips — click to filter ── */}
+      {/* ── Status chips — click to filter, shows count + total amount ── */}
       {s?.by_status && Object.keys(s.by_status).length > 0 && (
-        <section className="grid grid-cols-3 gap-2.5">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {Object.entries(s.by_status).map(([status, count]) => {
-            const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--glass-bg)', border: 'var(--glass-border)' }
+            const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
             const Icon = m.icon
             const active = statusFilter === status
+            const amount = s?.by_status_amounts?.[status]
             return (
               <button key={status}
                 onClick={() => setStatusFilter(active ? '' : status)}
-                className="card flex items-center gap-3 p-3 cursor-pointer transition-all text-left"
-                style={{ borderColor: active ? m.color : 'var(--glass-border)', background: active ? m.bg : 'var(--glass-bg)' }}
+                className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
+                style={{
+                  borderColor: active ? m.color : 'var(--card-border)',
+                  background: active ? `${m.color}10` : 'var(--card-bg)',
+                  boxShadow: active ? `0 0 0 2px ${m.color}30, var(--card-shadow)` : 'var(--card-shadow)',
+                }}
                 aria-pressed={active}>
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${m.color}15` }}>
-                  {Icon && <Icon size={15} style={{ color: m.color }} />}
+                {/* Icon tile */}
+                <div className="kpi-icon flex-shrink-0"
+                  style={{ background: `${m.color}18` }}>
+                  {Icon && <Icon size={18} style={{ color: m.color }} />}
                 </div>
-                <div>
-                  <p className="font-bold text-lg tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{status}</p>
+                {/* Text */}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
+                  <p className="font-bold text-2xl tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
+                  {amount != null && (
+                    <p className="text-[11px] tabular-nums mt-1 font-medium" style={{ color: 'var(--text-2)' }}>
+                      {fmt(amount)}
+                    </p>
+                  )}
                 </div>
+                {/* Active indicator */}
+                {active && (
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.color }} />
+                )}
               </button>
             )
           })}
@@ -730,21 +745,19 @@ export default function Invoices() {
         <div className="overflow-x-auto">
           <table className="w-full" style={{ minWidth: 960 }}>
             <thead>
-              <tr style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--glass-border)' }}>
-                <SortTh col="Invoice Number">Invoice #</SortTh>
-                <SortTh col="Project">Project</SortTh>
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Category</th>
-                <SortTh col="Raised Date">Raised</SortTh>
-                <SortTh col="Amount Raised">Amount</SortTh>
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>GST Total</th>
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Received</th>
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Outstanding</th>
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Status</th>
-                <SortTh col="Agening (Days)">Aging</SortTh>
-                {/* Attachments column */}
-                <th className="px-4 py-3 text-left section-title" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Docs</th>
-                {/* Action column */}
-                <th className="px-4 py-3" />
+              <tr>
+                <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
+                <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
+                <th className="tbl-head">Category</th>
+                <th className="tbl-head"><SortLabel col="Raised Date">Raised</SortLabel></th>
+                <th className="tbl-head"><SortLabel col="Amount Raised">Amount</SortLabel></th>
+                <th className="tbl-head">GST Total</th>
+                <th className="tbl-head">Received</th>
+                <th className="tbl-head">Outstanding</th>
+                <th className="tbl-head">Status</th>
+                <th className="tbl-head"><SortLabel col="Agening (Days)">Aging</SortLabel></th>
+                <th className="tbl-head">Docs</th>
+                <th className="tbl-head" style={{ width: 80 }} />
               </tr>
             </thead>
             <tbody>
@@ -763,55 +776,52 @@ export default function Invoices() {
                       const allFiles = [...refs, ...pdfs]
 
                       return (
-                        <tr key={r.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', cursor: 'pointer' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-bg)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }}
                           onClick={() => openView(r)}>
 
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
                               {f['Invoice Number'] || '—'}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>
                               {fmt(f['Amount Raised'])}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>
                               {fmt(f['Amount with Tax'])}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>
                               {fmt(f['Amount Received'])}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             {outstanding > 0
                               ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
                               : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <StatusPill status={f['Payment Status']} />
                           </td>
-                          <td className="px-4 py-3.5">
+                          <td className="tbl-cell">
                             <AgingBadge days={f['Agening (Days)']} />
                           </td>
 
                           {/* Attachment thumbs */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                             {allFiles.length > 0 ? (
                               <div className="flex items-center gap-1">
                                 {allFiles.slice(0, 2).map((a, i) => (
@@ -828,12 +838,12 @@ export default function Invoices() {
                             )}
                           </td>
 
-                          {/* View action — always visible */}
-                          <td className="px-3 py-3.5" onClick={e => e.stopPropagation()}>
+                          {/* View action */}
+                          <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                             <button
                               onClick={() => openView(r)}
                               className="btn-ghost flex items-center gap-1.5"
-                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.6rem', color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}
                               aria-label={`View ${f['Invoice Number']}`}>
                               <Eye size={12} />
                               <span className="text-[11px] font-semibold">View</span>

@@ -5,18 +5,14 @@ const ThemeCtx = createContext(null)
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem('fintrack-theme')
-    return saved ? saved === 'dark' : true // default dark
+    return saved ? saved === 'dark' : false // default light
   })
 
   useEffect(() => {
     const html = document.documentElement
-    if (dark) {
-      html.classList.remove('light')
-      html.classList.add('dark')
-    } else {
-      html.classList.remove('dark')
-      html.classList.add('light')
-    }
+    // :root = light, html.dark = dark  (no .light class needed)
+    html.classList.remove('light', 'dark')
+    if (dark) html.classList.add('dark')
     localStorage.setItem('fintrack-theme', dark ? 'dark' : 'light')
   }, [dark])
 
