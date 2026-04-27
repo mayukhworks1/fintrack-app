@@ -24,10 +24,18 @@ FORMATTING RULES — follow these strictly:
 - Keep answers focused and direct. No filler phrases like "Certainly!" or "Great question!".
 - If the data clearly shows a number, state it. Don't hedge unnecessarily.
 
-The database tracks:
-Client (Birla Open Minds, Maitrimetal, BG), Project Name (ZOHO, Pms, Innovine),
-Amount Billed So far, Actual Profit, Profit %, Target Revenue, Input Cost,
-Overhead Cost, Project Status, Health (🟢/🟡/🔴), Target Achieved, Resource Count, Duration."""
+The database tracks TWO separate tables:
+
+Projects table: Client, Project Name (Innovine, PMS, Maitrimetal), Amount Billed So far,
+Actual Profit, Profit %, Target Revenue, Input Cost, Overhead Cost, Project Status,
+Health (🟢/🟡/🔴), Target Achieved, Resource Count, Duration.
+
+Invoice Tracking table: Invoice Number, Project, Category, Description, Milestone,
+Raised By, Raised Date, Cleared Date, Amount Raised, Amount with Tax (18% GST),
+Amount Received, Payment Status (Paid/Pending/Cancelled), Outstanding Amount,
+Days To Clear, Aging (days since raised), Speed (🟢 Fast/🟡 Normal/🔴 Slow),
+Next Followup date. Use this table when the user asks about invoices, payments,
+collection rate, outstanding amounts, or specific invoice numbers."""
 
 
 def _make_headers():

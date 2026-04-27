@@ -8,6 +8,7 @@ import ProjectDetail from './pages/ProjectDetail'
 import Analytics from './pages/Analytics'
 import AIAssistant from './pages/AIAssistant'
 import Report from './pages/Report'
+import Invoices from './pages/Invoices'
 import Login from './pages/Login'
 import { useAuth } from './context/AuthContext'
 
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/"             element={<Dashboard />} />
           <Route path="/projects"     element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/invoices"     element={<Invoices />} />
           <Route path="/analytics"    element={<Analytics />} />
           <Route path="/ai"           element={<AIAssistant />} />
           <Route path="/report"       element={<Report />} />

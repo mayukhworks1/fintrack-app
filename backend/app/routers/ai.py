@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from ..services.teable import TeableService
+from ..services.invoice import InvoiceService
 from ..services.openrouter import (
     chat_with_ai, autofill_project, analyze_project, generate_report,
     _format_records_context
@@ -9,16 +10,51 @@ from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
+def _format_invoice_context(summary: dict, records: list[dict]) -> str:
+    """Build concise invoice context string for the AI."""
+    lines = [
+        "=== INVOICE TRACKING SUMMARY ===",
+        f"Total Invoices: {summary['total_invoices']}",
+        f"Total Raised (pre-tax): ₹{summary['total_raised']:,.0f}",
+        f"Total with GST: ₹{summary['total_with_tax']:,.0f}",
+        f"Total Received: ₹{summary['total_received']:,.0f}",
+        f"Outstanding: ₹{summary['total_outstanding']:,.0f}",
+        f"Collection Rate: {summary['collection_rate']:.1f}%",
+        f"By Status: {summary['by_status']}",
+        "",
+        "=== LIVE INVOICE RECORDS ===",
+    ]
+    for r in records[:50]:   # cap at 50 to keep context size sane
+        f = r.get("fields", {})
+        lines.append(
+            f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
+            f"{f.get('Category','?')} | {f.get('Payment Status','?')} | "
+            f"Raised: ₹{float(f.get('Amount Raised') or 0):,.0f} | "
+            f"Tax: ₹{float(f.get('Amount with Tax') or 0):,.0f} | "
+            f"Received: ₹{float(f.get('Amount Received') or 0):,.0f} | "
+            f"Outstanding: ₹{float(f.get('Outstanding Amount') or 0):,.0f} | "
+            f"Raised: {f.get('Raised Date','?')} | "
+            f"Aging: {f.get('Agening (Days)','0')} days"
+        )
+    return "\n".join(lines)
+
+
 @router.post("/chat")
 async def ai_chat(body: ChatRequest):
-    """Natural language chat about your Fintrack projects with full live data context."""
+    """Natural language chat about projects + invoices with full live data context."""
     try:
-        teable = TeableService()
-        # Fetch both summary AND full records for rich context
-        summary, all_records = await teable.get_summary(), await teable.get_all_records()
+        teable  = TeableService()
+        inv_svc = InvoiceService()
 
-        # Build rich context: summary + every individual project record
-        summary_text = (
+        # Fetch project + invoice data concurrently
+        import asyncio
+        (summary, all_records), (inv_summary, inv_records) = await asyncio.gather(
+            asyncio.gather(teable.get_summary(), teable.get_all_records()),
+            asyncio.gather(inv_svc.get_summary(), inv_svc.get_all_invoices()),
+        )
+
+        # Build project context
+        project_text = (
             f"=== PORTFOLIO SUMMARY ===\n"
             f"Total Projects: {summary['total_projects']}\n"
             f"Total Billed: ₹{summary['total_billed']:,.0f}\n"
@@ -29,8 +65,9 @@ async def ai_chat(body: ChatRequest):
             f"By Health: {summary['by_health']}\n"
             f"Targets Achieved: {summary.get('target_achieved_count', 0)}/{summary['total_projects']}\n"
         )
-        records_text = _format_records_context(all_records)
-        context = summary_text + "\n" + records_text
+        records_text  = _format_records_context(all_records)
+        invoice_text  = _format_invoice_context(inv_summary, inv_records)
+        context = project_text + "\n" + records_text + "\n\n" + invoice_text
 
         history = [{"role": m.role, "content": m.content} for m in body.history]
         result = await chat_with_ai(body.message, history, context)

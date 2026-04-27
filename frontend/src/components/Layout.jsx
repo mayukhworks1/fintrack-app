@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
-  Sun, Moon, WifiOff, Menu, X, LogOut
+  Sun, Moon, WifiOff, Menu, X, LogOut, Receipt
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext'
 const nav = [
   { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
   { to: '/projects',  label: 'Projects',     icon: FolderKanban },
+  { to: '/invoices',  label: 'Invoices',     icon: Receipt },
   { to: '/analytics', label: 'Analytics',    icon: BarChart3 },
   { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText },
   { to: '/report',    label: 'Report',       icon: FileText },

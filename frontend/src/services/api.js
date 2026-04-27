@@ -116,6 +116,18 @@ export const api = {
     report:   (opts = {}) =>
       request('/api/ai/report', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
+  invoices: {
+    list:    (params = {}) => {
+      const q = new URLSearchParams()
+      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/invoices?${q}`)
+    },
+    summary: ()         => request('/api/invoices/summary'),
+    get:     (id)       => request(`/api/invoices/${id}`),
+    create:  (data)     => request('/api/invoices', { method: 'POST',   body: JSON.stringify(data) }),
+    update:  (id, data) => request(`/api/invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+    delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
+  },
   health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.
