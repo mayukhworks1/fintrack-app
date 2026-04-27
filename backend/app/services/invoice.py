@@ -208,27 +208,34 @@ class InvoiceService:
 
         for r in records:
             f = r.get("fields", {})
-            raised      = float(f.get("Amount Raised")    or 0)
-            with_tax    = float(f.get("Amount with Tax")  or 0)
-            received    = float(f.get("Amount Received")  or 0)
-            outstanding = float(f.get("Outstanding Amount") or 0)
+            raised      = float(f.get("Amount Raised")       or 0)
+            with_tax    = float(f.get("Amount with Tax")     or 0)
+            received    = float(f.get("Amount Received")     or 0)
+            outstanding = float(f.get("Outstanding Amount")  or 0)
             status      = f.get("Payment Status", "Unknown")
             project     = f.get("Project", "Unknown")
-            aging       = float(f.get("Agening (Days)")   or 0)
+            aging       = float(f.get("Agening (Days)")      or 0)
+            cancelled   = status == "Cancelled"
 
-            total_raised       += raised
-            total_with_tax     += with_tax
-            total_received     += received
-            total_outstanding  += outstanding
+            # Totals exclude Cancelled invoices — they were never meant to be
+            # collected. Only count Paid + Pending toward raised/owed/outstanding.
+            if not cancelled:
+                total_raised      += raised
+                total_with_tax    += with_tax
+                total_outstanding += outstanding
 
-            by_status[status]  = by_status.get(status, 0) + 1
+            # Received is always accumulated (money already in hand)
+            total_received += received
+
+            by_status[status] = by_status.get(status, 0) + 1
 
             if project not in by_project:
                 by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
-            by_project[project]["raised"]      += raised
-            by_project[project]["received"]    += received
-            by_project[project]["outstanding"] += outstanding
-            by_project[project]["count"]       += 1
+            if not cancelled:
+                by_project[project]["raised"]      += raised
+                by_project[project]["outstanding"] += outstanding
+            by_project[project]["received"] += received
+            by_project[project]["count"]    += 1
 
             if status == "Pending":
                 pending_invoices.append({
@@ -259,6 +266,7 @@ class InvoiceService:
             "total_received":     round(total_received, 2),
             "total_outstanding":  round(total_outstanding, 2),
             "total_invoices":     len(records),
+            "active_invoices":    len(records) - by_status.get("Cancelled", 0),
             "by_status":          by_status,
             "by_project":         by_project,
             "pending_invoices":   pending_invoices[:10],

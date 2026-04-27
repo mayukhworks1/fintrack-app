@@ -55,7 +55,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         {!collapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--accent)' }}>
+              style={{ background: '#22c55e' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -66,7 +66,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         )}
         {collapsed && (
           <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}>
+            style={{ background: '#22c55e' }}>
             <TrendingUp size={13} className="text-white" aria-hidden="true" />
           </div>
         )}
@@ -92,14 +92,20 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
             title={collapsed ? label : undefined}
             className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'}`}
             style={({ isActive }) => isActive
-              ? { background: 'var(--bg-input)', color: 'var(--text-1)' }
-              : { color: 'var(--text-2)' }
+              ? { background: 'var(--nav-active-bg)', color: 'var(--text-1)' }
+              : { color: 'var(--text-3)' }
             }
           >
             {({ isActive }) => (
               <>
-                <Icon size={15} aria-hidden="true" style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }} />
-                {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                <Icon size={15} aria-hidden="true"
+                  style={{ color: isActive ? 'var(--text-1)' : 'var(--text-3)', flexShrink: 0 }} />
+                {!collapsed && (
+                  <span className="flex-1 truncate"
+                    style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>
+                    {label}
+                  </span>
+                )}
               </>
             )}
           </NavLink>
@@ -247,7 +253,7 @@ export default function Layout({ children }) {
           style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--accent)' }}>
+              style={{ background: '#22c55e' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
             <span className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>FinTrack</span>
