@@ -38,6 +38,46 @@ Next Followup date. Use this table when the user asks about invoices, payments,
 collection rate, outstanding amounts, or specific invoice numbers."""
 
 
+def _strip_reasoning(content: str) -> str:
+    """
+    Strip chain-of-thought reasoning from model output.
+
+    Handles three patterns:
+    1. <think>...</think> blocks (DeepSeek R1, Qwen3, Nemotron-super, etc.)
+    2. <reasoning>...</reasoning> blocks (some OpenRouter wrappers)
+    3. Raw reasoning prefix — some models dump their thought process as plain
+       text before writing the actual answer. We detect the transition phrase
+       (common markers like "The user wants", "I should present",
+       "Let me structure", etc.) and keep only the part after the last such
+       marker's paragraph ends.
+    """
+    # 1 & 2 — XML-tagged thinking blocks (greedy, dotall)
+    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+    content = re.sub(r'<reasoning>.*?</reasoning>', '', content, flags=re.DOTALL | re.IGNORECASE)
+
+    # 3 — Raw reasoning prefix: detect double-newline after a line that looks
+    #     like the model is talking to itself rather than to the user.
+    #     Heuristic: if the first non-empty paragraph starts with a meta-phrase,
+    #     drop everything up to (and including) the last such paragraph.
+    _META = re.compile(
+        r'^(okay[,\s]|alright[,\s]|let me |i (should|need|will|can) |'
+        r'the user (is|wants|asked|has)|looking at |checking |'
+        r'first,? |now,? i|so,? (the|i|let)|important note|'
+        r'must avoid|i should present|let me structure)',
+        re.IGNORECASE
+    )
+    paragraphs = re.split(r'\n{2,}', content.strip())
+    last_meta = -1
+    for idx, para in enumerate(paragraphs):
+        first_line = para.strip().splitlines()[0] if para.strip() else ''
+        if _META.match(first_line.strip()):
+            last_meta = idx
+    if last_meta >= 0 and last_meta < len(paragraphs) - 1:
+        content = '\n\n'.join(paragraphs[last_meta + 1:])
+
+    return content.strip()
+
+
 def _make_headers():
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -157,11 +197,13 @@ async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: f
 
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 if content and content.strip():
-                    return {
-                        "content": content,
-                        "model": model,
-                        "model_short": _short_model_name(model),
-                    }
+                    content = _strip_reasoning(content)
+                    if content.strip():
+                        return {
+                            "content": content,
+                            "model": model,
+                            "model_short": _short_model_name(model),
+                        }
                 errors.append(f"{_short_model_name(model)}: empty response")
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:

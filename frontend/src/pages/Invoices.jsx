@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
@@ -831,11 +832,11 @@ export default function Invoices() {
                           <td className="px-3 py-3.5" onClick={e => e.stopPropagation()}>
                             <button
                               onClick={() => openView(r)}
-                              className="btn-icon flex items-center gap-1.5 px-2.5"
-                              style={{ fontSize: '0.6875rem', color: 'var(--text-2)' }}
+                              className="btn-ghost flex items-center gap-1.5"
+                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.6rem', color: 'var(--accent)', borderColor: 'var(--accent)' }}
                               aria-label={`View ${f['Invoice Number']}`}>
-                              <Eye size={13} />
-                              <span className="hidden sm:inline text-[11px]">View</span>
+                              <Eye size={12} />
+                              <span className="text-[11px] font-semibold">View</span>
                             </button>
                           </td>
                         </tr>
@@ -847,21 +848,23 @@ export default function Invoices() {
         </div>
       </div>
 
-      {/* ── Drawers ── */}
-      {drawer?.mode === 'view' && (
+      {/* ── Drawers — rendered via portal to escape overflow/transform stacking contexts ── */}
+      {drawer?.mode === 'view' && createPortal(
         <InvoiceDetail
           invoice={drawer.invoice}
           onClose={closeDrawer}
           onEdit={() => setDrawer({ mode: 'edit', invoice: drawer.invoice })}
-        />
+        />,
+        document.body
       )}
-      {(drawer?.mode === 'new' || drawer?.mode === 'edit') && (
+      {(drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
         <InvoiceDrawer
           invoice={drawer.mode === 'edit' ? drawer.invoice : null}
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
-        />
+        />,
+        document.body
       )}
     </div>
   )
