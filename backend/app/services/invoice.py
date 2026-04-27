@@ -217,15 +217,14 @@ class InvoiceService:
             aging       = float(f.get("Agening (Days)")      or 0)
             cancelled   = status == "Cancelled"
 
-            # Totals exclude Cancelled invoices — they were never meant to be
-            # collected. Only count Paid + Pending toward raised/owed/outstanding.
+            # Cancelled invoices are completely voided — exclude from every
+            # financial total (raised, tax, received, outstanding).
+            # Only Paid + Pending invoices represent real business activity.
             if not cancelled:
                 total_raised      += raised
                 total_with_tax    += with_tax
+                total_received    += received
                 total_outstanding += outstanding
-
-            # Received is always accumulated (money already in hand)
-            total_received += received
 
             by_status[status] = by_status.get(status, 0) + 1
 
@@ -233,9 +232,9 @@ class InvoiceService:
                 by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
             if not cancelled:
                 by_project[project]["raised"]      += raised
+                by_project[project]["received"]    += received
                 by_project[project]["outstanding"] += outstanding
-            by_project[project]["received"] += received
-            by_project[project]["count"]    += 1
+            by_project[project]["count"] += 1
 
             if status == "Pending":
                 pending_invoices.append({
