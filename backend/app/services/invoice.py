@@ -217,23 +217,28 @@ class InvoiceService:
             aging       = float(f.get("Agening (Days)")      or 0)
             cancelled   = status == "Cancelled"
 
-            # Cancelled invoices are completely voided — exclude from every
-            # financial total (raised, tax, received, outstanding).
-            # Only Paid + Pending invoices represent real business activity.
+            # Cancelled = voided, excluded from everything.
+            # Total Raised = Amount Raised (pre-GST) for Paid + Pending.
+            # Collected    = Amount Raised (pre-GST) for Paid invoices only.
+            # Outstanding  = Amount Raised (pre-GST) for Pending invoices only.
             if not cancelled:
-                total_raised      += raised
-                total_with_tax    += with_tax
-                total_received    += received
-                total_outstanding += outstanding
+                total_raised     += raised
+                total_with_tax   += with_tax
+                if status == "Paid":
+                    total_received += raised        # collected = pre-GST raised of Paid
+                else:  # Pending
+                    total_outstanding += raised     # outstanding = pre-GST raised of Pending
 
             by_status[status] = by_status.get(status, 0) + 1
 
             if project not in by_project:
                 by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
             if not cancelled:
-                by_project[project]["raised"]      += raised
-                by_project[project]["received"]    += received
-                by_project[project]["outstanding"] += outstanding
+                by_project[project]["raised"] += raised
+                if status == "Paid":
+                    by_project[project]["received"]    += raised
+                else:
+                    by_project[project]["outstanding"] += raised
             by_project[project]["count"] += 1
 
             if status == "Pending":
@@ -270,7 +275,7 @@ class InvoiceService:
             "by_project":         by_project,
             "pending_invoices":   pending_invoices[:10],
             "overdue_invoices":   overdue_invoices[:5],
-            "collection_rate":    round((total_received / total_with_tax * 100), 2) if total_with_tax > 0 else 0.0,
+            "collection_rate":    round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
         }
         _cache_set(cache_key, summary)
         return summary
