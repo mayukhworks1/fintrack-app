@@ -2,7 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
-  Sun, Moon, WifiOff, Menu, X, LogOut, Receipt
+  Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
+  ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -17,7 +18,7 @@ const nav = [
   { to: '/report',    label: 'Report',       icon: FileText },
 ]
 
-function OfflineBanner() {
+function OfflineBanner({ collapsed }) {
   const [online, setOnline] = useState(navigator.onLine)
   useEffect(() => {
     const on  = () => setOnline(true)
@@ -28,55 +29,68 @@ function OfflineBanner() {
   }, [])
   if (online) return null
   return (
-    <div className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl"
-      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-      <WifiOff size={12} style={{ color: '#f87171' }} aria-hidden="true" />
-      <span className="text-xs" style={{ color: '#f87171' }}>Offline</span>
+    <div className={`mx-2 mb-2 flex items-center gap-2 px-2 py-2 rounded-lg ${collapsed ? 'justify-center' : ''}`}
+      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+      <WifiOff size={12} style={{ color: '#f87171', flexShrink: 0 }} aria-hidden="true" />
+      {!collapsed && <span className="text-xs" style={{ color: '#f87171' }}>Offline</span>}
     </div>
   )
 }
 
-function SidebarContent({ onClose }) {
+function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
   const { logout } = useAuth()
   const location = useLocation()
 
-  // Close drawer on navigation (mobile)
+  // Close mobile drawer on navigation
   useEffect(() => {
     if (onClose) onClose()
   }, [location.pathname]) // eslint-disable-line
 
   return (
     <>
-      {/* Logo */}
-      <div className="flex items-center justify-between px-4 py-5"
+      {/* Logo + collapse button */}
+      <div className={`flex items-center px-3 py-4 ${collapsed ? 'justify-center' : 'justify-between'}`}
         style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent)' }}>
-            <TrendingUp size={15} className="text-white" aria-hidden="true" />
+        {!collapsed && (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--accent)' }}>
+              <TrendingUp size={13} className="text-white" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-sm leading-tight truncate" style={{ color: 'var(--text-1)' }}>FinTrack</p>
+              <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>AI Finance Manager</p>
+            </div>
           </div>
-          <div>
-            <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>FinTrack</p>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>AI Finance Manager</p>
-          </div>
-        </div>
-        {/* Close button — only visible on mobile drawer */}
-        {onClose && (
-          <button onClick={onClose} aria-label="Close navigation"
-            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg"
-            style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-            <X size={15} />
-          </button>
         )}
+        {collapsed && (
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+            style={{ background: 'var(--accent)' }}>
+            <TrendingUp size={13} className="text-white" aria-hidden="true" />
+          </div>
+        )}
+        {/* Close button mobile / collapse button desktop */}
+        {onClose ? (
+          <button onClick={onClose} aria-label="Close navigation"
+            className="lg:hidden btn-icon" style={{ padding: '0.3rem' }}>
+            <X size={14} />
+          </button>
+        ) : onToggleCollapse ? (
+          <button onClick={onToggleCollapse} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="btn-icon" style={{ padding: '0.3rem' }}>
+            {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+          </button>
+        ) : null}
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 p-2.5 space-y-0.5" aria-label="Main navigation">
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         {nav.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to} to={to} end={end}
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium transition-colors"
+            title={collapsed ? label : undefined}
+            className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'}`}
             style={({ isActive }) => isActive
               ? { background: 'var(--bg-input)', color: 'var(--text-1)' }
               : { color: 'var(--text-2)' }
@@ -84,99 +98,128 @@ function SidebarContent({ onClose }) {
           >
             {({ isActive }) => (
               <>
-                <Icon size={15} aria-hidden="true" style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)' }} />
-                <span className="flex-1">{label}</span>
+                <Icon size={15} aria-hidden="true" style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }} />
+                {!collapsed && <span className="flex-1 truncate">{label}</span>}
               </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <OfflineBanner />
+      <OfflineBanner collapsed={collapsed} />
 
-      {/* Theme toggle */}
-      <div className="p-3" style={{ borderTop: '1px solid var(--border)' }}>
+      {/* Bottom controls */}
+      <div className="p-2" style={{ borderTop: '1px solid var(--border)' }}>
+        {/* Theme toggle */}
         <button
           onClick={toggle}
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all"
-          style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'transparent' }}
-          onMouseEnter={e => e.currentTarget.style.background = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}
+          className={`w-full flex items-center rounded-lg text-sm transition-colors mb-1 ${collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'}`}
+          style={{ color: 'var(--text-2)', background: 'transparent' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={collapsed ? (dark ? 'Light mode' : 'Dark mode') : undefined}
         >
-          <span className="flex items-center gap-2">
-            {dark ? <Sun size={14} style={{ color: '#facc15' }} aria-hidden="true" />
-                  : <Moon size={14} style={{ color: '#818cf8' }} aria-hidden="true" />}
-            <span style={{ color: 'var(--text-2)' }}>{dark ? 'Light mode' : 'Dark mode'}</span>
-          </span>
-          <div className="w-9 h-5 rounded-full relative flex-shrink-0 transition-all duration-300"
-            style={{ background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(34,197,94,0.35)' }}>
-            <div className="absolute top-1 w-3 h-3 rounded-full transition-all duration-300"
-              style={{ background: dark ? 'rgba(255,255,255,0.55)' : '#16a34a', left: dark ? '3px' : 'calc(100% - 15px)', boxShadow: dark ? 'none' : '0 0 6px rgba(34,197,94,0.6)' }} />
-          </div>
+          {dark
+            ? <Sun size={14} style={{ color: '#facc15', flexShrink: 0 }} aria-hidden="true" />
+            : <Moon size={14} style={{ color: '#818cf8', flexShrink: 0 }} aria-hidden="true" />}
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-[13px]" style={{ color: 'var(--text-2)' }}>{dark ? 'Light mode' : 'Dark mode'}</span>
+              {/* Mini toggle pill */}
+              <div className="w-8 h-4 rounded-full relative flex-shrink-0 transition-all duration-300"
+                style={{ background: dark ? 'rgba(255,255,255,0.10)' : 'rgba(34,197,94,0.3)' }}>
+                <div className="absolute top-0.5 w-3 h-3 rounded-full transition-all duration-300"
+                  style={{ background: dark ? 'rgba(255,255,255,0.5)' : '#16a34a', left: dark ? '2px' : 'calc(100% - 14px)' }} />
+              </div>
+            </>
+          )}
         </button>
+
+        {/* Sign out */}
         <button
           onClick={logout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs mt-2 transition-all"
-          style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'transparent' }}
+          className={`w-full flex items-center rounded-lg text-xs transition-colors ${collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'}`}
+          style={{ color: 'var(--text-3)', background: 'transparent' }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.06)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           aria-label="Sign out"
+          title={collapsed ? 'Sign out' : undefined}
         >
-          <LogOut size={12} aria-hidden="true" />
-          <span>Sign out</span>
+          <LogOut size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
+          {!collapsed && <span>Sign out</span>}
         </button>
-        <p className="text-[10px] text-center mt-2.5" style={{ color: 'var(--text-3)' }}>
-          Powered by OpenRouter AI
-        </p>
+
+        {!collapsed && (
+          <p className="text-[10px] text-center mt-2" style={{ color: 'var(--text-3)' }}>
+            Powered by OpenRouter AI
+          </p>
+        )}
       </div>
     </>
   )
 }
 
 export default function Layout({ children }) {
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerOpen,  setDrawerOpen]  = useState(false)
+  const [collapsed,   setCollapsed]   = useState(() => {
+    try { return localStorage.getItem('ft-sidebar-collapsed') === '1' } catch { return false }
+  })
 
-  // Close drawer on ESC key
+  const toggleCollapse = useCallback(() => {
+    setCollapsed(c => {
+      const next = !c
+      try { localStorage.setItem('ft-sidebar-collapsed', next ? '1' : '0') } catch {}
+      return next
+    })
+  }, [])
+
+  // Close drawer on ESC
   const handleKey = useCallback((e) => {
     if (e.key === 'Escape') setDrawerOpen(false)
   }, [])
-
   useEffect(() => {
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [handleKey])
 
-  // Lock body scroll when drawer is open on mobile
+  // Lock body scroll when drawer open
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [drawerOpen])
 
+  const sidebarW = collapsed ? 56 : 224
+
   return (
     <div className="flex h-screen overflow-hidden">
 
-      {/* ── Skip to content (accessibility) ── */}
+      {/* ── Skip to content ── */}
       <a href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 px-3 py-1.5 rounded-lg text-sm font-semibold"
-        style={{ background: '#22c55e', color: '#fff' }}>
+        style={{ background: 'var(--accent)', color: '#fff' }}>
         Skip to content
       </a>
 
-      {/* ── Desktop sidebar (always visible ≥ lg) ── */}
+      {/* ── Desktop sidebar ── */}
       <aside
-        className="hidden lg:flex w-56 flex-col flex-shrink-0 relative"
-        style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)' }}
+        className="hidden lg:flex flex-col flex-shrink-0 relative overflow-hidden"
+        style={{
+          width: sidebarW,
+          background: 'var(--bg-sidebar)',
+          borderRight: '1px solid var(--border)',
+          transition: 'width 0.2s ease',
+        }}
         aria-label="Sidebar"
       >
-        <SidebarContent />
+        <SidebarContent collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       </aside>
 
       {/* ── Mobile drawer overlay ── */}
       {drawerOpen && (
         <div
           className="lg:hidden fixed inset-0 z-40"
-          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setDrawerOpen(false)}
           aria-hidden="true"
         />
@@ -184,7 +227,7 @@ export default function Layout({ children }) {
 
       {/* ── Mobile drawer panel ── */}
       <aside
-        className="lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
+        className="lg:hidden fixed top-0 left-0 h-full w-56 z-50 flex flex-col transition-transform duration-300"
         style={{
           background: 'var(--bg-sidebar)',
           borderRight: '1px solid var(--border)',
@@ -193,7 +236,7 @@ export default function Layout({ children }) {
         aria-label="Mobile navigation"
         aria-hidden={!drawerOpen}
       >
-        <SidebarContent onClose={() => setDrawerOpen(false)} />
+        <SidebarContent collapsed={false} onClose={() => setDrawerOpen(false)} />
       </aside>
 
       {/* ── Main content ── */}
@@ -213,19 +256,15 @@ export default function Layout({ children }) {
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
             aria-expanded={drawerOpen}
-            className="w-9 h-9 flex items-center justify-center rounded-xl transition-all"
-            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <Menu size={18} />
+            className="btn-icon">
+            <Menu size={16} />
           </button>
         </header>
 
         <main
           id="main-content"
           className="flex-1 overflow-y-auto animate-fade-in"
-          style={{ background: 'var(--bg-base)', transition: 'background 0.3s ease' }}
+          style={{ background: 'var(--bg-base)' }}
           tabIndex={-1}
         >
           {children}
