@@ -26,7 +26,7 @@ function AiText({ text }) {
           {items.map((it, j) => (
             <li key={j} className="flex gap-2 sm:gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
               <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
-                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j+1}</span>
+                style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--fin-positive)' }}>{j+1}</span>
               <span dangerouslySetInnerHTML={{ __html: it.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
             </li>
           ))}
@@ -45,7 +45,7 @@ function AiText({ text }) {
         <ul key={`ul-${i}`} className="space-y-1.5 my-2 ml-0.5">
           {items.map((it, j) => (
             <li key={j} className="flex gap-2 sm:gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#22c55e' }} />
+              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--fin-positive)' }} />
               <span dangerouslySetInnerHTML={{ __html: it.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
             </li>
           ))}
@@ -58,7 +58,7 @@ function AiText({ text }) {
       const heading = line.replace(/^#{1,3}\s/, '')
       elements.push(
         <h3 key={i} className="text-sm font-bold mt-5 mb-2 pt-3"
-          style={{ color: '#22c55e', borderTop: '1px solid var(--border)' }}>
+          style={{ color: 'var(--fin-positive)', borderTop: '1px solid var(--border)' }}>
           {heading.replace(/[`*_]/g,'')}
         </h3>
       )
@@ -68,7 +68,7 @@ function AiText({ text }) {
       const rest  = line.slice(ci+1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--fin-positive)' }}>{label}</span>
           {rest && <span className="text-sm ml-2" style={{ color: 'var(--text-2)' }}
             dangerouslySetInnerHTML={{ __html: rest.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />}
         </div>
@@ -142,7 +142,7 @@ export default function Report() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)' }}>AI Report</h1>
           <p className="text-xs sm:text-sm mt-0.5 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-            <Database size={11} style={{ color: '#4ade80' }} />
+            <Database size={11} style={{ color: 'var(--fin-positive)' }} />
             Executive summary powered by live data
           </p>
         </div>
@@ -152,7 +152,7 @@ export default function Report() {
               <button onClick={copy}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all hover:bg-white/5"
                 style={{
-                  color: copied ? '#22c55e' : 'var(--text-2)',
+                  color: copied ? 'var(--fin-positive)' : 'var(--text-2)',
                   border: `1px solid ${copied ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
                 }}>
                 {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -171,7 +171,7 @@ export default function Report() {
               style={{
                 background: 'rgba(239,68,68,0.15)',
                 border: '1px solid rgba(239,68,68,0.3)',
-                color: '#f87171',
+                color: 'var(--fin-negative)',
               }}>
               <Square size={12} fill="currentColor" /> Stop
             </button>
@@ -181,7 +181,7 @@ export default function Report() {
               style={{
                 background: 'linear-gradient(135deg, #22c55e, #16a34a)',
                 color: 'white',
-                boxShadow: '0 4px 12px rgba(34,197,94,0.3)',
+                boxShadow: '0 4px 12px rgba(37,99,235,0.25)',
               }}>
               <RefreshCw size={13} />
               {report ? 'Regenerate' : 'Generate'}
@@ -191,7 +191,7 @@ export default function Report() {
       </div>
 
       {error && (
-        <div className="card text-sm" style={{ border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.05)', color: '#f87171' }}>
+        <div className="card text-sm" style={{ border: '1px solid var(--fin-neg-border)', background: 'rgba(239,68,68,0.05)', color: 'var(--fin-negative)' }}>
           {error}
         </div>
       )}
@@ -199,8 +199,8 @@ export default function Report() {
       {!report && !loading && !error && (
         <div className="card flex flex-col items-center justify-center py-14 sm:py-20 px-4 text-center">
           <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'rgba(34,197,94,0.1)', boxShadow: '0 0 24px rgba(34,197,94,0.15)' }}>
-            <FileText size={24} style={{ color: '#4ade80' }} />
+            style={{ background: 'var(--accent-dim)', boxShadow: '0 0 24px rgba(34,197,94,0.15)' }}>
+            <FileText size={24} style={{ color: 'var(--fin-positive)' }} />
           </div>
           <p className="font-semibold text-base sm:text-lg" style={{ color: 'var(--text-1)' }}>Generate Your Executive Report</p>
           <p className="text-xs sm:text-sm mt-2 max-w-sm" style={{ color: 'var(--text-3)' }}>
@@ -209,7 +209,7 @@ export default function Report() {
           <div className="flex items-center gap-3 sm:gap-4 mt-6 text-[10px] sm:text-xs flex-wrap justify-center" style={{ color: 'var(--text-3)' }}>
             {['Portfolio overview', 'Financial analysis', 'Recommendations'].map((label) => (
               <span key={label} className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ade80' }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--fin-positive)' }} />
                 {label}
               </span>
             ))}
@@ -225,32 +225,32 @@ export default function Report() {
       {loading && (
         <div className="card flex flex-col items-center justify-center py-14 sm:py-20 px-4 text-center">
           <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-4 animate-pulse"
-            style={{ background: 'rgba(34,197,94,0.1)' }}>
-            <Sparkles size={24} style={{ color: '#4ade80' }} />
+            style={{ background: 'var(--accent-dim)' }}>
+            <Sparkles size={24} style={{ color: 'var(--fin-positive)' }} />
           </div>
           <p className="font-semibold text-sm sm:text-base" style={{ color: 'var(--text-1)' }}>Analyzing your portfolio…</p>
           <p className="text-xs sm:text-sm mt-1.5" style={{ color: 'var(--text-3)' }}>Reading all project records — may take 20–40 seconds</p>
           <div className="flex gap-1.5 mt-4">
             {[0, 150, 300].map((d) => (
               <span key={d} className="w-2 h-2 rounded-full animate-bounce"
-                style={{ background: '#4ade80', animationDelay: `${d}ms` }} />
+                style={{ background: 'var(--fin-positive)', animationDelay: `${d}ms` }} />
             ))}
           </div>
         </div>
       )}
 
       {report && (
-        <div className="card animate-fade-in" style={{ border: '1px solid rgba(34,197,94,0.2)' }}>
+        <div className="card animate-fade-in" style={{ border: '1px solid var(--accent-soft)' }}>
           <div className="flex items-center gap-2 mb-4 pb-4 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(34,197,94,0.1)' }}>
-              <FileText size={14} style={{ color: '#4ade80' }} />
+              style={{ background: 'var(--accent-dim)' }}>
+              <FileText size={14} style={{ color: 'var(--fin-positive)' }} />
             </div>
-            <span className="text-sm font-semibold" style={{ color: '#4ade80' }}>Executive Report</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--fin-positive)' }}>Executive Report</span>
             {model && (
               <span className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-full"
                 style={{ background: 'rgba(34,197,94,0.08)', color: 'var(--text-3)' }}>
-                <Sparkles size={9} style={{ color: '#4ade80' }} /> {model}
+                <Sparkles size={9} style={{ color: 'var(--fin-positive)' }} /> {model}
               </span>
             )}
             <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>

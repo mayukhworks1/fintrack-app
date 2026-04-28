@@ -24,7 +24,7 @@ const axisInr = (v) => {
 function SyncDot({ syncing }) {
   return (
     <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? '#facc15' : '#22c55e' }} aria-hidden="true" />
+      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
   )
 }
 
@@ -96,7 +96,7 @@ export default function Analytics() {
   const healthData = Object.entries(s?.by_health || {}).map(([name, value]) => ({ name, value }))
 
   const healthColor = (name) => {
-    if (name?.includes('🟢')) return '#22c55e'
+    if (name?.includes('🟢')) return 'var(--fin-positive)'
     if (name?.includes('🟡')) return '#f59e0b'
     if (name?.includes('🔴')) return '#ef4444'
     return '#6b7280'
@@ -123,7 +123,7 @@ export default function Analytics() {
             {lastUpdated && (
               <span className="flex items-center gap-1.5">
                 · <SyncDot syncing={syncing} />
-                <span style={{ color: syncing ? '#facc15' : 'var(--text-3)' }}>
+                <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
                   {syncing ? 'syncing…' : `live · ${updatedLabel}`}
                 </span>
               </span>
@@ -141,7 +141,7 @@ export default function Analytics() {
 
       {error && (
         <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
+          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
           <AlertCircle size={15} /> {error}
           <button onClick={refresh} className="underline ml-1">retry</button>
         </div>
@@ -156,9 +156,9 @@ export default function Analytics() {
           { label: 'Overall Margin',value: formatPct(margin, 2),  icon: Target, accent: margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative' },
         ].map(({ label, value, icon: Icon, accent }) => {
           const valueColor =
-            accent === 'positive' ? '#22c55e'
-            : accent === 'warning' ? '#fbbf24'
-            : accent === 'negative' ? '#f87171'
+            accent === 'positive' ? 'var(--fin-positive)'
+            : accent === 'warning' ? 'var(--fin-warning)'
+            : accent === 'negative' ? 'var(--fin-negative)'
             : 'var(--text-1)'
           return (
             <div key={label} className="card text-center p-3 sm:p-4">
@@ -238,13 +238,13 @@ export default function Analytics() {
                 <div key={i}>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="truncate max-w-[60%]" style={{ color: 'var(--text-2)' }}>{p.name}</span>
-                    <span className="font-bold tabular-nums ml-2" style={{ color: isNeg ? '#f87171' : '#22c55e' }}>
+                    <span className="font-bold tabular-nums ml-2" style={{ color: isNeg ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>
                       {isNeg ? '' : '+'}{formatPct(p.profit, 2)}
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
                     <div className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${barPct}%`, background: isNeg ? '#ef4444' : '#22c55e' }} />
+                      style={{ width: `${barPct}%`, background: isNeg ? '#ef4444' : 'var(--fin-positive)' }} />
                   </div>
                 </div>
               )
@@ -296,7 +296,7 @@ export default function Analytics() {
                         {f['Client']?.split(' ')[0]}/{f['Project Name']}
                       </td>
                       <td className="py-1.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(f['Amount Billed So far'])}</td>
-                      <td className="py-1.5 font-semibold tabular-nums" style={{ color: p >= 0 ? '#22c55e' : '#f87171' }}>
+                      <td className="py-1.5 font-semibold tabular-nums" style={{ color: p >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
                         {p > 0 ? '+' : ''}{formatPct(p, 2)}
                       </td>
                     </tr>

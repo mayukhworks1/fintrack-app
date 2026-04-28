@@ -71,9 +71,9 @@ const isPdf = (a) =>
 
 /* ── Status config ───────────────────────────────────────────────────────── */
 const STATUS_META = {
-  Paid:      { color: '#4ade80', bg: 'rgba(74,222,128,0.10)',  border: 'rgba(74,222,128,0.20)',  icon: CheckCircle2 },
-  Pending:   { color: '#fbbf24', bg: 'rgba(251,191,36,0.10)',  border: 'rgba(251,191,36,0.20)',  icon: Clock },
-  Cancelled: { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.20)', icon: XCircle },
+  Paid:      { color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)',  border: 'var(--fin-pos-border)',  icon: CheckCircle2 },
+  Pending:   { color: 'var(--fin-warning)',  bg: 'var(--fin-warn-bg)', border: 'var(--fin-warn-border)', icon: Clock },
+  Cancelled: { color: 'var(--fin-negative)', bg: 'var(--fin-neg-bg)', border: 'var(--fin-neg-border)',  icon: XCircle },
 }
 
 function StatusPill({ status }) {
@@ -92,10 +92,12 @@ function StatusPill({ status }) {
 function AgingBadge({ days }) {
   if (days == null || days === '') return <span style={{ color: 'var(--text-3)' }}>—</span>
   const d = Number(days)
-  const color = d > 30 ? '#f87171' : d > 14 ? '#fbbf24' : '#4ade80'
+  const color = d > 30 ? 'var(--fin-negative)' : d > 14 ? 'var(--fin-warning)' : 'var(--fin-positive)'
+  const bg    = d > 30 ? 'var(--fin-neg-bg)'   : d > 14 ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)'
+  const bdr   = d > 30 ? 'var(--fin-neg-border)': d > 14 ? 'var(--fin-warn-border)': 'var(--fin-pos-border)'
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums"
-      style={{ background: `${color}18`, color, border: `1px solid ${color}28` }}>
+      style={{ background: bg, color, border: `1px solid ${bdr}` }}>
       {d}d
     </span>
   )

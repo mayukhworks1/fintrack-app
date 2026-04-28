@@ -55,7 +55,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         {!collapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: '#22c55e' }}>
+              style={{ background: 'var(--accent-btn)' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -66,7 +66,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         )}
         {collapsed && (
           <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: '#22c55e' }}>
+            style={{ background: 'var(--accent-btn)' }}>
             <TrendingUp size={13} className="text-white" aria-hidden="true" />
           </div>
         )}
@@ -92,17 +92,17 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
             title={collapsed ? label : undefined}
             className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'}`}
             style={({ isActive }) => isActive
-              ? { background: 'var(--nav-active-bg)', color: 'var(--text-1)' }
-              : { color: 'var(--text-3)' }
+              ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)' }
+              : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
             }
           >
             {({ isActive }) => (
               <>
                 <Icon size={15} aria-hidden="true"
-                  style={{ color: isActive ? 'var(--text-1)' : 'var(--text-3)', flexShrink: 0 }} />
+                  style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }} />
                 {!collapsed && (
-                  <span className="flex-1 truncate"
-                    style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>
+                  <span className="flex-1 truncate font-medium"
+                    style={{ color: isActive ? 'var(--nav-active-color)' : 'var(--text-2)' }}>
                     {label}
                   </span>
                 )}
@@ -134,9 +134,9 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
               <span className="flex-1 text-[13px]" style={{ color: 'var(--text-2)' }}>{dark ? 'Light mode' : 'Dark mode'}</span>
               {/* Mini toggle pill */}
               <div className="w-8 h-4 rounded-full relative flex-shrink-0 transition-all duration-300"
-                style={{ background: dark ? 'rgba(255,255,255,0.10)' : 'rgba(34,197,94,0.3)' }}>
+                style={{ background: dark ? 'rgba(255,255,255,0.10)' : 'rgba(37,99,235,0.25)' }}>
                 <div className="absolute top-0.5 w-3 h-3 rounded-full transition-all duration-300"
-                  style={{ background: dark ? 'rgba(255,255,255,0.5)' : '#16a34a', left: dark ? '2px' : 'calc(100% - 14px)' }} />
+                  style={{ background: dark ? 'rgba(255,255,255,0.5)' : '#2563eb', left: dark ? '2px' : 'calc(100% - 14px)' }} />
               </div>
             </>
           )}

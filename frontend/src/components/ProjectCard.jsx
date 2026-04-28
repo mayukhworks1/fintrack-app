@@ -15,7 +15,7 @@ function HealthBar({ health, profitPct }) {
   if (!health) return null
   const isGood    = health.includes('🟢')
   const isWarning = health.includes('🟡')
-  const color  = isGood ? '#4ade80' : isWarning ? '#facc15' : '#f87171'
+  const color  = isGood ? 'var(--fin-positive)' : isWarning ? 'var(--fin-warning)' : 'var(--fin-negative)'
   const width  = Math.min(Math.max((profitPct / 40) * 100, 5), 100)
   const label  = health.replace(/^\p{Emoji}\s*/u, '') || health
   return (
@@ -81,13 +81,13 @@ export default function ProjectCard({ record }) {
         <div className="mb-4">
           <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-3)' }}>
             <span>Target progress</span>
-            <span style={{ color: targetPct >= 100 ? '#4ade80' : 'var(--text-2)' }}>{formatPct(targetPct, 1)}</span>
+            <span style={{ color: targetPct >= 100 ? 'var(--fin-positive)' : 'var(--text-2)' }}>{formatPct(targetPct, 1)}</span>
           </div>
           <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
             <div className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${targetPct}%`,
-                background: targetPct >= 100 ? '#22c55e' : '#3b82f6',
+                background: targetPct >= 100 ? 'var(--fin-positive)' : '#3b82f6',
               }} />
           </div>
         </div>
@@ -104,7 +104,7 @@ export default function ProjectCard({ record }) {
         <div className="text-right">
           <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>Profit</p>
           <p className="font-bold text-sm flex items-center gap-1 tabular-nums"
-            style={{ color: isProfit ? '#4ade80' : '#f87171' }}>
+            style={{ color: isProfit ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
             {isProfit ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {formatPct(profitPct, 2)}
           </p>

@@ -42,7 +42,7 @@ function AiText({ text }) {
           {items.map((item, j) => (
             <li key={j} className="flex gap-2 sm:gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-1)' }}>
               <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
-                style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>
+                style={{ background: 'rgba(34,197,94,0.15)', color: 'var(--fin-positive)' }}>
                 {j + 1}
               </span>
               <span dangerouslySetInnerHTML={{ __html: formatInline(item) }} />
@@ -64,7 +64,7 @@ function AiText({ text }) {
         <ul key={`ul-${i}`} className="space-y-1.5 my-2 ml-0.5">
           {items.map((item, j) => (
             <li key={j} className="flex gap-2 sm:gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-1)' }}>
-              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: '#22c55e' }} />
+              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: 'var(--fin-positive)' }} />
               <span dangerouslySetInnerHTML={{ __html: formatInline(item) }} />
             </li>
           ))}
@@ -80,7 +80,7 @@ function AiText({ text }) {
       const rest = line.slice(colonIdx + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--fin-positive)' }}>
             {label}
           </span>
           {rest && (
@@ -118,7 +118,7 @@ function CopyButton({ text }) {
       onClick={handle}
       aria-label={copied ? 'Copied' : 'Copy message'}
       className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md transition-all hover:bg-white/5"
-      style={{ color: copied ? '#22c55e' : 'var(--text-3)' }}
+      style={{ color: copied ? 'var(--fin-positive)' : 'var(--text-3)' }}
     >
       {copied ? <Check size={10} /> : <Copy size={10} />}
       {copied ? 'Copied' : 'Copy'}
@@ -150,14 +150,14 @@ function Message({ msg }) {
       <div
         className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
         style={isUser
-          ? { background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 0 12px rgba(34,197,94,0.3)' }
+          ? { background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 0 12px rgba(37,99,235,0.25)' }
           : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }
         }
         aria-hidden="true"
       >
         {isUser
           ? <User size={12} className="text-white" />
-          : <Bot size={12} style={{ color: '#4ade80' }} />
+          : <Bot size={12} style={{ color: 'var(--fin-positive)' }} />
         }
       </div>
 
@@ -166,12 +166,12 @@ function Message({ msg }) {
           className={clsx('rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm leading-relaxed break-words',
             isUser ? 'rounded-tr-sm' : 'rounded-tl-sm')}
           style={isUser
-            ? { background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.2)', color: 'var(--text-1)' }
+            ? { background: 'rgba(34,197,94,0.12)', border: '1px solid var(--accent-soft)', color: 'var(--text-1)' }
             : { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-1)' }
           }
         >
           {msg.error
-            ? <span className="flex items-start gap-2" style={{ color: '#f87171' }}>
+            ? <span className="flex items-start gap-2" style={{ color: 'var(--fin-negative)' }}>
                 <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
                 <span>{msg.content}</span>
               </span>
@@ -186,7 +186,7 @@ function Message({ msg }) {
           <div className="flex items-center gap-2 mt-1 px-1">
             {msg.model && (
               <span className="text-[10px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
-                <Sparkles size={9} style={{ color: '#4ade80' }} />
+                <Sparkles size={9} style={{ color: 'var(--fin-positive)' }} />
                 {msg.model}
               </span>
             )}
@@ -203,7 +203,7 @@ function TypingIndicator({ onStop }) {
     <div className="flex gap-2 sm:gap-3 mb-5" aria-live="polite" aria-label="AI is analyzing your data">
       <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0"
         style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-        <Bot size={12} style={{ color: '#4ade80' }} />
+        <Bot size={12} style={{ color: 'var(--fin-positive)' }} />
       </div>
       <div className="rounded-2xl rounded-tl-sm px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-3"
         style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -221,7 +221,7 @@ function TypingIndicator({ onStop }) {
             onClick={onStop}
             aria-label="Stop generating"
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
-            style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
+            style={{ color: 'var(--fin-negative)', border: '1px solid var(--fin-neg-border)' }}
           >
             <Square size={9} fill="currentColor" /> Stop
           </button>
@@ -330,18 +330,18 @@ export default function AIAssistant() {
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{
-              background: 'linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.05) 100%)',
+              background: 'linear-gradient(135deg, var(--accent-soft) 0%, rgba(34,197,94,0.05) 100%)',
               border: '1px solid rgba(34,197,94,0.25)',
               boxShadow: '0 0 20px rgba(34,197,94,0.15)',
             }}>
-            <Sparkles size={15} style={{ color: '#4ade80' }} />
+            <Sparkles size={15} style={{ color: 'var(--fin-positive)' }} />
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
-              style={{ background: '#4ade80', borderColor: 'var(--bg-base)', boxShadow: '0 0 6px #4ade80' }} />
+              style={{ background: 'var(--fin-positive)', borderColor: 'var(--bg-base)', boxShadow: '0 0 6px #4ade80' }} />
           </div>
           <div className="min-w-0">
             <h1 className="font-bold text-sm truncate" style={{ color: 'var(--text-1)' }}>FinTrack AI</h1>
             <div className="flex items-center gap-1.5">
-              <Database size={9} style={{ color: '#4ade80' }} />
+              <Database size={9} style={{ color: 'var(--fin-positive)' }} />
               <p className="text-[10px] sm:text-xs truncate" style={{ color: 'var(--text-3)' }}>
                 Live data · nvidia/nemotron
               </p>
@@ -365,7 +365,7 @@ export default function AIAssistant() {
         {showSuggestions && !loading && (
           <div className="mt-2">
             <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-              <Sparkles size={11} style={{ color: '#4ade80' }} /> Try asking:
+              <Sparkles size={11} style={{ color: 'var(--fin-positive)' }} /> Try asking:
             </p>
             <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested questions">
               {visibleSuggestions.map((s) => (
@@ -379,7 +379,7 @@ export default function AIAssistant() {
               {!showAll && SUGGESTIONS.length > 5 && (
                 <button onClick={() => setShowAll(true)}
                   className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition-all"
-                  style={{ color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.05)' }}>
+                  style={{ color: 'var(--fin-positive)', border: '1px solid var(--accent-soft)', background: 'rgba(34,197,94,0.05)' }}>
                   More <ChevronDown size={10} />
                 </button>
               )}
@@ -418,7 +418,7 @@ export default function AIAssistant() {
               style={{
                 background: 'rgba(239,68,68,0.15)',
                 border: '1px solid rgba(239,68,68,0.3)',
-                color: '#f87171',
+                color: 'var(--fin-negative)',
               }}
               aria-label="Stop generating"
               title="Stop"
@@ -432,7 +432,7 @@ export default function AIAssistant() {
               className="px-3 sm:px-4 rounded-xl flex items-center justify-center font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
               style={{
                 background: !input.trim()
-                  ? 'rgba(34,197,94,0.2)'
+                  ? 'var(--accent-soft)'
                   : 'linear-gradient(135deg, #22c55e, #16a34a)',
                 color: 'white',
                 boxShadow: !input.trim() ? 'none' : '0 4px 12px rgba(34,197,94,0.35)',
@@ -445,12 +445,12 @@ export default function AIAssistant() {
         </div>
         <div className="flex items-center justify-between gap-2 mt-2" style={{ color: 'var(--text-3)' }}>
           <span className="text-[10px] sm:text-xs flex items-center gap-1.5 min-w-0">
-            <Database size={10} style={{ color: '#4ade80' }} className="flex-shrink-0" />
+            <Database size={10} style={{ color: 'var(--fin-positive)' }} className="flex-shrink-0" />
             <span className="truncate">AI reads live project data every response</span>
           </span>
           {input.length > 0 && (
             <span className="text-[10px] sm:text-xs tabular-nums flex-shrink-0"
-              style={{ color: input.length > 900 ? '#f87171' : 'var(--text-3)' }}>
+              style={{ color: input.length > 900 ? 'var(--fin-negative)' : 'var(--text-3)' }}>
               {input.length}/1000
             </span>
           )}

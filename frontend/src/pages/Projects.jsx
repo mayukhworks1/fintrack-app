@@ -32,7 +32,7 @@ function SkeletonCard() {
 function SyncDot({ syncing }) {
   return (
     <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? '#facc15' : '#22c55e' }} aria-hidden="true" />
+      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
   )
 }
 
@@ -124,7 +124,7 @@ export default function Projects() {
             {lastUpdated && (
               <span className="flex items-center gap-1.5">
                 · <SyncDot syncing={syncing} />
-                <span style={{ color: syncing ? '#facc15' : 'var(--text-3)' }}>
+                <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
                   {syncing ? 'syncing…' : `live · ${updatedLabel}`}
                 </span>
               </span>
@@ -141,7 +141,7 @@ export default function Projects() {
           </button>
           <button onClick={() => navigate('/projects/new')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
+            style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
             <Plus size={15} aria-hidden="true" /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
           </button>
         </div>
@@ -150,7 +150,7 @@ export default function Projects() {
       {/* Error */}
       {error && (
         <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
+          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
           <AlertCircle size={15} aria-hidden="true" /> {error}
           <button onClick={refresh} className="underline ml-1">retry</button>
         </div>
@@ -198,15 +198,15 @@ export default function Projects() {
             aria-label="Toggle filters" aria-expanded={showFilters}
             className="flex items-center gap-1.5 px-3 rounded-xl text-sm transition-all"
             style={{
-              background: showFilters || activeFilters.length ? 'rgba(34,197,94,0.1)' : 'var(--bg-input)',
-              border: `1px solid ${showFilters || activeFilters.length ? 'rgba(34,197,94,0.3)' : 'var(--border)'}`,
-              color: showFilters || activeFilters.length ? '#22c55e' : 'var(--text-2)',
+              background: showFilters || activeFilters.length ? 'var(--accent-dim)' : 'var(--bg-input)',
+              border: `1px solid ${showFilters || activeFilters.length ? 'rgba(37,99,235,0.25)' : 'var(--border)'}`,
+              color: showFilters || activeFilters.length ? 'var(--fin-positive)' : 'var(--text-2)',
             }}>
             <SlidersHorizontal size={14} aria-hidden="true" />
             <span className="hidden sm:inline">Filters</span>
             {activeFilters.length > 0 && (
               <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{ background: '#22c55e', color: '#fff' }}>{activeFilters.length}</span>
+                style={{ background: 'var(--accent)', color: '#fff' }}>{activeFilters.length}</span>
             )}
           </button>
         </div>
@@ -233,7 +233,7 @@ export default function Projects() {
               <button
                 onClick={() => { setSearchParams({}); setShowFilters(false) }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all"
-                style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)' }}
+                style={{ color: 'var(--fin-negative)', border: '1px solid var(--fin-neg-border)', background: 'var(--fin-neg-bg)' }}
                 aria-label="Clear all filters">
                 <X size={13} aria-hidden="true" /> Clear filters
               </button>
@@ -246,7 +246,7 @@ export default function Projects() {
           <div className="flex flex-wrap gap-1.5">
             {activeFilters.map(f => (
               <span key={f} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--fin-positive)' }}>
                 {f}
               </span>
             ))}
@@ -281,7 +281,7 @@ export default function Projects() {
             )}
             <button onClick={() => navigate('/projects/new')}
               className="px-4 py-2 rounded-xl text-sm font-semibold"
-              style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
+              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
               + New project
             </button>
           </div>

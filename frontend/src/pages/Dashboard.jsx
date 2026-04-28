@@ -18,7 +18,7 @@ const countHealthy = (byHealth = {}) =>
 function SyncDot({ syncing }) {
   return (
     <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? '#facc15' : '#22c55e' }} aria-hidden="true" />
+      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
   )
 }
 
@@ -35,9 +35,9 @@ function SkeletonCard() {
 /* ── KPI card — minimal, typographic ── */
 function KpiCard({ label, value, sub, icon: Icon, accent, trend }) {
   const accentColor =
-    accent === 'positive' ? '#22c55e'
-    : accent === 'warning' ? '#fbbf24'
-    : accent === 'negative' ? '#f87171'
+    accent === 'positive' ? 'var(--fin-positive)'
+    : accent === 'warning' ? 'var(--fin-warning)'
+    : accent === 'negative' ? 'var(--fin-negative)'
     : 'var(--text-1)'
   return (
     <div className="card">
@@ -60,7 +60,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend }) {
       <div className="flex items-center gap-2 mt-2 min-h-[16px]">
         {trend != null && Number.isFinite(trend) && (
           <span className="text-[11px] font-medium flex items-center gap-0.5 tabular-nums"
-            style={{ color: trend >= 0 ? '#22c55e' : '#f87171' }}>
+            style={{ color: trend >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
             {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
             {formatPct(Math.abs(trend), 2)}
           </span>
@@ -83,7 +83,7 @@ function RiskRow({ project }) {
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{project.status || project.health}</p>
       </div>
       <span className="text-sm font-bold tabular-nums flex-shrink-0"
-        style={{ color: isNeg ? '#f87171' : '#fbbf24' }}>
+        style={{ color: isNeg ? 'var(--fin-negative)' : 'var(--fin-warning)' }}>
         {project.pct > 0 ? '+' : ''}{formatPct(project.pct, 2)}
       </span>
     </div>
@@ -100,14 +100,14 @@ function ClientBar({ client, billed, profit, maxBilled }) {
         <span className="font-medium" style={{ color: 'var(--text-1)' }}>{client}</span>
         <div className="flex items-center gap-3 text-xs flex-shrink-0 ml-2">
           <span className="tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(billed)}</span>
-          <span className="font-bold tabular-nums" style={{ color: margin >= 0 ? '#22c55e' : '#f87171' }}>
+          <span className="font-bold tabular-nums" style={{ color: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
             {formatPct(margin, 2)} margin
           </span>
         </div>
       </div>
       <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
         <div className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#22c55e88,#22c55e)' }} />
+          style={{ width: `${pct}%`, background: 'var(--accent)' }} />
       </div>
     </div>
   )
@@ -147,7 +147,7 @@ export default function Dashboard() {
             {lastUpdated && (
               <span className="flex items-center gap-1.5">
                 · <SyncDot syncing={syncing} />
-                <span style={{ color: syncing ? '#facc15' : 'var(--text-3)' }}>
+                <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
                   {syncing ? 'syncing…' : `live · ${updatedLabel}`}
                 </span>
               </span>
@@ -169,7 +169,7 @@ export default function Dashboard() {
       {/* Error */}
       {error && (
         <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
+          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
           <AlertTriangle size={15} aria-hidden="true" /> {error} —
           <button onClick={refresh} className="underline">retry</button>
         </div>
@@ -249,8 +249,8 @@ export default function Dashboard() {
             atRisk.length === 0
               ? <div className="flex flex-col items-center py-6 text-center">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-                    style={{ background: 'rgba(34,197,94,0.1)' }}>
-                    <Award size={18} style={{ color: '#22c55e' }} aria-hidden="true" />
+                    style={{ background: 'var(--accent-dim)' }}>
+                    <Award size={18} style={{ color: 'var(--fin-positive)' }} aria-hidden="true" />
                   </div>
                   <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>All projects healthy</p>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>No critical issues found</p>
@@ -267,11 +267,11 @@ export default function Dashboard() {
             {loading && !data ? <SkeletonCard /> :
               s?.best_project?.name
                 ? <div className="rounded-xl p-3"
-                    style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)' }}>
+                    style={{ background: 'var(--accent-dim)', border: '1px solid rgba(37,99,235,0.20)' }}>
                     <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>
                       {s.best_project.name}
                     </p>
-                    <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: '#22c55e' }}>
+                    <p className="text-2xl font-bold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
                       {s.best_project.pct >= 0 ? '+' : ''}{formatPct(s.best_project.pct, 2)}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>profit margin</p>
@@ -291,7 +291,7 @@ export default function Dashboard() {
                       {s.worst_project.name}
                     </p>
                     <p className="text-2xl font-bold mt-1 tabular-nums"
-                      style={{ color: s.worst_project.pct < 0 ? '#f87171' : '#fbbf24' }}>
+                      style={{ color: s.worst_project.pct < 0 ? 'var(--fin-negative)' : 'var(--fin-warning)' }}>
                       {s.worst_project.pct > 0 ? '+' : ''}{formatPct(s.worst_project.pct, 2)}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>profit margin</p>
@@ -307,10 +307,10 @@ export default function Dashboard() {
         <section aria-label="Projects by status">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {Object.entries(s.by_status).map(([status, count]) => {
-              const accent = status.includes('Active')    ? '#22c55e'
+              const accent = status.includes('Active')    ? 'var(--fin-positive)'
                            : status.includes('Completed') ? '#60a5fa'
-                           : status.includes('Hold')      ? '#fbbf24'
-                           : '#f87171'
+                           : status.includes('Hold')      ? 'var(--fin-warning)'
+                           : 'var(--fin-negative)'
               return (
                 <button key={status}
                   onClick={() => navigate(`/projects?status=${encodeURIComponent(status)}`)}
@@ -350,7 +350,7 @@ export default function Dashboard() {
             : <div className="text-center py-12" style={{ color: 'var(--text-3)' }}>
                 No projects yet.{' '}
                 <button onClick={() => navigate('/projects/new')}
-                  className="underline hover:no-underline" style={{ color: '#22c55e' }}>
+                  className="underline hover:no-underline" style={{ color: 'var(--fin-positive)' }}>
                   Create one
                 </button>
               </div>
