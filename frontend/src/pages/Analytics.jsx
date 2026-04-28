@@ -326,14 +326,6 @@ export default function Analytics() {
       .slice(0, 5)
   , [allInvoices])
 
-  /* ── Category breakdown (from filtered) ── */
-  const categoryData = useMemo(() =>
-    Object.entries(filtered.byCategory)
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6)
-  , [filtered])
-
   /* ── Client concentration (from filtered) ── */
   const clientConc = useMemo(() => {
     const total = Object.values(filtered.byClient).reduce((s, v) => s + v, 0)
@@ -653,56 +645,27 @@ export default function Analytics() {
         </ChartCard>
       </div>
 
-      {/* ── Row: Status pie + Category breakdown ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        <ChartCard title="Invoice Status" sub="By total amount raised (this period)">
-          {statusBreakdown.length === 0 ? (
-            <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoices in selected period</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80}
-                  dataKey="amount" nameKey="name" paddingAngle={2}>
-                  {statusBreakdown.map((entry) => {
-                    const c = entry.name === 'Paid' ? '#16a34a' : entry.name === 'Pending' ? '#d97706' : entry.name === 'Cancelled' ? '#dc2626' : '#9ca3af'
-                    return <Cell key={entry.name} fill={c} />
-                  })}
-                </Pie>
-                <Tooltip {...tooltipStyle}
-                  formatter={(v, n, p) => [inr(v) + ` (${p.payload.count} invoice${p.payload.count === 1 ? '' : 's'})`, n]} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Revenue by Category" sub="Top categories this period">
-          {categoryData.length === 0 ? (
-            <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No data</div>
-          ) : (
-            <div className="space-y-2.5">
-              {(() => {
-                const max = categoryData[0]?.amount || 1
-                return categoryData.map(c => {
-                  const pct = (c.amount / max) * 100
-                  return (
-                    <div key={c.name}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs truncate max-w-[60%]" style={{ color: 'var(--text-2)' }}>{c.name}</span>
-                        <span className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{inr(c.amount)}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
-                      </div>
-                    </div>
-                  )
-                })
-              })()}
-            </div>
-          )}
-        </ChartCard>
-      </div>
+      {/* ── Invoice status pie ── */}
+      <ChartCard title="Invoice Status" sub="By total amount raised (this period)">
+        {statusBreakdown.length === 0 ? (
+          <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoices in selected period</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={56} outerRadius={88}
+                dataKey="amount" nameKey="name" paddingAngle={2}>
+                {statusBreakdown.map((entry) => {
+                  const c = entry.name === 'Paid' ? '#16a34a' : entry.name === 'Pending' ? '#d97706' : entry.name === 'Cancelled' ? '#dc2626' : '#9ca3af'
+                  return <Cell key={entry.name} fill={c} />
+                })}
+              </Pie>
+              <Tooltip {...tooltipStyle}
+                formatter={(v, n, p) => [inr(v) + ` (${p.payload.count} invoice${p.payload.count === 1 ? '' : 's'})`, n]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </ChartCard>
 
       {/* ── Client concentration row ── */}
       {clientConc.length > 1 && (
