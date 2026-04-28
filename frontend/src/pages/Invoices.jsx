@@ -164,21 +164,20 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
     semantic === 'negative' ? 'var(--fin-negative)' :
     'var(--text-1)'
   return (
-    <div className="card flex items-center gap-3.5 animate-scale-in">
+    <div className="card flex items-center gap-3 animate-scale-in">
       {Icon && (
         <div className="rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ width: 44, height: 44, background: palette.bg, color: palette.fg }}>
-          <Icon size={20} aria-hidden="true" />
+          style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
+          <Icon size={18} aria-hidden="true" />
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="display-num text-xl sm:text-[1.4rem] truncate"
-          style={{ color }}
-          title={typeof value === 'string' ? value : undefined}>
+        <p className="display-num tabular-nums break-words leading-tight"
+          style={{ color, fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)', wordBreak: 'break-word' }}>
           {value ?? '—'}
         </p>
-        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
-        {sub && <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+        <p className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--text-3)' }}>{label}</p>
+        {sub && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
       </div>
     </div>
   )
@@ -592,7 +591,7 @@ export default function Invoices() {
       </div>
 
       {/* ── KPIs ── */}
-      <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+      <section aria-label="Invoice metrics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
         <KpiCard tone={1} label="Incl. GST"    value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
         <KpiCard tone={2} label="Collected"    value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />

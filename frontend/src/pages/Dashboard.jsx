@@ -52,23 +52,26 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
     : accent === 'negative' ? 'var(--fin-negative)'
     : 'var(--text-1)'
   return (
-    <div className="card flex items-center gap-3.5">
+    <div className="card flex items-center gap-3">
       {/* Colored icon tile */}
       {Icon && (
         <div className="rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ width: 44, height: 44, background: palette.bg, color: palette.fg }}>
-          <Icon size={20} aria-hidden="true" />
+          style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
+          <Icon size={18} aria-hidden="true" />
         </div>
       )}
-      {/* Number + label + trend */}
+      {/* Number + label + trend — full digits, wraps if needed */}
       <div className="min-w-0 flex-1">
-        <p className="display-num text-xl sm:text-[1.4rem] truncate"
-          style={{ color: accentColor }}
-          title={typeof value === 'string' ? value : undefined}>
+        <p className="display-num tabular-nums break-words leading-tight"
+          style={{
+            color: accentColor,
+            fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)',
+            wordBreak: 'break-word',
+          }}>
           {value}
         </p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <p className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{label}</p>
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          <p className="text-[11px] leading-tight" style={{ color: 'var(--text-3)' }}>{label}</p>
           {trend != null && Number.isFinite(trend) && (
             <span className="text-[10px] font-bold flex items-center gap-0.5 tabular-nums px-1.5 py-0.5 rounded"
               style={{
@@ -80,7 +83,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
             </span>
           )}
         </div>
-        {sub && <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+        {sub && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
       </div>
     </div>
   )
@@ -190,7 +193,7 @@ export default function Dashboard() {
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}
       <section aria-label="Key metrics">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {loading && !data
             ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
             : <>
