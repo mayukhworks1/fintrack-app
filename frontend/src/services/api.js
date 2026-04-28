@@ -115,6 +115,8 @@ export const api = {
       }),
     report:   (opts = {}) =>
       request('/api/ai/report', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
+    executiveSummary: (opts = {}) =>
+      request('/api/ai/executive-summary', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
   invoices: {
     list:    (params = {}) => {

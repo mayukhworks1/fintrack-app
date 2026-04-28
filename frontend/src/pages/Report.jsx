@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check, Square } from 'lucide-react'
+import { FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check, Square, Printer, TrendingUp } from 'lucide-react'
 import { api } from '../services/api'
 
 function AiText({ text }) {
@@ -116,7 +116,22 @@ export default function Report() {
 
   const cancel = () => abortRef.current?.abort()
 
-  const download = () => {
+  const printPdf = () => {
+    // Use the browser's native print dialog — user picks "Save as PDF"
+    // Print stylesheet in index.css hides chrome and renders the report
+    // as a clean branded document.
+    document.body.classList.add('printing-report')
+    window.print()
+    // Cleanup after the dialog closes (handled by afterprint listener below)
+  }
+
+  useEffect(() => {
+    const cleanup = () => document.body.classList.remove('printing-report')
+    window.addEventListener('afterprint', cleanup)
+    return () => window.removeEventListener('afterprint', cleanup)
+  }, [])
+
+  const downloadTxt = () => {
     const blob = new Blob([report], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -158,10 +173,20 @@ export default function Report() {
                 {copied ? <Check size={13} /> : <Copy size={13} />}
                 <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
               </button>
-              <button onClick={download}
+              <button onClick={downloadTxt} title="Download plain text"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all hover:bg-white/5"
                 style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                <Download size={13} /><span className="hidden sm:inline">Download</span>
+                <Download size={13} /><span className="hidden sm:inline">.txt</span>
+              </button>
+              <button onClick={printPdf} title="Print / Save as PDF"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all"
+                style={{
+                  background: 'var(--accent-btn)',
+                  color: 'white',
+                  border: '1px solid transparent',
+                  boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                }}>
+                <Printer size={13} /><span className="hidden sm:inline">PDF</span>
               </button>
             </>
           )}
@@ -240,24 +265,50 @@ export default function Report() {
       )}
 
       {report && (
-        <div className="card animate-fade-in" style={{ border: '1px solid var(--accent-soft)' }}>
-          <div className="flex items-center gap-2 mb-4 pb-4 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="card printable-report animate-fade-in" style={{ border: '1px solid var(--accent-soft)' }}>
+
+          {/* PRINT-ONLY branded letterhead — hidden on screen */}
+          <div className="print-only print-letterhead">
+            <div className="print-brand">
+              <div className="print-logo">
+                <TrendingUp size={20} color="#fff" />
+              </div>
+              <div>
+                <p className="print-brand-name">FinTrack</p>
+                <p className="print-brand-tagline">AI Finance Manager · Board Pack</p>
+              </div>
+            </div>
+            <div className="print-meta">
+              <p className="print-meta-label">Report date</p>
+              <p className="print-meta-value">{new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</p>
+            </div>
+          </div>
+
+          {/* On-screen toolbar — hidden when printing */}
+          <div className="print-hide flex items-center gap-2 mb-4 pb-4 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: 'var(--accent-dim)' }}>
-              <FileText size={14} style={{ color: 'var(--fin-positive)' }} />
+              <FileText size={14} style={{ color: 'var(--accent)' }} />
             </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--fin-positive)' }}>Executive Report</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>Executive Report</span>
             {model && (
               <span className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-full"
-                style={{ background: 'rgba(34,197,94,0.08)', color: 'var(--text-3)' }}>
-                <Sparkles size={9} style={{ color: 'var(--fin-positive)' }} /> {model}
+                style={{ background: 'var(--accent-dim)', color: 'var(--text-3)' }}>
+                <Sparkles size={9} style={{ color: 'var(--accent)' }} /> {model}
               </span>
             )}
             <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
               {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}
             </span>
           </div>
+
           <AiText text={report} />
+
+          {/* PRINT-ONLY footer */}
+          <div className="print-only print-footer">
+            <p>Generated by FinTrack · {new Date().toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })}</p>
+            <p>Confidential — for internal use only</p>
+          </div>
         </div>
       )}
     </div>

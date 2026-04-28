@@ -407,6 +407,141 @@ h1 { letter-spacing: -0.03em; }
   .card { border-radius: 12px; }
 }
 
+/* ── Print stylesheet — board-ready PDF ─────────────────────────── */
+.print-only        { display: none; }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm 22mm 16mm;
+  }
+
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide app chrome */
+  body.printing-report aside,
+  body.printing-report header,
+  body.printing-report nav,
+  body.printing-report .print-hide {
+    display: none !important;
+  }
+
+  /* Make the main scroll area auto-height */
+  body.printing-report main { overflow: visible !important; }
+  body.printing-report .pb-16 { padding-bottom: 0 !important; }
+
+  /* Show print-only sections */
+  .print-only { display: block !important; }
+
+  /* Strip the screen card chrome on the printable region */
+  .printable-report {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    background: #fff !important;
+    page-break-inside: auto;
+  }
+
+  /* Branded letterhead */
+  .print-letterhead {
+    display: flex !important;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 12pt;
+    margin-bottom: 16pt;
+    border-bottom: 2px solid #2563eb;
+    page-break-after: avoid;
+  }
+  .print-brand {
+    display: flex;
+    align-items: center;
+    gap: 10pt;
+  }
+  .print-logo {
+    width: 36pt; height: 36pt;
+    border-radius: 8pt;
+    background: #2563eb !important;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .print-brand-name {
+    font-size: 18pt;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin: 0;
+    line-height: 1;
+  }
+  .print-brand-tagline {
+    font-size: 9pt;
+    color: #64748b;
+    margin: 3pt 0 0 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .print-meta {
+    text-align: right;
+  }
+  .print-meta-label {
+    font-size: 8pt;
+    color: #94a3b8;
+    margin: 0;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .print-meta-value {
+    font-size: 11pt;
+    color: #0f172a;
+    font-weight: 600;
+    margin: 2pt 0 0 0;
+  }
+
+  /* Footer */
+  .print-footer {
+    display: block !important;
+    margin-top: 24pt;
+    padding-top: 10pt;
+    border-top: 1px solid #cbd5e1;
+    font-size: 8.5pt;
+    color: #64748b;
+    text-align: center;
+  }
+  .print-footer p { margin: 1pt 0; }
+
+  /* Make text print-friendly */
+  .printable-report p,
+  .printable-report li {
+    color: #1f2937 !important;
+    font-size: 11pt !important;
+    line-height: 1.55 !important;
+  }
+  .printable-report h1,
+  .printable-report h2,
+  .printable-report h3,
+  .printable-report strong {
+    color: #0f172a !important;
+  }
+  .printable-report h3 {
+    border-top: 1px solid #cbd5e1 !important;
+    page-break-after: avoid;
+    margin-top: 14pt !important;
+    padding-top: 8pt !important;
+  }
+  .printable-report ol li span:first-child {
+    background: #2563eb !important;
+    color: #fff !important;
+  }
+  .printable-report ul li span:first-child {
+    background: #2563eb !important;
+  }
+}
+
 /* ── Animations ──────────────────────────────────────────────────── */
 @keyframes shimmer   { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 @keyframes slideIn   { from { opacity:0; transform:translateX(100%)  } to { opacity:1; transform:translateX(0) } }
