@@ -742,8 +742,77 @@ export default function Invoices() {
         </div>
       )}
 
-      {/* ── Table ── */}
-      <div className="card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
+      {/* ── Mobile card list (sm-down) ── */}
+      <div className="md:hidden space-y-2.5">
+        {loading && !listData
+          ? Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="card animate-pulse">
+                <div className="skeleton h-3 w-2/5 mb-3 rounded" />
+                <div className="skeleton h-5 w-3/5 rounded" />
+              </div>
+            ))
+          : records.length === 0
+            ? <div className="card text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
+                No invoices found.{' '}
+                <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline font-medium">Create one</button>
+              </div>
+            : records.map(r => {
+                const f = r.fields || {}
+                const outstanding = Number(f['Outstanding Amount'] || 0)
+                const refs = parseAttachments(f['Reference'])
+                const pdfs = parseAttachments(f['Invoice PDF'])
+                const allFiles = [...refs, ...pdfs]
+                return (
+                  <button key={r.id} onClick={() => openView(r)}
+                    className="card-hover w-full text-left animate-slide-up"
+                    style={{ padding: '0.875rem 1rem' }}>
+                    {/* Top: invoice # + status */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-[12px] font-bold truncate" style={{ color: 'var(--text-1)' }}>
+                          {f['Invoice Number'] || '—'}
+                        </p>
+                        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
+                          {f['Project'] || '—'} {f['Category'] ? `· ${f['Category']}` : ''}
+                        </p>
+                      </div>
+                      <StatusPill status={f['Payment Status']} />
+                    </div>
+                    {/* Middle: amounts */}
+                    <div className="flex items-end justify-between gap-3 mb-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Amount</p>
+                        <p className="font-bold tabular-nums text-base" style={{ color: 'var(--text-1)' }}>
+                          {fmt(f['Amount Raised'])}
+                        </p>
+                      </div>
+                      {outstanding > 0 && (
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Outstanding</p>
+                          <p className="font-bold tabular-nums text-sm" style={{ color: 'var(--fin-warning)' }}>
+                            {fmt(outstanding)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {/* Bottom: meta */}
+                    <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      <span className="tabular-nums">{fmtDate(f['Raised Date'])}</span>
+                      <div className="flex items-center gap-2">
+                        {allFiles.length > 0 && (
+                          <span className="flex items-center gap-0.5"><FileText size={10} />{allFiles.length}</span>
+                        )}
+                        <AgingBadge days={f['Agening (Days)']} />
+                      </div>
+                    </div>
+                  </button>
+                )
+              })
+        }
+      </div>
+
+      {/* ── Desktop table (md+) ── */}
+      <div className="hidden md:block card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
         <div className="overflow-x-auto">
           <table className="w-full" style={{ minWidth: 960 }}>
             <thead>

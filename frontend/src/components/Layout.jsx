@@ -212,8 +212,8 @@ export default function Layout({ children }) {
         className="hidden lg:flex flex-col flex-shrink-0 relative overflow-hidden"
         style={{
           width: sidebarW,
-          background: 'var(--bg-sidebar)',
-          borderRight: '1px solid var(--border)',
+          background: 'var(--sidebar-bg)',
+          borderRight: '1px solid var(--sidebar-border)',
           transition: 'width 0.2s ease',
         }}
         aria-label="Sidebar"
@@ -221,11 +221,11 @@ export default function Layout({ children }) {
         <SidebarContent collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       </aside>
 
-      {/* ── Mobile drawer overlay ── */}
+      {/* ── Mobile drawer overlay (for theme/signout overflow) ── */}
       {drawerOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
+          className="lg:hidden fixed inset-0 z-40 animate-fade-in"
+          style={{ background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }}
           onClick={() => setDrawerOpen(false)}
           aria-hidden="true"
         />
@@ -233,11 +233,12 @@ export default function Layout({ children }) {
 
       {/* ── Mobile drawer panel ── */}
       <aside
-        className="lg:hidden fixed top-0 left-0 h-full w-56 z-50 flex flex-col transition-transform duration-300"
+        className="lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
         style={{
-          background: 'var(--bg-sidebar)',
-          borderRight: '1px solid var(--border)',
+          background: 'var(--sidebar-bg)',
+          borderRight: '1px solid var(--sidebar-border)',
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+          boxShadow: drawerOpen ? '4px 0 24px rgba(0,0,0,0.12)' : 'none',
         }}
         aria-label="Mobile navigation"
         aria-hidden={!drawerOpen}
@@ -246,18 +247,21 @@ export default function Layout({ children }) {
       </aside>
 
       {/* ── Main content ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* Mobile top bar */}
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2.5">
+        {/* Mobile top bar — clean, sticky, no clutter */}
+        <header className="lg:hidden flex items-center justify-between px-4 py-3 flex-shrink-0 sticky top-0 z-30"
+          style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open settings menu"
+            className="flex items-center gap-2.5 -ml-1 p-1 rounded-lg">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: '#22c55e' }}>
+              style={{ background: 'var(--accent-btn)' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
             <span className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>FinTrack</span>
-          </div>
+          </button>
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
@@ -269,13 +273,63 @@ export default function Layout({ children }) {
 
         <main
           id="main-content"
-          className="flex-1 overflow-y-auto animate-fade-in"
+          className="flex-1 overflow-y-auto animate-fade-in pb-16 lg:pb-0"
           style={{ background: 'var(--bg-base)' }}
           tabIndex={-1}
         >
           {children}
         </main>
+
+        {/* ── Mobile bottom navigation — primary items, sticky bottom ── */}
+        <MobileBottomNav />
       </div>
     </div>
+  )
+}
+
+/* ── Mobile bottom nav — 5 primary destinations, hidden on lg+ ── */
+function MobileBottomNav() {
+  const primary = [
+    { to: '/',          label: 'Home',     icon: LayoutDashboard, end: true },
+    { to: '/projects',  label: 'Projects', icon: FolderKanban },
+    { to: '/invoices',  label: 'Invoices', icon: Receipt },
+    { to: '/analytics', label: 'Stats',    icon: BarChart3 },
+    { to: '/ai',        label: 'AI',       icon: MessageSquareText },
+  ]
+  return (
+    <nav
+      aria-label="Primary navigation"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch justify-around"
+      style={{
+        background: 'var(--sidebar-bg)',
+        borderTop: '1px solid var(--sidebar-border)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        boxShadow: '0 -4px 16px rgba(15,23,42,0.04)',
+      }}
+    >
+      {primary.map(({ to, label, icon: Icon, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          className="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors relative"
+          style={({ isActive }) => ({ color: isActive ? 'var(--accent)' : 'var(--text-3)' })}
+          aria-label={label}
+        >
+          {({ isActive }) => (
+            <>
+              {/* Top accent bar on active */}
+              {isActive && (
+                <span aria-hidden="true"
+                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-b-full"
+                  style={{ background: 'var(--accent)' }} />
+              )}
+              <Icon size={20} aria-hidden="true" strokeWidth={isActive ? 2.4 : 2} />
+              <span className="text-[10px] font-medium tracking-tight">{label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
   )
 }

@@ -11,4 +11,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Split heavy 3rd-party libs into their own chunks so the app shell stays small
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'icons':        ['lucide-react'],
+          'charts':       ['recharts'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

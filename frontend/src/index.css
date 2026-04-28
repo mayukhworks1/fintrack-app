@@ -379,6 +379,34 @@
   clip: auto; white-space: normal;
 }
 
+/* ── Typography refinements (2026 polish) ──────────────────────── */
+h1, h2, h3 { letter-spacing: -0.025em; }
+h1 { letter-spacing: -0.03em; }
+.tabular-nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Display number — for KPI hero values */
+.display-num {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Subtle press feedback for tappable surfaces on touch devices */
+@media (hover: none) {
+  .card-hover:active { transform: scale(0.98); }
+}
+
+/* iOS-style safe-area inset for sticky bottom nav */
+@supports (padding: max(0px)) {
+  .pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+}
+
+/* ── Mobile padding rhythm ────────────────────────────────────── */
+@media (max-width: 639px) {
+  .card { border-radius: 12px; }
+}
+
 /* ── Animations ──────────────────────────────────────────────────── */
 @keyframes shimmer   { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 @keyframes slideIn   { from { opacity:0; transform:translateX(100%)  } to { opacity:1; transform:translateX(0) } }
