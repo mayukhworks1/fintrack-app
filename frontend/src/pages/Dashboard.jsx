@@ -32,42 +32,55 @@ function SkeletonCard() {
   )
 }
 
-/* ── KPI card — minimal, typographic ── */
-function KpiCard({ label, value, sub, icon: Icon, accent, trend }) {
+/* ── KPI card — horizontal layout, colored icon tile on left ──
+   Matches reference: $32,350.00 / Total Revenue style with a tinted square tile.
+   Each card auto-picks an icon tile color from a palette so the row pops. */
+const TILE_PALETTE = [
+  { bg: '#fef3c7', fg: '#d97706' },   // amber
+  { bg: '#dbeafe', fg: '#2563eb' },   // blue
+  { bg: '#dcfce7', fg: '#16a34a' },   // green
+  { bg: '#fce7f3', fg: '#db2777' },   // pink
+  { bg: '#ede9fe', fg: '#7c3aed' },   // violet
+  { bg: '#cffafe', fg: '#0891b2' },   // cyan
+]
+
+function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
+  const palette = TILE_PALETTE[tone % TILE_PALETTE.length]
   const accentColor =
     accent === 'positive' ? 'var(--fin-positive)'
     : accent === 'warning' ? 'var(--fin-warning)'
     : accent === 'negative' ? 'var(--fin-negative)'
     : 'var(--text-1)'
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-medium uppercase tracking-wider"
-          style={{ color: 'var(--text-3)', letterSpacing: '0.06em' }}>
-          {label}
+    <div className="card flex items-center gap-3.5">
+      {/* Colored icon tile */}
+      {Icon && (
+        <div className="rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ width: 44, height: 44, background: palette.bg, color: palette.fg }}>
+          <Icon size={20} aria-hidden="true" />
+        </div>
+      )}
+      {/* Number + label + trend */}
+      <div className="min-w-0 flex-1">
+        <p className="display-num text-xl sm:text-[1.4rem] truncate"
+          style={{ color: accentColor }}
+          title={typeof value === 'string' ? value : undefined}>
+          {value}
         </p>
-        {Icon && <Icon size={13} style={{ color: 'var(--text-3)' }} aria-hidden="true" />}
-      </div>
-      <p className="font-semibold tabular-nums leading-none break-words"
-        style={{
-          fontSize: 'clamp(1.25rem, 3.6vw, 1.625rem)',
-          color: accentColor,
-          letterSpacing: '-0.02em',
-          wordBreak: 'break-word',
-        }}>
-        {value}
-      </p>
-      <div className="flex items-center gap-2 mt-2 min-h-[16px]">
-        {trend != null && Number.isFinite(trend) && (
-          <span className="text-[11px] font-medium flex items-center gap-0.5 tabular-nums"
-            style={{ color: trend >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
-            {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-            {formatPct(Math.abs(trend), 2)}
-          </span>
-        )}
-        {sub && (
-          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{sub}</p>
-        )}
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <p className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{label}</p>
+          {trend != null && Number.isFinite(trend) && (
+            <span className="text-[10px] font-bold flex items-center gap-0.5 tabular-nums px-1.5 py-0.5 rounded"
+              style={{
+                color: trend >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)',
+                background: trend >= 0 ? 'var(--fin-pos-bg)' : 'var(--fin-neg-bg)',
+              }}>
+              {trend >= 0 ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+              {formatPct(Math.abs(trend), 1)}
+            </span>
+          )}
+        </div>
+        {sub && <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
       </div>
     </div>
   )
@@ -181,36 +194,36 @@ export default function Dashboard() {
           {loading && !data
             ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
             : <>
-                <KpiCard
+                <KpiCard tone={0}
                   label="Total Revenue"
                   value={inr(s?.total_billed)}
                   icon={IndianRupee}
                 />
-                <KpiCard
+                <KpiCard tone={1}
                   label="Net Profit"
                   value={inr(s?.total_profit)}
                   icon={TrendingUp}
                   accent={(s?.total_profit ?? 0) >= 0 ? 'positive' : 'negative'}
                   trend={s?.avg_profit_pct}
                 />
-                <KpiCard
+                <KpiCard tone={2}
                   label="Total Cost"
                   value={inr(s?.total_cost)}
                   icon={Activity}
                   sub={s?.total_cost > 0 ? `${formatPct(costRatio, 1)} of revenue` : undefined}
                 />
-                <KpiCard
+                <KpiCard tone={3}
                   label="Profit Margin"
                   value={formatPct(margin, 2)}
                   icon={Flame}
                   accent={margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative'}
                 />
-                <KpiCard
+                <KpiCard tone={4}
                   label="Targets Hit"
                   value={`${s?.target_achieved_count ?? 0} / ${s?.total_projects ?? 0}`}
                   icon={Target}
                 />
-                <KpiCard
+                <KpiCard tone={5}
                   label="Projects"
                   value={s?.total_projects ?? '—'}
                   icon={FolderKanban}

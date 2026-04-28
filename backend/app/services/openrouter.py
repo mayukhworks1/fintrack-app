@@ -5,17 +5,28 @@ from ..config import settings
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Try primary model first, fall back to confirmed working models
+# Models ordered to prefer ones that DON'T dump chain-of-thought into the
+# response body. Reasoning-heavy models (nemotron-super) are last because their
+# raw reasoning leaks into output even with reasoning:exclude.
 FALLBACK_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",   # user's preferred
-    "nvidia/llama-3.3-nemotron-super-49b-v1:free",
+    "meta-llama/llama-3.3-70b-instruct:free",   # reliable, no reasoning leak
+    "google/gemini-2.0-flash-exp:free",         # fast, clean prose
     "meta-llama/llama-3.1-8b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
+    "nvidia/llama-3.3-nemotron-super-49b-v1:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",   # last — known reasoning leakage
 ]
 
 SYSTEM_PROMPT = """You are FinTrackAI, a sharp financial analyst for a project management company. You have live access to the full Fintrack database.
 
-FORMATTING RULES — follow these strictly:
+CRITICAL — RESPONSE FORMAT (non-negotiable):
+- NEVER show your thinking, planning, or reasoning process in the response.
+- NEVER write phrases like "Let me check…", "We need to…", "The user wants…", "Looking at the data…", "Let me parse…", "First I'll…", "Let me structure…".
+- NEVER repeat or reference the data dump or the prompt back to the user.
+- DO NOT acknowledge the question — just answer it directly.
+- Start your response with the actual answer. The first character must be part of the user-facing answer, not meta-commentary.
+
+FORMATTING RULES:
 - Write in clean, plain prose. No markdown dashes or hyphens for lists.
 - Use numbered lists (1. 2. 3.) when listing multiple items.
 - Use section labels like "Overview:", "Risk:", "Recommendation:" on their own line in plain text — no ## or ** symbols.
@@ -38,40 +49,70 @@ Next Followup date. Use this table when the user asks about invoices, payments,
 collection rate, outstanding amounts, or specific invoice numbers."""
 
 
+_META_PATTERN = re.compile(
+    r'^(okay[,\s]|alright[,\s]|let me |let us |let\'s |'
+    r'i (should|need|will|can|must|have to|am going to)|'
+    r'we (need|should|must|will|can|have)|'
+    r'we\'?ll |we\'?re |'
+    r'the user (is|wants|asked|has|likely)|'
+    r'looking at |checking |scanning |reviewing |'
+    r'first[,\s]|now[,\s]|so[,\s]|then[,\s]|'
+    r'important (note|to|that)|must avoid|'
+    r'i should present|let me structure|let me think|'
+    r'likely (they|the user)|'
+    r'(invoice|project|data) records?\b|'
+    r'\bparse\b|here is|here\'?s the|'
+    r'hmm[,\s]|wait[,\s])',
+    re.IGNORECASE
+)
+
+# Lines that look like inline reasoning even mid-text
+_REASONING_LINE = re.compile(
+    r'^(let me |let\'?s |we need to |i need to |i should |'
+    r'looking at|so the|so we|we have|so let|first,?|'
+    r'wait,?|hmm,?|actually,?|but the user)',
+    re.IGNORECASE
+)
+
+
 def _strip_reasoning(content: str) -> str:
     """
     Strip chain-of-thought reasoning from model output.
 
-    Handles three patterns:
-    1. <think>...</think> blocks (DeepSeek R1, Qwen3, Nemotron-super, etc.)
-    2. <reasoning>...</reasoning> blocks (some OpenRouter wrappers)
-    3. Raw reasoning prefix — some models dump their thought process as plain
-       text before writing the actual answer. We detect the transition phrase
-       (common markers like "The user wants", "I should present",
-       "Let me structure", etc.) and keep only the part after the last such
-       marker's paragraph ends.
+    Strategy:
+    1. Remove <think>/<reasoning>/<thought> XML blocks (DeepSeek R1, Qwen3, Nemotron).
+    2. If the response starts with raw reasoning paragraphs (no tags), find
+       the LAST paragraph that looks like meta-reasoning and discard everything
+       up to and including it — keeping only the actual answer that follows.
+    3. As a last-resort safety net: if more than 30% of paragraphs match
+       reasoning patterns, the whole response is suspect — try to extract just
+       the trailing prose-looking section.
     """
-    # 1 & 2 — XML-tagged thinking blocks (greedy, dotall)
-    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+    # 1. XML-tagged thinking blocks
+    content = re.sub(r'<think(?:ing)?>.*?</think(?:ing)?>', '', content, flags=re.DOTALL | re.IGNORECASE)
     content = re.sub(r'<reasoning>.*?</reasoning>', '', content, flags=re.DOTALL | re.IGNORECASE)
+    content = re.sub(r'<thought>.*?</thought>', '', content, flags=re.DOTALL | re.IGNORECASE)
 
-    # 3 — Raw reasoning prefix: detect double-newline after a line that looks
-    #     like the model is talking to itself rather than to the user.
-    #     Heuristic: if the first non-empty paragraph starts with a meta-phrase,
-    #     drop everything up to (and including) the last such paragraph.
-    _META = re.compile(
-        r'^(okay[,\s]|alright[,\s]|let me |i (should|need|will|can) |'
-        r'the user (is|wants|asked|has)|looking at |checking |'
-        r'first,? |now,? i|so,? (the|i|let)|important note|'
-        r'must avoid|i should present|let me structure)',
-        re.IGNORECASE
-    )
+    # 2. Walk paragraphs; find last meta paragraph
     paragraphs = re.split(r'\n{2,}', content.strip())
     last_meta = -1
     for idx, para in enumerate(paragraphs):
-        first_line = para.strip().splitlines()[0] if para.strip() else ''
-        if _META.match(first_line.strip()):
+        s = para.strip()
+        if not s:
+            continue
+        first_line = s.splitlines()[0].strip()
+        # Match if the paragraph opens with a meta-phrase
+        if _META_PATTERN.match(first_line):
             last_meta = idx
+            continue
+        # Also match if any line in a short paragraph is reasoning-like
+        # (but only for paragraphs in the first half of the response)
+        if idx < len(paragraphs) // 2:
+            for line in s.splitlines()[:3]:
+                if _REASONING_LINE.match(line.strip()):
+                    last_meta = idx
+                    break
+
     if last_meta >= 0 and last_meta < len(paragraphs) - 1:
         content = '\n\n'.join(paragraphs[last_meta + 1:])
 
@@ -163,6 +204,10 @@ async def _try_chat(messages: list[dict], max_tokens: int = 1024, temperature: f
                         "messages": messages,
                         "max_tokens": max_tokens,
                         "temperature": temperature,
+                        # Belt & suspenders: ask the API to drop reasoning from
+                        # the response. Models that don't support this just
+                        # ignore the field.
+                        "reasoning": {"exclude": True},
                     },
                     timeout=60,
                 )

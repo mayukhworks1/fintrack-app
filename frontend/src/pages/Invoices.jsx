@@ -81,9 +81,9 @@ function StatusPill({ status }) {
   const m = STATUS_META[status] || { color: 'var(--text-3)', bg: 'var(--glass-bg)', border: 'var(--glass-border)' }
   const Icon = m.icon
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
-      style={{ background: m.bg, border: `1px solid ${m.border}`, color: m.color }}>
-      {Icon && <Icon size={9} />}{status}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{ background: m.bg, color: m.color }}>
+      {Icon && <Icon size={11} strokeWidth={2.5} />}{status}
     </span>
   )
 }
@@ -148,25 +148,38 @@ function AttachCard({ a }) {
   )
 }
 
-/* ── KPI card ────────────────────────────────────────────────────────────── */
-function KpiCard({ label, value, sub, icon: Icon, semantic }) {
-  // semantic: 'positive' | 'warning' | 'negative' | undefined (neutral)
+/* ── KPI card — horizontal layout with colored icon tile ──────────────────── */
+const KPI_TILE_PALETTE = [
+  { bg: '#fef3c7', fg: '#d97706' },  // amber
+  { bg: '#dbeafe', fg: '#2563eb' },  // blue
+  { bg: '#dcfce7', fg: '#16a34a' },  // green
+  { bg: '#fce7f3', fg: '#db2777' },  // pink
+  { bg: '#ede9fe', fg: '#7c3aed' },  // violet
+]
+function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
+  const palette = KPI_TILE_PALETTE[tone % KPI_TILE_PALETTE.length]
   const color =
     semantic === 'positive' ? 'var(--fin-positive)' :
     semantic === 'warning'  ? 'var(--fin-warning)'  :
-    semantic === 'negative' ? 'var(--fin-negative)'  :
+    semantic === 'negative' ? 'var(--fin-negative)' :
     'var(--text-1)'
   return (
-    <div className="card animate-scale-in">
-      <div className="flex items-center justify-between mb-3">
-        <p className="section-title">{label}</p>
-        {Icon && <Icon size={13} style={{ color: 'var(--text-3)' }} />}
+    <div className="card flex items-center gap-3.5 animate-scale-in">
+      {Icon && (
+        <div className="rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ width: 44, height: 44, background: palette.bg, color: palette.fg }}>
+          <Icon size={20} aria-hidden="true" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="display-num text-xl sm:text-[1.4rem] truncate"
+          style={{ color }}
+          title={typeof value === 'string' ? value : undefined}>
+          {value ?? '—'}
+        </p>
+        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
+        {sub && <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
       </div>
-      <p className="font-bold tabular-nums leading-none break-words"
-        style={{ fontSize: 'clamp(1.1rem,3vw,1.55rem)', color, letterSpacing: '-0.025em' }}>
-        {value ?? '—'}
-      </p>
-      {sub && <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>{sub}</p>}
     </div>
   )
 }
@@ -580,17 +593,17 @@ export default function Invoices() {
 
       {/* ── KPIs ── */}
       <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-        <KpiCard label="Total Raised"    value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
-        <KpiCard label="Incl. GST"       value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
-        <KpiCard label="Collected"       value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
-        <KpiCard label="Outstanding"
+        <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
+        <KpiCard tone={1} label="Incl. GST"    value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
+        <KpiCard tone={2} label="Collected"    value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
+        <KpiCard tone={3} label="Outstanding"
           value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
           icon={CalendarClock}
           semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
           sub={(s?.total_outstanding || 0) > 0
             ? `${s?.by_status?.Pending || 0} pending`
             : 'Fully collected'} />
-        <KpiCard label="Collection Rate"
+        <KpiCard tone={4} label="Collection Rate"
           value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
           icon={Percent}
           semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
