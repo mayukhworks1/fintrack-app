@@ -165,6 +165,15 @@
   }
   @media (min-width: 640px) { .card { padding: 1.25rem; } }
 
+  /* Elevated card — same as card but with stronger shadow; use for modals / popovers */
+  .card-elevated {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 4px 6px rgba(15,23,42,0.06), 0 12px 32px rgba(15,23,42,0.10);
+    border-radius: 14px;
+    padding: 1.25rem;
+  }
+
   .card-hover {
     @apply card cursor-pointer;
     transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
@@ -194,18 +203,19 @@
     font-size: 0.8125rem;
     padding: 0.5rem 1rem;
     border-radius: 8px;
-    border: 1px solid transparent;
-    box-shadow: 0 1px 2px rgba(37,99,235,0.18), 0 2px 8px rgba(37,99,235,0.12);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 1px 2px rgba(37,99,235,0.2), 0 3px 10px rgba(37,99,235,0.15);
     transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
     white-space: nowrap;
+    letter-spacing: -0.01em;
   }
-  .btn-primary:hover    { background: var(--accent-btn-hover); box-shadow: 0 2px 4px rgba(37,99,235,0.25), 0 6px 18px rgba(37,99,235,0.22); transform: translateY(-1px); }
-  .btn-primary:active   { transform: scale(0.98); }
-  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .btn-primary:hover    { background: var(--accent-btn-hover); box-shadow: 0 2px 4px rgba(37,99,235,0.28), 0 8px 20px rgba(37,99,235,0.2); transform: translateY(-1px); }
+  .btn-primary:active   { transform: scale(0.975); box-shadow: 0 1px 2px rgba(37,99,235,0.15); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .btn-ghost {
     background: var(--card-bg);
@@ -301,7 +311,24 @@
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }
+
+  /* ── Page title — large hero heading used on each page ── */
+  .page-title {
+    font-size: clamp(1.125rem, 3vw, 1.5rem);
+    font-weight: 800;
+    color: var(--text-1);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
   .page-header { @apply flex items-center justify-between mb-6; }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--card-border);
+    margin: 0.75rem 0;
+  }
 
   /* ── Status badges ── */
   .badge-active    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold; background: var(--fin-pos-bg);  color: var(--fin-positive); border: 1px solid var(--fin-pos-border); }
@@ -540,6 +567,16 @@ h1 { letter-spacing: -0.03em; }
   .printable-report ul li span:first-child {
     background: #2563eb !important;
   }
+}
+
+/* ── Login page dot-grid background ─────────────────────────────── */
+.login-bg {
+  background-color: var(--bg-base);
+  background-image: radial-gradient(var(--card-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.dark .login-bg {
+  background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
 }
 
 /* ── Animations ──────────────────────────────────────────────────── */

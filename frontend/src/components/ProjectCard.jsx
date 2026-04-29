@@ -56,8 +56,9 @@ export default function ProjectCard({ record }) {
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <StatusBadge status={f['Project Status']} />
-          <ChevronRight size={14} style={{ color: 'var(--text-3)' }}
-            className="group-hover:translate-x-0.5 group-hover:text-brand-400 transition-all" />
+          <ChevronRight size={14}
+            className="transition-all group-hover:translate-x-0.5"
+            style={{ color: 'var(--text-3)' }} />
         </div>
       </div>
 
@@ -87,7 +88,7 @@ export default function ProjectCard({ record }) {
             <div className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${targetPct}%`,
-                background: targetPct >= 100 ? 'var(--fin-positive)' : '#3b82f6',
+                background: targetPct >= 100 ? 'var(--fin-positive)' : 'var(--accent)',
               }} />
           </div>
         </div>

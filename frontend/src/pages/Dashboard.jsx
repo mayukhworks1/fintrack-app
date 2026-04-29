@@ -1,9 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   TrendingUp, TrendingDown, IndianRupee, FolderKanban,
   Target, AlertTriangle, Award, RefreshCw, Plus,
-  ArrowRight, Flame, ShieldAlert, Activity
+  ArrowRight, Flame, Activity
 } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
@@ -129,8 +129,18 @@ function ClientBar({ client, billed, profit, maxBilled }) {
   )
 }
 
+function useGreeting() {
+  return useMemo(() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }, [])
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
+  const greeting = useGreeting()
 
   const fetchAll = useCallback(() =>
     Promise.all([
@@ -157,20 +167,26 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)' }}>Dashboard</h1>
+          <p className="text-xs font-medium mb-0.5 tabular-nums"
+            style={{ color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>
+            {greeting} 👋
+          </h1>
           <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
             Portfolio overview
             {lastUpdated && (
               <span className="flex items-center gap-1.5">
                 · <SyncDot syncing={syncing} />
                 <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
-                  {syncing ? 'syncing…' : `live · ${updatedLabel}`}
+                  {syncing ? 'syncing…' : `${updatedLabel}`}
                 </span>
               </span>
             )}
           </p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 mt-1">
           <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
             <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
           </button>
