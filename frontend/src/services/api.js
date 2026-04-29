@@ -14,10 +14,44 @@ export function setAuthToken(t) {
 }
 export function clearAuthToken() { setAuthToken('') }
 
+// ── In-flight request dedupe ──────────────────────────────────────────────
+// Polling hooks across multiple mounted components frequently fire the
+// SAME GET in parallel (e.g. /api/projects/summary from Dashboard + /exec
+// + Analytics every 10s). We coalesce identical concurrent reads so the
+// network and backend only see one request — all subscribers share the
+// same promise.
+//
+// Only safe-method requests (GET) are deduped. Anything with a body or
+// non-GET method bypasses entirely (mutations must not share promises).
+// Requests with an external `signal` also bypass — the caller wants
+// independent cancellation control.
+const _inflight = new Map()  // key -> Promise
+
+function _dedupeKey(method, path) { return `${method} ${path}` }
+
+async function _dedupedFetch(method, path, runner, externalSignal) {
+  if (method !== 'GET' || externalSignal) return runner()
+  const key = _dedupeKey(method, path)
+  const existing = _inflight.get(key)
+  if (existing) return existing
+  const promise = runner().finally(() => _inflight.delete(key))
+  _inflight.set(key, promise)
+  return promise
+}
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
 async function request(path, options = {}, retries = 2) {
+  const { signal: externalSignal, timeout, ...rest } = options
+  const method = (rest.method || 'GET').toUpperCase()
+
+  // Coalesce identical concurrent GETs across the app
+  return _dedupedFetch(method, path, () =>
+    _doRequest(path, options, retries), externalSignal)
+}
+
+async function _doRequest(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, ...rest } = options
   const controller = new AbortController()
   const timeoutMs = timeout || TIMEOUT_MS
@@ -49,8 +83,18 @@ async function request(path, options = {}, retries = 2) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }))
-      const msg = err.detail || err.message || `HTTP ${res.status}`
-      throw new Error(msg)
+      // Backend wraps errors as { error: { code, type, message, request_id } }
+      // Older endpoints return { detail: "..." }
+      const msg =
+        err?.error?.message ||
+        err?.detail ||
+        err?.message ||
+        `HTTP ${res.status}`
+      const e = new Error(msg)
+      e.status     = res.status
+      e.requestId  = err?.error?.request_id
+      e.errorType  = err?.error?.type
+      throw e
     }
 
     if (res.status === 204) return null
@@ -115,8 +159,6 @@ export const api = {
       }),
     report:   (opts = {}) =>
       request('/api/ai/report', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
-    executiveSummary: (opts = {}) =>
-      request('/api/ai/executive-summary', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
   invoices: {
     list:    (params = {}) => {

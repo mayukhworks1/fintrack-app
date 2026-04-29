@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
-  MessageSquareText, FileText, TrendingUp, Sparkles,
+  MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight
 } from 'lucide-react'
@@ -11,7 +11,6 @@ import { useAuth } from '../context/AuthContext'
 
 const nav = [
   { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
-  { to: '/exec',      label: 'Exec View',    icon: Sparkles },
   { to: '/projects',  label: 'Projects',     icon: FolderKanban },
   { to: '/invoices',  label: 'Invoices',     icon: Receipt },
   { to: '/analytics', label: 'Analytics',    icon: BarChart3 },

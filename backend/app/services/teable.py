@@ -1,33 +1,18 @@
 import json
-import time
 from typing import Any, Optional
 import httpx
 from ..config import settings
 from ..models import FIELD_IDS
+from ..utils.cache import cache
 
-# ── Simple in-memory cache (avoids hammering Teable on every 5s poll) ──────
-_cache: dict[str, tuple[float, Any]] = {}
-SUMMARY_TTL = 30   # seconds — summary recalculated at most every 30s
-RECORDS_TTL = 15   # seconds — record lists cached for 15s
-
-
-def _cache_get(key: str) -> Any | None:
-    if key in _cache:
-        ts, val = _cache[key]
-        if time.time() - ts < (SUMMARY_TTL if "summary" in key else RECORDS_TTL):
-            return val
-        del _cache[key]
-    return None
+# ── TTL config (seconds) — keys are namespaced "project:" in the shared cache ──
+_TTL_SUMMARY = 30   # summary recalculated at most every 30s
+_TTL_RECORDS = 15   # record lists cached for 15s
 
 
-def _cache_set(key: str, val: Any) -> None:
-    _cache[key] = (time.time(), val)
-
-
-def _cache_invalidate_prefix(prefix: str) -> None:
-    keys = [k for k in list(_cache.keys()) if k.startswith(prefix)]
-    for k in keys:
-        del _cache[k]
+def _bust_project_cache() -> None:
+    """Invalidate every cached project entry after a write."""
+    cache.bust(prefix="project:")
 
 
 class TeableService:
@@ -83,22 +68,19 @@ class TeableService:
         take: int = 100,
         skip: int = 0,
     ) -> list[dict[str, Any]]:
-        cache_key = f"list:{status}:{client}:{order_by_field}:{order_dir}:{take}:{skip}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
+        cache_key = f"project:list:{status}:{client}:{order_by_field}:{order_dir}:{take}:{skip}"
 
-        params: dict[str, Any] = {"fieldKeyType": "name", "take": take, "skip": skip}
-        f = self._build_filter(status=status, client=client)
-        if f:
-            params["filter"] = json.dumps(f)
-        if order_by_field and order_by_field in FIELD_IDS:
-            params["orderBy"] = json.dumps([{"fieldId": FIELD_IDS[order_by_field], "order": order_dir}])
+        async def _load():
+            params: dict[str, Any] = {"fieldKeyType": "name", "take": take, "skip": skip}
+            f = self._build_filter(status=status, client=client)
+            if f:
+                params["filter"] = json.dumps(f)
+            if order_by_field and order_by_field in FIELD_IDS:
+                params["orderBy"] = json.dumps([{"fieldId": FIELD_IDS[order_by_field], "order": order_dir}])
+            data = await self._get(self._record_url, params)
+            return data.get("records", [])
 
-        data = await self._get(self._record_url, params)
-        records = data.get("records", [])
-        _cache_set(cache_key, records)
-        return records
+        return await cache.get_or_set(cache_key, ttl=_TTL_RECORDS, loader=_load)
 
     async def get_record(self, record_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient() as http:
@@ -121,8 +103,7 @@ class TeableService:
             )
             r.raise_for_status()
             records = r.json().get("records", [])
-            _cache_invalidate_prefix("list:")
-            _cache_invalidate_prefix("summary")
+            _bust_project_cache()
             return records[0] if records else r.json()
 
     async def update_record(self, record_id: str, fields: dict) -> dict[str, Any]:
@@ -134,16 +115,14 @@ class TeableService:
                 timeout=30,
             )
             r.raise_for_status()
-            _cache_invalidate_prefix("list:")
-            _cache_invalidate_prefix("summary")
+            _bust_project_cache()
             return r.json()
 
     async def delete_record(self, record_id: str) -> bool:
         async with httpx.AsyncClient() as http:
             r = await http.delete(f"{self._record_url}/{record_id}", headers=self._headers, timeout=30)
             r.raise_for_status()
-            _cache_invalidate_prefix("list:")
-            _cache_invalidate_prefix("summary")
+            _bust_project_cache()
             return True
 
     async def search_records(self, query: str, take: int = 20) -> list[dict[str, Any]]:
@@ -168,7 +147,7 @@ class TeableService:
         return all_records
 
     async def get_summary(self) -> dict:
-        cached = _cache_get("summary")
+        cached = cache.get("project:summary")
         if cached is not None:
             return cached
 
@@ -259,7 +238,7 @@ class TeableService:
             "worst_project":         worst_rec,
             "at_risk":               at_risk,
         }
-        _cache_set("summary", result)
+        cache.set("project:summary", result, ttl=_TTL_SUMMARY)
         return result
 
 

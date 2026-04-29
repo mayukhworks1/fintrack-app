@@ -1,19 +1,14 @@
-import time
 import asyncio
 from fastapi import APIRouter, HTTPException
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.openrouter import (
     chat_with_ai, autofill_project, analyze_project, generate_report,
-    _format_records_context, _try_chat,
+    _format_records_context,
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
-
-# In-memory cache for /executive-summary — model is slow, recompute every 5 min
-_exec_cache: dict[str, tuple[float, dict]] = {}
-_EXEC_TTL = 300  # seconds
 
 
 def _format_invoice_context(summary: dict, records: list[dict]) -> str:
@@ -103,102 +98,6 @@ async def ai_analyze(body: AnalyzeRequest):
             "model": result["model_short"],
             "record_id": body.record_id,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/executive-summary")
-async def executive_summary():
-    """
-    Generate a 2-3 sentence AI executive summary of the entire portfolio
-    + invoice book. Designed for the top of the dashboard.
-    Cached for 5 minutes to keep latency low and avoid rate-limiting.
-    """
-    # Cache check
-    cached = _exec_cache.get("default")
-    if cached and (time.time() - cached[0]) < _EXEC_TTL:
-        return cached[1]
-
-    try:
-        teable  = TeableService()
-        inv_svc = InvoiceService()
-
-        (proj_sum, proj_records), (inv_sum, inv_records) = await asyncio.gather(
-            asyncio.gather(teable.get_summary(), teable.get_all_records()),
-            asyncio.gather(inv_svc.get_summary(), inv_svc.get_all_invoices()),
-        )
-
-        # Compact business snapshot — focused, no fluff
-        margin_pct = (
-            (proj_sum["total_profit"] / proj_sum["total_billed"] * 100)
-            if proj_sum["total_billed"] > 0 else 0
-        )
-        snapshot = (
-            f"BUSINESS SNAPSHOT (live):\n"
-            f"- Total revenue billed: ₹{proj_sum['total_billed']:,.0f}\n"
-            f"- Net profit: ₹{proj_sum['total_profit']:,.0f} ({margin_pct:.1f}% margin)\n"
-            f"- Active projects: {proj_sum['total_projects']} "
-            f"({proj_sum.get('target_achieved_count', 0)} hit target)\n"
-            f"- Invoices total raised: ₹{inv_sum['total_raised']:,.0f}\n"
-            f"- Outstanding receivables: ₹{inv_sum['total_outstanding']:,.0f}\n"
-            f"- Collection rate: {inv_sum['collection_rate']:.1f}%\n"
-            f"- Pending invoices: {inv_sum['by_status'].get('Pending', 0)}\n"
-            f"- Overdue (>30 days): {len(inv_sum.get('overdue_invoices', []))}"
-        )
-        if inv_sum.get("overdue_invoices"):
-            top = inv_sum["overdue_invoices"][0]
-            snapshot += (
-                f"\n- Oldest overdue: {top.get('invoice_no', '?')} "
-                f"({top.get('project', '?')}) "
-                f"₹{float(top.get('amount', 0)):,.0f} "
-                f"aged {int(top.get('aging', 0))} days"
-            )
-
-        prompt = (
-            "You are FinTrackAI — a sharp CXO advisor.\n\n"
-            "Write a 3-sentence executive summary of the business based on the "
-            "snapshot below. Each sentence must be punchy, specific, and "
-            "actionable. Cite real numbers (use ₹ shorthand: ₹2.5L, ₹1.2Cr).\n\n"
-            "Sentence 1: state overall health using revenue, margin, project count.\n"
-            "Sentence 2: highlight the biggest risk OR opportunity (overdue, "
-            "concentration, low margin project).\n"
-            "Sentence 3: one concrete action the CXO should take this week.\n\n"
-            "Rules:\n"
-            "- Output ONLY the 3 sentences. No headings, no bullet points, no "
-            "preamble like 'Here is' or 'Based on'.\n"
-            "- No markdown. Plain prose.\n"
-            "- Start the first sentence with the actual answer (not meta-text).\n\n"
-            f"{snapshot}"
-        )
-
-        messages = [
-            {"role": "system", "content":
-             "You are a concise CXO advisor. Write only the requested output. "
-             "Never explain your thinking. Never say 'Let me' or 'Based on'."},
-            {"role": "user", "content": prompt},
-        ]
-
-        result = await _try_chat(messages, max_tokens=300, temperature=0.5)
-
-        payload = {
-            "summary":     result["content"].strip(),
-            "model":       result["model_short"],
-            "generated_at": time.time(),
-            "metrics": {
-                "total_billed":    proj_sum["total_billed"],
-                "total_profit":    proj_sum["total_profit"],
-                "margin_pct":      round(margin_pct, 2),
-                "total_projects":  proj_sum["total_projects"],
-                "total_raised":    inv_sum["total_raised"],
-                "outstanding":     inv_sum["total_outstanding"],
-                "collection_rate": inv_sum["collection_rate"],
-                "overdue_count":   len(inv_sum.get("overdue_invoices", [])),
-                "pending_count":   inv_sum["by_status"].get("Pending", 0),
-            },
-        }
-        _exec_cache["default"] = (time.time(), payload)
-        return payload
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

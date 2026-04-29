@@ -14,7 +14,6 @@ const Invoices      = lazy(() => import('./pages/Invoices'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
 const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
 const Report        = lazy(() => import('./pages/Report'))
-const ExecView      = lazy(() => import('./pages/ExecView'))
 
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
@@ -44,7 +43,6 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/"             element={<Dashboard />} />
-            <Route path="/exec"         element={<ExecView />} />
             <Route path="/projects"     element={<Projects />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/invoices"     element={<Invoices />} />

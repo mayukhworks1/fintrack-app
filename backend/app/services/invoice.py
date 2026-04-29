@@ -3,10 +3,10 @@ Invoice Teable service — table tblyWvNkprE1HnaVZIH
 Handles CRUD + summary for Invoice Tracking.
 """
 import json
-import time
 from typing import Any, Optional
 import httpx
 from ..config import settings
+from ..utils.cache import cache
 
 # ── Field IDs for filter/sort params (must use IDs, not names) ─────────────
 INVOICE_FIELD_IDS = {
@@ -32,29 +32,16 @@ INVOICE_FIELD_IDS = {
     "Outstanding Amount": "fldn4mfpKXNQxSnDfc6", # READ-ONLY
 }
 
-# ── Simple per-process cache ───────────────────────────────────────────────
-_cache: dict[str, tuple[float, Any]] = {}
-INVOICE_RECORDS_TTL = 15   # seconds
+# ── Cache config ───────────────────────────────────────────────────────────
+# All entries live in the shared ../utils/cache singleton, namespaced by
+# the "invoice:" prefix so writes can bust just our slice.
+_TTL_LIST    = 15   # invoice list/sort/filter results
+_TTL_ALL     = 30   # full record dump (used by summary + AI)
+_TTL_SUMMARY = 30   # computed summary
 
-
-def _cache_get(key: str) -> Any | None:
-    if key in _cache:
-        ts, val = _cache[key]
-        if time.time() - ts < INVOICE_RECORDS_TTL:
-            return val
-        del _cache[key]
-    return None
-
-
-def _cache_set(key: str, val: Any) -> None:
-    _cache[key] = (time.time(), val)
-
-
-def _cache_bust() -> None:
-    """Invalidate all invoice cache entries after a write."""
-    keys = [k for k in list(_cache.keys()) if k.startswith("invoice")]
-    for k in keys:
-        del _cache[k]
+def _bust_invoice_cache() -> None:
+    """Invalidate every cached invoice entry after a write."""
+    cache.bust(prefix="invoice:")
 
 
 class InvoiceService:
@@ -85,72 +72,60 @@ class InvoiceService:
         order: str = "desc",
     ) -> dict:
         cache_key = f"invoice:list:{status}:{project}:{limit}:{skip}:{order_by}:{order}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
 
-        params: dict[str, Any] = {
-            "fieldKeyType": "name",
-            "take": limit,
-            "skip": skip,
-        }
+        async def _load():
+            params: dict[str, Any] = {
+                "fieldKeyType": "name",
+                "take": limit,
+                "skip": skip,
+            }
+            filter_set = []
+            if status:
+                filter_set.append({
+                    "fieldId": INVOICE_FIELD_IDS["Payment Status"],
+                    "operator": "is",
+                    "value": status,
+                })
+            if project:
+                filter_set.append({
+                    "fieldId": INVOICE_FIELD_IDS["Project"],
+                    "operator": "is",
+                    "value": project,
+                })
+            if filter_set:
+                params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
+            field_id = INVOICE_FIELD_IDS.get(order_by, INVOICE_FIELD_IDS["Raised Date"])
+            params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
 
-        # Build filter
-        filter_set = []
-        if status:
-            filter_set.append({
-                "fieldId": INVOICE_FIELD_IDS["Payment Status"],
-                "operator": "is",
-                "value": status,
-            })
-        if project:
-            filter_set.append({
-                "fieldId": INVOICE_FIELD_IDS["Project"],
-                "operator": "is",
-                "value": project,
-            })
-        if filter_set:
-            params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                data = res.json()
+            return {"records": data.get("records", []), "total": data.get("total", 0)}
 
-        # Sort by Raised Date desc
-        field_id = INVOICE_FIELD_IDS.get(order_by, INVOICE_FIELD_IDS["Raised Date"])
-        params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
-
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.get(self._record_url, params=params, headers=self._headers)
-            res.raise_for_status()
-            data = res.json()
-
-        result = {"records": data.get("records", []), "total": data.get("total", 0)}
-        _cache_set(cache_key, result)
-        return result
+        return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
     # ── Fetch all records (for summary / AI) ──────────────────────────────
     async def get_all_invoices(self) -> list[dict]:
-        cache_key = "invoice:all"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
-
-        records, skip = [], 0
-        async with httpx.AsyncClient(timeout=30) as client:
-            while True:
-                params = {
-                    "fieldKeyType": "name",
-                    "take": 1000,
-                    "skip": skip,
-                    "orderBy": json.dumps([{"fieldId": INVOICE_FIELD_IDS["Raised Date"], "order": "desc"}]),
-                }
-                res = await client.get(self._record_url, params=params, headers=self._headers)
-                res.raise_for_status()
-                batch = res.json().get("records", [])
-                records.extend(batch)
-                if len(batch) < 1000:
-                    break
-                skip += 1000
-
-        _cache_set(cache_key, records)
-        return records
+        async def _load():
+            records, skip = [], 0
+            async with httpx.AsyncClient(timeout=30) as client:
+                while True:
+                    params = {
+                        "fieldKeyType": "name",
+                        "take": 1000,
+                        "skip": skip,
+                        "orderBy": json.dumps([{"fieldId": INVOICE_FIELD_IDS["Raised Date"], "order": "desc"}]),
+                    }
+                    res = await client.get(self._record_url, params=params, headers=self._headers)
+                    res.raise_for_status()
+                    batch = res.json().get("records", [])
+                    records.extend(batch)
+                    if len(batch) < 1000:
+                        break
+                    skip += 1000
+            return records
+        return await cache.get_or_set("invoice:all", ttl=_TTL_ALL, loader=_load)
 
     # ── Get single invoice ────────────────────────────────────────────────
     async def get_invoice(self, record_id: str) -> dict:
@@ -166,7 +141,7 @@ class InvoiceService:
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.post(self._record_url, json=body, headers=self._headers)
             res.raise_for_status()
-            _cache_bust()
+            _bust_invoice_cache()
             data = res.json()
             return data.get("records", [{}])[0]
 
@@ -177,7 +152,7 @@ class InvoiceService:
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
-            _cache_bust()
+            _bust_invoice_cache()
             return res.json()
 
     # ── Delete invoice ────────────────────────────────────────────────────
@@ -186,12 +161,11 @@ class InvoiceService:
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.delete(url, headers=self._headers)
             res.raise_for_status()
-            _cache_bust()
+            _bust_invoice_cache()
 
     # ── Compute summary ───────────────────────────────────────────────────
     async def get_summary(self) -> dict:
-        cache_key = "invoice:summary"
-        cached = _cache_get(cache_key)
+        cached = cache.get("invoice:summary")
         if cached is not None:
             return cached
 
@@ -281,7 +255,7 @@ class InvoiceService:
             "overdue_invoices":   overdue_invoices[:5],
             "collection_rate":    round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
         }
-        _cache_set(cache_key, summary)
+        cache.set("invoice:summary", summary, ttl=_TTL_SUMMARY)
         return summary
 
 

@@ -6,7 +6,6 @@ import {
   ArrowRight, Flame, ShieldAlert, Activity
 } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
-import ExecutiveSummary from '../components/ExecutiveSummary'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { formatInr as inr, formatPct } from '../utils/format'
@@ -192,8 +191,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* AI Executive Summary — hero card */}
-      <ExecutiveSummary />
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}
       <section aria-label="Key metrics">
