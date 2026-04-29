@@ -1,7 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..services.teable import TeableService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
+from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -18,6 +19,7 @@ async def list_projects(
     order_dir: str = Query("desc"),
     limit: int = Query(100, le=1000),
     skip: int = Query(0),
+    _role: str = Depends(require_auth),
 ):
     teable = get_teable()
     resolved = resolve_status(status) if status else None
@@ -33,20 +35,24 @@ async def list_projects(
 
 
 @router.get("/summary")
-async def get_summary():
+async def get_summary(_role: str = Depends(require_auth)):
     teable = get_teable()
     return await teable.get_summary()
 
 
 @router.get("/search")
-async def search_projects(q: str = Query(..., min_length=1), limit: int = Query(20, le=100)):
+async def search_projects(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, le=100),
+    _role: str = Depends(require_auth),
+):
     teable = get_teable()
     records = await teable.search_records(q, take=limit)
     return {"records": records, "count": len(records)}
 
 
 @router.get("/{record_id}")
-async def get_project(record_id: str):
+async def get_project(record_id: str, _role: str = Depends(require_auth)):
     teable = get_teable()
     try:
         return await teable.get_record(record_id)
@@ -55,15 +61,16 @@ async def get_project(record_id: str):
 
 
 @router.post("", status_code=201)
-async def create_project(body: ProjectCreate):
+async def create_project(body: ProjectCreate, _role: str = Depends(require_editor)):
     teable = get_teable()
     fields = body.to_teable_fields()
-    record = await teable.create_record(fields)
-    return record
+    return await teable.create_record(fields)
 
 
 @router.patch("/{record_id}")
-async def update_project(record_id: str, body: ProjectUpdate):
+async def update_project(
+    record_id: str, body: ProjectUpdate, _role: str = Depends(require_editor)
+):
     teable = get_teable()
     fields = body.to_teable_fields()
     if not fields:
@@ -75,7 +82,7 @@ async def update_project(record_id: str, body: ProjectUpdate):
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_project(record_id: str):
+async def delete_project(record_id: str, _role: str = Depends(require_editor)):
     teable = get_teable()
     try:
         await teable.delete_record(record_id)

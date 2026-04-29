@@ -10,6 +10,7 @@ import {
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { formatInr } from '../utils/format'
+import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
@@ -199,7 +200,7 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…', comp
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ invoice, onClose, onEdit }) {
+function InvoiceDetail({ invoice, onClose, onEdit, isEditor }) {
   if (!invoice) return null
   const f = invoice.fields || {}
   const refs = parseAttachments(f['Reference'])
@@ -224,9 +225,11 @@ function InvoiceDetail({ invoice, onClose, onEdit }) {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              Edit
-            </button>
+            {isEditor && (
+              <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                Edit
+              </button>
+            )}
             <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
           </div>
         </div>
@@ -490,6 +493,7 @@ function SkeletonRow() {
 
 /* ── Main page ────────────────────────────────────────────────────────────── */
 export default function Invoices() {
+  const { isEditor } = useAuth()
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -582,11 +586,13 @@ export default function Invoices() {
           <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button onClick={openNew} className="btn-primary">
-            <Plus size={14} />
-            <span className="hidden sm:inline">New Invoice</span>
-            <span className="sm:hidden">New</span>
-          </button>
+          {isEditor && (
+            <button onClick={openNew} className="btn-primary">
+              <Plus size={14} />
+              <span className="hidden sm:inline">New Invoice</span>
+              <span className="sm:hidden">New</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -946,11 +952,12 @@ export default function Invoices() {
         <InvoiceDetail
           invoice={drawer.invoice}
           onClose={closeDrawer}
-          onEdit={() => setDrawer({ mode: 'edit', invoice: drawer.invoice })}
+          onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer.invoice })}
+          isEditor={isEditor}
         />,
         document.body
       )}
-      {(drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
+      {isEditor && (drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
         <InvoiceDrawer
           invoice={drawer.mode === 'edit' ? drawer.invoice : null}
           onClose={closeDrawer}

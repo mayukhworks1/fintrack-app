@@ -4,6 +4,7 @@ import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw } from
 import ProjectForm from '../components/ProjectForm'
 import { api } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
+import { useAuth } from '../context/AuthContext'
 
 // Shared clean AI text renderer (no ugly markdown symbols)
 function AiText({ text }) {
@@ -81,7 +82,13 @@ export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { isEditor } = useAuth()
   const isNew = id === 'new'
+
+  // Viewers cannot create new projects — redirect them away
+  useEffect(() => {
+    if (isNew && !isEditor) navigate('/projects', { replace: true })
+  }, [isNew, isEditor, navigate])
 
   const [record, setRecord]               = useState(null)
   const [loading, setLoading]             = useState(!isNew)
@@ -194,37 +201,41 @@ export default function ProjectDetail() {
             </button>
             <button onClick={handleAnalyze} disabled={analyzing}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5 disabled:opacity-50"
-              style={{ color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}
+              style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}
               aria-label="Run AI analysis">
               {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
               {analyzing ? 'Analyzing…' : 'AI Analyze'}
             </button>
-            <button onClick={() => setEditing(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
-              style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-              <Edit2 size={13} /> Edit
-            </button>
-            {deleteConfirm ? (
-              <div className="flex gap-1">
-                <button onClick={handleDelete} disabled={deleting}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                  style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
-                  aria-label="Confirm delete">
-                  {deleting ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                  Confirm
+            {isEditor && (
+              <>
+                <button onClick={() => setEditing(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
+                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                  <Edit2 size={13} /> Edit
                 </button>
-                <button onClick={() => setDeleteConfirm(false)} aria-label="Cancel delete"
-                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
-                  style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => setDeleteConfirm(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-red-500/10"
-                style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
-                <Trash2 size={13} /> Delete
-              </button>
+                {deleteConfirm ? (
+                  <div className="flex gap-1">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+                      aria-label="Confirm delete">
+                      {deleting ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      Confirm
+                    </button>
+                    <button onClick={() => setDeleteConfirm(false)} aria-label="Cancel delete"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
+                      style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setDeleteConfirm(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-red-500/10"
+                    style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <Trash2 size={13} /> Delete
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

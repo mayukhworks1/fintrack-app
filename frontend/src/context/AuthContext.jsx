@@ -3,20 +3,40 @@ import { api, getAuthToken, setAuthToken, clearAuthToken } from '../services/api
 
 const AuthContext = createContext(null)
 
+const ROLE_KEY = 'fintrack-auth-role'
+
+function getStoredRole() {
+  try { return localStorage.getItem(ROLE_KEY) || 'editor' } catch { return 'editor' }
+}
+function setStoredRole(role) {
+  try {
+    if (role) localStorage.setItem(ROLE_KEY, role)
+    else localStorage.removeItem(ROLE_KEY)
+  } catch {}
+}
+
 export function AuthProvider({ children }) {
   // 'loading' | 'authed' | 'unauthed'
   const [status, setStatus] = useState(() => (getAuthToken() ? 'loading' : 'unauthed'))
+  // 'editor' | 'viewer'
+  const [role, setRole] = useState(() => getStoredRole())
 
-  // Verify stored token on mount (token may have expired server-side)
+  // Verify stored token on mount — also refreshes the role from server
   useEffect(() => {
     if (!getAuthToken()) return
     let cancelled = false
     ;(async () => {
       try {
-        await api.auth.verify()
-        if (!cancelled) setStatus('authed')
+        const res = await api.auth.verify()
+        if (!cancelled) {
+          const r = res?.role || 'editor'
+          setRole(r)
+          setStoredRole(r)
+          setStatus('authed')
+        }
       } catch {
         clearAuthToken()
+        setStoredRole(null)
         if (!cancelled) setStatus('unauthed')
       }
     })()
@@ -25,7 +45,10 @@ export function AuthProvider({ children }) {
 
   // Listen for 401s from anywhere in the app
   useEffect(() => {
-    const onExpired = () => setStatus('unauthed')
+    const onExpired = () => {
+      setStoredRole(null)
+      setStatus('unauthed')
+    }
     window.addEventListener('fintrack:auth-expired', onExpired)
     return () => window.removeEventListener('fintrack:auth-expired', onExpired)
   }, [])
@@ -34,16 +57,27 @@ export function AuthProvider({ children }) {
     const res = await api.auth.login(password)
     if (!res?.token) throw new Error('Login failed')
     setAuthToken(res.token)
+    const r = res.role || 'editor'
+    setRole(r)
+    setStoredRole(r)
     setStatus('authed')
   }, [])
 
   const logout = useCallback(() => {
     clearAuthToken()
+    setStoredRole(null)
+    setRole('editor')
     setStatus('unauthed')
   }, [])
 
   return (
-    <AuthContext.Provider value={{ status, login, logout }}>
+    <AuthContext.Provider value={{
+      status,
+      role,
+      isEditor: role === 'editor',
+      login,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   )

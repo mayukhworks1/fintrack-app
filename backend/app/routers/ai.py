@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.openrouter import (
@@ -7,6 +7,7 @@ from ..services.openrouter import (
     _format_records_context,
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
+from .deps import require_auth
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -41,7 +42,7 @@ def _format_invoice_context(summary: dict, records: list[dict]) -> str:
 
 
 @router.post("/chat")
-async def ai_chat(body: ChatRequest):
+async def ai_chat(body: ChatRequest, _role: str = Depends(require_auth)):
     """Natural language chat about projects + invoices with full live data context."""
     try:
         teable  = TeableService()
@@ -77,7 +78,7 @@ async def ai_chat(body: ChatRequest):
 
 
 @router.post("/autofill")
-async def ai_autofill(body: AutofillRequest):
+async def ai_autofill(body: AutofillRequest, _role: str = Depends(require_auth)):
     """Describe a project in plain text, AI extracts structured fields."""
     try:
         fields = await autofill_project(body.description)
@@ -87,7 +88,7 @@ async def ai_autofill(body: AutofillRequest):
 
 
 @router.post("/analyze")
-async def ai_analyze(body: AnalyzeRequest):
+async def ai_analyze(body: AnalyzeRequest, _role: str = Depends(require_auth)):
     """Deep AI analysis of a specific project."""
     try:
         teable = TeableService()
@@ -103,7 +104,7 @@ async def ai_analyze(body: AnalyzeRequest):
 
 
 @router.get("/report")
-async def ai_report():
+async def ai_report(_role: str = Depends(require_auth)):
     """Generate an executive report for the full portfolio."""
     try:
         teable = TeableService()

@@ -11,9 +11,12 @@ class Settings(BaseSettings):
     openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     frontend_url: str = "*"
 
-    # App access password — case-insensitive. Lives server-side only.
+    # Full-access (editor) password — case-insensitive.
     # Override via APP_PASSWORD env var / HF Space secret.
     app_password: str = "tw@2026"
+    # View-only password — grants read access, no create/edit/delete.
+    # Override via APP_VIEW_PASSWORD env var / HF Space secret.
+    app_view_password: str = "tw@2001"
     # Signing key for session tokens. Override via APP_SECRET env var in prod.
     app_secret: str = "fintrack-dev-secret-change-me"
     # How long a login token stays valid (seconds). Default 7 days.

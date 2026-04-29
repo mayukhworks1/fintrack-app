@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import {
   TrendingUp, TrendingDown, IndianRupee, FolderKanban,
   Target, AlertTriangle, Award, RefreshCw, Plus,
@@ -141,6 +142,7 @@ function useGreeting() {
 export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
+  const { isEditor } = useAuth()
 
   const fetchAll = useCallback(() =>
     Promise.all([
@@ -190,11 +192,13 @@ export default function Dashboard() {
           <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
             <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
           </button>
-          <button onClick={() => navigate('/projects/new')} className="btn-primary">
-            <Plus size={14} aria-hidden="true" />
-            <span className="hidden sm:inline">New Project</span>
-            <span className="sm:hidden">New</span>
-          </button>
+          {isEditor && (
+            <button onClick={() => navigate('/projects/new')} className="btn-primary">
+              <Plus size={14} aria-hidden="true" />
+              <span className="hidden sm:inline">New Project</span>
+              <span className="sm:hidden">New</span>
+            </button>
+          )}
         </div>
       </div>
 

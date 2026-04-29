@@ -4,6 +4,7 @@ import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal } f
 import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
@@ -52,6 +53,7 @@ function SelectFilter({ value, onChange, label, children }) {
 export default function Projects() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { isEditor } = useAuth()
 
   const [search, setSearch]           = useState('')
   const [searching, setSearching]     = useState(false)
@@ -139,11 +141,13 @@ export default function Projects() {
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
             <RefreshCw size={15} className={clsx(loading && 'animate-spin')} />
           </button>
-          <button onClick={() => navigate('/projects/new')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-            <Plus size={15} aria-hidden="true" /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
-          </button>
+          {isEditor && (
+            <button onClick={() => navigate('/projects/new')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+              <Plus size={15} aria-hidden="true" /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -279,11 +283,13 @@ export default function Projects() {
                 Clear filters
               </button>
             )}
-            <button onClick={() => navigate('/projects/new')}
-              className="px-4 py-2 rounded-xl text-sm font-semibold"
-              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-              + New project
-            </button>
+            {isEditor && (
+              <button onClick={() => navigate('/projects/new')}
+                className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+                + New project
+              </button>
+            )}
           </div>
         </div>
       ) : (

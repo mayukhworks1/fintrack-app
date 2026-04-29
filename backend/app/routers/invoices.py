@@ -1,11 +1,13 @@
 """
 Invoice Tracking router — /api/invoices
-All endpoints require a valid Bearer token (auth middleware applied globally).
+GET endpoints: require any valid token (editor or viewer).
+POST / PATCH / DELETE: require editor token — viewers get 403.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from pydantic import BaseModel
 from ..services.invoice import InvoiceService
+from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
@@ -30,7 +32,6 @@ class InvoiceFields(BaseModel):
     next_followup:    Optional[str]   = None   # ISO 8601
 
     def to_teable_fields(self) -> dict:
-        """Map camelCase → exact Teable field names."""
         m = {
             "Invoice Number":  self.invoice_number,
             "Project":         self.project,
@@ -53,28 +54,25 @@ class InvoiceFields(BaseModel):
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/summary")
-async def invoice_summary():
-    """Aggregated financial summary across all invoices."""
+async def invoice_summary(_role: str = Depends(require_auth)):
     try:
-        svc = InvoiceService()
-        return await svc.get_summary()
+        return await InvoiceService().get_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")
 async def list_invoices(
-    status:   Optional[str] = Query(None, description="Filter by Payment Status: Paid|Pending|Cancelled"),
-    project:  Optional[str] = Query(None, description="Filter by Project name"),
+    status:   Optional[str] = Query(None),
+    project:  Optional[str] = Query(None),
     limit:    int           = Query(200, ge=1, le=1000),
     skip:     int           = Query(0,   ge=0),
     order_by: str           = Query("Raised Date"),
     order:    str           = Query("desc"),
+    _role:    str           = Depends(require_auth),
 ):
-    """List invoices with optional status/project filters."""
     try:
-        svc = InvoiceService()
-        return await svc.list_invoices(
+        return await InvoiceService().list_invoices(
             status=status, project=project,
             limit=limit, skip=skip,
             order_by=order_by, order=order,
@@ -84,40 +82,34 @@ async def list_invoices(
 
 
 @router.get("/{record_id}")
-async def get_invoice(record_id: str):
-    """Fetch a single invoice record by its Teable record ID."""
+async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
     try:
-        svc = InvoiceService()
-        return await svc.get_invoice(record_id)
+        return await InvoiceService().get_invoice(record_id)
     except Exception as e:
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 
 
 @router.post("", status_code=201)
-async def create_invoice(body: InvoiceFields):
-    """Create a new invoice in Teable."""
+async def create_invoice(body: InvoiceFields, _role: str = Depends(require_editor)):
     try:
-        svc = InvoiceService()
-        return await svc.create_invoice(body.to_teable_fields())
+        return await InvoiceService().create_invoice(body.to_teable_fields())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/{record_id}")
-async def update_invoice(record_id: str, body: InvoiceFields):
-    """Update an existing invoice record."""
+async def update_invoice(
+    record_id: str, body: InvoiceFields, _role: str = Depends(require_editor)
+):
     try:
-        svc = InvoiceService()
-        return await svc.update_invoice(record_id, body.to_teable_fields())
+        return await InvoiceService().update_invoice(record_id, body.to_teable_fields())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_invoice(record_id: str):
-    """Delete an invoice record."""
+async def delete_invoice(record_id: str, _role: str = Depends(require_editor)):
     try:
-        svc = InvoiceService()
-        await svc.delete_invoice(record_id)
+        await InvoiceService().delete_invoice(record_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

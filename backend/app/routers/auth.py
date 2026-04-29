@@ -1,12 +1,15 @@
 """
 Password gate for the Fintrack app.
 
-- Password lives ONLY on the server (settings.app_password, default "tw@2026").
-- Comparison is case-insensitive (user requested).
-- On successful login we return an HMAC-signed token so the client can
-  prove authentication on subsequent requests without us storing state.
-- The token format is: base64url(expiry_ts).base64url(hmac_sha256(expiry_ts, secret))
-  — there's no user data, no password, and no sensitive material in it.
+Two access levels:
+  editor  — full access (create / edit / delete).  Password: settings.app_password
+  viewer  — read-only (no mutations).              Password: settings.app_view_password
+
+Token format:
+  base64url("{expiry_ts}:{role}").base64url(hmac_sha256("{expiry_ts}:{role}", secret))
+
+The role is embedded in the signed payload so the client can't forge it.
+Old tokens (no colon / no role field) are treated as "editor" for backward compat.
 """
 
 import base64
@@ -25,12 +28,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+# ── Token helpers ─────────────────────────────────────────────────────────────
+
 def _b64url(b: bytes) -> str:
     return base64.urlsafe_b64encode(b).decode().rstrip("=")
 
 
 def _b64url_decode(s: str) -> bytes:
-    # Add padding back before decoding
     pad = "=" * (-len(s) % 4)
     return base64.urlsafe_b64decode(s + pad)
 
@@ -43,59 +47,85 @@ def _sign(payload: bytes) -> bytes:
     ).digest()
 
 
-def make_token(ttl: int | None = None) -> str:
-    """Build an opaque token that expires after ttl seconds (default from settings)."""
+def make_token(role: str = "editor", ttl: int | None = None) -> str:
+    """Build a signed token that embeds expiry + role."""
     expiry = int(time.time()) + (ttl if ttl is not None else settings.app_session_ttl)
-    payload = str(expiry).encode()
+    payload = f"{expiry}:{role}".encode()
     sig = _sign(payload)
     return f"{_b64url(payload)}.{_b64url(sig)}"
 
 
-def verify_token(token: str) -> bool:
-    """Return True iff token is well-formed, signature valid, and not expired."""
+def verify_token(token: str) -> str | None:
+    """
+    Verify token signature and expiry.
+    Returns the role string ("editor" or "viewer") on success, None on failure.
+    Old tokens without a role field default to "editor".
+    """
     if not token or "." not in token:
-        return False
+        return None
     try:
         payload_b64, sig_b64 = token.split(".", 1)
         payload = _b64url_decode(payload_b64)
-        sig = _b64url_decode(sig_b64)
+        sig     = _b64url_decode(sig_b64)
     except Exception:
-        return False
-    # constant-time compare to prevent timing oracles
-    if not hmac.compare_digest(sig, _sign(payload)):
-        return False
-    try:
-        expiry = int(payload.decode())
-    except ValueError:
-        return False
-    return time.time() < expiry
+        return None
 
+    if not hmac.compare_digest(sig, _sign(payload)):
+        return None
+
+    try:
+        decoded = payload.decode()
+        if ":" in decoded:
+            expiry_str, role = decoded.split(":", 1)
+        else:
+            # Backward compat: old tokens have only the expiry timestamp
+            expiry_str, role = decoded, "editor"
+        expiry = int(expiry_str)
+    except (ValueError, AttributeError):
+        return None
+
+    if time.time() >= expiry:
+        return None
+
+    return role
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/login")
 async def login(body: LoginRequest):
-    """Check password case-insensitively; return a signed token on success."""
-    expected = settings.app_password or ""
-    provided = body.password or ""
+    """
+    Accept either the editor or viewer password (case-insensitive).
+    Returns a signed token plus the role so the frontend can adjust its UI.
+    """
+    provided = (body.password or "").strip().lower()
+    editor_pw = (settings.app_password or "").strip().lower()
+    viewer_pw = (settings.app_view_password or "").strip().lower()
 
-    # Case-insensitive comparison with constant-time guard on equal-length inputs
-    ok = provided.strip().lower() == expected.strip().lower()
+    # Constant-time comparisons to resist timing attacks
+    is_editor = hmac.compare_digest(provided, editor_pw)
+    is_viewer = hmac.compare_digest(provided, viewer_pw)
 
-    # Always take roughly the same amount of time regardless of match
-    # (prevents trivial timing side-channels on such a short comparison)
-    secrets.compare_digest(provided.encode(), expected.encode())
-
-    if not ok:
+    if is_editor:
+        role = "editor"
+    elif is_viewer:
+        role = "viewer"
+    else:
         raise HTTPException(status_code=401, detail="Incorrect password")
 
-    return {"token": make_token(), "expires_in": settings.app_session_ttl}
+    token = make_token(role=role)
+    return {"token": token, "role": role, "expires_in": settings.app_session_ttl}
 
 
 @router.get("/verify")
 async def verify(authorization: str | None = Header(default=None)):
-    """Check a token is still valid. Used by the frontend on app start."""
+    """Validate a token and return its role. Used by the frontend on app start."""
     token = ""
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
-    if not verify_token(token):
+
+    role = verify_token(token)
+    if role is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return {"valid": True}
+
+    return {"valid": True, "role": role}
