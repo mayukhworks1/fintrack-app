@@ -250,24 +250,29 @@ export default function Layout({ children }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Mobile top bar — clean, sticky, no clutter */}
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 flex-shrink-0 sticky top-0 z-30"
-          style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <header className="lg:hidden flex items-center justify-between px-4 py-2.5 flex-shrink-0 sticky top-0 z-30"
+          style={{
+            background: 'var(--sidebar-bg)',
+            borderBottom: '1px solid var(--sidebar-border)',
+            backdropFilter: 'blur(12px)',
+          }}>
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open settings menu"
-            className="flex items-center gap-2.5 -ml-1 p-1 rounded-lg">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--accent-btn)' }}>
+            className="flex items-center gap-2 -ml-0.5 p-1 rounded-xl">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
               <TrendingUp size={13} className="text-white" aria-hidden="true" />
             </div>
-            <span className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>FinTrack</span>
+            <span className="font-bold text-sm tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>FinTrack</span>
           </button>
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
             aria-expanded={drawerOpen}
-            className="btn-icon">
-            <Menu size={16} />
+            className="btn-icon"
+            style={{ padding: '0.375rem' }}>
+            <Menu size={15} />
           </button>
         </header>
 
@@ -324,8 +329,17 @@ function MobileBottomNav() {
                   className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-b-full"
                   style={{ background: 'var(--accent)' }} />
               )}
-              <Icon size={20} aria-hidden="true" strokeWidth={isActive ? 2.4 : 2} />
-              <span className="text-[10px] font-medium tracking-tight">{label}</span>
+              {/* Icon with subtle pill bg when active */}
+              <span className="flex items-center justify-center rounded-xl transition-all duration-200"
+                style={{
+                  width: 40, height: 28,
+                  background: isActive ? 'var(--nav-active-bg)' : 'transparent',
+                }}>
+                <Icon size={18} aria-hidden="true" strokeWidth={isActive ? 2.5 : 1.8} />
+              </span>
+              <span className={`text-[10px] tracking-tight transition-all ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                {label}
+              </span>
             </>
           )}
         </NavLink>

@@ -25,10 +25,10 @@ function SyncDot({ syncing }) {
 
 function SkeletonCard() {
   return (
-    <div className="card space-y-3 animate-pulse" aria-hidden="true">
-      <div className="h-3 rounded w-2/3" style={{ background: 'var(--bg-input)' }} />
-      <div className="h-8 rounded w-3/4" style={{ background: 'var(--bg-input)' }} />
-      <div className="h-3 rounded w-1/2" style={{ background: 'var(--bg-input)' }} />
+    <div className="card space-y-3" aria-hidden="true">
+      <div className="skeleton h-3 rounded w-2/3" />
+      <div className="skeleton h-8 rounded w-3/4" />
+      <div className="skeleton h-3 rounded w-1/2" />
     </div>
   )
 }
@@ -167,39 +167,46 @@ export default function Dashboard() {
     <div className="p-4 sm:p-6 space-y-6 animate-fade-in">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium mb-0.5 tabular-nums"
-            style={{ color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+      <div className="space-y-1">
+        {/* Top row: date + actions */}
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold tabular-nums truncate"
+            style={{ color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            <span className="hidden sm:inline">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </span>
+            <span className="sm:hidden">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
           </p>
-          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>
-            {greeting} 👋
-          </h1>
-          <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
-            Portfolio overview
-            {lastUpdated && (
-              <span className="flex items-center gap-1.5">
-                · <SyncDot syncing={syncing} />
-                <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
-                  {syncing ? 'syncing…' : `${updatedLabel}`}
-                </span>
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex gap-2 flex-shrink-0 mt-1">
-          <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
-            <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
-          </button>
-          {isEditor && (
-            <button onClick={() => navigate('/projects/new')} className="btn-primary">
-              <Plus size={14} aria-hidden="true" />
-              <span className="hidden sm:inline">New Project</span>
-              <span className="sm:hidden">New</span>
+          <div className="flex gap-2 flex-shrink-0">
+            <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
+              <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
             </button>
-          )}
+            {isEditor && (
+              <button onClick={() => navigate('/projects/new')} className="btn-primary">
+                <Plus size={14} aria-hidden="true" />
+                <span className="hidden sm:inline">New Project</span>
+                <span className="sm:hidden">New</span>
+              </button>
+            )}
+          </div>
         </div>
+        {/* Greeting — full width, no wrapping pressure */}
+        <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
+          {greeting} <span role="img" aria-label="wave">👋</span>
+        </h1>
+        <p className="text-sm flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
+          Portfolio overview
+          {lastUpdated && (
+            <span className="flex items-center gap-1.5">
+              · <SyncDot syncing={syncing} />
+              <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
+                {syncing ? 'syncing…' : updatedLabel}
+              </span>
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Error */}

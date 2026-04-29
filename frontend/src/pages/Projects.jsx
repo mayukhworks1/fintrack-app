@@ -17,14 +17,14 @@ const SORT_OPTIONS = [
 
 function SkeletonCard() {
   return (
-    <div className="card space-y-3 animate-pulse" aria-hidden="true">
-      <div className="h-5 rounded w-3/4" style={{ background: 'var(--bg-input)' }} />
-      <div className="h-4 rounded w-1/2" style={{ background: 'var(--bg-input)' }} />
-      <div className="h-2 rounded w-full" style={{ background: 'var(--bg-input)' }} />
-      <div className="h-2 rounded w-2/3" style={{ background: 'var(--bg-input)' }} />
+    <div className="card space-y-3" aria-hidden="true">
+      <div className="skeleton h-5 rounded w-3/4" />
+      <div className="skeleton h-4 rounded w-1/2" />
+      <div className="skeleton h-2 rounded w-full" />
+      <div className="skeleton h-2 rounded w-2/3" />
       <div className="flex gap-2 pt-1">
-        <div className="h-7 rounded w-1/2" style={{ background: 'var(--bg-input)' }} />
-        <div className="h-7 rounded w-1/2" style={{ background: 'var(--bg-input)' }} />
+        <div className="skeleton h-7 rounded w-1/2" />
+        <div className="skeleton h-7 rounded w-1/2" />
       </div>
     </div>
   )

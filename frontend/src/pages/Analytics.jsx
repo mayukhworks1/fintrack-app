@@ -438,8 +438,42 @@ export default function Analytics() {
     ? ((collectedThisMonth - collectedLastMonth) / collectedLastMonth) * 100 : null
 
   if (loading && !data) return (
-    <div className="flex items-center justify-center h-full p-12">
-      <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--text-3)' }} />
+    <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="space-y-2">
+          <div className="skeleton h-7 w-40 rounded-lg" />
+          <div className="skeleton h-4 w-56 rounded" />
+        </div>
+        <div className="skeleton h-9 w-24 rounded-xl" />
+      </div>
+      {/* KPI row skeleton */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="card flex items-center gap-3">
+            <div className="skeleton rounded-xl flex-shrink-0" style={{ width: 40, height: 40 }} />
+            <div className="flex-1 space-y-2">
+              <div className="skeleton h-5 rounded w-3/4" />
+              <div className="skeleton h-3 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Chart skeleton */}
+      <div className="card space-y-3">
+        <div className="skeleton h-4 w-32 rounded" />
+        <div className="skeleton rounded-xl w-full" style={{ height: 200 }} />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="card space-y-3">
+          <div className="skeleton h-4 w-28 rounded" />
+          <div className="skeleton rounded-xl w-full" style={{ height: 160 }} />
+        </div>
+        <div className="card space-y-3">
+          <div className="skeleton h-4 w-28 rounded" />
+          <div className="skeleton rounded-xl w-full" style={{ height: 160 }} />
+        </div>
+      </div>
     </div>
   )
 

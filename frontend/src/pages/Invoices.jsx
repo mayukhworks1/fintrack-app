@@ -574,7 +574,7 @@ export default function Invoices() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>
-            Invoice Tracking
+            Invoices
           </h1>
           <p className="text-xs mt-1 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
             <span className="live-dot" />
