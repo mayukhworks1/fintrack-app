@@ -48,6 +48,18 @@ const monthLabel = (key) => {
   return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 }
 
+const shiftMonthKey = (key, delta) => {
+  const [year, month] = key.split('-').map(Number)
+  const d = new Date(year, month - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const shortMonthLabel = (key) => {
+  const [year, month] = key.split('-')
+  const d = new Date(Number(year), Number(month) - 1, 1)
+  return d.toLocaleDateString('en-IN', { month: 'short' })
+}
+
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
@@ -68,6 +80,28 @@ function sortByRaisedDateDesc(records = []) {
     const db = parseIsoDate(b.fields?.['Raised Date'])?.getTime() || 0
     return db - da
   })
+}
+
+function MonthStatusPill({ status, active }) {
+  const map = {
+    Raised:   { bg: 'var(--fin-pos-bg)',  fg: 'var(--fin-positive)', border: 'var(--fin-pos-border)' },
+    Pending:  { bg: 'var(--fin-warn-bg)', fg: 'var(--fin-warning)',  border: 'var(--fin-warn-border)' },
+    Paused:   { bg: 'var(--fin-neg-bg)',  fg: 'var(--fin-negative)', border: 'var(--fin-neg-border)' },
+    Missing:  { bg: 'var(--accent-dim)',  fg: 'var(--accent)',       border: 'var(--accent-soft)' },
+  }
+  const m = map[status] || map.Missing
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{
+        background: m.bg,
+        color: m.fg,
+        border: `1px solid ${m.border}`,
+        boxShadow: active ? `0 0 0 2px ${m.border}` : 'none',
+      }}>
+      {status}
+    </span>
+  )
 }
 
 const KPI_PALETTE = [
@@ -834,6 +868,7 @@ function WebTopBar() {
 /* ── Main page ── */
 export default function WebInvoices() {
   const toast = useToast()
+  const [workspace,      setWorkspace]      = useState('invoices')
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -951,6 +986,11 @@ export default function WebInvoices() {
       const sorted = sortByRaisedDateDesc(items)
       const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
       const monthRecord = sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
+      const recordByMonth = Object.fromEntries(
+        sorted
+          .map(r => [monthKey(r.fields?.['Raised Date']), r])
+          .filter(([k]) => Boolean(k))
+      )
       const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
       const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
       const monthStatus = !monthRecord
@@ -958,15 +998,52 @@ export default function WebInvoices() {
         : monthRecord.fields?.['Payment Status'] === 'Cancelled'
           ? 'Paused'
           : monthRecord.fields?.['Payment Status'] || 'Pending'
+      const timelineMonths = Array.from({ length: 8 }, (_, i) => shiftMonthKey(currentMonthKey(), i - 3))
+      const timeline = timelineMonths.map((key) => {
+        const rec = recordByMonth[key]
+        const recStatus = !rec
+          ? 'Missing'
+          : rec.fields?.['Payment Status'] === 'Cancelled'
+            ? 'Paused'
+            : rec.fields?.['Payment Status'] === 'Paid'
+              ? 'Raised'
+              : 'Pending'
+        return {
+          key,
+          label: shortMonthLabel(key),
+          fullLabel: monthLabel(key),
+          record: rec,
+          status: recStatus,
+          active: key === retainerMonth,
+          current: key === currentMonthKey(),
+        }
+      })
+      const currentTimeline = timeline.find(t => t.current)
+      const currentMonthRaised = currentTimeline ? currentTimeline.status !== 'Missing' : false
+      let nextDueMonth = currentMonthKey()
+      for (let i = 0; i < 12; i++) {
+        const key = shiftMonthKey(currentMonthKey(), i)
+        const rec = recordByMonth[key]
+        const paused = rec?.fields?.['Payment Status'] === 'Cancelled'
+        if (!rec || paused) {
+          nextDueMonth = paused ? shiftMonthKey(key, 1) : key
+          break
+        }
+        nextDueMonth = shiftMonthKey(key, 1)
+      }
 
       return {
         project,
         records: sorted,
         latestActive,
+        recordByMonth,
         monthRecord,
         amount,
         withTax,
         monthStatus,
+        timeline,
+        currentMonthRaised,
+        nextDueMonth,
         raisedBy: latestActive?.fields?.['Raised By'] || '',
         description: latestActive?.fields?.['Description'] || '',
       }
@@ -1070,6 +1147,22 @@ export default function WebInvoices() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               {[
+                ['invoices', 'Invoices'],
+                ['retainers', 'Retainers'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setWorkspace(value)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                  style={workspace === value
+                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                    : { color: 'var(--text-3)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              {[
                 ['all', 'All'],
                 ['project', 'Projects'],
                 ['retainer', 'Retainers'],
@@ -1086,7 +1179,7 @@ export default function WebInvoices() {
               ))}
             </div>
             <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-              Retainer mode uses `Project` as the retainer/client name for now.
+              Retainer workflow uses `Project` as the retainer/client name for now.
             </span>
           </div>
 
@@ -1169,13 +1262,13 @@ export default function WebInvoices() {
             </section>
           )}
 
-          {(billingFilter === 'all' || billingFilter === 'retainer') && retainerGroups.length > 0 && (
+          {workspace === 'retainers' && (
             <section className="card space-y-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <h2 className="section-title mb-1">Retainer Tracker</h2>
+                  <h2 className="section-title mb-1">Retainer Workspace</h2>
                   <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                    Fixed monthly retainers tracked in the same invoice table. Missing months can be created or paused without touching schema.
+                    Dedicated retainer planning space inside the same invoice table. Track expected month, highlight billing gaps, and create or pause recurring months safely.
                   </p>
                 </div>
                 <div className="relative">
@@ -1188,7 +1281,15 @@ export default function WebInvoices() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              {retainerGroups.length === 0 ? (
+                <div className="rounded-xl p-8 text-center" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No retainer templates found</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                    Create a normal invoice and set the category to your retainer category first.
+                  </p>
+                </div>
+              ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {retainerGroups.map(group => {
                   const monthRec = group.monthRecord?.fields || null
                   const missing = !monthRec
@@ -1196,7 +1297,7 @@ export default function WebInvoices() {
                   const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
                   const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
                   return (
-                    <div key={group.project} className="rounded-xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                    <div key={group.project} className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
@@ -1213,10 +1314,20 @@ export default function WebInvoices() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 mt-4">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <p className="label">Tracking month</p>
                           <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthLabel(retainerMonth)}</p>
+                        </div>
+                        <div>
+                          <p className="label">Next due</p>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthLabel(group.nextDueMonth)}</p>
+                        </div>
+                        <div>
+                          <p className="label">Current month</p>
+                          <p className="text-xs font-medium" style={{ color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
+                            {group.currentMonthRaised ? 'Raised / planned' : 'Not raised yet'}
+                          </p>
                         </div>
                         <div>
                           <p className="label">Raised by</p>
@@ -1232,11 +1343,34 @@ export default function WebInvoices() {
                         </div>
                       </div>
 
+                      <div>
+                        <p className="label mb-2">Month Timeline</p>
+                        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                          {group.timeline.map(item => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => setRetainerMonth(item.key)}
+                              className="rounded-xl p-2 text-left transition-all"
+                              style={{
+                                background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
+                                border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
+                                boxShadow: item.active ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
+                              }}>
+                              <p className="text-[10px] font-semibold mb-1" style={{ color: item.current ? 'var(--accent)' : 'var(--text-3)' }}>
+                                {item.label}
+                              </p>
+                              <MonthStatusPill status={item.status} active={item.active} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {group.description && (
-                        <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>{group.description}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{group.description}</p>
                       )}
 
-                      <div className="flex gap-2 flex-wrap mt-4">
+                      <div className="flex gap-2 flex-wrap">
                         {missing ? (
                           <>
                             <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
@@ -1259,9 +1393,12 @@ export default function WebInvoices() {
                   )
                 })}
               </div>
+              )}
             </section>
           )}
 
+          {workspace === 'invoices' && (
+          <>
           {/* Filter bar */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -1523,6 +1660,8 @@ export default function WebInvoices() {
               </table>
             </div>
           </div>
+          </>
+          )}
 
         </div>
       </main>
