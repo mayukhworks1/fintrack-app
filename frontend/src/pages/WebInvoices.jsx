@@ -260,7 +260,7 @@ function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, 
         <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
       </div>
       <button type="button" onClick={() => setAdding(true)} className="btn-icon flex-shrink-0"
-        title={`Add new ${fieldName}`} aria-label={`Add new ${fieldName}`}>
+        title={`Add new ${fieldName} (requires Teable field-edit permission)`} aria-label={`Add new ${fieldName}`}>
         <Plus size={12} />
       </button>
     </div>

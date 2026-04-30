@@ -131,7 +131,16 @@ class WebInvoiceService:
 
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.put(url, json=body, headers=self._headers)
-            res.raise_for_status()
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise ValueError(
+                        "This Teable token can edit invoice records but cannot change dropdown schema. "
+                        "Adding new picklist options requires a token with field/schema edit permission "
+                        "(for example via TEABLE_WEB_API_TOKEN)."
+                    ) from e
+                raise
 
         # Bust picklist cache so next fetch gets fresh data
         cache.bust(prefix="webinv:picklists")
