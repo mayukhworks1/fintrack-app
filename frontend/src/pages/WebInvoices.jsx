@@ -1277,55 +1277,46 @@ export default function WebInvoices() {
             </div>
           </div>
 
-          <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4" style={{ padding: '0.85rem 1rem' }}>
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-              {[
-                ['invoices', 'Invoices'],
-                ['retainers', 'Retainers'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  onClick={() => setWorkspace(value)}
-                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                  style={workspace === value
-                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                    : { color: 'var(--text-3)' }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-              {[
-                ['all', 'All'],
-                ['project', 'Projects'],
-                ['retainer', 'Retainers'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  onClick={() => setBillingFilter(value)}
-                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                  style={billingFilter === value
-                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                    : { color: 'var(--text-3)' }}>
-                  {label}
-                </button>
-              ))}
-            </div>
+                <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  {[
+                    ['invoices', 'Invoices'],
+                    ['retainers', 'Retainers'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setWorkspace(value)}
+                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                      style={workspace === value
+                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                        : { color: 'var(--text-3)' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  {[
+                    ['all', 'All'],
+                    ['project', 'Projects'],
+                    ['retainer', 'Retainers'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setBillingFilter(value)}
+                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                      style={billingFilter === value
+                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                        : { color: 'var(--text-3)' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <span className="text-xs" style={{ color: 'var(--text-3)' }}>
                 Retainer workflow uses `Project` as the retainer/client name for now. Category follows the selected billing type until the user overrides it manually.
               </span>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Quick Actions</span>
-              <button onClick={openNew} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
-                <Plus size={13} />New invoice
-              </button>
-              <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
-                <ExternalLink size={13} />Open request form
-              </button>
             </div>
           </div>
 
