@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
@@ -27,6 +27,20 @@ const EMPTY_FORM = {
   payment_status: 'Pending', remark: '', next_followup: '',
 }
 
+const monthKey = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const monthLabel = (key) => {
+  if (!key) return 'All months'
+  const [year, month] = key.split('-')
+  const d = new Date(Number(year), Number(month) - 1, 1)
+  return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 const fmt     = (n) => formatInr(n)
 const fmtDate = (d) => {
@@ -46,7 +60,7 @@ function parseAttachments(cell) {
     return cell.map(a => ({
       name: a.name || a.filename || 'Attachment',
       url:  a.url  || a.presignedUrl || '',
-      mime: a.mimeType || '',
+      mime: a.mimeType || a.mimetype || '',
     }))
   }
   const parts = String(cell).split(/\s+/)
@@ -339,6 +353,7 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
   const [deleting,   setDeleting]  = useState(false)
   const [confirmDel, setConfirmDel]= useState(false)
   const [error,      setError]     = useState('')
+  const paidSelected = form.payment_status === 'Paid'
 
   useEffect(() => {
     if (!invoice) { setForm(EMPTY_FORM); return }
@@ -365,6 +380,14 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
   const setE = k => ev  => setForm(f => ({ ...f, [k]: ev.target.value }))
 
   async function handleSave() {
+    if (paidSelected && !String(form.amount_received).trim()) {
+      setError('Amount received is required when status is Paid')
+      return
+    }
+    if (paidSelected && !form.cleared_date) {
+      setError('Cleared date is required when status is Paid')
+      return
+    }
     setSaving(true); setError('')
     try {
       const payload = {
@@ -498,7 +521,11 @@ export default function Invoices() {
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
+  const [monthFilter,    setMonthFilter]    = useState('')
   const [search,         setSearch]         = useState('')
+  const [overdueOnly,    setOverdueOnly]    = useState(false)
+  const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
+  const [followupDueOnly,setFollowupDueOnly]= useState(false)
   const [showFilters,    setShowFilters]    = useState(false)
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
@@ -522,10 +549,31 @@ export default function Invoices() {
   const allRecords = listData?.records || []
 
   /* ── Client-side filter (category, raisedBy, freetext) ── */
+  const monthOptions = useMemo(() => (
+    [...new Set(
+      allRecords
+        .map(r => monthKey(r.fields?.['Raised Date']))
+        .filter(Boolean)
+    )].sort().reverse()
+  ), [allRecords])
+
+  const todayIso = new Date().toISOString().slice(0, 10)
+
   const records = allRecords.filter(r => {
     const f = r.fields || {}
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
+    if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' && Number(f['Agening (Days)'] || 0) > 30)) return false
+    if (followupDueOnly) {
+      const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
+      if (!nextFollowup || nextFollowup > todayIso) return false
+    }
+    if (hasDocsOnly) {
+      const refs = parseAttachments(f['Reference'])
+      const pdfs = parseAttachments(f['Invoice PDF'])
+      if (refs.length + pdfs.length === 0) return false
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       return (
@@ -541,7 +589,7 @@ export default function Invoices() {
 
   const s = summary
   const overdue = s?.overdue_invoices || []
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || search
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
 
   /* ── Helpers ── */
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
@@ -702,7 +750,17 @@ export default function Invoices() {
             {hasFilters && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />}
           </button>
           {hasFilters && (
-            <button onClick={() => { setStatusFilter(''); setProjectFilter(''); setCategoryFilter(''); setRaisedByFilter(''); setSearch('') }}
+            <button onClick={() => {
+              setStatusFilter('')
+              setProjectFilter('')
+              setCategoryFilter('')
+              setRaisedByFilter('')
+              setMonthFilter('')
+              setOverdueOnly(false)
+              setHasDocsOnly(false)
+              setFollowupDueOnly(false)
+              setSearch('')
+            }}
               className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
               <X size={11} />Clear
             </button>
@@ -722,6 +780,15 @@ export default function Invoices() {
                 className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 140, paddingRight: '1.5rem' }}>
                 <option value="">All projects</option>
                 {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+            </div>
+            <div className="relative">
+              <CalendarDays size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+              <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                <option value="">All months</option>
+                {monthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
               </select>
               <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             </div>
@@ -745,6 +812,42 @@ export default function Invoices() {
               </select>
               <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             </div>
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className="btn-ghost"
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.375rem 0.625rem',
+                color: overdueOnly ? 'var(--fin-negative)' : 'var(--text-2)',
+                borderColor: overdueOnly ? 'var(--fin-neg-border)' : 'var(--card-border)',
+                background: overdueOnly ? 'var(--fin-neg-bg)' : 'var(--card-bg)',
+              }}>
+              Overdue only
+            </button>
+            <button
+              onClick={() => setFollowupDueOnly(v => !v)}
+              className="btn-ghost"
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.375rem 0.625rem',
+                color: followupDueOnly ? 'var(--fin-warning)' : 'var(--text-2)',
+                borderColor: followupDueOnly ? 'var(--fin-warn-border)' : 'var(--card-border)',
+                background: followupDueOnly ? 'var(--fin-warn-bg)' : 'var(--card-bg)',
+              }}>
+              Follow-up due
+            </button>
+            <button
+              onClick={() => setHasDocsOnly(v => !v)}
+              className="btn-ghost"
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.375rem 0.625rem',
+                color: hasDocsOnly ? 'var(--accent)' : 'var(--text-2)',
+                borderColor: hasDocsOnly ? 'var(--accent-soft)' : 'var(--card-border)',
+                background: hasDocsOnly ? 'var(--accent-dim)' : 'var(--card-bg)',
+              }}>
+              Has docs
+            </button>
           </div>
         )}
       </div>

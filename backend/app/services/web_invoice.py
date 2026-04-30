@@ -117,6 +117,33 @@ class WebInvoiceService:
         updated = await self.get_picklists()
         return {"options": updated.get(field_name, {}).get("options", [])}
 
+    async def upload_attachment_to_field(
+        self,
+        record_id: str,
+        field_name: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> dict:
+        field_id = WEB_INVOICE_FIELD_IDS.get(field_name)
+        if not field_id:
+            raise ValueError(f"Unknown attachment field: {field_name}")
+
+        url = f"{self._record_url}/{record_id}/{field_id}/uploadAttachment"
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {self.token}"},
+                files={"file": (filename, content, content_type or "application/octet-stream")},
+            )
+            res.raise_for_status()
+            data = res.json()
+
+        _bust_web_cache()
+        fields = data.get("fields", {})
+        attachments = fields.get(field_id) or fields.get(field_name) or []
+        return {"record": data, "attachments": attachments}
+
     async def list_invoices(
         self,
         status: Optional[str] = None,

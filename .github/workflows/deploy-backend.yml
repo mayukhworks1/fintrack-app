@@ -8,6 +8,10 @@ on:
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Push to HF Space
@@ -42,7 +46,7 @@ jobs:
           git config user.email "ci@fintrack"
           git config user.name "FinTrack CI"
           git add .
-          git commit -m "deploy: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git commit -m "deploy: ${GITHUB_SHA}" || echo "No backend changes to commit"
           git push --force \
             "https://Mayukhj24:${HF_TOKEN}@huggingface.co/spaces/Mayukhj24/fintrack-api" \
             HEAD:main

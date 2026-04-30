@@ -12,6 +12,15 @@ from .deps import require_auth, require_editor
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
 
+def _validate_paid_invoice(fields: dict) -> None:
+    if fields.get("Payment Status") != "Paid":
+        return
+    if fields.get("Amount Received") in (None, "", 0, 0.0):
+        raise HTTPException(status_code=400, detail="Amount Received is required when Payment Status is Paid")
+    if not fields.get("Cleared Date"):
+        raise HTTPException(status_code=400, detail="Cleared Date is required when Payment Status is Paid")
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class InvoiceFields(BaseModel):
@@ -92,7 +101,11 @@ async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
 @router.post("", status_code=201)
 async def create_invoice(body: InvoiceFields, _role: str = Depends(require_editor)):
     try:
-        return await InvoiceService().create_invoice(body.to_teable_fields())
+        fields = body.to_teable_fields()
+        _validate_paid_invoice(fields)
+        return await InvoiceService().create_invoice(fields)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -102,7 +115,11 @@ async def update_invoice(
     record_id: str, body: InvoiceFields, _role: str = Depends(require_editor)
 ):
     try:
-        return await InvoiceService().update_invoice(record_id, body.to_teable_fields())
+        fields = body.to_teable_fields()
+        _validate_paid_invoice(fields)
+        return await InvoiceService().update_invoice(record_id, fields)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Globe, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
@@ -33,6 +33,20 @@ const EMPTY_FORM = {
   reference: [], invoice_pdf: [],
 }
 
+const monthKey = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const monthLabel = (key) => {
+  if (!key) return 'All months'
+  const [year, month] = key.split('-')
+  const d = new Date(Number(year), Number(month) - 1, 1)
+  return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
 const KPI_PALETTE = [
   { bg: '#fef3c7', fg: '#d97706' },
   { bg: '#dbeafe', fg: '#2563eb' },
@@ -57,7 +71,7 @@ const fmtDateFull = (d) => {
 function parseAttachments(cell) {
   if (!cell) return []
   if (Array.isArray(cell)) {
-    return cell.map(a => ({ name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || '' }))
+    return cell.map(a => ({ name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || a.mimetype || '' }))
   }
   const parts = String(cell).split(/\s+/)
   const out = []
@@ -254,23 +268,28 @@ function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, 
 }
 
 /* ── Attachment upload field (for Reference + Invoice PDF in form drawer) ── */
-function AttachmentUploadField({ label, fieldKey, value, onChange }) {
+function AttachmentUploadField({ label, fieldKey, value, onChange, recordId }) {
   const [uploading,  setUploading]  = useState(false)
   const [uploadErr,  setUploadErr]  = useState('')
   const [dragOver,   setDragOver]   = useState(false)
   const fileInputRef = useRef(null)
   const attachments  = Array.isArray(value) ? value : []
+  const fieldNameMap = { invoice_pdf: 'Invoice PDF', reference: 'Reference' }
 
   async function processFiles(files) {
+    if (!recordId) {
+      setUploadErr('Save the invoice first, then upload attachments')
+      return
+    }
     if (!files?.length) return
     setUploading(true); setUploadErr('')
     try {
-      const uploaded = []
+      let latest = attachments
       for (const file of files) {
-        const result = await api.webInvoices.upload(file)
-        uploaded.push(result)
+        const result = await api.webInvoices.upload(recordId, fieldNameMap[fieldKey], file)
+        latest = result?.attachments || latest
       }
-      onChange([...attachments, ...uploaded])
+      onChange(latest)
     } catch (e) {
       setUploadErr(e.message || 'Upload failed')
     } finally {
@@ -337,7 +356,7 @@ function AttachmentUploadField({ label, fieldKey, value, onChange }) {
         style={{
           borderColor: dragOver ? 'var(--accent)' : 'var(--glass-border)',
           background: dragOver ? 'rgba(99,102,241,0.06)' : 'var(--glass-bg)',
-          opacity: uploading ? 0.7 : 1,
+          opacity: uploading || !recordId ? 0.7 : 1,
         }}
         aria-label={`Upload ${label}`}>
         {uploading
@@ -345,7 +364,7 @@ function AttachmentUploadField({ label, fieldKey, value, onChange }) {
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Uploading…</span></>
           : <><Upload size={16} style={{ color: 'var(--text-3)' }} />
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                Click or drag to upload · PDF, images
+                {recordId ? 'Click or drag to upload · PDF, images' : 'Save invoice first to enable uploads'}
               </span></>}
         <input ref={fileInputRef} type="file" multiple className="hidden"
           id={`upload-${fieldKey}`}
@@ -486,6 +505,7 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
   const [deleting,   setDeleting]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [error,      setError]      = useState('')
+  const paidSelected = form.payment_status === 'Paid'
 
   useEffect(() => {
     if (!invoice) { setForm(EMPTY_FORM); return }
@@ -514,6 +534,14 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
   const setE = k => ev => setForm(f => ({ ...f, [k]: ev.target.value }))
 
   async function handleSave() {
+    if (paidSelected && !String(form.amount_received).trim()) {
+      setError('Amount received is required when status is Paid')
+      return
+    }
+    if (paidSelected && !form.cleared_date) {
+      setError('Cleared date is required when status is Paid')
+      return
+    }
     setSaving(true); setError('')
     try {
       const payload = {
@@ -611,18 +639,27 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
             <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
           </FieldRow>
 
+          {paidSelected && (
+            <div className="rounded-xl p-3 text-xs"
+              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)', color: 'var(--text-2)' }}>
+              Paid invoices must include `Amount Received` and `Cleared Date`. It is also recommended to attach a payment reference screenshot before closing the entry.
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <AttachmentUploadField
               label="Invoice PDF"
               fieldKey="invoice_pdf"
               value={form.invoice_pdf}
               onChange={v => setForm(f => ({ ...f, invoice_pdf: v }))}
+              recordId={invoice?.id}
             />
             <AttachmentUploadField
               label="Payment Reference"
               fieldKey="reference"
               value={form.reference}
               onChange={v => setForm(f => ({ ...f, reference: v }))}
+              recordId={invoice?.id}
             />
           </div>
         </div>
@@ -690,7 +727,11 @@ export default function WebInvoices() {
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
+  const [monthFilter,    setMonthFilter]    = useState('')
   const [search,         setSearch]         = useState('')
+  const [overdueOnly,    setOverdueOnly]    = useState(false)
+  const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
+  const [followupDueOnly,setFollowupDueOnly]= useState(false)
   const [showFilters,    setShowFilters]    = useState(false)
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
@@ -727,10 +768,31 @@ export default function WebInvoices() {
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const allRecords = listData?.records || []
 
+  const monthOptions = useMemo(() => (
+    [...new Set(
+      allRecords
+        .map(r => monthKey(r.fields?.['Raised Date']))
+        .filter(Boolean)
+    )].sort().reverse()
+  ), [allRecords])
+
+  const todayIso = new Date().toISOString().slice(0, 10)
+
   const records = allRecords.filter(r => {
     const f = r.fields || {}
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
+    if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' && Number(f['Agening (Days)'] || 0) > 30)) return false
+    if (followupDueOnly) {
+      const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
+      if (!nextFollowup || nextFollowup > todayIso) return false
+    }
+    if (hasDocsOnly) {
+      const refs = parseAttachments(f['Reference'])
+      const pdfs = parseAttachments(f['Invoice PDF'])
+      if (refs.length + pdfs.length === 0) return false
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       return (
@@ -746,7 +808,7 @@ export default function WebInvoices() {
 
   const s        = summary
   const overdue  = s?.overdue_invoices || []
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || search
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
 
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
@@ -894,7 +956,17 @@ export default function WebInvoices() {
                 {hasFilters && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />}
               </button>
               {hasFilters && (
-                <button onClick={() => { setStatusFilter(''); setProjectFilter(''); setCategoryFilter(''); setRaisedByFilter(''); setSearch('') }}
+                <button onClick={() => {
+                  setStatusFilter('')
+                  setProjectFilter('')
+                  setCategoryFilter('')
+                  setRaisedByFilter('')
+                  setMonthFilter('')
+                  setOverdueOnly(false)
+                  setHasDocsOnly(false)
+                  setFollowupDueOnly(false)
+                  setSearch('')
+                }}
                   className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
                   <X size={11} />Clear
                 </button>
@@ -917,6 +989,15 @@ export default function WebInvoices() {
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 </div>
                 <div className="relative">
+                  <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+                  <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                    <option value="">All months</option>
+                    {monthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+                </div>
+                <div className="relative">
                   <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
                     className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 160, paddingRight: '1.5rem' }}>
@@ -934,6 +1015,42 @@ export default function WebInvoices() {
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 </div>
+                <button
+                  onClick={() => setOverdueOnly(v => !v)}
+                  className="btn-ghost"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '0.375rem 0.625rem',
+                    color: overdueOnly ? 'var(--fin-negative)' : 'var(--text-2)',
+                    borderColor: overdueOnly ? 'var(--fin-neg-border)' : 'var(--card-border)',
+                    background: overdueOnly ? 'var(--fin-neg-bg)' : 'var(--card-bg)',
+                  }}>
+                  Overdue only
+                </button>
+                <button
+                  onClick={() => setFollowupDueOnly(v => !v)}
+                  className="btn-ghost"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '0.375rem 0.625rem',
+                    color: followupDueOnly ? 'var(--fin-warning)' : 'var(--text-2)',
+                    borderColor: followupDueOnly ? 'var(--fin-warn-border)' : 'var(--card-border)',
+                    background: followupDueOnly ? 'var(--fin-warn-bg)' : 'var(--card-bg)',
+                  }}>
+                  Follow-up due
+                </button>
+                <button
+                  onClick={() => setHasDocsOnly(v => !v)}
+                  className="btn-ghost"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '0.375rem 0.625rem',
+                    color: hasDocsOnly ? 'var(--accent)' : 'var(--text-2)',
+                    borderColor: hasDocsOnly ? 'var(--accent-soft)' : 'var(--card-border)',
+                    background: hasDocsOnly ? 'var(--accent-dim)' : 'var(--card-bg)',
+                  }}>
+                  Has docs
+                </button>
               </div>
             )}
           </div>

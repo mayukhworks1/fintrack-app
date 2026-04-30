@@ -2,6 +2,7 @@
 Web Invoice Tracker router — /api/web-invoices
 All routes require the "web" role. Editor/viewer tokens get 403.
 """
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import Optional, List, Any
 from pydantic import BaseModel
@@ -9,6 +10,15 @@ from ..services.web_invoice import WebInvoiceService
 from .deps import require_web
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
+
+
+def _validate_paid_invoice(fields: dict) -> None:
+    if fields.get("Payment Status") != "Paid":
+        return
+    if fields.get("Amount Received") in (None, "", 0, 0.0):
+        raise HTTPException(status_code=400, detail="Amount Received is required when Payment Status is Paid")
+    if not fields.get("Cleared Date"):
+        raise HTTPException(status_code=400, detail="Cleared Date is required when Payment Status is Paid")
 
 
 class AddOptionRequest(BaseModel):
@@ -78,24 +88,26 @@ async def add_picklist_option(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/upload")
+@router.post("/upload/{record_id}/{field_name}")
 async def upload_attachment(
+    record_id: str,
+    field_name: str,
     file: UploadFile = File(...),
     _role: str = Depends(require_web),
 ):
-    """Proxy a file upload to Teable and return the attachment token object."""
-    import httpx
+    """Upload a file into a specific attachment field on an existing Teable record."""
     service = WebInvoiceService()
     try:
         content = await file.read()
-        async with httpx.AsyncClient(timeout=60) as client:
-            res = await client.post(
-                f"{service.base_url}/api/attachments/upload",
-                headers={"Authorization": f"Bearer {service.token}"},
-                files={"file": (file.filename, content, file.content_type or "application/octet-stream")},
-            )
-            res.raise_for_status()
-            return res.json()
+        return await service.upload_attachment_to_field(
+            record_id=record_id,
+            field_name=field_name,
+            filename=file.filename or "upload.bin",
+            content=content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
     except Exception as e:
@@ -141,7 +153,11 @@ async def get_web_invoice(record_id: str, _role: str = Depends(require_web)):
 @router.post("", status_code=201)
 async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(require_web)):
     try:
-        return await WebInvoiceService().create_invoice(body.to_teable_fields())
+        fields = body.to_teable_fields()
+        _validate_paid_invoice(fields)
+        return await WebInvoiceService().create_invoice(fields)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -151,7 +167,11 @@ async def update_web_invoice(
     record_id: str, body: WebInvoiceFields, _role: str = Depends(require_web)
 ):
     try:
-        return await WebInvoiceService().update_invoice(record_id, body.to_teable_fields())
+        fields = body.to_teable_fields()
+        _validate_paid_invoice(fields)
+        return await WebInvoiceService().update_invoice(record_id, fields)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

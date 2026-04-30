@@ -175,11 +175,11 @@ export const api = {
   webInvoices: {
     // File upload bypasses the standard request() so the browser sets the
     // multipart/form-data Content-Type with the correct boundary automatically.
-    upload: (file) => {
+    upload: (recordId, fieldName, file) => {
       const form = new FormData()
       form.append('file', file)
       const token = getAuthToken()
-      return fetch(`${BASE_URL}/api/web-invoices/upload`, {
+      return fetch(`${BASE_URL}/api/web-invoices/upload/${encodeURIComponent(recordId)}/${encodeURIComponent(fieldName)}`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
