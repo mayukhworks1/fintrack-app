@@ -69,6 +69,13 @@ function getRetainerCategoryOption(options = []) {
   return options.find(isRetainerCategory) || 'Development- Retainer'
 }
 
+function getProjectCategoryOption(options = [], current = '') {
+  if (current && !isRetainerCategory(current)) return current
+  const explicit = options.find(o => /^project$/i.test(String(o || '').trim()))
+  if (explicit) return explicit
+  return options.find(o => !isRetainerCategory(o)) || ''
+}
+
 function parseIsoDate(value) {
   const d = new Date(value || '')
   return Number.isNaN(d.getTime()) ? null : d
@@ -360,7 +367,7 @@ function PicklistSelect({
 }
 
 /* ── Attachment upload field (for Reference + Invoice PDF in form drawer) ── */
-function AttachmentUploadField({ label, fieldKey, value, onChange, recordId }) {
+function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ensureRecord }) {
   const [uploading,  setUploading]  = useState(false)
   const [uploadErr,  setUploadErr]  = useState('')
   const [dragOver,   setDragOver]   = useState(false)
@@ -369,16 +376,14 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId }) {
   const fieldNameMap = { invoice_pdf: 'Invoice PDF', reference: 'Reference' }
 
   async function processFiles(files) {
-    if (!recordId) {
-      setUploadErr('Save the invoice first, then upload attachments')
-      return
-    }
     if (!files?.length) return
     setUploading(true); setUploadErr('')
     try {
+      const resolvedRecordId = recordId || await ensureRecord?.()
+      if (!resolvedRecordId) throw new Error('Could not prepare invoice record for upload')
       let latest = attachments
       for (const file of files) {
-        const result = await api.webInvoices.upload(recordId, fieldNameMap[fieldKey], file)
+        const result = await api.webInvoices.upload(resolvedRecordId, fieldNameMap[fieldKey], file)
         latest = result?.attachments || latest
       }
       onChange(latest)
@@ -448,7 +453,7 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId }) {
         style={{
           borderColor: dragOver ? 'var(--accent)' : 'var(--glass-border)',
           background: dragOver ? 'rgba(99,102,241,0.06)' : 'var(--glass-bg)',
-          opacity: uploading || !recordId ? 0.7 : 1,
+          opacity: uploading ? 0.7 : 1,
         }}
         aria-label={`Upload ${label}`}>
         {uploading
@@ -456,7 +461,7 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId }) {
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Uploading…</span></>
           : <><Upload size={16} style={{ color: 'var(--text-3)' }} />
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                {recordId ? 'Click or drag to upload · PDF, images' : 'Save invoice first to enable uploads'}
+                {recordId ? 'Click or drag to upload · PDF, images' : 'Click to save draft and upload · PDF, images'}
               </span></>}
         <input ref={fileInputRef} type="file" multiple className="hidden"
           id={`upload-${fieldKey}`}
@@ -607,9 +612,13 @@ function InvoiceDrawer({
   const [deleting,   setDeleting]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [error,      setError]      = useState('')
+  const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
+  const [categoryLocked, setCategoryLocked] = useState(false)
   const paidSelected = form.payment_status === 'Paid'
   const retainerSelected = isRetainerCategory(form.category)
   const retainerCategoryOption = getRetainerCategoryOption(picklists?.Category || [])
+  const projectCategoryOption = getProjectCategoryOption(picklists?.Category || [], form.category)
+  const currentRecordId = invoice?.id || workingRecordId
 
   useEffect(() => {
     if (!invoice && !draft) { setForm(EMPTY_FORM); return }
@@ -641,13 +650,54 @@ function InvoiceDrawer({
     })
   }, [invoice, draft])
 
+  useEffect(() => {
+    setWorkingRecordId(invoice?.id || null)
+    setCategoryLocked(Boolean(invoice?.id))
+  }, [invoice?.id])
+
   const set  = k => v  => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev => setForm(f => ({ ...f, [k]: ev.target.value }))
-  const setRetainerMode = (enabled) => {
+  const setCategoryValue = (next) => {
+    setCategoryLocked(true)
+    setForm(f => ({ ...f, category: next }))
+  }
+  const setRetainerMode = (enabled, { force = true } = {}) => {
+    const nextCategory = enabled ? retainerCategoryOption : getProjectCategoryOption(picklists?.Category || [], form.category)
+    if (!force && categoryLocked) return
     setForm(f => ({
       ...f,
-      category: enabled ? retainerCategoryOption : (isRetainerCategory(f.category) ? '' : f.category),
+      category: nextCategory,
     }))
+    if (force) setCategoryLocked(false)
+  }
+
+  useEffect(() => {
+    if (!invoice?.id && draft?.category == null) {
+      setRetainerMode(retainerSelected, { force: false })
+    }
+  }, [retainerCategoryOption, projectCategoryOption])
+
+  async function persistDraftRecord() {
+    if (currentRecordId) return currentRecordId
+    const paidDraftIncomplete = form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date)
+    const payload = {
+      ...form,
+      amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
+      amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
+      amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
+      raised_date:     form.raised_date   ? `${form.raised_date}T00:00:00.000Z`   : undefined,
+      cleared_date:    form.cleared_date  ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
+      next_followup:   form.next_followup ? `${form.next_followup}T00:00:00.000Z` : undefined,
+      payment_status:  paidDraftIncomplete ? 'Pending' : form.payment_status,
+      remark: paidDraftIncomplete
+        ? [form.remark, 'Draft created for attachment upload. Complete paid details before final save.'].filter(Boolean).join(' ')
+        : form.remark,
+    }
+    const created = await api.webInvoices.create(payload)
+    const createdId = created?.id
+    if (!createdId) throw new Error('Invoice draft was created but no record id was returned')
+    setWorkingRecordId(createdId)
+    return createdId
   }
 
   async function handleSave() {
@@ -670,8 +720,8 @@ function InvoiceDrawer({
         cleared_date:    form.cleared_date  ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
         next_followup:   form.next_followup ? `${form.next_followup}T00:00:00.000Z` : undefined,
       }
-      if (isEdit) await api.webInvoices.update(invoice.id, payload)
-      else        await api.webInvoices.create(payload)
+      if (currentRecordId) await api.webInvoices.update(currentRecordId, payload)
+      else                 await api.webInvoices.create(payload)
       onSaved()
     } catch (e) {
       setError(e.message || 'Save failed')
@@ -724,7 +774,7 @@ function InvoiceDrawer({
                 canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
             <FieldRow label="Category">
-              <PicklistSelect fieldName="Category" value={form.category} onChange={set('category')}
+              <PicklistSelect fieldName="Category" value={form.category} onChange={setCategoryValue}
                 options={picklists?.Category || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
                 canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
@@ -804,14 +854,16 @@ function InvoiceDrawer({
               fieldKey="invoice_pdf"
               value={form.invoice_pdf}
               onChange={v => setForm(f => ({ ...f, invoice_pdf: v }))}
-              recordId={invoice?.id}
+              recordId={currentRecordId}
+              ensureRecord={persistDraftRecord}
             />
             <AttachmentUploadField
               label="Payment Reference"
               fieldKey="reference"
               value={form.reference}
               onChange={v => setForm(f => ({ ...f, reference: v }))}
-              recordId={invoice?.id}
+              recordId={currentRecordId}
+              ensureRecord={persistDraftRecord}
             />
           </div>
         </div>
@@ -825,7 +877,7 @@ function InvoiceDrawer({
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Save size={12} />{saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create invoice'}
+              <Save size={12} />{saving ? 'Saving…' : currentRecordId ? 'Save changes' : 'Create invoice'}
             </button>
           </div>
         </div>
@@ -889,7 +941,7 @@ export default function WebInvoices() {
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
-  const [showFilters,    setShowFilters]    = useState(false)
+  const [showFilters,    setShowFilters]    = useState(true)
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer,         setDrawer]         = useState(null)
@@ -981,6 +1033,12 @@ export default function WebInvoices() {
   const s        = summary
   const overdue  = s?.overdue_invoices || []
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+  const projectSummaryCards = useMemo(() => {
+    const entries = Object.entries(s?.by_project || {})
+      .sort(([, a], [, b]) => (b?.raised || 0) - (a?.raised || 0))
+      .slice(0, 8)
+    return entries.map(([project, metrics]) => ({ project, metrics }))
+  }, [s])
 
   const retainerGroups = useMemo(() => {
     const retainerRecords = allRecords.filter(r => isRetainerCategory(r.fields?.['Category']))
@@ -1190,6 +1248,11 @@ export default function WebInvoices() {
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
+                <ExternalLink size={14} />
+                <span className="hidden sm:inline">Raise Externally</span>
+                <span className="sm:hidden">Raise</span>
+              </button>
               <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
@@ -1201,7 +1264,9 @@ export default function WebInvoices() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="card flex items-center justify-between gap-4 flex-wrap" style={{ padding: '0.85rem 1rem' }}>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               {[
                 ['invoices', 'Invoices'],
@@ -1235,9 +1300,20 @@ export default function WebInvoices() {
                 </button>
               ))}
             </div>
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-              Retainer workflow uses `Project` as the retainer/client name for now.
-            </span>
+              </div>
+              <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                Retainer workflow uses `Project` as the retainer/client name for now. Category follows the selected billing type until the user overrides it manually.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Quick Actions</span>
+              <button onClick={openNew} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+                <Plus size={13} />New invoice
+              </button>
+              <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+                <ExternalLink size={13} />Open request form
+              </button>
+            </div>
           </div>
 
           {/* KPIs */}
@@ -1558,8 +1634,79 @@ export default function WebInvoices() {
 
           {workspace === 'invoices' && (
           <>
+          {projectSummaryCards.length > 0 && (
+            <section className="card space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Project Snapshot</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                    Click any project card to filter the invoice list.
+                  </p>
+                </div>
+                {projectFilter && (
+                  <button
+                    onClick={() => setProjectFilter('')}
+                    className="btn-ghost"
+                    style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
+                    <X size={11} />Clear project filter
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {projectSummaryCards.map(({ project, metrics }) => {
+                  const active = projectFilter === project
+                  return (
+                    <button
+                      key={project}
+                      type="button"
+                      onClick={() => setProjectFilter(active ? '' : project)}
+                      className="rounded-xl p-4 text-left transition-all"
+                      style={{
+                        background: active ? 'var(--accent-dim)' : 'var(--bg-layer)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
+                        boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--shadow-sm)',
+                      }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
+                          <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{metrics.count || 0} invoice{metrics.count === 1 ? '' : 's'}</p>
+                        </div>
+                        {active && <CheckCircle2 size={14} style={{ color: 'var(--accent)' }} />}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-4">
+                        <div>
+                          <p className="label">Raised</p>
+                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmt(metrics.raised)}</p>
+                        </div>
+                        <div>
+                          <p className="label">Received</p>
+                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{fmt(metrics.received)}</p>
+                        </div>
+                        <div>
+                          <p className="label">Open</p>
+                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(metrics.outstanding)}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
           {/* Filter bar */}
-          <div className="space-y-2">
+          <div className="card space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                  Filters stay open by default for quicker scanning across monthly and project billing.
+                </p>
+              </div>
+              <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
+                {records.length} result{records.length !== 1 ? 's' : ''}
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[180px]">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -1579,6 +1726,7 @@ export default function WebInvoices() {
                   setProjectFilter('')
                   setCategoryFilter('')
                   setRaisedByFilter('')
+                  setBillingFilter('all')
                   setMonthFilter('')
                   setOverdueOnly(false)
                   setHasDocsOnly(false)
@@ -1589,9 +1737,6 @@ export default function WebInvoices() {
                   <X size={11} />Clear
                 </button>
               )}
-              <span className="text-xs whitespace-nowrap ml-auto" style={{ color: 'var(--text-3)' }}>
-                {records.length} result{records.length !== 1 ? 's' : ''}
-              </span>
             </div>
 
             {showFilters && (
@@ -1833,6 +1978,7 @@ export default function WebInvoices() {
       {(drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
         <InvoiceDrawer
           invoice={drawer.mode === 'edit' ? drawer.invoice : null}
+          draft={drawer.mode === 'new' ? drawer.draft : null}
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
