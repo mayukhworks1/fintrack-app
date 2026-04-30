@@ -63,7 +63,7 @@ const shortMonthLabel = (key) => {
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
-const ymdFromMonthKey = (key) => `${key}-01`
+const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
 
 function getRetainerCategoryOption(options = []) {
   return options.find(isRetainerCategory) || 'Development- Retainer'
@@ -592,6 +592,7 @@ function FieldRow({ label, children }) {
 
 function InvoiceDrawer({
   invoice,
+  draft,
   onClose,
   onSaved,
   onDeleted,
@@ -611,7 +612,14 @@ function InvoiceDrawer({
   const retainerCategoryOption = getRetainerCategoryOption(picklists?.Category || [])
 
   useEffect(() => {
-    if (!invoice) { setForm(EMPTY_FORM); return }
+    if (!invoice && !draft) { setForm(EMPTY_FORM); return }
+    if (!invoice && draft) {
+      setForm({
+        ...EMPTY_FORM,
+        ...draft,
+      })
+      return
+    }
     const f = invoice.fields || {}
     setForm({
       invoice_number:  f['Invoice Number']  || '',
@@ -631,7 +639,7 @@ function InvoiceDrawer({
       reference:       Array.isArray(f['Reference'])   ? f['Reference']   : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
     })
-  }, [invoice])
+  }, [invoice, draft])
 
   const set  = k => v  => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev => setForm(f => ({ ...f, [k]: ev.target.value }))
@@ -1106,7 +1114,43 @@ export default function WebInvoices() {
     }
   }
 
-  const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
+  function openInvoiceRequestForm(group, monthKeyValue) {
+    const label = monthLabel(monthKeyValue)
+    const confirmed = window.confirm(
+      `Open the external invoice request form for ${group.project} (${label})?`
+    )
+    if (!confirmed) return
+    window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')
+  }
+
+  function openRetainerRecordForm(group, monthKeyValue) {
+    const base = group?.latestActive?.fields || {}
+    const label = monthLabel(monthKeyValue)
+    setDrawer({
+      mode: 'new',
+      invoice: null,
+      draft: {
+        invoice_number: '',
+        project: group.project,
+        category: base['Category'] || getRetainerCategoryOption(picklists?.Category || []),
+        description: `Retainer invoice recorded for ${label}`,
+        milestone: base['Milestone'] || '',
+        raised_by: base['Raised By'] || '',
+        raised_date: `${monthKeyValue}-01`,
+        cleared_date: '',
+        amount_raised: base['Amount Raised'] ?? '',
+        amount_with_tax: base['Amount with Tax'] ?? '',
+        amount_received: '',
+        payment_status: 'Pending',
+        remark: `Invoice already raised via Zoho form for ${label}. Enter invoice number and final details here.`,
+        next_followup: '',
+        reference: [],
+        invoice_pdf: [],
+      },
+    })
+  }
+
+  const openNew     = () => setDrawer({ mode: 'new',  invoice: null, draft: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
   const closeDrawer = () => setDrawer(null)
   const handleSaved   = () => { refresh(); closeDrawer() }
@@ -1279,9 +1323,11 @@ export default function WebInvoices() {
             <section className="card space-y-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <h2 className="section-title mb-1">Retainer Workspace</h2>
-                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                    Dedicated retainer planning space inside the same invoice table. Track expected month, highlight billing gaps, and create or pause recurring months safely.
+                  <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>Retainer Workspace</h2>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                    <strong style={{ color: 'var(--text-1)' }}>Raise externally.</strong> Use the Zoho invoice request form when a retainer invoice needs to be raised.
+                    <span> </span>
+                    <strong style={{ color: 'var(--text-1)' }}>Record internally.</strong> Once it has been raised, store the final invoice number and details here.
                   </p>
                 </div>
                 <div className="relative">
@@ -1420,7 +1466,7 @@ export default function WebInvoices() {
                         <div className="flex items-center justify-between gap-3 mb-2">
                           <p className="label mb-0">Monthly Records</p>
                           <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                            Direct access to each visible month
+                            Bold month cards with direct record access
                           </span>
                         </div>
                         <div className="space-y-2">
@@ -1453,13 +1499,17 @@ export default function WebInvoices() {
                                     </button>
                                   ) : item.key === retainerMonth ? (
                                     <>
-                                      <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
+                                      <button onClick={() => openInvoiceRequestForm(group, item.key)}
                                         className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                        {busyCreate ? 'Creating…' : 'Create'}
+                                        Open request form
+                                      </button>
+                                      <button onClick={() => openRetainerRecordForm(group, item.key)}
+                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                        Record raised invoice
                                       </button>
                                       <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                        {busyPause ? 'Pausing…' : 'Pause'}
+                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                                        {busyPause ? 'Pausing…' : 'Pause month'}
                                       </button>
                                     </>
                                   ) : (
@@ -1484,12 +1534,16 @@ export default function WebInvoices() {
 
                       {missing && (
                         <div className="flex gap-2 flex-wrap">
-                          <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
+                          <button onClick={() => openInvoiceRequestForm(group, retainerMonth)}
                             className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                            {busyCreate ? 'Creating…' : `Create ${monthLabel(retainerMonth)}`}
+                            Open invoice request form
+                          </button>
+                          <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
+                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                            Record already raised invoice
                           </button>
                           <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
                             {busyPause ? 'Pausing…' : 'Pause month'}
                           </button>
                         </div>
