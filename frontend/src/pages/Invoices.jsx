@@ -930,7 +930,7 @@ export default function Invoices() {
       </div>
 
       {/* ── Workspace + Billing switcher ── */}
-      <div className="card flex items-center justify-between gap-4 flex-wrap sm:flex-row flex-col" style={{ padding: '0.85rem 1rem' }}>
+      <div className="card" style={{ padding: '0.85rem 1rem' }}>
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
@@ -959,17 +959,6 @@ export default function Invoices() {
           <span className="text-xs" style={{ color: 'var(--text-3)' }}>
             Retainer workflow uses Project as the retainer/client name. Category follows the selected billing type until manually overridden.
           </span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Quick Actions</span>
-          {isEditor && (
-            <button onClick={openNew} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
-              <Plus size={13} />New invoice
-            </button>
-          )}
-          <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
-            <ExternalLink size={13} />Open request form
-          </button>
         </div>
       </div>
 
