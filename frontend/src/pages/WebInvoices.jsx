@@ -198,7 +198,16 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
 }
 
 /* Picklist select with inline "add new option" for Teable-backed fields */
-function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, placeholder = 'Select…' }) {
+function PicklistSelect({
+  fieldName,
+  value,
+  onChange,
+  options,
+  onOptionsUpdate,
+  placeholder = 'Select…',
+  canAddOptions = true,
+  onPermissionError,
+}) {
   const [adding, setAdding]   = useState(false)
   const [newVal, setNewVal]   = useState('')
   const [saving, setSaving]   = useState(false)
@@ -220,10 +229,36 @@ function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, 
       onChange(trimmed)
       setAdding(false); setNewVal('')
     } catch (err) {
-      setAddErr(err.message || 'Failed to add')
+      const msg = err.message || 'Failed to add'
+      setAddErr(msg)
+      if (/cannot change dropdown schema|required.*field\/schema edit permission/i.test(msg)) {
+        onPermissionError?.(msg)
+        setAdding(false)
+        setNewVal('')
+      }
     } finally {
       setSaving(false)
     }
+  }
+
+  if (!canAddOptions) {
+    return (
+      <div className="flex gap-1.5">
+        <div className="relative flex-1">
+          <select value={value} onChange={e => onChange(e.target.value)}
+            className="input appearance-none w-full" style={{ paddingRight: '1.75rem' }}>
+            <option value="">{placeholder}</option>
+            {options.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+        </div>
+        <button type="button" disabled className="btn-icon flex-shrink-0 opacity-50 cursor-not-allowed"
+          title={`New ${fieldName} options must be added in Teable because this token cannot edit schema`}
+          aria-label={`Add ${fieldName} disabled`}>
+          <Plus size={12} />
+        </button>
+      </div>
+    )
   }
 
   if (adding) {
@@ -498,7 +533,16 @@ function FieldRow({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOptionsUpdate }) {
+function InvoiceDrawer({
+  invoice,
+  onClose,
+  onSaved,
+  onDeleted,
+  picklists,
+  onOptionsUpdate,
+  canEditPicklists,
+  onPicklistPermissionError,
+}) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]       = useState(EMPTY_FORM)
   const [saving,     setSaving]     = useState(false)
@@ -603,21 +647,25 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Project">
               <PicklistSelect fieldName="Project" value={form.project} onChange={set('project')}
-                options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select project…" />
+                options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select project…"
+                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
             <FieldRow label="Category">
               <PicklistSelect fieldName="Category" value={form.category} onChange={set('category')}
-                options={picklists?.Category || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
+                options={picklists?.Category || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
+                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Milestone">
               <PicklistSelect fieldName="Milestone" value={form.milestone} onChange={set('milestone')}
-                options={picklists?.Milestone || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
+                options={picklists?.Milestone || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
+                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
             <FieldRow label="Raised By">
               <PicklistSelect fieldName="Raised By" value={form.raised_by} onChange={set('raised_by')}
-                options={picklists?.['Raised By'] || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
+                options={picklists?.['Raised By'] || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
+                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
           </div>
           <FieldRow label="Description">
@@ -737,6 +785,8 @@ export default function WebInvoices() {
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer,         setDrawer]         = useState(null)
   const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
+  const [canEditPicklists, setCanEditPicklists] = useState(true)
+  const [picklistPermissionMsg, setPicklistPermissionMsg] = useState('')
 
   useEffect(() => {
     api.webInvoices.picklists.get()
@@ -751,6 +801,11 @@ export default function WebInvoices() {
 
   function handleOptionsUpdate(fieldName, newOptions) {
     setPicklists(prev => ({ ...prev, [fieldName]: newOptions }))
+  }
+
+  function handlePicklistPermissionError(message) {
+    setCanEditPicklists(false)
+    setPicklistPermissionMsg(message)
   }
 
   const fetchSummary = useCallback(() => api.webInvoices.summary(), [])
@@ -1064,6 +1119,14 @@ export default function WebInvoices() {
             </div>
           )}
 
+          {picklistPermissionMsg && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-xs"
+              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)', color: 'var(--text-2)' }}>
+              <AlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: 'var(--fin-warning)' }} />
+              <span>{picklistPermissionMsg}</span>
+            </div>
+          )}
+
           {/* Mobile card list */}
           <div className="md:hidden space-y-2.5">
             {loading && !listData
@@ -1210,6 +1273,8 @@ export default function WebInvoices() {
           onDeleted={handleDeleted}
           picklists={picklists}
           onOptionsUpdate={handleOptionsUpdate}
+          canEditPicklists={canEditPicklists}
+          onPicklistPermissionError={handlePicklistPermissionError}
         />,
         document.body
       )}
