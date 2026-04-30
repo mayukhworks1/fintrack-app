@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
+import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'           // eager — landing route
@@ -43,29 +44,35 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
-          <WebInvoices />
+          <>
+            <WebInvoices />
+            <VercelAnalytics />
+          </>
         </Suspense>
       </ErrorBoundary>
     )
   }
 
   return (
-    <Layout>
-      <ErrorBoundary>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/"             element={<Dashboard />} />
-            <Route path="/projects"     element={<Projects />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/invoices"     element={<Invoices />} />
-            <Route path="/analytics"    element={<Analytics />} />
-            <Route path="/ai"           element={<AIAssistant />} />
-            <Route path="/report"       element={<Report />} />
-            <Route path="*"             element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
-    </Layout>
+    <>
+      <Layout>
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/"             element={<Dashboard />} />
+              <Route path="/projects"     element={<Projects />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route path="/invoices"     element={<Invoices />} />
+              <Route path="/analytics"    element={<AnalyticsPage />} />
+              <Route path="/ai"           element={<AIAssistant />} />
+              <Route path="/report"       element={<Report />} />
+              <Route path="*"             element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </Layout>
+      <VercelAnalytics />
+    </>
   )
 }
 
