@@ -351,7 +351,7 @@ export default function Analytics() {
         const billed = parseFloat(f['Amount Billed So far'] || 0)
         const cost   = parseFloat(f['Input cost so far'] || 0) + parseFloat(f['Total Overhead Cost'] || 0)
         const profit = parseFloat(f['Actual Profit'] || 0)
-        const margin = parseFloat(f['Profit percentage'] || 0)
+        const margin = parseFloat(f['Profit percentage'] || 0) * 100
         return {
           id: r.id,
           name: `${(f['Client'] || '').split(' ')[0]}/${f['Project Name'] || ''}`,
