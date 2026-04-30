@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     app_password:       str = ""
     app_view_password:  str = ""
     app_web_password:   str = ""
-    # Web invoice table ID (separate from the internal invoice table).
+    # Web invoice table — may live in a different Teable space with its own token.
+    # TEABLE_WEB_API_TOKEN: token for tblT6iQNKe8CfAUN2iR (falls back to TEABLE_API_TOKEN if not set)
+    teable_web_api_token: Optional[str] = None
     teable_web_invoice_table_id: str = "tblT6iQNKe8CfAUN2iR"
     # Signing key for session tokens — set APP_SECRET in prod.
     app_secret: str = "fintrack-dev-secret-change-me"

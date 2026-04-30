@@ -43,7 +43,8 @@ def _bust_web_cache() -> None:
 
 class WebInvoiceService:
     def __init__(self):
-        self.token    = settings.teable_api_token
+        # Use dedicated web token if set, otherwise fall back to the main token
+        self.token    = settings.teable_web_api_token or settings.teable_api_token
         self.base_url = settings.teable_base_url.rstrip("/")
         self.table_id = settings.teable_web_invoice_table_id
 
