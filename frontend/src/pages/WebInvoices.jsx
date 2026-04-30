@@ -13,6 +13,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -45,6 +46,28 @@ const monthLabel = (key) => {
   const [year, month] = key.split('-')
   const d = new Date(Number(year), Number(month) - 1, 1)
   return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
+const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
+const currentMonthKey = () => monthKey(new Date().toISOString())
+const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
+const ymdFromMonthKey = (key) => `${key}-01`
+
+function getRetainerCategoryOption(options = []) {
+  return options.find(isRetainerCategory) || 'Development- Retainer'
+}
+
+function parseIsoDate(value) {
+  const d = new Date(value || '')
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function sortByRaisedDateDesc(records = []) {
+  return [...records].sort((a, b) => {
+    const da = parseIsoDate(a.fields?.['Raised Date'])?.getTime() || 0
+    const db = parseIsoDate(b.fields?.['Raised Date'])?.getTime() || 0
+    return db - da
+  })
 }
 
 const KPI_PALETTE = [
@@ -550,6 +573,8 @@ function InvoiceDrawer({
   const [confirmDel, setConfirmDel] = useState(false)
   const [error,      setError]      = useState('')
   const paidSelected = form.payment_status === 'Paid'
+  const retainerSelected = isRetainerCategory(form.category)
+  const retainerCategoryOption = getRetainerCategoryOption(picklists?.Category || [])
 
   useEffect(() => {
     if (!invoice) { setForm(EMPTY_FORM); return }
@@ -576,6 +601,12 @@ function InvoiceDrawer({
 
   const set  = k => v  => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev => setForm(f => ({ ...f, [k]: ev.target.value }))
+  const setRetainerMode = (enabled) => {
+    setForm(f => ({
+      ...f,
+      category: enabled ? retainerCategoryOption : (isRetainerCategory(f.category) ? '' : f.category),
+    }))
+  }
 
   async function handleSave() {
     if (paidSelected && !String(form.amount_received).trim()) {
@@ -656,6 +687,30 @@ function InvoiceDrawer({
                 canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
           </div>
+
+          <div>
+            <label className="label">Billing Type</label>
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              <button
+                type="button"
+                onClick={() => setRetainerMode(false)}
+                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                style={!retainerSelected
+                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                  : { color: 'var(--text-3)' }}>
+                Project
+              </button>
+              <button
+                type="button"
+                onClick={() => setRetainerMode(true)}
+                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                style={retainerSelected
+                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                  : { color: 'var(--text-3)' }}>
+                Retainer
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Milestone">
               <PicklistSelect fieldName="Milestone" value={form.milestone} onChange={set('milestone')}
@@ -691,6 +746,13 @@ function InvoiceDrawer({
             <div className="rounded-xl p-3 text-xs"
               style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)', color: 'var(--text-2)' }}>
               Paid invoices must include `Amount Received` and `Cleared Date`. It is also recommended to attach a payment reference screenshot before closing the entry.
+            </div>
+          )}
+
+          {retainerSelected && (
+            <div className="rounded-xl p-3 text-xs"
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--text-2)' }}>
+              Retainer mode uses the existing table only. Put the retainer/client name in `Project`. The latest retainer row becomes the monthly template, invoice number can be filled later by the account manager, and paused months are stored as zero-value cancelled records with a reason.
             </div>
           )}
 
@@ -771,11 +833,14 @@ function WebTopBar() {
 
 /* ── Main page ── */
 export default function WebInvoices() {
+  const toast = useToast()
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
+  const [billingFilter,  setBillingFilter]  = useState('all')
   const [monthFilter,    setMonthFilter]    = useState('')
+  const [retainerMonth,  setRetainerMonth]  = useState(currentMonthKey())
   const [search,         setSearch]         = useState('')
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
@@ -787,6 +852,7 @@ export default function WebInvoices() {
   const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
   const [canEditPicklists, setCanEditPicklists] = useState(true)
   const [picklistPermissionMsg, setPicklistPermissionMsg] = useState('')
+  const [retainerActionBusy, setRetainerActionBusy] = useState('')
 
   useEffect(() => {
     api.webInvoices.picklists.get()
@@ -831,10 +897,17 @@ export default function WebInvoices() {
     )].sort().reverse()
   ), [allRecords])
 
+  const retainerMonthOptions = useMemo(() => (
+    [...new Set([currentMonthKey(), ...monthOptions])].sort().reverse()
+  ), [monthOptions])
+
   const todayIso = new Date().toISOString().slice(0, 10)
 
   const records = allRecords.filter(r => {
     const f = r.fields || {}
+    const retainer = isRetainerCategory(f['Category'])
+    if (billingFilter === 'retainer' && !retainer) return false
+    if (billingFilter === 'project' && retainer) return false
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
@@ -863,7 +936,85 @@ export default function WebInvoices() {
 
   const s        = summary
   const overdue  = s?.overdue_invoices || []
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+
+  const retainerGroups = useMemo(() => {
+    const retainerRecords = allRecords.filter(r => isRetainerCategory(r.fields?.['Category']))
+    const grouped = new Map()
+    for (const record of retainerRecords) {
+      const project = String(record.fields?.['Project'] || '').trim() || 'Unnamed Retainer'
+      if (!grouped.has(project)) grouped.set(project, [])
+      grouped.get(project).push(record)
+    }
+
+    return [...grouped.entries()].map(([project, items]) => {
+      const sorted = sortByRaisedDateDesc(items)
+      const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
+      const monthRecord = sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
+      const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
+      const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
+      const monthStatus = !monthRecord
+        ? 'Missing'
+        : monthRecord.fields?.['Payment Status'] === 'Cancelled'
+          ? 'Paused'
+          : monthRecord.fields?.['Payment Status'] || 'Pending'
+
+      return {
+        project,
+        records: sorted,
+        latestActive,
+        monthRecord,
+        amount,
+        withTax,
+        monthStatus,
+        raisedBy: latestActive?.fields?.['Raised By'] || '',
+        description: latestActive?.fields?.['Description'] || '',
+      }
+    }).sort((a, b) => a.project.localeCompare(b.project))
+  }, [allRecords, retainerMonth])
+
+  async function createRetainerMonth(group, mode) {
+    if (!group?.latestActive) {
+      toast('No existing retainer template found for this project', 'warning')
+      return
+    }
+    const isPause = mode === 'pause'
+    const monthName = monthLabel(retainerMonth)
+    const pauseReason = isPause
+      ? window.prompt(`Why is ${group.project} paused for ${monthName}?`, '')
+      : null
+    if (isPause && pauseReason == null) return
+    const key = `${mode}:${group.project}:${retainerMonth}`
+    setRetainerActionBusy(key)
+    try {
+      const base = group.latestActive.fields || {}
+      const payload = {
+        invoice_number: '',
+        project: group.project,
+        category: base['Category'] || getRetainerCategoryOption(picklists?.Category || []),
+        description: isPause
+          ? `Retainer paused for ${monthName}`
+          : `Recurring retainer invoice for ${monthName}. Update invoice number before sharing.`,
+        milestone: base['Milestone'] || null,
+        raised_by: base['Raised By'] || null,
+        raised_date: firstDayIso(retainerMonth),
+        amount_raised: isPause ? 0 : Number(base['Amount Raised'] || 0),
+        amount_with_tax: isPause ? 0 : Number(base['Amount with Tax'] || 0),
+        amount_received: isPause ? 0 : undefined,
+        payment_status: isPause ? 'Cancelled' : 'Pending',
+        remark: isPause
+          ? `Paused for ${monthName}. Reason: ${(pauseReason || 'Not specified').trim()}`
+          : `Recurring retainer for ${monthName}. Invoice number to be updated by account manager.`,
+      }
+      await api.webInvoices.create(payload)
+      toast(isPause ? `Paused ${group.project} for ${monthName}` : `Created ${monthName} retainer for ${group.project}`, 'success')
+      refresh()
+    } catch (e) {
+      toast(e.message || 'Failed to create retainer month', 'error')
+    } finally {
+      setRetainerActionBusy('')
+    }
+  }
 
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
@@ -914,6 +1065,29 @@ export default function WebInvoices() {
                 <span className="sm:hidden">New</span>
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              {[
+                ['all', 'All'],
+                ['project', 'Projects'],
+                ['retainer', 'Retainers'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setBillingFilter(value)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                  style={billingFilter === value
+                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                    : { color: 'var(--text-3)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+              Retainer mode uses `Project` as the retainer/client name for now.
+            </span>
           </div>
 
           {/* KPIs */}
@@ -991,6 +1165,99 @@ export default function WebInvoices() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </section>
+          )}
+
+          {(billingFilter === 'all' || billingFilter === 'retainer') && retainerGroups.length > 0 && (
+            <section className="card space-y-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="section-title mb-1">Retainer Tracker</h2>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    Fixed monthly retainers tracked in the same invoice table. Missing months can be created or paused without touching schema.
+                  </p>
+                </div>
+                <div className="relative">
+                  <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+                  <select value={retainerMonth} onChange={e => setRetainerMonth(e.target.value)}
+                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                    {retainerMonthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {retainerGroups.map(group => {
+                  const monthRec = group.monthRecord?.fields || null
+                  const missing = !monthRec
+                  const paused = group.monthStatus === 'Paused'
+                  const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
+                  const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
+                  return (
+                    <div key={group.project} className="rounded-xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                            Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''}
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                          style={{
+                            background: missing ? 'var(--fin-warn-bg)' : paused ? 'var(--fin-neg-bg)' : 'var(--fin-pos-bg)',
+                            color: missing ? 'var(--fin-warning)' : paused ? 'var(--fin-negative)' : 'var(--fin-positive)',
+                          }}>
+                          {group.monthStatus}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <div>
+                          <p className="label">Tracking month</p>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthLabel(retainerMonth)}</p>
+                        </div>
+                        <div>
+                          <p className="label">Raised by</p>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="label">Month invoice #</p>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthRec?.['Invoice Number'] || 'Pending update'}</p>
+                        </div>
+                        <div>
+                          <p className="label">Month remark</p>
+                          <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{monthRec?.['Remark'] || '—'}</p>
+                        </div>
+                      </div>
+
+                      {group.description && (
+                        <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>{group.description}</p>
+                      )}
+
+                      <div className="flex gap-2 flex-wrap mt-4">
+                        {missing ? (
+                          <>
+                            <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
+                              className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                              {busyCreate ? 'Creating…' : `Create ${monthLabel(retainerMonth)}`}
+                            </button>
+                            <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                              className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                              {busyPause ? 'Pausing…' : 'Pause month'}
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={() => openView(group.monthRecord)}
+                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                            View month entry
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </section>
           )}
