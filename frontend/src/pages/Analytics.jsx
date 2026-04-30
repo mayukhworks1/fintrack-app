@@ -342,6 +342,24 @@ export default function Analytics() {
     }))
   , [filtered])
 
+  /* ── Per-project invoice totals built from raw invoice records.
+        Uses normalised lowercase+trim keys so "PMS" matches "Pms" etc.
+        Excludes Cancelled invoices; outstanding = non-Paid only. ── */
+  const invByProject = useMemo(() => {
+    const map = {}
+    allInvoices.forEach(r => {
+      const f = r.fields || {}
+      if (f['Payment Status'] === 'Cancelled') return
+      const key = (f['Project'] || '').toLowerCase().trim()
+      if (!key) return
+      if (!map[key]) map[key] = { raised: 0, outstanding: 0 }
+      const amt = Number(f['Amount Raised'] || 0)
+      map[key].raised += amt
+      if (f['Payment Status'] !== 'Paid') map[key].outstanding += amt
+    })
+    return map
+  }, [allInvoices])
+
   /* ── Project profitability matrix ── */
   const projMatrix = useMemo(() =>
     projects
@@ -352,17 +370,20 @@ export default function Analytics() {
         const cost   = parseFloat(f['Input cost so far'] || 0) + parseFloat(f['Total Overhead Cost'] || 0)
         const profit = parseFloat(f['Actual Profit'] || 0)
         const margin = parseFloat(f['Profit percentage'] || 0) * 100
+        // Match project name case-insensitively against invoice project field values
+        const projKey = (f['Project Name'] || '').toLowerCase().trim()
+        const invData = invByProject[projKey] || null
         return {
           id: r.id,
           name: `${(f['Client'] || '').split(' ')[0]}/${f['Project Name'] || ''}`,
           status: f['Project Status'],
           billed, cost, profit, margin,
-          invoiced: is?.by_project?.[f['Project Name']]?.raised || 0,
-          outstanding: is?.by_project?.[f['Project Name']]?.outstanding || 0,
+          invoiced:    invData?.raised      || 0,
+          outstanding: invData?.outstanding || 0,
         }
       })
       .sort((a, b) => b.billed - a.billed)
-  , [projects, is])
+  , [projects, invByProject])
 
   /* ── Smart insights ── */
   const insights = useMemo(() => {
