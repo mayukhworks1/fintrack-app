@@ -6,7 +6,7 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, User, Tag, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
-  Sun, Moon, LogOut
+  Sun, Moon, LogOut, Check, Loader2
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -16,11 +16,14 @@ import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
 
 /* ── Constants ── */
-const PROJECTS   = ['Innovine', 'PMS', 'Maitrimetal Workspace migration']
-const CATEGORIES = ['BUG Fixing', 'Development- Retainer', 'Phase 1.1', 'Phase 1.2', 'Change Request', 'ZOHO', 'Overtime', 'Phase 1.3', 'Project Management']
-const MILESTONES = ['Advance', 'Prehandover', 'Post go Live', 'Bug Fix', 'Presales']
-const RAISED_BY  = ['Mayukh', 'Hardik']
-const STATUSES   = ['Paid', 'Pending', 'Cancelled']
+// Fallback defaults used before picklists load from Teable
+const DEFAULT_PICKLISTS = {
+  Project:    ['Innovine', 'PMS', 'Maitrimetal Workspace migration'],
+  Category:   ['BUG Fixing', 'Development- Retainer', 'Phase 1.1', 'Phase 1.2', 'Change Request', 'ZOHO', 'Overtime', 'Phase 1.3', 'Project Management'],
+  Milestone:  ['Advance', 'Prehandover', 'Post go Live', 'Bug Fix', 'Presales'],
+  'Raised By': ['Mayukh', 'Hardik'],
+}
+const STATUSES = ['Paid', 'Pending', 'Cancelled']
 
 const EMPTY_FORM = {
   invoice_number: '', project: '', category: '', description: '',
@@ -179,6 +182,76 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
   )
 }
 
+/* Picklist select with inline "add new option" for Teable-backed fields */
+function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, placeholder = 'Select…' }) {
+  const [adding, setAdding]   = useState(false)
+  const [newVal, setNewVal]   = useState('')
+  const [saving, setSaving]   = useState(false)
+  const [addErr, setAddErr]   = useState('')
+  const inputRef              = useRef(null)
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus()
+  }, [adding])
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    const trimmed = newVal.trim()
+    if (!trimmed) return
+    setSaving(true); setAddErr('')
+    try {
+      const res = await api.webInvoices.picklists.add(fieldName, trimmed)
+      onOptionsUpdate(fieldName, res.options)
+      onChange(trimmed)
+      setAdding(false); setNewVal('')
+    } catch (err) {
+      setAddErr(err.message || 'Failed to add')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (adding) {
+    return (
+      <div className="space-y-1">
+        <form onSubmit={handleAdd} className="flex gap-1">
+          <input ref={inputRef}
+            className="input flex-1 text-xs" style={{ height: 32 }}
+            value={newVal} onChange={e => setNewVal(e.target.value)}
+            placeholder={`New ${fieldName.toLowerCase()}…`}
+            disabled={saving} />
+          <button type="submit" disabled={saving || !newVal.trim()} className="btn-primary flex-shrink-0"
+            style={{ padding: '0 0.5rem', height: 32 }} aria-label="Confirm add">
+            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+          </button>
+          <button type="button" onClick={() => { setAdding(false); setNewVal(''); setAddErr('') }}
+            className="btn-icon flex-shrink-0" style={{ height: 32, width: 32 }} aria-label="Cancel">
+            <X size={11} />
+          </button>
+        </form>
+        {addErr && <p className="text-[10px]" style={{ color: '#f87171' }}>{addErr}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      <div className="relative flex-1">
+        <select value={value} onChange={e => onChange(e.target.value)}
+          className="input appearance-none w-full" style={{ paddingRight: '1.75rem' }}>
+          <option value="">{placeholder}</option>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+      </div>
+      <button type="button" onClick={() => setAdding(true)} className="btn-icon flex-shrink-0"
+        title={`Add new ${fieldName}`} aria-label={`Add new ${fieldName}`}>
+        <Plus size={12} />
+      </button>
+    </div>
+  )
+}
+
 /* ── Detail panel ── */
 function InvoiceDetail({ invoice, onClose, onEdit }) {
   if (!invoice) return null
@@ -296,7 +369,7 @@ function FieldRow({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
+function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOptionsUpdate }) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]       = useState(EMPTY_FORM)
   const [saving,     setSaving]     = useState(false)
@@ -389,18 +462,22 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Project">
-              <SelectInput value={form.project} onChange={set('project')} options={PROJECTS} placeholder="Select project…" />
+              <PicklistSelect fieldName="Project" value={form.project} onChange={set('project')}
+                options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select project…" />
             </FieldRow>
             <FieldRow label="Category">
-              <SelectInput value={form.category} onChange={set('category')} options={CATEGORIES} placeholder="Select…" />
+              <PicklistSelect fieldName="Category" value={form.category} onChange={set('category')}
+                options={picklists?.Category || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
             </FieldRow>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FieldRow label="Milestone">
-              <SelectInput value={form.milestone} onChange={set('milestone')} options={MILESTONES} placeholder="Select…" />
+              <PicklistSelect fieldName="Milestone" value={form.milestone} onChange={set('milestone')}
+                options={picklists?.Milestone || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
             </FieldRow>
             <FieldRow label="Raised By">
-              <SelectInput value={form.raised_by} onChange={set('raised_by')} options={RAISED_BY} placeholder="Select…" />
+              <PicklistSelect fieldName="Raised By" value={form.raised_by} onChange={set('raised_by')}
+                options={picklists?.['Raised By'] || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…" />
             </FieldRow>
           </div>
           <FieldRow label="Description">
@@ -491,6 +568,22 @@ export default function WebInvoices() {
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer,         setDrawer]         = useState(null)
+  const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
+
+  useEffect(() => {
+    api.webInvoices.picklists.get()
+      .then(data => {
+        setPicklists(prev => ({
+          ...prev,
+          ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v.options])),
+        }))
+      })
+      .catch(() => {})  // keep fallback defaults on error
+  }, [])
+
+  function handleOptionsUpdate(fieldName, newOptions) {
+    setPicklists(prev => ({ ...prev, [fieldName]: newOptions }))
+  }
 
   const fetchSummary = useCallback(() => api.webInvoices.summary(), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
@@ -692,7 +785,7 @@ export default function WebInvoices() {
                   <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
                     className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 140, paddingRight: '1.5rem' }}>
                     <option value="">All projects</option>
-                    {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    {(picklists.Project || []).map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 </div>
@@ -701,7 +794,7 @@ export default function WebInvoices() {
                   <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
                     className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 160, paddingRight: '1.5rem' }}>
                     <option value="">All categories</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {(picklists.Category || []).map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 </div>
@@ -710,7 +803,7 @@ export default function WebInvoices() {
                   <select value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}
                     className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 130, paddingRight: '1.5rem' }}>
                     <option value="">Anyone</option>
-                    {RAISED_BY.map(r => <option key={r} value={r}>{r}</option>)}
+                    {(picklists['Raised By'] || []).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 </div>
@@ -871,6 +964,8 @@ export default function WebInvoices() {
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
+          picklists={picklists}
+          onOptionsUpdate={handleOptionsUpdate}
         />,
         document.body
       )}

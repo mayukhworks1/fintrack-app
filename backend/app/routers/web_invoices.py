@@ -11,6 +11,10 @@ from .deps import require_web
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
 
+class AddOptionRequest(BaseModel):
+    option: str
+
+
 class WebInvoiceFields(BaseModel):
     invoice_number:  Optional[str]   = None
     project:         Optional[str]   = None
@@ -45,6 +49,28 @@ class WebInvoiceFields(BaseModel):
             "Next followup":   self.next_followup,
         }
         return {k: v for k, v in m.items() if v is not None}
+
+
+@router.get("/picklists")
+async def get_picklists(_role: str = Depends(require_web)):
+    """Return current single-select options for all editable picklist fields."""
+    try:
+        return await WebInvoiceService().get_picklists()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/picklists/{field_name}")
+async def add_picklist_option(
+    field_name: str, body: AddOptionRequest, _role: str = Depends(require_web)
+):
+    """Append a new option to a single-select field and return updated list."""
+    try:
+        return await WebInvoiceService().add_picklist_option(field_name, body.option.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/summary")

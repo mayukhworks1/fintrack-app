@@ -178,11 +178,17 @@ export const api = {
       Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
       return request(`/api/web-invoices?${q}`)
     },
-    summary: ()         => request('/api/web-invoices/summary'),
-    get:     (id)       => request(`/api/web-invoices/${id}`),
-    create:  (data)     => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
-    update:  (id, data) => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
-    delete:  (id)       => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
+    summary:  ()          => request('/api/web-invoices/summary'),
+    get:      (id)        => request(`/api/web-invoices/${id}`),
+    create:   (data)      => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
+    update:   (id, data)  => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+    delete:   (id)        => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
+    picklists: {
+      get:    ()                   => request('/api/web-invoices/picklists'),
+      add:    (fieldName, option)  => request(`/api/web-invoices/picklists/${encodeURIComponent(fieldName)}`, {
+        method: 'POST', body: JSON.stringify({ option }),
+      }),
+    },
   },
   health: () => request('/health', {}, 0),
   auth: {

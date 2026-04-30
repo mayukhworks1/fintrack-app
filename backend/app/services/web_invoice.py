@@ -59,6 +59,64 @@ class WebInvoiceService:
     def _record_url(self):
         return f"{self.base_url}/api/table/{self.table_id}/record"
 
+    @property
+    def _field_url(self):
+        return f"{self.base_url}/api/table/{self.table_id}/field"
+
+    # ── Picklist (single-select field options) ────────────────────────────
+    # Which fields are user-editable select fields (not Payment Status which is fixed)
+    PICKLIST_FIELDS = ["Project", "Category", "Milestone", "Raised By"]
+
+    async def get_picklists(self) -> dict:
+        """Fetch current options for all single-select fields from Teable."""
+        async def _load():
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.get(self._field_url, headers=self._headers)
+                res.raise_for_status()
+                fields = res.json()
+
+            result = {}
+            for field in fields:
+                name = field.get("name", "")
+                if name in self.PICKLIST_FIELDS and field.get("type") == "singleSelect":
+                    choices = field.get("options", {}).get("choices", [])
+                    result[name] = {
+                        "field_id": field.get("id"),
+                        "options": [c["name"] for c in choices],
+                        # Preserve full choice objects (id+name) needed for PATCH
+                        "_choices": choices,
+                    }
+            return result
+
+        return await cache.get_or_set("webinv:picklists", ttl=60, loader=_load)
+
+    async def add_picklist_option(self, field_name: str, new_option: str) -> dict:
+        """Append a new choice to a single-select field in Teable."""
+        picklists = await self.get_picklists()
+        if field_name not in picklists:
+            raise ValueError(f"Unknown picklist field: {field_name}")
+
+        meta = picklists[field_name]
+        field_id = meta["field_id"]
+
+        # Preserve existing choices (with their Teable IDs) and append the new one
+        existing = meta["_choices"]
+        if new_option in [c["name"] for c in existing]:
+            return {"options": [c["name"] for c in existing]}  # already exists
+
+        updated_choices = existing + [{"name": new_option}]
+        url = f"{self._field_url}/{field_id}"
+        body = {"options": {"choices": updated_choices}}
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.patch(url, json=body, headers=self._headers)
+            res.raise_for_status()
+
+        # Bust picklist cache so next fetch gets fresh data
+        cache.bust(prefix="webinv:picklists")
+        updated = await self.get_picklists()
+        return {"options": updated.get(field_name, {}).get("options", [])}
+
     async def list_invoices(
         self,
         status: Optional[str] = None,
