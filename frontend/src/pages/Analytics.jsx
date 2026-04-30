@@ -343,7 +343,7 @@ export default function Analytics() {
   , [filtered])
 
   /* ── Per-project invoice totals built from raw invoice records.
-        Uses normalised lowercase+trim keys so "PMS" matches "Pms" etc.
+        Keys are lowercase+trimmed invoice Project field values.
         Excludes Cancelled invoices; outstanding = non-Paid only. ── */
   const invByProject = useMemo(() => {
     const map = {}
@@ -360,6 +360,25 @@ export default function Analytics() {
     return map
   }, [allInvoices])
 
+  /* Resolve invoice data for a Projects-table row using a two-pass lookup:
+     1. Exact normalised match   — handles "PMS" ↔ "Pms"
+     2. Client-name prefix match — handles cases where the invoice project
+        name starts with the client's first word but differs from the Projects
+        table name (e.g. Projects: Client="Maitrimetal", Name="ZOHO" but
+        invoice Project="Maitrimetal Workspace migration"). Only fires when
+        there is exactly ONE unambiguous match to avoid cross-project bleed. */
+  const resolveInvData = useCallback((projectName, clientName) => {
+    const norm = s => (s || '').toLowerCase().trim()
+    // 1. Direct match
+    const direct = invByProject[norm(projectName)]
+    if (direct) return direct
+    // 2. Client-name prefix fallback
+    const clientPrefix = norm(clientName).split(' ')[0]
+    if (!clientPrefix) return null
+    const hits = Object.entries(invByProject).filter(([k]) => k.startsWith(clientPrefix))
+    return hits.length === 1 ? hits[0][1] : null
+  }, [invByProject])
+
   /* ── Project profitability matrix ── */
   const projMatrix = useMemo(() =>
     projects
@@ -370,9 +389,7 @@ export default function Analytics() {
         const cost   = parseFloat(f['Input cost so far'] || 0) + parseFloat(f['Total Overhead Cost'] || 0)
         const profit = parseFloat(f['Actual Profit'] || 0)
         const margin = parseFloat(f['Profit percentage'] || 0) * 100
-        // Match project name case-insensitively against invoice project field values
-        const projKey = (f['Project Name'] || '').toLowerCase().trim()
-        const invData = invByProject[projKey] || null
+        const invData = resolveInvData(f['Project Name'], f['Client'])
         return {
           id: r.id,
           name: `${(f['Client'] || '').split(' ')[0]}/${f['Project Name'] || ''}`,
@@ -383,7 +400,7 @@ export default function Analytics() {
         }
       })
       .sort((a, b) => b.billed - a.billed)
-  , [projects, invByProject])
+  , [projects, resolveInvData])
 
   /* ── Smart insights ── */
   const insights = useMemo(() => {
