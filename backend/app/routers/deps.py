@@ -31,10 +31,20 @@ def require_auth(token: str = Depends(_get_token)) -> str:
 
 
 def require_editor(role: str = Depends(require_auth)) -> str:
-    """Requires a valid editor token. Raises 403 for viewer tokens."""
+    """Requires a valid editor token. Raises 403 for viewer/web tokens."""
     if role != "editor":
         raise HTTPException(
             status_code=403,
             detail="This action requires editor access",
+        )
+    return role
+
+
+def require_web(role: str = Depends(require_auth)) -> str:
+    """Requires a web token. Only the web role can access web invoice routes."""
+    if role != "web":
+        raise HTTPException(
+            status_code=403,
+            detail="Access restricted to web invoice module",
         )
     return role

@@ -14,6 +14,7 @@ const Invoices      = lazy(() => import('./pages/Invoices'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
 const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
 const Report        = lazy(() => import('./pages/Report'))
+const WebInvoices   = lazy(() => import('./pages/WebInvoices'))
 
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
@@ -25,7 +26,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { status } = useAuth()
+  const { status, isWeb } = useAuth()
 
   if (status === 'loading') {
     return (
@@ -36,6 +37,17 @@ export default function App() {
   }
 
   if (status !== 'authed') return <Login />
+
+  // Web role: isolated experience — only the web invoice tracker, no other routes
+  if (isWeb) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <WebInvoices />
+        </Suspense>
+      </ErrorBoundary>
+    )
+  }
 
   return (
     <Layout>

@@ -172,6 +172,18 @@ export const api = {
     update:  (id, data) => request(`/api/invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
   },
+  webInvoices: {
+    list:    (params = {}) => {
+      const q = new URLSearchParams()
+      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/web-invoices?${q}`)
+    },
+    summary: ()         => request('/api/web-invoices/summary'),
+    get:     (id)       => request(`/api/web-invoices/${id}`),
+    create:  (data)     => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
+    update:  (id, data) => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+    delete:  (id)       => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
+  },
   health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.

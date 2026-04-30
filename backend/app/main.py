@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .routers import projects, ai, auth, invoices
+from .routers import projects, ai, auth, invoices, web_invoices
 from .utils.cache import cache
 
 logger = logging.getLogger("fintrack")
@@ -44,6 +44,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(invoices.router)
 app.include_router(ai.router)
+app.include_router(web_invoices.router)
 
 
 # ── Request ID + access log ──────────────────────────────────────────

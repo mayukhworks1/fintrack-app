@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # View-only password — grants read access, no create/edit/delete.
     # Override via APP_VIEW_PASSWORD env var / HF Space secret.
     app_view_password: str = "tw@2001"
+    # Web invoice module password — isolated role, sees only web invoice tracker.
+    # Override via APP_WEB_PASSWORD env var / HF Space secret.
+    app_web_password: str = "Theworks@2026"
+    # Web invoice table ID (different from the internal invoice table).
+    teable_web_invoice_table_id: str = "tblT6iQNKe8CfAUN2iR"
     # Signing key for session tokens. Override via APP_SECRET env var in prod.
     app_secret: str = "fintrack-dev-secret-change-me"
     # How long a login token stays valid (seconds). Default 7 days.

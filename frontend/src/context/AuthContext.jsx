@@ -75,6 +75,7 @@ export function AuthProvider({ children }) {
       status,
       role,
       isEditor: role === 'editor',
+      isWeb:    role === 'web',
       login,
       logout,
     }}>
