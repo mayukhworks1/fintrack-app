@@ -676,12 +676,22 @@ export default function Invoices() {
     return [...grouped.entries()].map(([project, items]) => {
       const sorted = sortByRaisedDateDesc(items)
       const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
-      const monthRecord = sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
-      const recordByMonth = Object.fromEntries(
-        sorted
-          .map(r => [monthKey(r.fields?.['Raised Date']), r])
-          .filter(([k]) => Boolean(k))
-      )
+      // Build recordByMonth preferring active (non-cancelled) records when a month
+      // has multiple invoices (e.g. original cancelled + re-raised paid replacement).
+      const recordByMonth = {}
+      for (const r of sorted) {
+        const key = monthKey(r.fields?.['Raised Date'])
+        if (!key) continue
+        const existing = recordByMonth[key]
+        const thisCancelled = r.fields?.['Payment Status'] === 'Cancelled'
+        if (!existing || (existing.fields?.['Payment Status'] === 'Cancelled' && !thisCancelled)) {
+          recordByMonth[key] = r
+        }
+      }
+      // For the selected month, prefer the active record over a cancelled one
+      const monthRecord =
+        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth && r.fields?.['Payment Status'] !== 'Cancelled') ||
+        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
       const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
       const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
       const monthStatus = !monthRecord
