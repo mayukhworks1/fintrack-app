@@ -85,10 +85,30 @@ class WebInvoiceService:
                         "options": [c["name"] for c in choices],
                         # Preserve full choice objects (id+name) needed for PATCH
                         "_choices": choices,
+                        "_field": field,
                     }
             return result
 
         return await cache.get_or_set("webinv:picklists", ttl=60, loader=_load)
+
+    def _field_convert_payload(self, field: dict, updated_choices: list[dict]) -> dict:
+        payload = {
+            "type": field["type"],
+            "name": field["name"],
+            "options": {
+                **(field.get("options") or {}),
+                "choices": updated_choices,
+            },
+        }
+
+        # Teable's convert endpoint expects the full mutable config where present.
+        for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
+            if key in field:
+                payload[key] = field.get(key)
+        for key in ("unique", "notNull", "isLookup", "isConditionalLookup"):
+            if key in field:
+                payload[key] = bool(field.get(key))
+        return payload
 
     async def add_picklist_option(self, field_name: str, new_option: str) -> dict:
         """Append a new choice to a single-select field in Teable."""
@@ -98,18 +118,19 @@ class WebInvoiceService:
 
         meta = picklists[field_name]
         field_id = meta["field_id"]
+        field = meta["_field"]
 
-        # Preserve existing choices (with their Teable IDs) and append the new one
+        # Preserve existing choices (with their Teable IDs/colors) and append the new one
         existing = meta["_choices"]
         if new_option in [c["name"] for c in existing]:
             return {"options": [c["name"] for c in existing]}  # already exists
 
         updated_choices = existing + [{"name": new_option}]
-        url = f"{self._field_url}/{field_id}"
-        body = {"options": {"choices": updated_choices}}
+        url = f"{self._field_url}/{field_id}/convert"
+        body = self._field_convert_payload(field, updated_choices)
 
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.patch(url, json=body, headers=self._headers)
+            res = await client.put(url, json=body, headers=self._headers)
             res.raise_for_status()
 
         # Bust picklist cache so next fetch gets fresh data
