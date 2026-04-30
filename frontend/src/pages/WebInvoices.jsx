@@ -6,7 +6,7 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, User, Tag, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
-  Sun, Moon, LogOut, Check, Loader2
+  Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   milestone: '', raised_by: '', raised_date: '', cleared_date: '',
   amount_raised: '', amount_with_tax: '', amount_received: '',
   payment_status: 'Pending', remark: '', next_followup: '',
+  reference: [], invoice_pdf: [],
 }
 
 const KPI_PALETTE = [
@@ -252,6 +253,115 @@ function PicklistSelect({ fieldName, value, onChange, options, onOptionsUpdate, 
   )
 }
 
+/* ── Attachment upload field (for Reference + Invoice PDF in form drawer) ── */
+function AttachmentUploadField({ label, fieldKey, value, onChange }) {
+  const [uploading,  setUploading]  = useState(false)
+  const [uploadErr,  setUploadErr]  = useState('')
+  const [dragOver,   setDragOver]   = useState(false)
+  const fileInputRef = useRef(null)
+  const attachments  = Array.isArray(value) ? value : []
+
+  async function processFiles(files) {
+    if (!files?.length) return
+    setUploading(true); setUploadErr('')
+    try {
+      const uploaded = []
+      for (const file of files) {
+        const result = await api.webInvoices.upload(file)
+        uploaded.push(result)
+      }
+      onChange([...attachments, ...uploaded])
+    } catch (e) {
+      setUploadErr(e.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function onDrop(e) {
+    e.preventDefault(); setDragOver(false)
+    processFiles(Array.from(e.dataTransfer.files))
+  }
+
+  function removeAt(i) {
+    onChange(attachments.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div>
+      <label className="label flex items-center gap-1.5">
+        <Paperclip size={10} style={{ color: 'var(--text-3)' }} />{label}
+      </label>
+
+      {/* Existing / just-uploaded files */}
+      {attachments.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {attachments.map((a, i) => {
+            const norm = { name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || '' }
+            return (
+              <div key={i} className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                {isPdf(norm)
+                  ? <FileText size={13} className="flex-shrink-0" style={{ color: '#f87171' }} />
+                  : isImage(norm)
+                    ? <ImageIcon size={13} className="flex-shrink-0" style={{ color: '#60a5fa' }} />
+                    : <Paperclip size={13} className="flex-shrink-0" style={{ color: 'var(--text-3)' }} />}
+                <span className="flex-1 truncate text-xs" style={{ color: 'var(--text-2)' }}>{norm.name}</span>
+                {norm.url && (
+                  <a href={norm.url} target="_blank" rel="noopener noreferrer" title="Open"
+                    className="flex-shrink-0 btn-icon" style={{ width: 22, height: 22 }}
+                    onClick={e => e.stopPropagation()}>
+                    <ExternalLink size={10} />
+                  </a>
+                )}
+                <button type="button" onClick={() => removeAt(i)} className="flex-shrink-0 btn-icon"
+                  style={{ width: 22, height: 22 }} aria-label="Remove attachment">
+                  <X size={10} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Drop zone / upload button */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        role="button" tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
+        className="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed cursor-pointer transition-all py-4 select-none"
+        style={{
+          borderColor: dragOver ? 'var(--accent)' : 'var(--glass-border)',
+          background: dragOver ? 'rgba(99,102,241,0.06)' : 'var(--glass-bg)',
+          opacity: uploading ? 0.7 : 1,
+        }}
+        aria-label={`Upload ${label}`}>
+        {uploading
+          ? <><Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Uploading…</span></>
+          : <><Upload size={16} style={{ color: 'var(--text-3)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                Click or drag to upload · PDF, images
+              </span></>}
+        <input ref={fileInputRef} type="file" multiple className="hidden"
+          id={`upload-${fieldKey}`}
+          accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+          onChange={e => processFiles(Array.from(e.target.files || []))} />
+      </div>
+
+      {uploadErr && (
+        <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#f87171' }}>
+          <AlertTriangle size={10} />{uploadErr}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Detail panel ── */
 function InvoiceDetail({ invoice, onClose, onEdit }) {
   if (!invoice) return null
@@ -395,6 +505,8 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
       payment_status:  f['Payment Status']  || 'Pending',
       remark:          f['Remark']          || '',
       next_followup:   f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
+      reference:       Array.isArray(f['Reference'])   ? f['Reference']   : [],
+      invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
     })
   }, [invoice])
 
@@ -498,6 +610,21 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted, picklists, onOpti
           <FieldRow label="Remark">
             <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
           </FieldRow>
+
+          <div className="grid grid-cols-2 gap-3">
+            <AttachmentUploadField
+              label="Invoice PDF"
+              fieldKey="invoice_pdf"
+              value={form.invoice_pdf}
+              onChange={v => setForm(f => ({ ...f, invoice_pdf: v }))}
+            />
+            <AttachmentUploadField
+              label="Payment Reference"
+              fieldKey="reference"
+              value={form.reference}
+              onChange={v => setForm(f => ({ ...f, reference: v }))}
+            />
+          </div>
         </div>
 
         <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderTop: '1px solid var(--glass-border)' }}>

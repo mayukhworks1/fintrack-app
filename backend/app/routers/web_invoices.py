@@ -2,8 +2,8 @@
 Web Invoice Tracker router — /api/web-invoices
 All routes require the "web" role. Editor/viewer tokens get 403.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from typing import Optional, List, Any
 from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
 from .deps import require_web
@@ -16,20 +16,22 @@ class AddOptionRequest(BaseModel):
 
 
 class WebInvoiceFields(BaseModel):
-    invoice_number:  Optional[str]   = None
-    project:         Optional[str]   = None
-    category:        Optional[str]   = None
-    description:     Optional[str]   = None
-    milestone:       Optional[str]   = None
-    raised_by:       Optional[str]   = None
-    raised_date:     Optional[str]   = None
-    cleared_date:    Optional[str]   = None
-    amount_raised:   Optional[float] = None
-    amount_with_tax: Optional[float] = None
-    amount_received: Optional[float] = None
-    payment_status:  Optional[str]   = None
-    remark:          Optional[str]   = None
-    next_followup:   Optional[str]   = None
+    invoice_number:  Optional[str]        = None
+    project:         Optional[str]        = None
+    category:        Optional[str]        = None
+    description:     Optional[str]        = None
+    milestone:       Optional[str]        = None
+    raised_by:       Optional[str]        = None
+    raised_date:     Optional[str]        = None
+    cleared_date:    Optional[str]        = None
+    amount_raised:   Optional[float]      = None
+    amount_with_tax: Optional[float]      = None
+    amount_received: Optional[float]      = None
+    payment_status:  Optional[str]        = None
+    remark:          Optional[str]        = None
+    next_followup:   Optional[str]        = None
+    reference:       Optional[List[Any]]  = None  # attachment objects from Teable
+    invoice_pdf:     Optional[List[Any]]  = None  # attachment objects from Teable
 
     def to_teable_fields(self) -> dict:
         m = {
@@ -47,7 +49,10 @@ class WebInvoiceFields(BaseModel):
             "Payment Status":  self.payment_status,
             "Remark":          self.remark,
             "Next followup":   self.next_followup,
+            "Reference":       self.reference,
+            "Invoice PDF":     self.invoice_pdf,
         }
+        # Include lists even if empty (allows clearing attachments); exclude only None
         return {k: v for k, v in m.items() if v is not None}
 
 
@@ -69,6 +74,30 @@ async def add_picklist_option(
         return await WebInvoiceService().add_picklist_option(field_name, body.option.strip())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload")
+async def upload_attachment(
+    file: UploadFile = File(...),
+    _role: str = Depends(require_web),
+):
+    """Proxy a file upload to Teable and return the attachment token object."""
+    import httpx
+    service = WebInvoiceService()
+    try:
+        content = await file.read()
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                f"{service.base_url}/api/attachments/upload",
+                headers={"Authorization": f"Bearer {service.token}"},
+                files={"file": (file.filename, content, file.content_type or "application/octet-stream")},
+            )
+            res.raise_for_status()
+            return res.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

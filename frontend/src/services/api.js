@@ -173,6 +173,26 @@ export const api = {
     delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
   },
   webInvoices: {
+    // File upload bypasses the standard request() so the browser sets the
+    // multipart/form-data Content-Type with the correct boundary automatically.
+    upload: (file) => {
+      const form = new FormData()
+      form.append('file', file)
+      const token = getAuthToken()
+      return fetch(`${BASE_URL}/api/web-invoices/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }))
+          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          e.status = res.status
+          throw e
+        }
+        return res.json()
+      })
+    },
     list:    (params = {}) => {
       const q = new URLSearchParams()
       Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
