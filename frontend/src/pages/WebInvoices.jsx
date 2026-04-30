@@ -869,6 +869,7 @@ function WebTopBar() {
 export default function WebInvoices() {
   const toast = useToast()
   const [workspace,      setWorkspace]      = useState('invoices')
+  const [selectedRetainer, setSelectedRetainer] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -1049,6 +1050,18 @@ export default function WebInvoices() {
       }
     }).sort((a, b) => a.project.localeCompare(b.project))
   }, [allRecords, retainerMonth])
+
+  useEffect(() => {
+    if (!retainerGroups.length) {
+      setSelectedRetainer('')
+      return
+    }
+    if (!selectedRetainer || !retainerGroups.some(g => g.project === selectedRetainer)) {
+      setSelectedRetainer(retainerGroups[0].project)
+    }
+  }, [retainerGroups, selectedRetainer])
+
+  const selectedRetainerGroup = retainerGroups.find(g => g.project === selectedRetainer) || null
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -1289,109 +1302,201 @@ export default function WebInvoices() {
                   </p>
                 </div>
               ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {retainerGroups.map(group => {
-                  const monthRec = group.monthRecord?.fields || null
-                  const missing = !monthRec
-                  const paused = group.monthStatus === 'Paused'
-                  const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
-                  const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
-                  return (
-                    <div key={group.project} className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+              <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+                <div className="space-y-3">
+                  {retainerGroups.map(group => (
+                    <button
+                      key={group.project}
+                      type="button"
+                      onClick={() => setSelectedRetainer(group.project)}
+                      className="w-full text-left rounded-xl p-4 transition-all"
+                      style={{
+                        background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
+                        border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
+                        boxShadow: selectedRetainer === group.project ? '0 0 0 2px rgba(37,99,235,0.10)' : 'none',
+                      }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
                           <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                            Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''}
+                            {fmt(group.amount)} template · next due {monthLabel(group.nextDueMonth)}
                           </p>
                         </div>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                          style={{
-                            background: missing ? 'var(--fin-warn-bg)' : paused ? 'var(--fin-neg-bg)' : 'var(--fin-pos-bg)',
-                            color: missing ? 'var(--fin-warning)' : paused ? 'var(--fin-negative)' : 'var(--fin-positive)',
-                          }}>
-                          {group.monthStatus}
-                        </span>
+                        <MonthStatusPill status={group.monthStatus} active={selectedRetainer === group.project} />
                       </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="label">Tracking month</p>
-                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthLabel(retainerMonth)}</p>
-                        </div>
-                        <div>
-                          <p className="label">Next due</p>
-                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthLabel(group.nextDueMonth)}</p>
-                        </div>
+                      <div className="grid grid-cols-2 gap-2 mt-3">
                         <div>
                           <p className="label">Current month</p>
                           <p className="text-xs font-medium" style={{ color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
-                            {group.currentMonthRaised ? 'Raised / planned' : 'Not raised yet'}
+                            {group.currentMonthRaised ? 'Raised / planned' : 'Missing'}
                           </p>
                         </div>
                         <div>
                           <p className="label">Raised by</p>
                           <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
                         </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedRetainerGroup && (() => {
+                  const group = selectedRetainerGroup
+                  const monthRec = group.monthRecord?.fields || null
+                  const missing = !monthRec
+                  const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
+                  const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
+                  return (
+                    <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div>
-                          <p className="label">Month invoice #</p>
-                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{monthRec?.['Invoice Number'] || 'Pending update'}</p>
+                          <p className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                            Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''} · Next due {monthLabel(group.nextDueMonth)}
+                          </p>
                         </div>
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <MonthStatusPill status={group.monthStatus} active />
+                          <span className="text-xs px-2 py-1 rounded-full"
+                            style={{
+                              background: group.currentMonthRaised ? 'var(--fin-pos-bg)' : 'var(--fin-warn-bg)',
+                              color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)',
+                              border: `1px solid ${group.currentMonthRaised ? 'var(--fin-pos-border)' : 'var(--fin-warn-border)'}`,
+                            }}>
+                            {group.currentMonthRaised ? 'Current month covered' : 'Current month not raised'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="card p-3">
+                          <p className="label">Tracking month</p>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{monthLabel(retainerMonth)}</p>
+                        </div>
+                        <div className="card p-3">
+                          <p className="label">Month invoice #</p>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{monthRec?.['Invoice Number'] || 'Pending update'}</p>
+                        </div>
+                        <div className="card p-3">
+                          <p className="label">Raised by</p>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
+                        </div>
+                        <div className="card p-3">
                           <p className="label">Month remark</p>
-                          <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{monthRec?.['Remark'] || '—'}</p>
+                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{monthRec?.['Remark'] || '—'}</p>
                         </div>
                       </div>
 
                       <div>
                         <p className="label mb-2">Month Timeline</p>
-                        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
                           {group.timeline.map(item => (
                             <button
                               key={item.key}
                               type="button"
                               onClick={() => setRetainerMonth(item.key)}
-                              className="rounded-xl p-2 text-left transition-all"
+                              className="rounded-xl p-3 text-left transition-all"
                               style={{
                                 background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
                                 border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
                                 boxShadow: item.active ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
                               }}>
-                              <p className="text-[10px] font-semibold mb-1" style={{ color: item.current ? 'var(--accent)' : 'var(--text-3)' }}>
-                                {item.label}
-                              </p>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
+                                  {item.label}
+                                </p>
+                                {item.current && <span className="text-[9px] font-bold" style={{ color: 'var(--accent)' }}>NOW</span>}
+                              </div>
                               <MonthStatusPill status={item.status} active={item.active} />
+                              <p className="text-[10px] mt-2 truncate" style={{ color: 'var(--text-3)' }}>
+                                {item.record?.fields?.['Invoice Number'] || 'No record'}
+                              </p>
                             </button>
                           ))}
                         </div>
                       </div>
 
+                      <div>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <p className="label mb-0">Monthly Records</p>
+                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                            Direct access to each visible month
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {group.timeline.map(item => {
+                            const rec = item.record
+                            const f = rec?.fields || {}
+                            const key = `${item.key}-${group.project}`
+                            return (
+                              <div key={key} className="rounded-xl p-3 flex items-center justify-between gap-3"
+                                style={{
+                                  background: item.active ? 'var(--accent-dim)' : 'var(--bg-base)',
+                                  border: `1px solid ${item.active ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                                }}>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.fullLabel}</p>
+                                    <MonthStatusPill status={item.status} active={item.active} />
+                                  </div>
+                                  <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                    {rec
+                                      ? `${f['Invoice Number'] || 'Invoice number pending'} · ${fmt(f['Amount Raised'])} · ${f['Remark'] || 'No remark'}`
+                                      : 'No record created for this month yet'}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 flex-shrink-0">
+                                  {rec ? (
+                                    <button onClick={() => openView(rec)}
+                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                      View
+                                    </button>
+                                  ) : item.key === retainerMonth ? (
+                                    <>
+                                      <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
+                                        className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                        {busyCreate ? 'Creating…' : 'Create'}
+                                      </button>
+                                      <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                        {busyPause ? 'Pausing…' : 'Pause'}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button onClick={() => setRetainerMonth(item.key)}
+                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                      Track month
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
                       {group.description && (
-                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{group.description}</p>
+                        <div className="rounded-xl p-3" style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
+                          <p className="label">Template Note</p>
+                          <p className="text-sm" style={{ color: 'var(--text-2)' }}>{group.description}</p>
+                        </div>
                       )}
 
-                      <div className="flex gap-2 flex-wrap">
-                        {missing ? (
-                          <>
-                            <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
-                              className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                              {busyCreate ? 'Creating…' : `Create ${monthLabel(retainerMonth)}`}
-                            </button>
-                            <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                              className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                              {busyPause ? 'Pausing…' : 'Pause month'}
-                            </button>
-                          </>
-                        ) : (
-                          <button onClick={() => openView(group.monthRecord)}
-                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                            View month entry
+                      {missing && (
+                        <div className="flex gap-2 flex-wrap">
+                          <button onClick={() => createRetainerMonth(group, 'create')} disabled={busyCreate || !!retainerActionBusy}
+                            className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                            {busyCreate ? 'Creating…' : `Create ${monthLabel(retainerMonth)}`}
                           </button>
-                        )}
-                      </div>
+                          <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                            {busyPause ? 'Pausing…' : 'Pause month'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )
-                })}
+                })()}
               </div>
               )}
             </section>
