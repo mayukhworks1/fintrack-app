@@ -229,7 +229,7 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   const palette = KPI_PALETTE[tone % KPI_PALETTE.length]
   const color = semantic === 'positive' ? 'var(--fin-positive)' : semantic === 'warning' ? 'var(--fin-warning)' : semantic === 'negative' ? 'var(--fin-negative)' : 'var(--text-1)'
   return (
-    <div className="card flex items-center gap-3 animate-scale-in">
+    <div className="card flex items-center gap-3 animate-scale-in hover:shadow-md transition-shadow">
       {Icon && (
         <div className="rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
@@ -744,6 +744,8 @@ function InvoiceDrawer({
       <aside className="relative ml-auto flex flex-col h-full overflow-hidden animate-slide-in"
         style={{ width: 'min(100vw,520px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
 
+        <div className="h-1 w-full flex-shrink-0 rounded-t-[inherit]"
+          style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-soft))' }} />
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--glass-border)' }}>
           <h2 className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>
             {isEdit ? `Edit · ${invoice.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
@@ -759,7 +761,7 @@ function InvoiceDrawer({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Invoice Number">
               <input className="input" value={form.invoice_number} onChange={setE('invoice_number')} placeholder="WM/25-26/001" />
             </FieldRow>
@@ -767,7 +769,7 @@ function InvoiceDrawer({
               <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
             </FieldRow>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Project">
               <PicklistSelect fieldName="Project" value={form.project} onChange={set('project')}
                 options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select project…"
@@ -803,7 +805,7 @@ function InvoiceDrawer({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Milestone">
               <PicklistSelect fieldName="Milestone" value={form.milestone} onChange={set('milestone')}
                 options={picklists?.Milestone || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
@@ -818,16 +820,16 @@ function InvoiceDrawer({
           <FieldRow label="Description">
             <textarea className="input resize-none" rows={2} value={form.description} onChange={setE('description')} placeholder="Brief description…" />
           </FieldRow>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Raised Date"><input type="date" className="input" value={form.raised_date} onChange={setE('raised_date')} /></FieldRow>
             <FieldRow label="Cleared Date"><input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} /></FieldRow>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FieldRow label="Raised (₹)"><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></FieldRow>
             <FieldRow label="With GST (₹)"><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></FieldRow>
             <FieldRow label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></FieldRow>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Next Followup"><input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} /></FieldRow>
           </div>
           <FieldRow label="Remark">
@@ -835,9 +837,10 @@ function InvoiceDrawer({
           </FieldRow>
 
           {paidSelected && (
-            <div className="rounded-xl p-3 text-xs"
-              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)', color: 'var(--text-2)' }}>
-              Paid invoices must include `Amount Received` and `Cleared Date`. It is also recommended to attach a payment reference screenshot before closing the entry.
+            <div className="rounded-xl p-3 text-xs flex items-start gap-2"
+              style={{ background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e' }}>
+              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+              <span>Paid invoices must include <strong>Amount Received</strong> and <strong>Cleared Date</strong>. Attach a payment reference screenshot before closing the entry.</span>
             </div>
           )}
 
@@ -848,7 +851,7 @@ function InvoiceDrawer({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <AttachmentUploadField
               label="Invoice PDF"
               fieldKey="invoice_pdf"
@@ -1264,7 +1267,7 @@ export default function WebInvoices() {
             </div>
           </div>
 
-          <div className="card flex items-center justify-between gap-4 flex-wrap" style={{ padding: '0.85rem 1rem' }}>
+          <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4" style={{ padding: '0.85rem 1rem' }}>
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
@@ -1317,7 +1320,7 @@ export default function WebInvoices() {
           </div>
 
           {/* KPIs */}
-          <section aria-label="Invoice metrics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
             <KpiCard tone={0} label="Total Raised"    value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
             <KpiCard tone={1} label="Incl. GST"       value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
             <KpiCard tone={2} label="Collected"       value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
@@ -1517,7 +1520,7 @@ export default function WebInvoices() {
                               key={item.key}
                               type="button"
                               onClick={() => setRetainerMonth(item.key)}
-                              className="rounded-xl p-3 text-left transition-all"
+                              className="min-w-0 rounded-xl p-3 text-left transition-all min-h-[72px]"
                               style={{
                                 background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
                                 border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
@@ -1652,7 +1655,7 @@ export default function WebInvoices() {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {projectSummaryCards.map(({ project, metrics }) => {
                   const active = projectFilter === project
                   return (
@@ -1720,6 +1723,13 @@ export default function WebInvoices() {
                 <Filter size={13} /><span className="text-xs">Filters</span>
                 {hasFilters && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />}
               </button>
+              {monthFilter && (
+                <button onClick={() => setMonthFilter('')}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                  {monthLabel(monthFilter)}<X size={10} />
+                </button>
+              )}
               {hasFilters && (
                 <button onClick={() => {
                   setStatusFilter('')
@@ -1741,7 +1751,7 @@ export default function WebInvoices() {
 
             {showFilters && (
               <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
-                style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)' }}>
                 <div className="relative">
                   <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
@@ -1845,9 +1855,13 @@ export default function WebInvoices() {
                   </div>
                 ))
               : records.length === 0
-                ? <div className="card text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
-                    No invoices found.{' '}
-                    <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline font-medium">Create one</button>
+                ? <div className="card flex flex-col items-center py-12 gap-3" style={{ color: 'var(--text-3)' }}>
+                    <Receipt size={32} style={{ opacity: 0.3 }} />
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
+                    <p className="text-xs text-center max-w-[240px]">Try adjusting your filters, or create a new invoice to get started.</p>
+                    <button onClick={openNew} className="btn-primary mt-2" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
+                      <Plus size={13} />Create invoice
+                    </button>
                   </div>
                 : records.map(r => {
                     const f = r.fields || {}
@@ -1915,9 +1929,14 @@ export default function WebInvoices() {
                   {loading && !listData
                     ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                     : records.length === 0
-                      ? <tr><td colSpan={12} className="px-4 py-14 text-center text-sm" style={{ color: 'var(--text-3)' }}>
-                          No invoices found.{' '}
-                          <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">Create one</button>
+                      ? <tr><td colSpan={12} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
+                          <div className="flex flex-col items-center gap-2">
+                            <Receipt size={28} style={{ opacity: 0.3 }} />
+                            <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
+                            <p className="text-xs">Adjust your filters or{' '}
+                              <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
+                            </p>
+                          </div>
                         </td></tr>
                       : records.map(r => {
                           const f = r.fields || {}
@@ -1926,7 +1945,9 @@ export default function WebInvoices() {
                           const pdfs = parseAttachments(f['Invoice PDF'])
                           const allFiles = [...refs, ...pdfs]
                           return (
-                            <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }} onClick={() => openView(r)}>
+                            <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }} onClick={() => openView(r)}
+                              onMouseEnter={e => e.currentTarget.style.borderLeft = '2px solid var(--accent)'}
+                              onMouseLeave={e => e.currentTarget.style.borderLeft = ''}>
                               <td className="tbl-cell"><span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span></td>

@@ -11,6 +11,7 @@ import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
@@ -39,6 +40,59 @@ const monthLabel = (key) => {
   const [year, month] = key.split('-')
   const d = new Date(Number(year), Number(month) - 1, 1)
   return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
+const shiftMonthKey = (key, delta) => {
+  const [year, month] = key.split('-').map(Number)
+  const d = new Date(year, month - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const shortMonthLabel = (key) => {
+  const [year, month] = key.split('-')
+  const d = new Date(Number(year), Number(month) - 1, 1)
+  return d.toLocaleDateString('en-IN', { month: 'short' })
+}
+
+const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
+const currentMonthKey = () => monthKey(new Date().toISOString())
+const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
+
+const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
+
+function parseIsoDate(value) {
+  const d = new Date(value || '')
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function sortByRaisedDateDesc(records = []) {
+  return [...records].sort((a, b) => {
+    const da = parseIsoDate(a.fields?.['Raised Date'])?.getTime() || 0
+    const db = parseIsoDate(b.fields?.['Raised Date'])?.getTime() || 0
+    return db - da
+  })
+}
+
+function MonthStatusPill({ status, active }) {
+  const map = {
+    Raised:  { bg: 'var(--fin-pos-bg)',  fg: 'var(--fin-positive)', border: 'var(--fin-pos-border)' },
+    Pending: { bg: 'var(--fin-warn-bg)', fg: 'var(--fin-warning)',  border: 'var(--fin-warn-border)' },
+    Paused:  { bg: 'var(--fin-neg-bg)',  fg: 'var(--fin-negative)', border: 'var(--fin-neg-border)' },
+    Missing: { bg: 'var(--accent-dim)',  fg: 'var(--accent)',       border: 'var(--accent-soft)' },
+  }
+  const m = map[status] || map.Missing
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{
+        background: m.bg,
+        color: m.fg,
+        border: `1px solid ${m.border}`,
+        boxShadow: active ? `0 0 0 2px ${m.border}` : 'none',
+      }}>
+      {status}
+    </span>
+  )
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -346,7 +400,7 @@ function Field({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
+function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]      = useState(EMPTY_FORM)
   const [saving,     setSaving]    = useState(false)
@@ -354,9 +408,15 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
   const [confirmDel, setConfirmDel]= useState(false)
   const [error,      setError]     = useState('')
   const paidSelected = form.payment_status === 'Paid'
+  const retainerCategoryOption = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+  const retainerSelected = isRetainerCategory(form.category)
 
   useEffect(() => {
-    if (!invoice) { setForm(EMPTY_FORM); return }
+    if (!invoice && !prefill) { setForm(EMPTY_FORM); return }
+    if (!invoice && prefill) {
+      setForm({ ...EMPTY_FORM, ...prefill })
+      return
+    }
     const f = invoice.fields || {}
     setForm({
       invoice_number:  f['Invoice Number']  || '',
@@ -374,7 +434,7 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
       remark:          f['Remark']          || '',
       next_followup:   f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
     })
-  }, [invoice])
+  }, [invoice, prefill])
 
   const set  = k => v   => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev  => setForm(f => ({ ...f, [k]: ev.target.value }))
@@ -455,6 +515,29 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
               <SelectInput value={form.category} onChange={set('category')} options={CATEGORIES} placeholder="Select…" />
             </Field>
           </div>
+          <div>
+            <label className="label">Billing Type</label>
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, category: CATEGORIES.find(c => !isRetainerCategory(c)) || '' }))}
+                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                style={!retainerSelected
+                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                  : { color: 'var(--text-3)' }}>
+                Project
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, category: retainerCategoryOption }))}
+                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                style={retainerSelected
+                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                  : { color: 'var(--text-3)' }}>
+                Retainer
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Milestone">
               <SelectInput value={form.milestone} onChange={set('milestone')} options={MILESTONES} placeholder="Select…" />
@@ -481,6 +564,21 @@ function InvoiceDrawer({ invoice, onClose, onSaved, onDeleted }) {
           <Field label="Remark">
             <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
           </Field>
+
+          {paidSelected && (
+            <div className="rounded-xl p-3 text-xs flex items-start gap-2"
+              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)', color: 'var(--text-2)' }}>
+              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--fin-warning)' }} />
+              Paid invoices must include Amount Received and Cleared Date. It is also recommended to attach a payment reference screenshot before closing the entry.
+            </div>
+          )}
+
+          {retainerSelected && (
+            <div className="rounded-xl p-3 text-xs"
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--text-2)' }}>
+              Retainer mode — put the retainer/client name in Project. The latest retainer row becomes the monthly template; invoice number can be filled later.
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
@@ -517,6 +615,12 @@ function SkeletonRow() {
 /* ── Main page ────────────────────────────────────────────────────────────── */
 export default function Invoices() {
   const { isEditor } = useAuth()
+  const toast = useToast()
+  const [workspace,       setWorkspace]       = useState('invoices')
+  const [selectedRetainer,setSelectedRetainer]= useState('')
+  const [retainerMonth,   setRetainerMonth]   = useState(currentMonthKey())
+  const [billingFilter,   setBillingFilter]   = useState('all')
+  const [retainerActionBusy, setRetainerActionBusy] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -557,10 +661,100 @@ export default function Invoices() {
     )].sort().reverse()
   ), [allRecords])
 
+  const retainerMonthOptions = useMemo(() => (
+    [...new Set([currentMonthKey(), ...monthOptions])].sort().reverse()
+  ), [monthOptions])
+
+  const retainerGroups = useMemo(() => {
+    const retainerRecords = allRecords.filter(r => isRetainerCategory(r.fields?.['Category']))
+    const grouped = new Map()
+    for (const record of retainerRecords) {
+      const project = String(record.fields?.['Project'] || '').trim() || 'Unnamed Retainer'
+      if (!grouped.has(project)) grouped.set(project, [])
+      grouped.get(project).push(record)
+    }
+    return [...grouped.entries()].map(([project, items]) => {
+      const sorted = sortByRaisedDateDesc(items)
+      const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
+      const monthRecord = sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
+      const recordByMonth = Object.fromEntries(
+        sorted
+          .map(r => [monthKey(r.fields?.['Raised Date']), r])
+          .filter(([k]) => Boolean(k))
+      )
+      const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
+      const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
+      const monthStatus = !monthRecord
+        ? 'Missing'
+        : monthRecord.fields?.['Payment Status'] === 'Cancelled'
+          ? 'Paused'
+          : monthRecord.fields?.['Payment Status'] || 'Pending'
+      const timelineMonths = Array.from({ length: 8 }, (_, i) => shiftMonthKey(currentMonthKey(), i - 3))
+      const timeline = timelineMonths.map((key) => {
+        const rec = recordByMonth[key]
+        const recStatus = !rec
+          ? 'Missing'
+          : rec.fields?.['Payment Status'] === 'Cancelled'
+            ? 'Paused'
+            : rec.fields?.['Payment Status'] === 'Paid'
+              ? 'Raised'
+              : 'Pending'
+        return {
+          key,
+          label: shortMonthLabel(key),
+          fullLabel: monthLabel(key),
+          record: rec,
+          status: recStatus,
+          active: key === retainerMonth,
+          current: key === currentMonthKey(),
+        }
+      })
+      const currentTimeline = timeline.find(t => t.current)
+      const currentMonthRaised = currentTimeline ? currentTimeline.status !== 'Missing' : false
+      let nextDueMonth = currentMonthKey()
+      for (let i = 0; i < 12; i++) {
+        const key = shiftMonthKey(currentMonthKey(), i)
+        const rec = recordByMonth[key]
+        const paused = rec?.fields?.['Payment Status'] === 'Cancelled'
+        if (!rec || paused) {
+          nextDueMonth = paused ? shiftMonthKey(key, 1) : key
+          break
+        }
+        nextDueMonth = shiftMonthKey(key, 1)
+      }
+      return {
+        project,
+        records: sorted,
+        latestActive,
+        recordByMonth,
+        monthRecord,
+        amount,
+        withTax,
+        monthStatus,
+        timeline,
+        currentMonthRaised,
+        nextDueMonth,
+        raisedBy: latestActive?.fields?.['Raised By'] || '',
+        description: latestActive?.fields?.['Description'] || '',
+      }
+    }).sort((a, b) => a.project.localeCompare(b.project))
+  }, [allRecords, retainerMonth])
+
+  useEffect(() => {
+    if (!retainerGroups.length) { setSelectedRetainer(''); return }
+    if (!selectedRetainer || !retainerGroups.some(g => g.project === selectedRetainer)) {
+      setSelectedRetainer(retainerGroups[0].project)
+    }
+  }, [retainerGroups, selectedRetainer])
+
+  const selectedRetainerGroup = retainerGroups.find(g => g.project === selectedRetainer) || null
+
   const todayIso = new Date().toISOString().slice(0, 10)
 
   const records = allRecords.filter(r => {
     const f = r.fields || {}
+    if (billingFilter === 'retainer' && !isRetainerCategory(f['Category'])) return false
+    if (billingFilter === 'project' && isRetainerCategory(f['Category'])) return false
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
@@ -589,7 +783,93 @@ export default function Invoices() {
 
   const s = summary
   const overdue = s?.overdue_invoices || []
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+
+  const projectSummaryCards = useMemo(() => {
+    const entries = Object.entries(s?.by_project || {})
+      .sort(([, a], [, b]) => (b?.raised || 0) - (a?.raised || 0))
+      .slice(0, 8)
+    return entries.map(([project, metrics]) => ({ project, metrics }))
+  }, [s])
+
+  async function createRetainerMonth(group, mode) {
+    if (!group?.latestActive) {
+      toast('No existing retainer template found for this project', 'warning')
+      return
+    }
+    const isPause = mode === 'pause'
+    const monthName = monthLabel(retainerMonth)
+    const pauseReason = isPause
+      ? window.prompt(`Why is ${group.project} paused for ${monthName}?`, '')
+      : null
+    if (isPause && pauseReason == null) return
+    const key = `${mode}:${group.project}:${retainerMonth}`
+    setRetainerActionBusy(key)
+    try {
+      const base = group.latestActive.fields || {}
+      const retainerCat = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+      const payload = {
+        invoice_number: '',
+        project: group.project,
+        category: base['Category'] || retainerCat,
+        description: isPause
+          ? `Retainer paused for ${monthName}`
+          : `Recurring retainer invoice for ${monthName}. Update invoice number before sharing.`,
+        milestone: base['Milestone'] || null,
+        raised_by: base['Raised By'] || null,
+        raised_date: firstDayIso(retainerMonth),
+        amount_raised: isPause ? 0 : Number(base['Amount Raised'] || 0),
+        amount_with_tax: isPause ? 0 : Number(base['Amount with Tax'] || 0),
+        amount_received: isPause ? 0 : undefined,
+        payment_status: isPause ? 'Cancelled' : 'Pending',
+        remark: isPause
+          ? `Paused for ${monthName}. Reason: ${(pauseReason || 'Not specified').trim()}`
+          : `Recurring retainer for ${monthName}. Invoice number to be updated.`,
+      }
+      await api.invoices.create(payload)
+      toast(isPause ? `Paused ${group.project} for ${monthName}` : `Created ${monthName} retainer for ${group.project}`, 'success')
+      refresh()
+    } catch (e) {
+      toast(e.message || 'Failed to create retainer month', 'error')
+    } finally {
+      setRetainerActionBusy('')
+    }
+  }
+
+  function openInvoiceRequestForm(group, monthKeyValue) {
+    const label = monthLabel(monthKeyValue)
+    const confirmed = window.confirm(
+      `Open the external invoice request form for ${group.project} (${label})?`
+    )
+    if (!confirmed) return
+    window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')
+  }
+
+  function openRetainerRecordForm(group, monthKeyValue) {
+    const base = group?.latestActive?.fields || {}
+    const label = monthLabel(monthKeyValue)
+    const retainerCat = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+    setDrawer({
+      mode: 'new',
+      invoice: null,
+      prefill: {
+        invoice_number: '',
+        project: group.project,
+        category: base['Category'] || retainerCat,
+        description: `Retainer invoice recorded for ${label}`,
+        milestone: base['Milestone'] || '',
+        raised_by: base['Raised By'] || '',
+        raised_date: `${monthKeyValue}-01`,
+        cleared_date: '',
+        amount_raised: base['Amount Raised'] ?? '',
+        amount_with_tax: base['Amount with Tax'] ?? '',
+        amount_received: '',
+        payment_status: 'Pending',
+        remark: `Invoice already raised via Zoho form for ${label}. Enter invoice number and final details here.`,
+        next_followup: '',
+      },
+    })
+  }
 
   /* ── Helpers ── */
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
@@ -631,6 +911,11 @@ export default function Invoices() {
           </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
+            <ExternalLink size={14} />
+            <span className="hidden sm:inline">Raise Externally</span>
+            <span className="sm:hidden">Raise</span>
+          </button>
           <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -641,6 +926,50 @@ export default function Invoices() {
               <span className="sm:hidden">New</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ── Workspace + Billing switcher ── */}
+      <div className="card flex items-center justify-between gap-4 flex-wrap sm:flex-row flex-col" style={{ padding: '0.85rem 1rem' }}>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              {[['invoices', 'Invoices'], ['retainers', 'Retainers']].map(([value, label]) => (
+                <button key={value} onClick={() => setWorkspace(value)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                  style={workspace === value
+                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                    : { color: 'var(--text-3)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              {[['all', 'All'], ['project', 'Projects'], ['retainer', 'Retainers']].map(([value, label]) => (
+                <button key={value} onClick={() => setBillingFilter(value)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                  style={billingFilter === value
+                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                    : { color: 'var(--text-3)' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+            Retainer workflow uses Project as the retainer/client name. Category follows the selected billing type until manually overridden.
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Quick Actions</span>
+          {isEditor && (
+            <button onClick={openNew} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+              <Plus size={13} />New invoice
+            </button>
+          )}
+          <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+            <ExternalLink size={13} />Open request form
+          </button>
         </div>
       </div>
 
@@ -733,6 +1062,287 @@ export default function Invoices() {
         </section>
       )}
 
+      {/* ── Retainer Workspace ── */}
+      {workspace === 'retainers' && (
+        <section className="card space-y-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>Retainer Workspace</h2>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                <strong style={{ color: 'var(--text-1)' }}>Raise externally.</strong> Use the Zoho invoice request form when a retainer invoice needs to be raised.
+                {' '}
+                <strong style={{ color: 'var(--text-1)' }}>Record internally.</strong> Once raised, store the final invoice number and details here.
+              </p>
+            </div>
+            <div className="relative">
+              <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+              <select value={retainerMonth} onChange={e => setRetainerMonth(e.target.value)}
+                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                {retainerMonthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+            </div>
+          </div>
+
+          {retainerGroups.length === 0 ? (
+            <div className="rounded-xl p-8 text-center" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No retainer templates found</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                Create a normal invoice and set the category to a retainer category first.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-4">
+              <div className="space-y-3">
+                {retainerGroups.map(group => (
+                  <button key={group.project} type="button"
+                    onClick={() => setSelectedRetainer(group.project)}
+                    className="w-full text-left rounded-xl p-4 transition-all"
+                    style={{
+                      background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
+                      border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
+                      boxShadow: selectedRetainer === group.project ? '0 0 0 2px rgba(37,99,235,0.10)' : 'none',
+                    }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                          {fmt(group.amount)} template · next due {monthLabel(group.nextDueMonth)}
+                        </p>
+                      </div>
+                      <MonthStatusPill status={group.monthStatus} active={selectedRetainer === group.project} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div>
+                        <p className="label">Current month</p>
+                        <p className="text-xs font-medium" style={{ color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
+                          {group.currentMonthRaised ? 'Raised / planned' : 'Missing'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="label">Raised by</p>
+                        <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {selectedRetainerGroup && (() => {
+                const group = selectedRetainerGroup
+                const monthRec = group.monthRecord?.fields || null
+                const missing = !monthRec
+                const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
+                const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
+                return (
+                  <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                        <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                          Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''} · Next due {monthLabel(group.nextDueMonth)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <MonthStatusPill status={group.monthStatus} active />
+                        <span className="text-xs px-2 py-1 rounded-full"
+                          style={{
+                            background: group.currentMonthRaised ? 'var(--fin-pos-bg)' : 'var(--fin-warn-bg)',
+                            color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)',
+                            border: `1px solid ${group.currentMonthRaised ? 'var(--fin-pos-border)' : 'var(--fin-warn-border)'}`,
+                          }}>
+                          {group.currentMonthRaised ? 'Current month covered' : 'Current month not raised'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {[
+                        ['Tracking month', monthLabel(retainerMonth)],
+                        ['Month invoice #', monthRec?.['Invoice Number'] || 'Pending update'],
+                        ['Raised by', group.raisedBy || '—'],
+                        ['Month remark', monthRec?.['Remark'] || '—'],
+                      ].map(([lbl, val]) => (
+                        <div key={lbl} className="card p-3">
+                          <p className="label">{lbl}</p>
+                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{val}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <p className="label mb-2">Month Timeline</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+                        {group.timeline.map(item => (
+                          <button key={item.key} type="button"
+                            onClick={() => setRetainerMonth(item.key)}
+                            className="min-w-0 rounded-xl p-3 text-left transition-all min-h-[72px]"
+                            style={{
+                              background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
+                              border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
+                              boxShadow: item.active ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
+                            }}>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
+                                {item.label}
+                              </p>
+                              {item.current && <span className="text-[9px] font-bold" style={{ color: 'var(--accent)' }}>NOW</span>}
+                            </div>
+                            <MonthStatusPill status={item.status} active={item.active} />
+                            <p className="text-[10px] mt-2 truncate" style={{ color: 'var(--text-3)' }}>
+                              {item.record?.fields?.['Invoice Number'] || 'No record'}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="label mb-2">Monthly Records</p>
+                      <div className="space-y-2">
+                        {group.timeline.map(item => {
+                          const rec = item.record
+                          const f = rec?.fields || {}
+                          const key = `${item.key}-${group.project}`
+                          return (
+                            <div key={key} className="rounded-xl p-3 flex items-center justify-between gap-3"
+                              style={{
+                                background: item.active ? 'var(--accent-dim)' : 'var(--bg-base)',
+                                border: `1px solid ${item.active ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                              }}>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.fullLabel}</p>
+                                  <MonthStatusPill status={item.status} active={item.active} />
+                                </div>
+                                <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                  {rec
+                                    ? `${f['Invoice Number'] || 'Invoice number pending'} · ${fmt(f['Amount Raised'])} · ${f['Remark'] || 'No remark'}`
+                                    : 'No record created for this month yet'}
+                                </p>
+                              </div>
+                              <div className="flex gap-2 flex-shrink-0 flex-wrap">
+                                {rec ? (
+                                  <button onClick={() => openView(rec)}
+                                    className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                    View
+                                  </button>
+                                ) : item.key === retainerMonth ? (
+                                  <>
+                                    <button onClick={() => openInvoiceRequestForm(group, item.key)}
+                                      className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                      Open request form
+                                    </button>
+                                    <button onClick={() => openRetainerRecordForm(group, item.key)}
+                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                      Record raised invoice
+                                    </button>
+                                    <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                                      {busyPause ? 'Pausing…' : 'Pause month'}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => setRetainerMonth(item.key)}
+                                    className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                    Track month
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {group.description && (
+                      <div className="rounded-xl p-3" style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
+                        <p className="label">Template Note</p>
+                        <p className="text-sm" style={{ color: 'var(--text-2)' }}>{group.description}</p>
+                      </div>
+                    )}
+
+                    {missing && (
+                      <div className="flex gap-2 flex-wrap">
+                        <button onClick={() => openInvoiceRequestForm(group, retainerMonth)}
+                          className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                          Open invoice request form
+                        </button>
+                        <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
+                          className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                          Record already raised invoice
+                        </button>
+                        <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                          className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                          {busyPause ? 'Pausing…' : 'Pause month'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+        </section>
+      )}
+
+      {workspace === 'invoices' && (
+      <>
+      {/* ── Project Snapshot ── */}
+      {projectSummaryCards.length > 0 && (
+        <section className="card space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Project Snapshot</h2>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Click any project card to filter the invoice list.</p>
+            </div>
+            {projectFilter && (
+              <button onClick={() => setProjectFilter('')}
+                className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
+                <X size={11} />Clear project filter
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {projectSummaryCards.map(({ project, metrics }) => {
+              const active = projectFilter === project
+              return (
+                <button key={project} type="button"
+                  onClick={() => setProjectFilter(active ? '' : project)}
+                  className="rounded-xl p-4 text-left transition-all"
+                  style={{
+                    background: active ? 'var(--accent-dim)' : 'var(--bg-layer)',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
+                    boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--shadow-sm)',
+                  }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{metrics.count || 0} invoice{metrics.count === 1 ? '' : 's'}</p>
+                    </div>
+                    {active && <CheckCircle2 size={14} style={{ color: 'var(--accent)' }} />}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <div>
+                      <p className="label">Raised</p>
+                      <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmt(metrics.raised)}</p>
+                    </div>
+                    <div>
+                      <p className="label">Received</p>
+                      <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{fmt(metrics.received)}</p>
+                    </div>
+                    <div>
+                      <p className="label">Open</p>
+                      <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(metrics.outstanding)}</p>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ── Filter bar ── */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -756,6 +1366,7 @@ export default function Invoices() {
               setCategoryFilter('')
               setRaisedByFilter('')
               setMonthFilter('')
+              setBillingFilter('all')
               setOverdueOnly(false)
               setHasDocsOnly(false)
               setFollowupDueOnly(false)
@@ -1050,6 +1661,9 @@ export default function Invoices() {
         </div>
       </div>
 
+      </>
+      )}
+
       {/* ── Drawers — rendered via portal to escape overflow/transform stacking contexts ── */}
       {drawer?.mode === 'view' && createPortal(
         <InvoiceDetail
@@ -1063,6 +1677,7 @@ export default function Invoices() {
       {isEditor && (drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
         <InvoiceDrawer
           invoice={drawer.mode === 'edit' ? drawer.invoice : null}
+          prefill={drawer.mode === 'new' ? drawer.prefill : null}
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
