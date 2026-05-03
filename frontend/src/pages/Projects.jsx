@@ -72,7 +72,7 @@ export default function Projects() {
   , [status, client, sortBy])
 
   const { data: _data, loading, error, refresh, lastUpdated, syncing } =
-    useAutoRefresh(fetchProjects, 5_000, [status, client, sortBy])
+    useAutoRefresh(fetchProjects, 5_000)
   const records = _data ?? []
   const updatedLabel = useRelativeTime(lastUpdated)
 

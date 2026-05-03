@@ -5,6 +5,8 @@ import ProjectForm from '../components/ProjectForm'
 import { api } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
+import clsx from 'clsx'
 
 // Shared clean AI text renderer (no ugly markdown symbols)
 function AiText({ text }) {
@@ -55,8 +57,6 @@ function AiText({ text }) {
   }
   return <div className="space-y-1.5">{elements}</div>
 }
-import { useToast } from '../context/ToastContext'
-import clsx from 'clsx'
 
 function Field({ label, value }) {
   if (value == null || value === '') return null

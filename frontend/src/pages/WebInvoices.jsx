@@ -675,7 +675,8 @@ function InvoiceDrawer({
     if (!invoice?.id && draft?.category == null) {
       setRetainerMode(retainerSelected, { force: false })
     }
-  }, [retainerCategoryOption, projectCategoryOption])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retainerCategoryOption, projectCategoryOption, retainerSelected, invoice?.id, draft?.category])
 
   async function persistDraftRecord() {
     if (currentRecordId) return currentRecordId
