@@ -216,6 +216,7 @@ export const api = {
       Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
       return request(`/api/web-projects?${q}`)
     },
+    names:   ()         => request('/api/web-projects/names'),
     summary: ()         => request('/api/web-projects/summary'),
     get:     (id)       => request(`/api/web-projects/${id}`),
     create:  (data)     => request('/api/web-projects', { method: 'POST',   body: JSON.stringify(data) }),

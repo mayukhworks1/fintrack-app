@@ -1021,6 +1021,7 @@ export default function WebInvoices() {
   const [retainerActionBusy, setRetainerActionBusy] = useState('')
 
   useEffect(() => {
+    // Load invoice picklists (status options, categories etc.)
     api.webInvoices.picklists.get()
       .then(data => {
         setPicklists(prev => ({
@@ -1029,6 +1030,22 @@ export default function WebInvoices() {
         }))
       })
       .catch(() => {})  // keep fallback defaults on error
+  }, [])
+
+  // Load project names from Web Projects table → merge into Project picklist
+  useEffect(() => {
+    api.webProjects.names()
+      .then(names => {
+        if (!Array.isArray(names) || names.length === 0) return
+        const projectNames = names.map(p => p.name).filter(Boolean)
+        setPicklists(prev => {
+          // Merge: web-project names take precedence, then keep any invoice-only names
+          const existing = prev.Project || []
+          const merged = [...new Set([...projectNames, ...existing])]
+          return { ...prev, Project: merged }
+        })
+      })
+      .catch(() => {})  // silently fallback to picklist defaults
   }, [])
 
   function handleOptionsUpdate(fieldName, newOptions) {

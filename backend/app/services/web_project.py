@@ -210,6 +210,32 @@ class WebProjectService:
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
+    # ── Names (shared dropdown — accessible to web + all roles) ──────────
+
+    async def list_project_names(self) -> list:
+        """Returns minimal [{id, name, client, status}] for dropdown use."""
+        async def _load():
+            params = {
+                "fieldKeyType": "name",
+                "take": 500,
+                "skip": 0,
+            }
+            async with httpx.AsyncClient(timeout=15) as client_:
+                res = await client_.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                records = res.json().get("records", [])
+            return [
+                {
+                    "id":     r["id"],
+                    "name":   r["fields"].get("Project Name", ""),
+                    "client": r["fields"].get("Client", ""),
+                    "status": r["fields"].get("Status", ""),
+                }
+                for r in records
+                if r["fields"].get("Project Name")
+            ]
+        return await cache.get_or_set("webproj:names", ttl=_TTL_LIST, loader=_load)
+
     # ── Get one ───────────────────────────────────────────────────────────
 
     async def get_project(self, record_id: str) -> dict:

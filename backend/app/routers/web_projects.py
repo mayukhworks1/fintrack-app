@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from pydantic import BaseModel
 from ..services.web_project import WebProjectService, WebResourceService
-from .deps import require_all
+from .deps import require_all, require_web_access
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -98,6 +98,15 @@ class ResourceFields(BaseModel):
 
 
 # ── Projects routes ───────────────────────────────────────────────────────────
+
+@projects_router.get("/names")
+async def list_web_project_names(_role: str = Depends(require_web_access)):
+    """Shared project name list — used by invoice dropdown (web + all roles)."""
+    try:
+        return await WebProjectService().list_project_names()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @projects_router.get("/summary")
 async def web_project_summary(_role: str = Depends(require_all)):

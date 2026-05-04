@@ -6,9 +6,12 @@
  *   WebProjects       (default) — standalone full-page app (kept for potential future use)
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft, Plus, Edit2, Trash2, X, Check, Loader2, RefreshCw,
   Search, Users, Briefcase, Moon, Sun, LogOut, AlertTriangle, Clock,
+  TrendingUp, TrendingDown, IndianRupee, Calendar, Tag, FileText,
+  ChevronRight, Receipt, CheckCircle2, XCircle, AlertOctagon,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -130,7 +133,19 @@ const TextareaInput = ({ value, onChange, placeholder, rows = 3 }) => (
     placeholder={placeholder} rows={rows} />
 )
 
-// ── Drawer ────────────────────────────────────────────────────────────────────
+// ── Section divider ───────────────────────────────────────────────────────────
+
+function SectionLabel({ icon: Icon, children }) {
+  return (
+    <div className="flex items-center gap-2 mb-3 mt-1">
+      {Icon && <Icon size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+      <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{children}</p>
+      <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+    </div>
+  )
+}
+
+// ── Simple Drawer (non-project, e.g. resource) ────────────────────────────────
 
 function Drawer({ open, onClose, title, children, footer }) {
   useEffect(() => {
@@ -141,37 +156,71 @@ function Drawer({ open, onClose, title, children, footer }) {
   }, [open, onClose])
 
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} onClick={onClose} />
-      <div className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl animate-slide-up"
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} onClick={onClose} />
+      <div className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl"
         style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-3)' }}>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ color: 'var(--text-3)' }}>
             <X size={16} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">{children}</div>
         {footer && (
-          <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid var(--border)' }}>{footer}</div>
+          <div className="px-5 py-4 flex gap-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+            {footer}
+          </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
-// ── Project Form ──────────────────────────────────────────────────────────────
+// ── Project Drawer (polished, portal-based) ───────────────────────────────────
 
-function ProjectForm({ initial = {}, onSubmit, loading }) {
+function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit }) {
   const [d, setD] = useState({
     project_name: '', client: '', status: 'Planning', priority: 'Medium',
     project_lead: '', description: '', est_start: '', est_end: '',
     actual_start: '', actual_end: '', estimated_budget: '', client_charge: '',
-    progress_pct: '', tags: '', context_notes: '', risks_blockers: '',
-    ...initial,
+    progress_pct: 0, tags: '', context_notes: '', risks_blockers: '',
   })
+  const [confirmDel, setConfirmDel] = useState(false)
   const set = k => v => setD(p => ({ ...p, [k]: v }))
+
+  // Reset form when drawer opens
+  useEffect(() => {
+    if (open) {
+      setD({
+        project_name: '', client: '', status: 'Planning', priority: 'Medium',
+        project_lead: '', description: '', est_start: '', est_end: '',
+        actual_start: '', actual_end: '', estimated_budget: '', client_charge: '',
+        progress_pct: 0, tags: '', context_notes: '', risks_blockers: '',
+        ...initial,
+      })
+      setConfirmDel(false)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [open, onClose])
+
+  // Live calculations
+  const budget = Number(d.estimated_budget) || 0
+  const charge = Number(d.client_charge) || 0
+  const profit = charge - budget
+  const marginPct = charge > 0 ? (profit / charge * 100) : 0
+  const pct = Math.min(100, Math.max(0, Number(d.progress_pct) || 0))
+  const pctColor = pct >= 100 ? '#4ade80' : pct >= 60 ? '#60a5fa' : pct >= 30 ? '#fb923c' : '#94a3b8'
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -188,66 +237,209 @@ function ProjectForm({ initial = {}, onSubmit, loading }) {
     if (d.actual_end)               p.actual_end       = d.actual_end
     if (d.estimated_budget !== '')  p.estimated_budget = Number(d.estimated_budget)
     if (d.client_charge    !== '')  p.client_charge    = Number(d.client_charge)
-    if (d.progress_pct     !== '')  p.progress_pct     = Number(d.progress_pct)
+    p.progress_pct = pct
     if (d.tags)                     p.tags             = d.tags
     if (d.context_notes)            p.context_notes    = d.context_notes
     if (d.risks_blockers)           p.risks_blockers   = d.risks_blockers
     onSubmit(p)
   }
 
-  return (
-    <form onSubmit={handleSubmit} id="project-form" className="space-y-4">
-      <FormRow label="Project Name" required>
-        <TextInput value={d.project_name} onChange={set('project_name')} placeholder="e.g. Web Portal Redesign" required />
-      </FormRow>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Client">
-          <TextInput value={d.client} onChange={set('client')} placeholder="Client name" />
-        </FormRow>
-        <FormRow label="Project Lead">
-          <TextInput value={d.project_lead} onChange={set('project_lead')} placeholder="Name" />
-        </FormRow>
+  if (!open) return null
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose} />
+      <div className="relative ml-auto flex flex-col h-full shadow-2xl"
+        style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.25)' }}>
+              <Briefcase size={14} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>
+                {isEdit ? 'Edit Project' : 'New Project'}
+              </p>
+              {d.project_name && (
+                <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{d.project_name}</p>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ color: 'var(--text-3)' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <form id="project-form" onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+          {/* ── Identity ── */}
+          <div>
+            <SectionLabel icon={Briefcase}>Project Identity</SectionLabel>
+            <div className="space-y-3">
+              <FormRow label="Project Name" required>
+                <TextInput value={d.project_name} onChange={set('project_name')}
+                  placeholder="e.g. Web Portal Redesign" required />
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Client">
+                  <TextInput value={d.client} onChange={set('client')} placeholder="Client name" />
+                </FormRow>
+                <FormRow label="Project Lead">
+                  <TextInput value={d.project_lead} onChange={set('project_lead')} placeholder="e.g. Mayukh" />
+                </FormRow>
+              </div>
+              <FormRow label="Tags">
+                <div className="relative">
+                  <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: 'var(--text-3)' }} />
+                  <input className={inputCls + ' pl-8'} style={inputStyle}
+                    value={d.tags} onChange={e => set('tags')(e.target.value)}
+                    placeholder="design, backend, phase-1 (comma-separated)" />
+                </div>
+              </FormRow>
+            </div>
+          </div>
+
+          {/* ── Status & Progress ── */}
+          <div>
+            <SectionLabel icon={Check}>Status & Progress</SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Status">
+                  <SelectInput value={d.status} onChange={set('status')} options={STATUSES} />
+                </FormRow>
+                <FormRow label="Priority">
+                  <SelectInput value={d.priority} onChange={set('priority')} options={PRIORITIES} />
+                </FormRow>
+              </div>
+              <FormRow label={`Progress — ${pct}%`}>
+                <div className="space-y-2">
+                  <input type="range" min={0} max={100} step={1} value={pct}
+                    onChange={e => set('progress_pct')(Number(e.target.value))}
+                    className="w-full accent-blue-500"
+                    style={{ accentColor: pctColor }} />
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+                    <div className="h-full rounded-full transition-all duration-300"
+                      style={{ width: `${pct}%`, background: pctColor }} />
+                  </div>
+                </div>
+              </FormRow>
+            </div>
+          </div>
+
+          {/* ── Timeline ── */}
+          <div>
+            <SectionLabel icon={Calendar}>Timeline</SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Est. Start">
+                  <TextInput type="date" value={d.est_start} onChange={set('est_start')} />
+                </FormRow>
+                <FormRow label="Est. End">
+                  <TextInput type="date" value={d.est_end} onChange={set('est_end')} />
+                </FormRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Actual Start">
+                  <TextInput type="date" value={d.actual_start} onChange={set('actual_start')} />
+                </FormRow>
+                <FormRow label="Actual End">
+                  <TextInput type="date" value={d.actual_end} onChange={set('actual_end')} />
+                </FormRow>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Financials ── */}
+          <div>
+            <SectionLabel icon={IndianRupee}>Financials</SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Est. Budget (₹)">
+                  <NumberInput value={d.estimated_budget} onChange={set('estimated_budget')} placeholder="0" min={0} />
+                </FormRow>
+                <FormRow label="Client Charge (₹)">
+                  <NumberInput value={d.client_charge} onChange={set('client_charge')} placeholder="0" min={0} />
+                </FormRow>
+              </div>
+              {(charge > 0 || budget > 0) && (
+                <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
+                  style={{
+                    background: profit >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)',
+                    border: `1px solid ${profit >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(248,113,113,0.2)'}`,
+                    color: profit >= 0 ? '#4ade80' : '#f87171',
+                  }}>
+                  {profit >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                  <span>
+                    Projected profit: <strong>{formatInr(profit)}</strong>
+                    {charge > 0 && <span className="ml-2 opacity-80">· {marginPct.toFixed(1)}% margin</span>}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Context ── */}
+          <div>
+            <SectionLabel icon={FileText}>Context</SectionLabel>
+            <div className="space-y-3">
+              <FormRow label="Description">
+                <TextareaInput value={d.description} onChange={set('description')}
+                  placeholder="Brief project overview and goals…" rows={3} />
+              </FormRow>
+              <FormRow label="Context & Notes">
+                <TextareaInput value={d.context_notes} onChange={set('context_notes')}
+                  placeholder="Background, key decisions, reference links…" rows={3} />
+              </FormRow>
+              <FormRow label="Risks & Blockers">
+                <TextareaInput value={d.risks_blockers} onChange={set('risks_blockers')}
+                  placeholder="Known risks, dependencies, or blockers…" rows={2} />
+              </FormRow>
+            </div>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="px-5 py-4 flex items-center gap-3 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          {isEdit && onDelete ? (
+            <button type="button"
+              onClick={() => confirmDel ? onDelete() : setConfirmDel(true)}
+              onBlur={() => setConfirmDel(false)}
+              className="px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+              style={{
+                background: confirmDel ? 'rgba(239,68,68,0.12)' : 'transparent',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#f87171',
+              }}>
+              <Trash2 size={13} className="inline mr-1" />
+              {confirmDel ? 'Confirm?' : 'Delete'}
+            </button>
+          ) : <div />}
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-xl text-sm font-medium"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              Cancel
+            </button>
+            <button type="submit" form="project-form" disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+              {saving && <Loader2 size={13} className="animate-spin" />}
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Project'}
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Status">
-          <SelectInput value={d.status} onChange={set('status')} options={STATUSES} />
-        </FormRow>
-        <FormRow label="Priority">
-          <SelectInput value={d.priority} onChange={set('priority')} options={PRIORITIES} />
-        </FormRow>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Est. Start"><TextInput type="date" value={d.est_start} onChange={set('est_start')} /></FormRow>
-        <FormRow label="Est. End"><TextInput type="date" value={d.est_end} onChange={set('est_end')} /></FormRow>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Actual Start"><TextInput type="date" value={d.actual_start} onChange={set('actual_start')} /></FormRow>
-        <FormRow label="Actual End"><TextInput type="date" value={d.actual_end} onChange={set('actual_end')} /></FormRow>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Est. Budget (₹)">
-          <NumberInput value={d.estimated_budget} onChange={set('estimated_budget')} placeholder="0" min={0} />
-        </FormRow>
-        <FormRow label="Client Charge (₹)">
-          <NumberInput value={d.client_charge} onChange={set('client_charge')} placeholder="0" min={0} />
-        </FormRow>
-      </div>
-      <FormRow label="Progress %">
-        <NumberInput value={d.progress_pct} onChange={set('progress_pct')} placeholder="0" min={0} max={100} step={1} />
-      </FormRow>
-      <FormRow label="Tags">
-        <TextInput value={d.tags} onChange={set('tags')} placeholder="comma-separated tags" />
-      </FormRow>
-      <FormRow label="Description">
-        <TextareaInput value={d.description} onChange={set('description')} placeholder="Brief project overview…" />
-      </FormRow>
-      <FormRow label="Context & Notes">
-        <TextareaInput value={d.context_notes} onChange={set('context_notes')} placeholder="Background, decisions, links…" />
-      </FormRow>
-      <FormRow label="Risks & Blockers">
-        <TextareaInput value={d.risks_blockers} onChange={set('risks_blockers')} placeholder="Known risks or blockers…" />
-      </FormRow>
-    </form>
+    </div>,
+    document.body
   )
 }
 
@@ -519,6 +711,7 @@ function ProjectCard({ record, onClick }) {
 
 function ProjectDetailView({
   project, resources, resourcesLoading,
+  linkedInvoices, invoicesLoading,
   onBack, onEditProject, onDeleteProject,
   onAddResource, onEditResource, onDeleteResource, onRefresh,
 }) {
@@ -704,6 +897,90 @@ function ProjectDetailView({
           </div>
         )}
       </div>
+
+      {/* ── Linked Invoices ── */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+              <Receipt size={11} className="inline mr-1.5" />Linked Invoices
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+              Invoices matching this project name
+            </p>
+          </div>
+          {linkedInvoices.length > 0 && (() => {
+            const totalRaised  = linkedInvoices.reduce((s, r) => s + Number(r.fields?.['Amount Raised'] || 0), 0)
+            const totalRcvd    = linkedInvoices.reduce((s, r) => s + Number(r.fields?.['Amount Received'] || 0), 0)
+            const outstanding  = totalRaised - totalRcvd
+            return (
+              <div className="flex gap-3 text-right">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Raised</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatInr(totalRaised)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Collected</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: '#4ade80' }}>{formatInr(totalRcvd)}</p>
+                </div>
+                {outstanding > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Open</p>
+                    <p className="text-sm font-bold tabular-nums" style={{ color: '#fb923c' }}>{formatInr(outstanding)}</p>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+        {invoicesLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-3)' }} />
+          </div>
+        ) : linkedInvoices.length === 0 ? (
+          <div className="text-center py-6">
+            <Receipt size={24} className="mx-auto mb-2 opacity-20" style={{ color: 'var(--text-3)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices linked yet</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+              Add invoices with project name <strong>"{f['Project Name']}"</strong> to see them here
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {linkedInvoices.map(inv => {
+              const fi = inv.fields || {}
+              const raised = Number(fi['Amount Raised'] || 0)
+              const rcvd   = Number(fi['Amount Received'] || 0)
+              const open   = raised - rcvd
+              const status = fi['Payment Status'] || fi['Status'] || '—'
+              const statusColor = status === 'Paid' ? '#4ade80' : status === 'Pending' ? '#fb923c' : '#94a3b8'
+              const StatusIcon  = status === 'Paid' ? CheckCircle2 : status === 'Cancelled' ? XCircle : AlertOctagon
+              return (
+                <div key={inv.id}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <StatusIcon size={14} style={{ color: statusColor, flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+                      {fi['Invoice Number'] || fi['Invoice No'] || inv.id.slice(0, 8)}
+                    </p>
+                    <p className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>
+                      {fi['Category'] || '—'}
+                      {fi['Raised Date'] && ` · ${new Date(fi['Raised Date']).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}`}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatInr(raised)}</p>
+                    {open > 0 && (
+                      <p className="text-[10px] tabular-nums" style={{ color: '#fb923c' }}>₹{(open/1000).toFixed(0)}k open</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -721,6 +998,8 @@ export function ProjectsWorkspace() {
   // Data
   const [projects,         setProjects]         = useState([])
   const [resources,        setResources]        = useState([])
+  const [linkedInvoices,   setLinkedInvoices]   = useState([])
+  const [invoicesLoading,  setInvoicesLoading]  = useState(false)
   const [summary,          setSummary]          = useState(null)
   const [loading,          setLoading]          = useState(true)
   const [detailLoading,    setDetailLoading]    = useState(false)
@@ -766,28 +1045,40 @@ export function ProjectsWorkspace() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
-  // ── Load project detail + resources ───────────────────────────────────
-  const loadProjectDetail = useCallback(async (projectId) => {
-    setDetailLoading(true); setResourcesLoading(true)
+  // ── Load project detail + resources + linked invoices ────────────────
+  const loadProjectDetail = useCallback(async (projectId, projectName) => {
+    setDetailLoading(true); setResourcesLoading(true); setInvoicesLoading(true)
+    // Project record
     try {
       const proj = await api.webProjects.get(projectId)
       setSelectedProject(proj)
     } catch (e) { toast('Failed to load project: ' + e.message, 'error') }
     finally { setDetailLoading(false) }
+    // Resources
     try {
       const res = await api.webProjects.resources.list(projectId)
       setResources(res.records || [])
     } catch (e) { toast('Failed to load resources: ' + e.message, 'error') }
     finally { setResourcesLoading(false) }
+    // Linked invoices (by project name match)
+    if (projectName) {
+      try {
+        const inv = await api.webInvoices.list({ project: projectName, limit: 100 })
+        setLinkedInvoices(inv.records || [])
+      } catch { setLinkedInvoices([]) }
+      finally { setInvoicesLoading(false) }
+    } else { setInvoicesLoading(false) }
   }, [toast])
 
   // ── Navigation ─────────────────────────────────────────────────────────
   const openProject = (record) => {
+    const name = record.fields?.['Project Name'] || ''
     setSelectedProjectId(record.id)
     setSelectedProject(record)
     setResources([])
+    setLinkedInvoices([])
     setView('detail')
-    loadProjectDetail(record.id)
+    loadProjectDetail(record.id, name)
   }
 
   const goBack = () => {
@@ -795,6 +1086,7 @@ export function ProjectsWorkspace() {
     setSelectedProjectId(null)
     setSelectedProject(null)
     setResources([])
+    setLinkedInvoices([])
   }
 
   // ── Filtered list ──────────────────────────────────────────────────────
@@ -1018,8 +1310,10 @@ export function ProjectsWorkspace() {
             project={selectedProject}
             resources={resources}
             resourcesLoading={resourcesLoading}
+            linkedInvoices={linkedInvoices}
+            invoicesLoading={invoicesLoading}
             onBack={goBack}
-            onRefresh={() => loadProjectDetail(selectedProjectId)}
+            onRefresh={() => loadProjectDetail(selectedProjectId, selectedProject?.fields?.['Project Name'])}
             onEditProject={() => {
               const f = selectedProject.fields || {}
               setEditingRecord({
@@ -1074,27 +1368,16 @@ export function ProjectsWorkspace() {
         ) : null
       )}
 
-      {/* ── PROJECT DRAWER ── */}
-      <Drawer
+      {/* ── PROJECT DRAWER (polished portal) ── */}
+      <ProjectDrawer
         open={drawer === 'new-project' || drawer === 'edit-project'}
         onClose={() => { setDrawer(null); setEditingRecord(null) }}
-        title={drawer === 'new-project' ? 'New Project' : 'Edit Project'}
-        footer={
-          <>
-            <button onClick={() => { setDrawer(null); setEditingRecord(null) }}
-              className="flex-1 py-2 rounded-xl text-sm font-medium"
-              style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>Cancel</button>
-            <button type="submit" form="project-form" disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? 'Saving…' : 'Save Project'}
-            </button>
-          </>
-        }
-      >
-        <ProjectForm initial={editingRecord?.initial || {}} onSubmit={handleSaveProject} loading={saving} />
-      </Drawer>
+        initial={editingRecord?.initial || {}}
+        onSubmit={handleSaveProject}
+        onDelete={drawer === 'edit-project' ? handleDeleteProject : undefined}
+        saving={saving}
+        isEdit={drawer === 'edit-project'}
+      />
 
       {/* ── RESOURCE DRAWER ── */}
       <Drawer
