@@ -14,6 +14,7 @@ import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
+import { ProjectsWorkspace } from './WebProjects'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -932,6 +933,7 @@ function WebTopBar() {
 /* ── Main page ── */
 export default function WebInvoices() {
   const toast = useToast()
+  const { isAll } = useAuth()
   const [workspace,      setWorkspace]      = useState('invoices')
   const [selectedRetainer, setSelectedRetainer] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
@@ -1283,8 +1285,9 @@ export default function WebInvoices() {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
                   {[
-                    ['invoices', 'Invoices'],
+                    ['invoices',  'Invoices'],
                     ['retainers', 'Retainers'],
+                    ...(isAll ? [['projects', 'Projects']] : []),
                   ].map(([value, label]) => (
                     <button
                       key={value}
@@ -1397,6 +1400,12 @@ export default function WebInvoices() {
                   </div>
                 ))}
               </div>
+            </section>
+          )}
+
+          {workspace === 'projects' && isAll && (
+            <section>
+              <ProjectsWorkspace />
             </section>
           )}
 

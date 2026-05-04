@@ -16,7 +16,6 @@ const Analytics     = lazy(() => import('./pages/Analytics'))
 const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
 const Report        = lazy(() => import('./pages/Report'))
 const WebInvoices   = lazy(() => import('./pages/WebInvoices'))
-const WebProjects   = lazy(() => import('./pages/WebProjects'))
 
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
@@ -40,27 +39,13 @@ export default function App() {
 
   if (status !== 'authed') return <Login />
 
-  // Web role: isolated experience — only the web invoice tracker, no other routes
-  if (isWeb) {
+  // Web + All roles: isolated experience — web invoice module (+ project workspace for 'all')
+  if (isWeb || isAll) {
     return (
       <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
           <>
             <WebInvoices />
-            <VercelAnalytics />
-          </>
-        </Suspense>
-      </ErrorBoundary>
-    )
-  }
-
-  // All role: isolated experience — only the web project tracker, no other routes
-  if (isAll) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<RouteFallback />}>
-          <>
-            <WebProjects />
             <VercelAnalytics />
           </>
         </Suspense>

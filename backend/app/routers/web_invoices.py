@@ -1,13 +1,15 @@
 """
 Web Invoice Tracker router — /api/web-invoices
-All routes require the "web" role. Editor/viewer tokens get 403.
+Routes accept 'web' OR 'all' role (require_web_access).
+'web'  — invoice tracker only (Theworks@2026)
+'all'  — invoice tracker + project tracker (All@2026)
 """
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import Optional, List, Any
 from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
-from .deps import require_web
+from .deps import require_web_access
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -67,7 +69,7 @@ class WebInvoiceFields(BaseModel):
 
 
 @router.get("/picklists")
-async def get_picklists(_role: str = Depends(require_web)):
+async def get_picklists(_role: str = Depends(require_web_access)):
     """Return current single-select options for all editable picklist fields."""
     try:
         return await WebInvoiceService().get_picklists()
@@ -77,7 +79,7 @@ async def get_picklists(_role: str = Depends(require_web)):
 
 @router.post("/picklists/{field_name}")
 async def add_picklist_option(
-    field_name: str, body: AddOptionRequest, _role: str = Depends(require_web)
+    field_name: str, body: AddOptionRequest, _role: str = Depends(require_web_access)
 ):
     """Append a new option to a single-select field and return updated list."""
     try:
@@ -93,7 +95,7 @@ async def upload_attachment(
     record_id: str,
     field_name: str,
     file: UploadFile = File(...),
-    _role: str = Depends(require_web),
+    _role: str = Depends(require_web_access),
 ):
     """Upload a file into a specific attachment field on an existing Teable record."""
     service = WebInvoiceService()
@@ -115,7 +117,7 @@ async def upload_attachment(
 
 
 @router.get("/summary")
-async def web_invoice_summary(_role: str = Depends(require_web)):
+async def web_invoice_summary(_role: str = Depends(require_web_access)):
     try:
         return await WebInvoiceService().get_summary()
     except Exception as e:
@@ -130,7 +132,7 @@ async def list_web_invoices(
     skip:     int           = Query(0,   ge=0),
     order_by: str           = Query("Raised Date"),
     order:    str           = Query("desc"),
-    _role:    str           = Depends(require_web),
+    _role:    str           = Depends(require_web_access),
 ):
     try:
         return await WebInvoiceService().list_invoices(
@@ -143,7 +145,7 @@ async def list_web_invoices(
 
 
 @router.get("/{record_id}")
-async def get_web_invoice(record_id: str, _role: str = Depends(require_web)):
+async def get_web_invoice(record_id: str, _role: str = Depends(require_web_access)):
     try:
         return await WebInvoiceService().get_invoice(record_id)
     except Exception as e:
@@ -151,7 +153,7 @@ async def get_web_invoice(record_id: str, _role: str = Depends(require_web)):
 
 
 @router.post("", status_code=201)
-async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(require_web)):
+async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(require_web_access)):
     try:
         fields = body.to_teable_fields()
         _validate_paid_invoice(fields)
@@ -164,7 +166,7 @@ async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(requir
 
 @router.patch("/{record_id}")
 async def update_web_invoice(
-    record_id: str, body: WebInvoiceFields, _role: str = Depends(require_web)
+    record_id: str, body: WebInvoiceFields, _role: str = Depends(require_web_access)
 ):
     try:
         fields = body.to_teable_fields()
@@ -177,7 +179,7 @@ async def update_web_invoice(
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_web_invoice(record_id: str, _role: str = Depends(require_web)):
+async def delete_web_invoice(record_id: str, _role: str = Depends(require_web_access)):
     try:
         await WebInvoiceService().delete_invoice(record_id)
     except Exception as e:

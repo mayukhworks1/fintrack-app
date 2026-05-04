@@ -57,32 +57,42 @@ class ProjectFields(BaseModel):
 
 
 class ResourceFields(BaseModel):
-    resource_name: Optional[str]   = None
-    role:          Optional[str]   = None
-    type_:         Optional[str]   = None   # "Type" — aliased to avoid Python keyword clash
-    rate:          Optional[float] = None
-    rate_unit:     Optional[str]   = None
-    units:         Optional[float] = None
-    from_date:     Optional[str]   = None
-    to_date:       Optional[str]   = None
-    notes:         Optional[str]   = None
-    project_id:    Optional[str]   = None   # Teable record ID of the linked project
+    resource_name:  Optional[str]   = None
+    role:           Optional[str]   = None
+    type_:          Optional[str]   = None   # "Type" — aliased to avoid Python keyword clash
+    rate:           Optional[float] = None
+    rate_unit:      Optional[str]   = None
+    units:          Optional[float] = None
+    # Man hours — requires "Man Hours" and "Planned Hours" fields in Teable
+    man_hours:      Optional[float] = None
+    planned_hours:  Optional[float] = None
+    # Revenue / billing — requires corresponding Teable fields
+    billing_rate:   Optional[float] = None   # "Billing Rate (₹)"
+    billable_units: Optional[float] = None   # "Billable Units"
+    from_date:      Optional[str]   = None
+    to_date:        Optional[str]   = None
+    notes:          Optional[str]   = None
+    project_id:     Optional[str]   = None   # Teable record ID of the linked project
 
     class Config:
         populate_by_name = True
 
     def to_teable_fields(self) -> dict:
         m = {
-            "Resource Name": self.resource_name,
-            "Role":          self.role,
-            "Type":          self.type_,
-            "Rate ₹":        self.rate,
-            "Rate Unit":     self.rate_unit,
-            "Units":         self.units,
-            "From Date":     self.from_date,
-            "To Date":       self.to_date,
-            "Notes":         self.notes,
-            "project_id":    self.project_id,   # handled specially in service
+            "Resource Name":    self.resource_name,
+            "Role":             self.role,
+            "Type":             self.type_,
+            "Rate ₹":           self.rate,
+            "Rate Unit":        self.rate_unit,
+            "Units":            self.units,
+            "Man Hours":        self.man_hours,
+            "Planned Hours":    self.planned_hours,
+            "Billing Rate (₹)": self.billing_rate,
+            "Billable Units":   self.billable_units,
+            "From Date":        self.from_date,
+            "To Date":          self.to_date,
+            "Notes":            self.notes,
+            "project_id":       self.project_id,   # handled specially in service
         }
         return {k: v for k, v in m.items() if v is not None}
 

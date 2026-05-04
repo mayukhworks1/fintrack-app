@@ -51,17 +51,29 @@ WEB_PROJECT_FIELD_IDS: dict[str, str] = {
 }
 
 WEB_RESOURCE_FIELD_IDS: dict[str, str] = {
-    "Resource Name": "fldGziN024fBytTHbxc",
-    "Role":          "fldkrQDHgMrfD9DjZG0",
-    "Type":          "fldaRgLjZWkR3iV2e5A",
-    "Rate ₹":        "fldkqwQErwSdDESQa6q",
-    "Rate Unit":     "fldBdHq5RaaGmkZ3vmk",
-    "Units":         "fld2EOpGBDHojqJfKAL",
-    "Total Cost":    "fldirC8RZ2Gwlqb6mwE",   # READ-ONLY formula
-    "Project":       "fldmmbZ14tbD5414oXs",   # link to Web Projects
-    "From Date":     "fldelZHMgbnp8f4UE1V",
-    "To Date":       "fldIBkYG6Lk9h1ZLb9p",
-    "Notes":         "fldWDh80n8lzJl4il7R",
+    "Resource Name":    "fldGziN024fBytTHbxc",
+    "Role":             "fldkrQDHgMrfD9DjZG0",
+    "Type":             "fldaRgLjZWkR3iV2e5A",
+    "Rate ₹":           "fldkqwQErwSdDESQa6q",
+    "Rate Unit":        "fldBdHq5RaaGmkZ3vmk",
+    "Units":            "fld2EOpGBDHojqJfKAL",
+    "Total Cost":       "fldirC8RZ2Gwlqb6mwE",   # READ-ONLY formula
+    "Project":          "fldmmbZ14tbD5414oXs",   # link to Web Projects
+    "From Date":        "fldelZHMgbnp8f4UE1V",
+    "To Date":          "fldIBkYG6Lk9h1ZLb9p",
+    "Notes":            "fldWDh80n8lzJl4il7R",
+    # ── Fields to be added in Teable (update IDs once created) ─────────
+    # Man hours tracking
+    "Man Hours":        "",   # Number — actual hours worked; TODO: add field ID after creating in Teable
+    "Planned Hours":    "",   # Number — originally estimated hours
+    # Revenue / billing
+    "Billing Rate (₹)": "",  # Number — rate charged to client per unit
+    "Billable Units":   "",   # Number — units billed (may differ from Units)
+    "Revenue Generated":"",  # Formula: Billing Rate × Billable Units — READ-ONLY after Teable adds it
+    "Resource Margin %":"",  # Formula — READ-ONLY
+    "Resource Gross Margin": "",  # Formula — READ-ONLY
+    "Project Client Charge": "",  # Lookup — READ-ONLY
+    "Revenue Contribution %":"",  # Formula — READ-ONLY
 }
 
 # Fields that Teable computes — never send in POST/PATCH
@@ -69,8 +81,17 @@ _PROJECT_READ_ONLY = {
     "Total Input Cost", "Actual Profit", "Profit Margin %",
     "Budget Variance", "Budget Variance %", "Schedule Variance Days",
     "Resource Names",
+    # New rollups/formulas (once added to Teable):
+    "Total Man Hours", "Total Planned Hours", "Total Revenue Generated",
+    "Resource Count", "Hours Variance", "Effective Cost Per Hour",
+    "Effective Billing Rate Per Hour",
 }
-_RESOURCE_READ_ONLY = {"Total Cost"}
+_RESOURCE_READ_ONLY = {
+    "Total Cost",
+    # New formula/lookup fields (once added to Teable):
+    "Revenue Generated", "Resource Gross Margin", "Resource Margin %",
+    "Project Client Charge", "Revenue Contribution %",
+}
 
 _TTL_LIST    = 15
 _TTL_ALL     = 30
@@ -94,10 +115,15 @@ def _clean_project_fields(fields: dict) -> dict:
 
 
 def _clean_resource_fields(fields: dict) -> dict:
-    """Strip read-only and empty fields before sending to Teable."""
+    """Strip read-only, empty, and fields whose Teable IDs are not yet configured."""
+    # Fields whose IDs are empty strings haven't been created in Teable yet — skip them.
+    _no_id_yet = {name for name, fid in WEB_RESOURCE_FIELD_IDS.items() if fid == ""}
     return {
         k: v for k, v in fields.items()
-        if k not in _RESOURCE_READ_ONLY and v is not None and v != ""
+        if k not in _RESOURCE_READ_ONLY
+        and k not in _no_id_yet
+        and v is not None
+        and v != ""
     }
 
 
