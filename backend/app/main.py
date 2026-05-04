@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .routers import projects, ai, auth, invoices, web_invoices
+from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 
 logger = logging.getLogger("fintrack")
@@ -45,6 +46,8 @@ app.include_router(projects.router)
 app.include_router(invoices.router)
 app.include_router(ai.router)
 app.include_router(web_invoices.router)
+app.include_router(web_projects_router)
+app.include_router(web_resources_router)
 
 
 # ── Request ID + access log ──────────────────────────────────────────

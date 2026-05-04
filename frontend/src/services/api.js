@@ -210,6 +210,25 @@ export const api = {
       }),
     },
   },
+  webProjects: {
+    list: (params = {}) => {
+      const q = new URLSearchParams()
+      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/web-projects?${q}`)
+    },
+    summary: ()         => request('/api/web-projects/summary'),
+    get:     (id)       => request(`/api/web-projects/${id}`),
+    create:  (data)     => request('/api/web-projects', { method: 'POST',   body: JSON.stringify(data) }),
+    update:  (id, data) => request(`/api/web-projects/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+    delete:  (id)       => request(`/api/web-projects/${id}`, { method: 'DELETE' }),
+    resources: {
+      list:   (projectId)       => request(`/api/web-projects/${projectId}/resources`),
+      get:    (id)              => request(`/api/web-resources/${id}`),
+      create: (data)            => request('/api/web-resources', { method: 'POST',   body: JSON.stringify(data) }),
+      update: (id, data)        => request(`/api/web-resources/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+      delete: (id)              => request(`/api/web-resources/${id}`, { method: 'DELETE' }),
+    },
+  },
   health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.

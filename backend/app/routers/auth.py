@@ -102,11 +102,13 @@ async def login(body: LoginRequest):
     editor_pw = (settings.app_password or "").strip().lower()
     viewer_pw = (settings.app_view_password or "").strip().lower()
     web_pw    = (settings.app_web_password or "").strip().lower()
+    all_pw    = (settings.app_all_password or "").strip().lower()
 
     # Constant-time comparisons to resist timing attacks
     is_editor = hmac.compare_digest(provided, editor_pw)
     is_viewer = hmac.compare_digest(provided, viewer_pw)
     is_web    = hmac.compare_digest(provided, web_pw)
+    is_all    = bool(all_pw) and hmac.compare_digest(provided, all_pw)
 
     if is_editor:
         role = "editor"
@@ -114,6 +116,8 @@ async def login(body: LoginRequest):
         role = "viewer"
     elif is_web:
         role = "web"
+    elif is_all:
+        role = "all"
     else:
         raise HTTPException(status_code=401, detail="Incorrect password")
 

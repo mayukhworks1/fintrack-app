@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     # TEABLE_WEB_API_TOKEN: token for tblT6iQNKe8CfAUN2iR (falls back to TEABLE_API_TOKEN if not set)
     teable_web_api_token: Optional[str] = None
     teable_web_invoice_table_id: str = "tblT6iQNKe8CfAUN2iR"
+    # "all" role — web project tracker (Web Projects + Web Resources tables)
+    # APP_ALL_PASSWORD → All@2024 (set via HF Space secret)
+    app_all_password: str = ""
+    # Optional dedicated token for the web projects Teable space.
+    # Falls back to TEABLE_API_TOKEN (or TEABLE_WEB_API_TOKEN) if not set.
+    teable_all_api_token: Optional[str] = None
+    # Web Projects table (tbl4qgQkatguBwrzxtf)
+    teable_web_projects_table_id: str = "tbl4qgQkatguBwrzxtf"
+    # Web Resources table (tblMjssDx55GOfLtgqo)
+    teable_web_resources_table_id: str = "tblMjssDx55GOfLtgqo"
     # Signing key for session tokens — set APP_SECRET in prod.
     app_secret: str = "fintrack-dev-secret-change-me"
     # How long a login token stays valid (seconds). Default 7 days.

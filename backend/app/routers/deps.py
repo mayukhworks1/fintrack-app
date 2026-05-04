@@ -48,3 +48,13 @@ def require_web(role: str = Depends(require_auth)) -> str:
             detail="Access restricted to web invoice module",
         )
     return role
+
+
+def require_all(role: str = Depends(require_auth)) -> str:
+    """Requires an 'all' token. Only the all role can access web project tracker routes."""
+    if role != "all":
+        raise HTTPException(
+            status_code=403,
+            detail="Access restricted to web project tracker module",
+        )
+    return role
