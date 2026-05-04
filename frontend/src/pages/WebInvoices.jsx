@@ -6,7 +6,8 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, User, Tag, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
-  Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip
+  Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
+  ChevronLeft, ChevronRight, Briefcase, RotateCcw
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -901,32 +902,94 @@ function SkeletonRow() {
   )
 }
 
-/* ── Minimal top bar for the web role ── */
-function WebTopBar() {
+/* ── Collapsible app sidebar ── */
+function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle }) {
   const { logout } = useAuth()
   const { dark, toggle } = useTheme()
+
+  const navItems = [
+    { value: 'invoices',  label: 'Invoices',  icon: FileText },
+    { value: 'retainers', label: 'Retainers', icon: RotateCcw },
+    ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
+  ]
+
   return (
-    <header className="flex items-center justify-between px-5 py-3 flex-shrink-0 sticky top-0 z-30"
-      style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)', backdropFilter: 'blur(12px)' }}>
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
-          <Globe size={13} className="text-white" aria-hidden="true" />
+    <aside
+      className="flex flex-col flex-shrink-0 transition-all duration-200 z-20"
+      style={{
+        width: open ? 220 : 56,
+        background: 'var(--sidebar-bg)',
+        borderRight: '1px solid var(--sidebar-border)',
+        height: '100vh',
+        overflow: 'hidden',
+      }}>
+
+      {/* Brand + toggle */}
+      <div className="flex items-center justify-between pl-3 pr-2 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--sidebar-border)', minHeight: 52 }}>
+        <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
+            <Globe size={13} className="text-white" />
+          </div>
+          {open && (
+            <div className="min-w-0">
+              <p className="font-bold text-sm leading-tight tracking-tight truncate" style={{ color: 'var(--text-1)' }}>TheWorks</p>
+              <p className="text-[10px] leading-none truncate" style={{ color: 'var(--text-3)' }}>Web Tracker</p>
+            </div>
+          )}
         </div>
-        <div>
-          <p className="font-bold text-sm leading-tight tracking-tight" style={{ color: 'var(--text-1)' }}>Web Invoice Tracker</p>
-          <p className="text-[10px] leading-none" style={{ color: 'var(--text-3)' }}>TheWorks</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-1">
-        <button onClick={toggle} className="btn-icon" aria-label={dark ? 'Light mode' : 'Dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
-          {dark ? <Sun size={14} style={{ color: '#facc15' }} /> : <Moon size={14} style={{ color: '#818cf8' }} />}
-        </button>
-        <button onClick={logout} className="btn-icon" aria-label="Sign out" title="Sign out">
-          <LogOut size={13} />
+        <button onClick={onToggle} title={open ? 'Collapse' : 'Expand'}
+          className="w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0 transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          {open ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
       </div>
-    </header>
+
+      {/* Nav items */}
+      <nav className="flex-1 py-2 space-y-0.5 px-2 overflow-y-auto">
+        {navItems.map(({ value, label, icon: Icon }) => {
+          const active = workspace === value
+          return (
+            <button key={value} onClick={() => setWorkspace(value)}
+              title={!open ? label : undefined}
+              className="w-full flex items-center gap-2.5 px-2 py-2.5 rounded-lg transition-all text-left"
+              style={{
+                background: active ? 'var(--accent-dim)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text-2)',
+                fontWeight: active ? 600 : 400,
+              }}>
+              <Icon size={16} className="flex-shrink-0"
+                style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
+              {open && <span className="text-sm truncate">{label}</span>}
+              {open && active && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ background: 'var(--accent)' }} />
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Footer: theme + logout */}
+      <div className="px-2 pb-3 flex-shrink-0 space-y-0.5"
+        style={{ borderTop: '1px solid var(--sidebar-border)', paddingTop: '0.5rem' }}>
+        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'}
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          {dark
+            ? <Sun size={15} style={{ color: '#facc15' }} />
+            : <Moon size={15} style={{ color: '#818cf8' }} />}
+          {open && <span className="text-xs">{dark ? 'Light mode' : 'Dark mode'}</span>}
+        </button>
+        <button onClick={logout} title="Sign out"
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          <LogOut size={14} />
+          {open && <span className="text-xs">Sign out</span>}
+        </button>
+      </div>
+    </aside>
   )
 }
 
@@ -934,6 +997,7 @@ function WebTopBar() {
 export default function WebInvoices() {
   const toast = useToast()
   const { isAll } = useAuth()
+  const [sidebarOpen,    setSidebarOpen]    = useState(true)
   const [workspace,      setWorkspace]      = useState('invoices')
   const [selectedRetainer, setSelectedRetainer] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
@@ -1247,13 +1311,23 @@ export default function WebInvoices() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
-      <WebTopBar />
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+      {/* ── Sidebar ── */}
+      <AppSidebar
+        workspace={workspace}
+        setWorkspace={setWorkspace}
+        isAll={isAll}
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen(v => !v)}
+      />
 
+      {/* ── Content area ── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
       <main className="flex-1 overflow-y-auto">
         <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
 
-          {/* Header */}
+          {/* ── Invoices header ── */}
+          {workspace === 'invoices' && (
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>Invoices</h1>
@@ -1279,50 +1353,25 @@ export default function WebInvoices() {
               </button>
             </div>
           </div>
+          )}
 
-          <div className="card" style={{ padding: '0.85rem 1rem' }}>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  {[
-                    ['invoices',  'Invoices'],
-                    ['retainers', 'Retainers'],
-                    ...(isAll ? [['projects', 'Projects']] : []),
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => setWorkspace(value)}
-                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                      style={workspace === value
-                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                        : { color: 'var(--text-3)' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  {[
-                    ['all', 'All'],
-                    ['project', 'Projects'],
-                    ['retainer', 'Retainers'],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => setBillingFilter(value)}
-                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                      style={billingFilter === value
-                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                        : { color: 'var(--text-3)' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                Retainer workflow uses `Project` as the retainer/client name for now. Category follows the selected billing type until the user overrides it manually.
-              </span>
+          {/* ── Retainers header ── */}
+          {workspace === 'retainers' && (
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>Retainers</h1>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                Monthly retainer invoices — use the Zoho form to raise externally.
+              </p>
             </div>
+            <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
+              <ExternalLink size={14} /><span className="hidden sm:inline">Raise Externally</span>
+            </button>
           </div>
+          )}
+
+          {/* ── (Projects workspace has its own header inside ProjectsWorkspace) ── */}
+
 
           {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
           {workspace !== 'projects' && (
@@ -1716,15 +1765,26 @@ export default function WebInvoices() {
           {/* Filter bar */}
           <div className="card space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                  Filters stay open by default for quicker scanning across monthly and project billing.
-                </p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                    {records.length} result{records.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                {/* Billing type filter pills */}
+                <div className="inline-flex items-center p-0.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  {[['all','All'],['project','Projects'],['retainer','Retainers']].map(([v, l]) => (
+                    <button key={v} onClick={() => setBillingFilter(v)}
+                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                      style={billingFilter === v
+                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                        : { color: 'var(--text-3)' }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
-                {records.length} result{records.length !== 1 ? 's' : ''}
-              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[180px]">
@@ -2026,6 +2086,7 @@ export default function WebInvoices() {
         />,
         document.body
       )}
+      </div>
     </div>
   )
 }
