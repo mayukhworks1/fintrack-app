@@ -884,14 +884,35 @@ export function ProjectsWorkspace() {
         <div className="animate-fade-in space-y-4">
           {/* Summary KPIs */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <KpiCard label="Total Projects"  value={summary.total_projects}     sub={`${summary.active_projects} active`} />
-              <KpiCard label="Total Charge"    value={formatInr(summary.total_client_charge)} />
-              <KpiCard label="Total Profit"    value={formatInr(summary.total_actual_profit)}
-                accent={summary.total_actual_profit > 0 ? '#4ade80' : summary.total_actual_profit < 0 ? '#f87171' : undefined} />
-              <KpiCard label="Avg. Margin"
-                value={summary.overall_margin_pct ? `${summary.overall_margin_pct.toFixed(1)}%` : '—'}
-                accent={summary.overall_margin_pct > 0 ? '#4ade80' : undefined} />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <KpiCard label="Total Projects"  value={summary.total_projects}     sub={`${summary.active_projects} active`} />
+                <KpiCard label="Total Charge"    value={formatInr(summary.total_client_charge)} />
+                <KpiCard label="Total Profit"    value={formatInr(summary.total_actual_profit)}
+                  accent={summary.total_actual_profit > 0 ? '#4ade80' : summary.total_actual_profit < 0 ? '#f87171' : undefined} />
+                <KpiCard label="Avg. Margin"
+                  value={summary.overall_margin_pct ? `${summary.overall_margin_pct.toFixed(1)}%` : '—'}
+                  accent={summary.overall_margin_pct > 0 ? '#4ade80' : undefined} />
+              </div>
+              {(summary.total_man_hours > 0 || summary.total_revenue_generated > 0) && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {summary.total_man_hours > 0 && (
+                    <KpiCard label="Total Man Hours" value={`${summary.total_man_hours}h`}
+                      sub={summary.total_input_cost > 0 ? `₹${Math.round(summary.total_input_cost / summary.total_man_hours)}/hr cost` : undefined} />
+                  )}
+                  {summary.total_revenue_generated > 0 && (
+                    <KpiCard label="Total Revenue" value={formatInr(summary.total_revenue_generated)}
+                      accent="#4ade80"
+                      sub={summary.total_man_hours > 0 ? `₹${Math.round(summary.total_revenue_generated / summary.total_man_hours)}/hr billed` : undefined} />
+                  )}
+                  {summary.total_man_hours > 0 && summary.total_planned_hours > 0 && (
+                    <KpiCard label="Hours Variance"
+                      value={`${summary.hours_variance >= 0 ? '+' : ''}${summary.hours_variance}h`}
+                      accent={summary.hours_variance >= 0 ? '#4ade80' : '#f87171'}
+                      sub={`${summary.total_planned_hours}h planned`} />
+                  )}
+                </div>
+              )}
             </div>
           )}
 
