@@ -1324,83 +1324,88 @@ export default function WebInvoices() {
             </div>
           </div>
 
-          {/* KPIs */}
-          <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-            <KpiCard tone={0} label="Total Raised"    value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
-            <KpiCard tone={1} label="Incl. GST"       value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
-            <KpiCard tone={2} label="Collected"       value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
-            <KpiCard tone={3} label="Outstanding"
-              value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
-              icon={CalendarClock}
-              semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
-              sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_status?.Pending || 0} pending` : 'Fully collected'} />
-            <KpiCard tone={4} label="Collection Rate"
-              value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
-              icon={Percent}
-              semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
-          </section>
+          {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
+          {workspace !== 'projects' && (
+            <>
+              {/* KPIs */}
+              <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+                <KpiCard tone={0} label="Total Raised"    value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
+                <KpiCard tone={1} label="Incl. GST"       value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
+                <KpiCard tone={2} label="Collected"       value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
+                <KpiCard tone={3} label="Outstanding"
+                  value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
+                  icon={CalendarClock}
+                  semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
+                  sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_status?.Pending || 0} pending` : 'Fully collected'} />
+                <KpiCard tone={4} label="Collection Rate"
+                  value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
+                  icon={Percent}
+                  semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
+              </section>
 
-          {/* Status chips */}
-          {s?.by_status && Object.keys(s.by_status).length > 0 && (
-            <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {Object.entries(s.by_status).map(([status, count]) => {
-                const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
-                const Icon = m.icon
-                const active = statusFilter === status
-                const amount = s?.by_status_amounts?.[status]
-                return (
-                  <button key={status}
-                    onClick={() => setStatusFilter(active ? '' : status)}
-                    className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
-                    style={{
-                      borderColor: active ? m.color : 'var(--card-border)',
-                      background: active ? `${m.color}10` : 'var(--card-bg)',
-                      boxShadow: active ? `0 0 0 2px ${m.color}30, var(--card-shadow)` : 'var(--card-shadow)',
-                    }}
-                    aria-pressed={active}>
-                    <div className="kpi-icon flex-shrink-0" style={{ background: `${m.color}18` }}>
-                      {Icon && <Icon size={18} style={{ color: m.color }} />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
-                      <p className="font-bold text-2xl tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
-                      {amount != null && (
-                        <p className="text-[11px] tabular-nums mt-1 font-medium" style={{ color: 'var(--text-2)' }}>{fmt(amount)}</p>
-                      )}
-                    </div>
-                    {active && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.color }} />}
-                  </button>
-                )
-              })}
-            </section>
-          )}
+              {/* Status chips */}
+              {s?.by_status && Object.keys(s.by_status).length > 0 && (
+                <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {Object.entries(s.by_status).map(([status, count]) => {
+                    const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
+                    const Icon = m.icon
+                    const active = statusFilter === status
+                    const amount = s?.by_status_amounts?.[status]
+                    return (
+                      <button key={status}
+                        onClick={() => setStatusFilter(active ? '' : status)}
+                        className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
+                        style={{
+                          borderColor: active ? m.color : 'var(--card-border)',
+                          background: active ? `${m.color}10` : 'var(--card-bg)',
+                          boxShadow: active ? `0 0 0 2px ${m.color}30, var(--card-shadow)` : 'var(--card-shadow)',
+                        }}
+                        aria-pressed={active}>
+                        <div className="kpi-icon flex-shrink-0" style={{ background: `${m.color}18` }}>
+                          {Icon && <Icon size={18} style={{ color: m.color }} />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
+                          <p className="font-bold text-2xl tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
+                          {amount != null && (
+                            <p className="text-[11px] tabular-nums mt-1 font-medium" style={{ color: 'var(--text-2)' }}>{fmt(amount)}</p>
+                          )}
+                        </div>
+                        {active && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.color }} />}
+                      </button>
+                    )
+                  })}
+                </section>
+              )}
 
-          {/* Overdue alert */}
-          {overdue.length > 0 && (
-            <section className="rounded-2xl p-4 animate-slide-down"
-              style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.16)' }}>
-              <div className="flex items-center gap-2 mb-3">
-                <AlertOctagon size={14} style={{ color: '#f87171' }} />
-                <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
-                  {overdue.length} Overdue — pending more than 30 days
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                {overdue.map((inv, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
-                    style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.10)' }}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
-                      <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(inv.amount)}</span>
-                      <AgingBadge days={inv.aging} />
-                    </div>
+              {/* Overdue alert */}
+              {overdue.length > 0 && (
+                <section className="rounded-2xl p-4 animate-slide-down"
+                  style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.16)' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertOctagon size={14} style={{ color: '#f87171' }} />
+                    <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
+                      {overdue.length} Overdue — pending more than 30 days
+                    </p>
                   </div>
-                ))}
-              </div>
-            </section>
+                  <div className="space-y-1.5">
+                    {overdue.map((inv, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
+                        style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.10)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
+                          <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(inv.amount)}</span>
+                          <AgingBadge days={inv.aging} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
 
           {workspace === 'projects' && isAll && (
