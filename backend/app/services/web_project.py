@@ -6,6 +6,7 @@ Web Project Tracker service — tables:
 Handles CRUD + summary for the Web Project Tracker module.
 Accessible only to the "all" role.
 """
+import asyncio
 import json
 from typing import Any, Optional
 import httpx
@@ -383,27 +384,58 @@ class WebResourceService:
     # ── List resources for a project ─────────────────────────────────────
 
     async def list_resources(self, project_id: str) -> dict:
+        """
+        Fetch resources linked to a project.
+
+        Strategy: read the bidirectional 'Resources' link array on the project
+        record (each entry is {id, title}), then batch-fetch those resource
+        records in parallel.  This avoids filtering on a link field, which
+        Teable does not support reliably via the filter query parameter.
+        """
         cache_key = f"webres:proj:{project_id}"
 
         async def _load():
-            params: dict[str, Any] = {
-                "fieldKeyType": "name",
-                "take": 500,
-                "skip": 0,
-                "filter": json.dumps({
-                    "conjunction": "and",
-                    "filterSet": [{
-                        "fieldId": WEB_RESOURCE_FIELD_IDS["Project"],
-                        "operator": "contains",
-                        "value": project_id,
-                    }],
-                }),
-            }
+            # Step 1 — get the project record to discover linked resource IDs
+            proj_url = (
+                f"{self.base_url}/api/table/"
+                f"{settings.teable_web_projects_table_id}"
+                f"/record/{project_id}?fieldKeyType=name"
+            )
+            async with httpx.AsyncClient(timeout=10) as client_:
+                proj_res = await client_.get(proj_url, headers=self._headers)
+                proj_res.raise_for_status()
+                proj_data = proj_res.json()
+
+            resource_links = proj_data.get("fields", {}).get("Resources", [])
+            if not resource_links:
+                return {"records": [], "total": 0}
+
+            resource_ids = [
+                r["id"] for r in resource_links
+                if isinstance(r, dict) and r.get("id")
+            ]
+            if not resource_ids:
+                return {"records": [], "total": 0}
+
+            # Step 2 — fetch all resource records in parallel
             async with httpx.AsyncClient(timeout=20) as client_:
-                res = await client_.get(self._record_url, params=params, headers=self._headers)
-                res.raise_for_status()
-                data = res.json()
-            return {"records": data.get("records", []), "total": data.get("total", 0)}
+                responses = await asyncio.gather(
+                    *[
+                        client_.get(
+                            f"{self._record_url}/{rid}?fieldKeyType=name",
+                            headers=self._headers,
+                        )
+                        for rid in resource_ids
+                    ],
+                    return_exceptions=True,
+                )
+
+            records = [
+                resp.json()
+                for resp in responses
+                if not isinstance(resp, Exception) and resp.status_code == 200
+            ]
+            return {"records": records, "total": len(records)}
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 

@@ -27,8 +27,7 @@ const STATUSES       = ['Planning', 'In Progress', 'On Hold', 'Blocked', 'Comple
 const PRIORITIES     = ['Low', 'Medium', 'High', 'Critical']
 const RATE_UNITS     = ['Per Hour', 'Per Day', 'Per Month', 'Fixed (Total)']
 const RESOURCE_TYPES = ['Employee', 'Freelancer', 'Contractor', 'Tool/Software', 'Cloud Infra']
-const CLIENT_OPTIONS = ['Riese Moto', 'OCD', 'Ujjwal']
-const LEAD_OPTIONS   = ['Falcon', 'Hardik', 'Ujjwal', 'Malcolm']
+// Client and lead options are fetched live from the invoices picklist API — not hardcoded here
 const TAG_OPTIONS    = ['ERP', 'CRM', 'Dashboard', 'Mobile', 'API', 'Automation', 'Internal']
 
 const STATUS_COLORS = {
@@ -248,14 +247,13 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
         ...initial,
       })
       setConfirmDel(false)
-      // Seed with hardcoded fallbacks immediately, then overwrite with live data
-      setClientSuggestions(CLIENT_OPTIONS)
-      setLeadSuggestions(LEAD_OPTIONS)
+      setClientSuggestions([])
+      setLeadSuggestions([])
       // Fetch live picklists from the invoices module
       api.webInvoices.picklists.get().then(pl => {
-        if (pl?.Project?.options?.length)   setClientSuggestions(pl.Project.options)
+        if (pl?.Project?.options?.length)       setClientSuggestions(pl.Project.options)
         if (pl?.['Raised By']?.options?.length) setLeadSuggestions(pl['Raised By'].options)
-      }).catch(() => { /* keep fallbacks */ })
+      }).catch(() => {})
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
