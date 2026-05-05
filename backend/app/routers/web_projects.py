@@ -35,23 +35,24 @@ class ProjectFields(BaseModel):
     client_charge:    Optional[float] = None
 
     def to_teable_fields(self) -> dict:
+        # IMPORTANT: key strings must exactly match Teable field names
         m = {
-            "Project Name":     self.project_name,
-            "Client":           self.client,
-            "Status":           self.status,
-            "Priority":         self.priority,
-            "Project Lead":     self.project_lead,
-            "Tags":             self.tags,
-            "Progress %":       self.progress_pct,
-            "Description":      self.description,
-            "Context & Notes":  self.context_notes,
-            "Risks & Blockers": self.risks_blockers,
-            "Est. Start":       self.est_start,
-            "Est. End":         self.est_end,
-            "Actual Start":     self.actual_start,
-            "Actual End":       self.actual_end,
-            "Estimated Budget": self.estimated_budget,
-            "Client Charge":    self.client_charge,
+            "Project Name":      self.project_name,
+            "Client":            self.client,
+            "Status":            self.status,
+            "Priority":          self.priority,
+            "Project Lead":      self.project_lead,
+            "Tags":              self.tags,
+            "Progress (%)":      self.progress_pct,   # was "Progress %"
+            "Description":       self.description,
+            "Context & Notes":   self.context_notes,
+            "Risks & Blockers":  self.risks_blockers,
+            "Est. Start Date":   self.est_start,      # was "Est. Start"
+            "Est. End Date":     self.est_end,         # was "Est. End"
+            "Actual Start Date": self.actual_start,    # was "Actual Start"
+            "Actual End Date":   self.actual_end,      # was "Actual End"
+            "Estimated Budget":  self.estimated_budget,
+            "Client Charge":     self.client_charge,
         }
         return {k: v for k, v in m.items() if v is not None}
 
@@ -78,11 +79,12 @@ class ResourceFields(BaseModel):
         populate_by_name = True
 
     def to_teable_fields(self) -> dict:
+        # IMPORTANT: key strings must exactly match Teable field names
         m = {
             "Resource Name":    self.resource_name,
             "Role":             self.role,
             "Type":             self.type_,
-            "Rate ₹":           self.rate,
+            "Rate (₹)":         self.rate,           # was "Rate ₹"
             "Rate Unit":        self.rate_unit,
             "Units":            self.units,
             "Man Hours":        self.man_hours,
@@ -187,6 +189,19 @@ async def delete_web_project(project_id: str, _role: str = Depends(require_all))
 
 
 # ── Resources routes ──────────────────────────────────────────────────────────
+
+@resources_router.get("")
+async def list_all_web_resources(
+    limit: int = Query(500, ge=1, le=1000),
+    skip:  int = Query(0,   ge=0),
+    _role: str = Depends(require_all),
+):
+    """List all resources across all projects."""
+    try:
+        return await WebResourceService().list_all_resources(limit=limit, skip=skip)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @resources_router.get("/{resource_id}")
 async def get_web_resource(resource_id: str, _role: str = Depends(require_all)):

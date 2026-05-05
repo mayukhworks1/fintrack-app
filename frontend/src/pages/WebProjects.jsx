@@ -22,17 +22,22 @@ import clsx from 'clsx'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const STATUSES       = ['Planning', 'Active', 'On Hold', 'Completed', 'Cancelled']
+// ⚠️  These must exactly match the Teable single-select options
+const STATUSES       = ['Planning', 'In Progress', 'On Hold', 'Blocked', 'Completed', 'Cancelled']
 const PRIORITIES     = ['Low', 'Medium', 'High', 'Critical']
-const RATE_UNITS     = ['Per Month', 'Per Hour', 'Per Day', 'Per Unit', 'Fixed']
-const RESOURCE_TYPES = ['Employee', 'Contractor', 'Tool', 'Vendor', 'Other']
+const RATE_UNITS     = ['Per Hour', 'Per Day', 'Per Month', 'Fixed (Total)']
+const RESOURCE_TYPES = ['Employee', 'Freelancer', 'Contractor', 'Tool/Software', 'Cloud Infra']
+const CLIENT_OPTIONS = ['Riese Moto', 'OCD', 'Ujjwal']
+const LEAD_OPTIONS   = ['Falcon', 'Hardik', 'Ujjwal', 'Malcolm']
+const TAG_OPTIONS    = ['ERP', 'CRM', 'Dashboard', 'Mobile', 'API', 'Automation', 'Internal']
 
 const STATUS_COLORS = {
-  Active:    { bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)',   text: '#4ade80' },
-  Planning:  { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.3)',  text: '#60a5fa' },
-  'On Hold': { bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)',  text: '#fb923c' },
-  Completed: { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)', text: '#94a3b8' },
-  Cancelled: { bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)', text: '#f87171' },
+  'In Progress': { bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)',   text: '#4ade80' },
+  Planning:      { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.3)',  text: '#60a5fa' },
+  'On Hold':     { bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)',  text: '#fb923c' },
+  Blocked:       { bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)', text: '#f87171' },
+  Completed:     { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)', text: '#94a3b8' },
+  Cancelled:     { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', text: '#64748b' },
 }
 
 const PRIORITY_COLORS = {
@@ -127,11 +132,36 @@ const SelectInput = ({ value, onChange, options, placeholder }) => (
   </select>
 )
 
+// Project select with id→name mapping
+const ProjectSelect = ({ value, onChange, projectNames, placeholder = '— Select project —' }) => (
+  <select className={inputCls} style={inputStyle} value={value ?? ''} onChange={e => onChange(e.target.value)}>
+    <option value="">{placeholder}</option>
+    {projectNames.map(p => <option key={p.id} value={p.id}>{p.name}{p.client ? ` (${p.client})` : ''}</option>)}
+  </select>
+)
+
 const TextareaInput = ({ value, onChange, placeholder, rows = 3 }) => (
   <textarea className={inputCls} style={{ ...inputStyle, resize: 'vertical' }}
     value={value ?? ''} onChange={e => onChange(e.target.value)}
     placeholder={placeholder} rows={rows} />
 )
+
+// Combo = free-text input with optional datalist suggestions
+function ComboInput({ id, value, onChange, placeholder, suggestions = [], required }) {
+  const listId = id ? `${id}-list` : undefined
+  return (
+    <div className="relative">
+      <input type="text" id={id} list={listId} className={inputCls} style={inputStyle}
+        value={value ?? ''} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder} required={required} autoComplete="off" />
+      {suggestions.length > 0 && listId && (
+        <datalist id={listId}>
+          {suggestions.map(s => <option key={s} value={s} />)}
+        </datalist>
+      )}
+    </div>
+  )
+}
 
 // ── Section divider ───────────────────────────────────────────────────────────
 
@@ -190,10 +220,12 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
     actual_start: '', actual_end: '', estimated_budget: '', client_charge: '',
     progress_pct: 0, tags: '', context_notes: '', risks_blockers: '',
   })
-  const [confirmDel, setConfirmDel] = useState(false)
+  const [confirmDel,       setConfirmDel]       = useState(false)
+  const [clientSuggestions, setClientSuggestions] = useState([])
+  const [leadSuggestions,   setLeadSuggestions]   = useState([])
   const set = k => v => setD(p => ({ ...p, [k]: v }))
 
-  // Reset form when drawer opens
+  // Reset form when drawer opens; seed suggestions from Teable options
   useEffect(() => {
     if (open) {
       setD({
@@ -204,6 +236,8 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
         ...initial,
       })
       setConfirmDel(false)
+      setClientSuggestions(CLIENT_OPTIONS)
+      setLeadSuggestions(LEAD_OPTIONS)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -289,20 +323,41 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Client">
-                  <TextInput value={d.client} onChange={set('client')} placeholder="Client name" />
+                  <ComboInput id="proj-client" value={d.client} onChange={set('client')}
+                    placeholder="Select or type" suggestions={clientSuggestions} />
                 </FormRow>
                 <FormRow label="Project Lead">
-                  <TextInput value={d.project_lead} onChange={set('project_lead')} placeholder="e.g. Mayukh" />
+                  <ComboInput id="proj-lead" value={d.project_lead} onChange={set('project_lead')}
+                    placeholder="e.g. Mayukh" suggestions={leadSuggestions} />
                 </FormRow>
               </div>
-              <FormRow label="Tags">
-                <div className="relative">
-                  <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                    style={{ color: 'var(--text-3)' }} />
-                  <input className={inputCls + ' pl-8'} style={inputStyle}
-                    value={d.tags} onChange={e => set('tags')(e.target.value)}
-                    placeholder="design, backend, phase-1 (comma-separated)" />
+              <FormRow label="Tags" hint="Pick any that apply">
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {TAG_OPTIONS.map(tag => {
+                    const selected = d.tags ? d.tags.split(',').map(t => t.trim()).includes(tag) : false
+                    return (
+                      <button key={tag} type="button"
+                        onClick={() => {
+                          const cur = d.tags ? d.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+                          const next = selected ? cur.filter(t => t !== tag) : [...cur, tag]
+                          set('tags')(next.join(', '))
+                        }}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium transition-all"
+                        style={{
+                          background: selected ? 'var(--accent-dim)' : 'var(--bg-input)',
+                          color: selected ? 'var(--accent)' : 'var(--text-3)',
+                          border: `1px solid ${selected ? 'var(--accent-soft)' : 'var(--border)'}`,
+                        }}>
+                        {tag}
+                      </button>
+                    )
+                  })}
                 </div>
+                {d.tags && (
+                  <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>
+                    Selected: {d.tags}
+                  </p>
+                )}
               </FormRow>
             </div>
           </div>
@@ -443,139 +498,259 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
   )
 }
 
-// ── Resource Form ─────────────────────────────────────────────────────────────
+// ── Resource Drawer (polished portal, same style as ProjectDrawer) ─────────────
 
-function ResourceForm({ initial = {}, onSubmit, loading }) {
-  const [d, setD] = useState({
+function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [] }) {
+  const EMPTY = {
     resource_name: '', role: '', type_: 'Employee',
     rate: '', rate_unit: 'Per Month', units: '',
     man_hours: '', planned_hours: '',
     billing_rate: '', billable_units: '',
     from_date: '', to_date: '', notes: '',
-    ...initial,
-  })
+    project_id: '',
+  }
+  const [d, setD] = useState(EMPTY)
+  const [confirmDel, setConfirmDel] = useState(false)
   const set = k => v => setD(p => ({ ...p, [k]: v }))
 
+  useEffect(() => {
+    if (open) {
+      setD({ ...EMPTY, ...initial })
+      setConfirmDel(false)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [open, onClose])
+
   // Live calculations
-  const totalCost    = useMemo(() => (Number(d.rate) || 0) * (Number(d.units) || 0), [d.rate, d.units])
-  const totalRevenue = useMemo(() => (Number(d.billing_rate) || 0) * (Number(d.billable_units) || 0), [d.billing_rate, d.billable_units])
+  const totalCost    = (Number(d.rate) || 0) * (Number(d.units) || 0)
+  const totalRevenue = (Number(d.billing_rate) || 0) * (Number(d.billable_units) || 0)
   const grossMargin  = totalRevenue - totalCost
   const costPerHour  = d.man_hours ? totalCost / Number(d.man_hours) : null
+  const hoursOver    = d.man_hours !== '' && d.planned_hours !== ''
+    ? Number(d.man_hours) - Number(d.planned_hours) : null
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const p = {}
-    if (d.resource_name)           p.resource_name   = d.resource_name
-    if (d.role)                    p.role             = d.role
-    if (d.type_)                   p.type_            = d.type_
-    if (d.rate !== '')             p.rate             = Number(d.rate)
-    if (d.rate_unit)               p.rate_unit        = d.rate_unit
-    if (d.units !== '')            p.units            = Number(d.units)
-    if (d.man_hours !== '')        p.man_hours        = Number(d.man_hours)
-    if (d.planned_hours !== '')    p.planned_hours    = Number(d.planned_hours)
-    if (d.billing_rate !== '')     p.billing_rate     = Number(d.billing_rate)
-    if (d.billable_units !== '')   p.billable_units   = Number(d.billable_units)
-    if (d.from_date)               p.from_date        = d.from_date
-    if (d.to_date)                 p.to_date          = d.to_date
-    if (d.notes)                   p.notes            = d.notes
+    if (d.resource_name)         p.resource_name   = d.resource_name
+    if (d.role)                  p.role             = d.role
+    if (d.type_)                 p.type_            = d.type_
+    if (d.rate !== '')           p.rate             = Number(d.rate)
+    if (d.rate_unit)             p.rate_unit        = d.rate_unit
+    if (d.units !== '')          p.units            = Number(d.units)
+    if (d.man_hours !== '')      p.man_hours        = Number(d.man_hours)
+    if (d.planned_hours !== '')  p.planned_hours    = Number(d.planned_hours)
+    if (d.billing_rate !== '')   p.billing_rate     = Number(d.billing_rate)
+    if (d.billable_units !== '') p.billable_units   = Number(d.billable_units)
+    if (d.from_date)             p.from_date        = d.from_date
+    if (d.to_date)               p.to_date          = d.to_date
+    if (d.notes)                 p.notes            = d.notes
+    if (d.project_id)            p.project_id       = d.project_id
     onSubmit(p)
   }
 
-  return (
-    <form onSubmit={handleSubmit} id="resource-form" className="space-y-4">
-      <FormRow label="Resource Name" required>
-        <TextInput value={d.resource_name} onChange={set('resource_name')} placeholder="e.g. Rahul Sharma" required />
-      </FormRow>
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="Role">
-          <TextInput value={d.role} onChange={set('role')} placeholder="e.g. Frontend Dev" />
-        </FormRow>
-        <FormRow label="Type">
-          <SelectInput value={d.type_} onChange={set('type_')} options={RESOURCE_TYPES} />
-        </FormRow>
-      </div>
+  if (!open) return null
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose} />
+      <div className="relative ml-auto flex flex-col h-full shadow-2xl"
+        style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
 
-      {/* Cost section */}
-      <div className="pt-2 pb-1">
-        <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Cost (What you pay)</p>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <FormRow label="Rate (₹)">
-              <NumberInput value={d.rate} onChange={set('rate')} placeholder="0" min={0} />
-            </FormRow>
-            <FormRow label="Rate Unit">
-              <SelectInput value={d.rate_unit} onChange={set('rate_unit')} options={RATE_UNITS} />
-            </FormRow>
-          </div>
-          <FormRow label="Units" hint="Months / hours / days depending on Rate Unit">
-            <NumberInput value={d.units} onChange={set('units')} placeholder="e.g. 2" min={0} step={0.5} />
-          </FormRow>
-          {totalCost > 0 && (
-            <div className="px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.2)', color: '#fb923c' }}>
-              Total cost: <strong>{formatInr(totalCost)}</strong>
-              {costPerHour && <span className="ml-2 opacity-70">· ₹{Math.round(costPerHour)}/hr</span>}
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.25)' }}>
+              <Users size={14} className="text-white" />
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Man hours section */}
-      <div className="pt-2 pb-1">
-        <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Man Hours</p>
-        <div className="grid grid-cols-2 gap-3">
-          <FormRow label="Actual Hours" hint="Total hours worked">
-            <NumberInput value={d.man_hours} onChange={set('man_hours')} placeholder="e.g. 160" min={0} step={0.5} />
-          </FormRow>
-          <FormRow label="Planned Hours" hint="Originally estimated">
-            <NumberInput value={d.planned_hours} onChange={set('planned_hours')} placeholder="e.g. 140" min={0} step={0.5} />
-          </FormRow>
-        </div>
-        {d.man_hours !== '' && d.planned_hours !== '' && (
-          <div className="mt-2 px-3 py-2 rounded-xl text-xs" style={{
-            background: Number(d.man_hours) > Number(d.planned_hours) ? 'rgba(248,113,113,0.08)' : 'rgba(34,197,94,0.08)',
-            border: `1px solid ${Number(d.man_hours) > Number(d.planned_hours) ? 'rgba(248,113,113,0.2)' : 'rgba(34,197,94,0.2)'}`,
-            color: Number(d.man_hours) > Number(d.planned_hours) ? '#f87171' : '#4ade80',
-          }}>
-            Hours variance: {Number(d.man_hours) > Number(d.planned_hours) ? '+' : ''}{Number(d.man_hours) - Number(d.planned_hours)}h
-            {Number(d.man_hours) > Number(d.planned_hours) ? ' over estimate' : ' under estimate'}
+            <div className="min-w-0">
+              <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>
+                {isEdit ? 'Edit Resource' : 'Add Resource'}
+              </p>
+              {d.resource_name && (
+                <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{d.resource_name}</p>
+              )}
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Revenue section */}
-      <div className="pt-2 pb-1">
-        <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Revenue (What you charge)</p>
-        <div className="grid grid-cols-2 gap-3">
-          <FormRow label="Billing Rate (₹)" hint="Rate charged to client">
-            <NumberInput value={d.billing_rate} onChange={set('billing_rate')} placeholder="0" min={0} />
-          </FormRow>
-          <FormRow label="Billable Units" hint="Units billed to client">
-            <NumberInput value={d.billable_units} onChange={set('billable_units')} placeholder="0" min={0} step={0.5} />
-          </FormRow>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ color: 'var(--text-3)' }}>
+            <X size={16} />
+          </button>
         </div>
-        {totalRevenue > 0 && (
-          <div className="mt-2 px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#4ade80' }}>
-            Revenue: <strong>{formatInr(totalRevenue)}</strong>
-            {totalCost > 0 && (
-              <span className="ml-2 opacity-80">
-                · Margin: <strong style={{ color: grossMargin >= 0 ? '#4ade80' : '#f87171' }}>
-                  {formatInr(grossMargin)} ({totalRevenue > 0 ? (grossMargin / totalRevenue * 100).toFixed(1) : 0}%)
-                </strong>
-              </span>
-            )}
-          </div>
-        )}
-      </div>
 
-      {/* Dates */}
-      <div className="grid grid-cols-2 gap-3">
-        <FormRow label="From Date"><TextInput type="date" value={d.from_date} onChange={set('from_date')} /></FormRow>
-        <FormRow label="To Date"><TextInput type="date" value={d.to_date} onChange={set('to_date')} /></FormRow>
+        {/* Body */}
+        <form id="resource-form" onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+          {/* ── Identity ── */}
+          <div>
+            <SectionLabel icon={Users}>Resource Identity</SectionLabel>
+            <div className="space-y-3">
+              <FormRow label="Resource Name" required>
+                <TextInput value={d.resource_name} onChange={set('resource_name')}
+                  placeholder="e.g. Rahul Sharma" required />
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Role">
+                  <TextInput value={d.role} onChange={set('role')} placeholder="e.g. Frontend Dev" />
+                </FormRow>
+                <FormRow label="Type">
+                  <SelectInput value={d.type_} onChange={set('type_')} options={RESOURCE_TYPES} />
+                </FormRow>
+              </div>
+              {projectNames.length > 0 && (
+                <FormRow label="Project">
+                  <ProjectSelect value={d.project_id} onChange={set('project_id')} projectNames={projectNames} />
+                </FormRow>
+              )}
+            </div>
+          </div>
+
+          {/* ── Cost ── */}
+          <div>
+            <SectionLabel icon={IndianRupee}>Cost <span className="normal-case font-normal">(what you pay)</span></SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Rate (₹)">
+                  <NumberInput value={d.rate} onChange={set('rate')} placeholder="0" min={0} />
+                </FormRow>
+                <FormRow label="Rate Unit">
+                  <SelectInput value={d.rate_unit} onChange={set('rate_unit')} options={RATE_UNITS} />
+                </FormRow>
+              </div>
+              <FormRow label="Units" hint="Months / hours / days — depends on Rate Unit">
+                <NumberInput value={d.units} onChange={set('units')} placeholder="e.g. 2" min={0} step={0.5} />
+              </FormRow>
+              {totalCost > 0 && (
+                <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
+                  style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.2)', color: '#fb923c' }}>
+                  <IndianRupee size={13} />
+                  <span>Total cost: <strong>{formatInr(totalCost)}</strong>
+                    {costPerHour && <span className="ml-2 opacity-70">· ₹{Math.round(costPerHour)}/hr</span>}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Man Hours ── */}
+          <div>
+            <SectionLabel icon={Clock}>Man Hours</SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Actual Hours" hint="Total worked">
+                  <NumberInput value={d.man_hours} onChange={set('man_hours')} placeholder="e.g. 160" min={0} step={0.5} />
+                </FormRow>
+                <FormRow label="Planned Hours" hint="Original estimate">
+                  <NumberInput value={d.planned_hours} onChange={set('planned_hours')} placeholder="e.g. 140" min={0} step={0.5} />
+                </FormRow>
+              </div>
+              {hoursOver !== null && (
+                <div className="px-3 py-2 rounded-xl text-xs flex items-center gap-2" style={{
+                  background: hoursOver > 0 ? 'rgba(248,113,113,0.08)' : 'rgba(34,197,94,0.08)',
+                  border: `1px solid ${hoursOver > 0 ? 'rgba(248,113,113,0.2)' : 'rgba(34,197,94,0.2)'}`,
+                  color: hoursOver > 0 ? '#f87171' : '#4ade80',
+                }}>
+                  {hoursOver > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                  <span>
+                    {hoursOver > 0 ? `+${hoursOver}h over estimate` : hoursOver < 0 ? `${hoursOver}h under estimate` : 'On track'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Revenue ── */}
+          <div>
+            <SectionLabel icon={TrendingUp}>Revenue <span className="normal-case font-normal">(what you charge)</span></SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Billing Rate (₹)" hint="Rate charged to client">
+                  <NumberInput value={d.billing_rate} onChange={set('billing_rate')} placeholder="0" min={0} />
+                </FormRow>
+                <FormRow label="Billable Units" hint="Units billed">
+                  <NumberInput value={d.billable_units} onChange={set('billable_units')} placeholder="0" min={0} step={0.5} />
+                </FormRow>
+              </div>
+              {(totalRevenue > 0 || totalCost > 0) && (totalRevenue > 0) && (
+                <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
+                  style={{
+                    background: grossMargin >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)',
+                    border: `1px solid ${grossMargin >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(248,113,113,0.2)'}`,
+                    color: grossMargin >= 0 ? '#4ade80' : '#f87171',
+                  }}>
+                  {grossMargin >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                  <span>Revenue: <strong>{formatInr(totalRevenue)}</strong>
+                    {totalCost > 0 && <span className="ml-2 opacity-80">
+                      · Margin: <strong>{formatInr(grossMargin)} ({totalRevenue > 0 ? (grossMargin / totalRevenue * 100).toFixed(1) : 0}%)</strong>
+                    </span>}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Dates & Notes ── */}
+          <div>
+            <SectionLabel icon={Calendar}>Dates &amp; Notes</SectionLabel>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="From Date">
+                  <TextInput type="date" value={d.from_date} onChange={set('from_date')} />
+                </FormRow>
+                <FormRow label="To Date">
+                  <TextInput type="date" value={d.to_date} onChange={set('to_date')} />
+                </FormRow>
+              </div>
+              <FormRow label="Notes">
+                <TextareaInput value={d.notes} onChange={set('notes')} placeholder="Any relevant notes…" rows={2} />
+              </FormRow>
+            </div>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="px-5 py-4 flex items-center gap-3 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          {isEdit && onDelete ? (
+            <button type="button"
+              onClick={() => confirmDel ? onDelete() : setConfirmDel(true)}
+              onBlur={() => setConfirmDel(false)}
+              className="px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+              style={{
+                background: confirmDel ? 'rgba(239,68,68,0.12)' : 'transparent',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#f87171',
+              }}>
+              <Trash2 size={13} className="inline mr-1" />
+              {confirmDel ? 'Confirm?' : 'Delete'}
+            </button>
+          ) : <div />}
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-xl text-sm font-medium"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              Cancel
+            </button>
+            <button type="submit" form="resource-form" disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+              {saving && <Loader2 size={13} className="animate-spin" />}
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Resource'}
+            </button>
+          </div>
+        </div>
       </div>
-      <FormRow label="Notes">
-        <TextareaInput value={d.notes} onChange={set('notes')} placeholder="Any relevant notes…" rows={2} />
-      </FormRow>
-    </form>
+    </div>,
+    document.body
   )
 }
 
@@ -619,7 +794,7 @@ function ResourceRow({ resource, onEdit, onDelete }) {
             </p>
           ) : (
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-              {f['Rate ₹'] ? `${formatInr(f['Rate ₹'])} × ${f['Units'] || 0} ${f['Rate Unit'] || ''}` : 'No rate'}
+              {f['Rate (₹)'] ? `${formatInr(f['Rate (₹)'])} × ${f['Units'] || 0} ${f['Rate Unit'] || ''}` : 'No rate'}
             </p>
           )}
         </div>
@@ -680,7 +855,7 @@ function ProjectCard({ record, onClick }) {
         {f['Client'] && <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{f['Client']}</span>}
         {f['Status'] && <StatusBadge status={f['Status']} />}
       </div>
-      {f['Progress %'] != null && <div className="mb-3"><ProgressBar value={f['Progress %']} /></div>}
+      {f['Progress (%)'] != null && <div className="mb-3"><ProgressBar value={f['Progress (%)']} /></div>}
       <div className="grid grid-cols-2 gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
         <div>
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>Charge</p>
@@ -818,8 +993,8 @@ function ProjectDetailView({
       )}
 
       {/* Progress */}
-      {f['Progress %'] != null && (
-        <div className="card"><ProgressBar value={f['Progress %']} /></div>
+      {f['Progress (%)'] != null && (
+        <div className="card"><ProgressBar value={f['Progress (%)']} /></div>
       )}
 
       {/* Detail fields */}
@@ -828,10 +1003,10 @@ function ProjectDetailView({
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
             ['Project Lead',  f['Project Lead']],
-            ['Est. Start',    f['Est. Start']   ? new Date(f['Est. Start']).toLocaleDateString('en-IN') : null],
-            ['Est. End',      f['Est. End']     ? new Date(f['Est. End']).toLocaleDateString('en-IN') : null],
-            ['Actual Start',  f['Actual Start'] ? new Date(f['Actual Start']).toLocaleDateString('en-IN') : null],
-            ['Actual End',    f['Actual End']   ? new Date(f['Actual End']).toLocaleDateString('en-IN') : null],
+            ['Est. Start',    f['Est. Start Date']   ? new Date(f['Est. Start Date']).toLocaleDateString('en-IN') : null],
+            ['Est. End',      f['Est. End Date']     ? new Date(f['Est. End Date']).toLocaleDateString('en-IN') : null],
+            ['Actual Start',  f['Actual Start Date'] ? new Date(f['Actual Start Date']).toLocaleDateString('en-IN') : null],
+            ['Actual End',    f['Actual End Date']   ? new Date(f['Actual End Date']).toLocaleDateString('en-IN') : null],
             ['Est. Budget',   budget ? formatInr(budget) : null],
             ['Budget Var.',   budgetVar ? `${budgetVar > 0 ? '+' : ''}${formatInr(budgetVar)}` : null],
             ['Tags',          f['Tags']],
@@ -997,6 +1172,7 @@ export function ProjectsWorkspace() {
 
   // Data
   const [projects,         setProjects]         = useState([])
+  const [projectNames,     setProjectNames]     = useState([])   // [{id, name, client}]
   const [resources,        setResources]        = useState([])
   const [linkedInvoices,   setLinkedInvoices]   = useState([])
   const [invoicesLoading,  setInvoicesLoading]  = useState(false)
@@ -1024,12 +1200,14 @@ export function ProjectsWorkspace() {
   const loadProjects = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [pData, sData] = await Promise.all([
+      const [pData, sData, names] = await Promise.all([
         api.webProjects.list(),
         api.webProjects.summary(),
+        api.webProjects.names().catch(() => []),
       ])
       setProjects(pData.records || [])
       setSummary(sData)
+      setProjectNames(Array.isArray(names) ? names : [])
     } catch (e) {
       setError(e.message)
       toast('Failed to load projects: ' + e.message, 'error')
@@ -1325,13 +1503,13 @@ export function ProjectsWorkspace() {
                   priority:         f['Priority']       || 'Medium',
                   project_lead:     f['Project Lead']   || '',
                   description:      f['Description']    || '',
-                  est_start:        f['Est. Start']?.split('T')[0]    || '',
-                  est_end:          f['Est. End']?.split('T')[0]      || '',
-                  actual_start:     f['Actual Start']?.split('T')[0]  || '',
-                  actual_end:       f['Actual End']?.split('T')[0]    || '',
+                  est_start:        f['Est. Start Date']?.split('T')[0]    || '',
+                  est_end:          f['Est. End Date']?.split('T')[0]      || '',
+                  actual_start:     f['Actual Start Date']?.split('T')[0]  || '',
+                  actual_end:       f['Actual End Date']?.split('T')[0]    || '',
                   estimated_budget: f['Estimated Budget'] != null ? String(f['Estimated Budget']) : '',
                   client_charge:    f['Client Charge']  != null ? String(f['Client Charge'])  : '',
-                  progress_pct:     f['Progress %']     != null ? String(f['Progress %'])     : '',
+                  progress_pct:     f['Progress (%)']     != null ? String(f['Progress (%)'])     : '',
                   tags:             f['Tags']            || '',
                   context_notes:    f['Context & Notes'] || '',
                   risks_blockers:   f['Risks & Blockers'] || '',
@@ -1349,7 +1527,7 @@ export function ProjectsWorkspace() {
                   resource_name:  f['Resource Name'] || '',
                   role:           f['Role']          || '',
                   type_:          f['Type']          || 'Employee',
-                  rate:           f['Rate ₹']        != null ? String(f['Rate ₹'])        : '',
+                  rate:           f['Rate (₹)']        != null ? String(f['Rate (₹)'])        : '',
                   rate_unit:      f['Rate Unit']     || 'Per Month',
                   units:          f['Units']         != null ? String(f['Units'])         : '',
                   man_hours:      f['Man Hours']     != null ? String(f['Man Hours'])     : '',
@@ -1380,26 +1558,289 @@ export function ProjectsWorkspace() {
       />
 
       {/* ── RESOURCE DRAWER ── */}
-      <Drawer
+      <ResourceDrawer
         open={drawer === 'new-resource' || drawer === 'edit-resource'}
         onClose={() => { setDrawer(null); setEditingRecord(null) }}
-        title={drawer === 'new-resource' ? 'Add Resource' : 'Edit Resource'}
-        footer={
-          <>
-            <button onClick={() => { setDrawer(null); setEditingRecord(null) }}
-              className="flex-1 py-2 rounded-xl text-sm font-medium"
-              style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>Cancel</button>
-            <button type="submit" form="resource-form" disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}>
-              {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? 'Saving…' : drawer === 'new-resource' ? 'Add Resource' : 'Save Resource'}
-            </button>
-          </>
-        }
-      >
-        <ResourceForm initial={editingRecord?.initial || {}} onSubmit={handleSaveResource} loading={saving} />
-      </Drawer>
+        initial={editingRecord?.initial || {}}
+        onSubmit={handleSaveResource}
+        onDelete={drawer === 'edit-resource' ? () => handleDeleteResource(editingRecord?.id) : undefined}
+        saving={saving}
+        isEdit={drawer === 'edit-resource'}
+        projectNames={projectNames}
+      />
+    </div>
+  )
+}
+
+// ── AllResourcesView — global resources table (named export) ─────────────────
+
+export function AllResourcesView() {
+  const toast = useToast()
+  const [resources,    setResources]    = useState([])
+  const [projectNames, setProjectNames] = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState(null)
+  const [search,       setSearch]       = useState('')
+  const [typeFilter,   setTypeFilter]   = useState('')
+  const [drawer,       setDrawer]       = useState(null)  // null | 'new' | 'edit'
+  const [editingRec,   setEditingRec]   = useState(null)
+  const [saving,       setSaving]       = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const [data, names] = await Promise.all([
+        api.webProjects.resources.listAll(),
+        api.webProjects.names().catch(() => []),
+      ])
+      setResources(data.records || [])
+      setProjectNames(Array.isArray(names) ? names : [])
+    } catch (e) {
+      setError(e.message)
+      toast('Failed to load resources: ' + e.message, 'error')
+    } finally { setLoading(false) }
+  }, [toast])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async (payload) => {
+    setSaving(true)
+    try {
+      if (drawer === 'new') {
+        await api.webProjects.resources.create(payload)
+        toast('Resource added!', 'success')
+      } else {
+        await api.webProjects.resources.update(editingRec.id, payload)
+        toast('Resource updated!', 'success')
+      }
+      setDrawer(null); setEditingRec(null)
+      await load()
+    } catch (e) { toast('Save failed: ' + e.message, 'error') }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!editingRec) return
+    try {
+      await api.webProjects.resources.delete(editingRec.id)
+      toast('Resource removed', 'info')
+      setDrawer(null); setEditingRec(null)
+      await load()
+    } catch (e) { toast('Delete failed: ' + e.message, 'error') }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    return resources.filter(r => {
+      const f = r.fields || {}
+      if (typeFilter && f['Type'] !== typeFilter) return false
+      if (q) {
+        const name    = (f['Resource Name'] || '').toLowerCase()
+        const role    = (f['Role'] || '').toLowerCase()
+        const project = Array.isArray(f['Project'])
+          ? f['Project'].map(p => (p.title || '')).join(' ').toLowerCase()
+          : (f['Project'] || '').toString().toLowerCase()
+        if (!name.includes(q) && !role.includes(q) && !project.includes(q)) return false
+      }
+      return true
+    })
+  }, [resources, search, typeFilter])
+
+  // Aggregate KPIs
+  const totalCost    = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Total Cost'] || 0), 0), [displayed])
+  const totalRevenue = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Revenue Generated'] || 0), 0), [displayed])
+  const totalHours   = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Man Hours'] || 0), 0), [displayed])
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>All Resources</h2>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+            {loading ? 'Loading…' : `${resources.length} resource${resources.length !== 1 ? 's' : ''} across all projects`}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={load} className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={() => { setEditingRec(null); setDrawer('new') }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold"
+            style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+            <Plus size={14} /><span className="hidden sm:inline">Add Resource</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      {!loading && resources.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <KpiCard label="Total Cost"    value={formatInr(totalCost)} />
+          <KpiCard label="Total Revenue" value={formatInr(totalRevenue)} accent={totalRevenue > 0 ? '#4ade80' : undefined} />
+          <KpiCard label="Total Hours"   value={totalHours > 0 ? `${totalHours}h` : '—'} />
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+          <input className="w-full rounded-xl pl-8 pr-3 py-2.5 text-sm outline-none"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+            placeholder="Search by name, role or project…"
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          className="rounded-xl px-3 py-2.5 text-sm outline-none"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
+          <option value="">All types</option>
+          {RESOURCE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+          <AlertTriangle size={15} /> {error}
+          <button onClick={load} className="underline ml-1">retry</button>
+        </div>
+      )}
+
+      {/* Table */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="card flex items-center gap-3" aria-hidden="true">
+              <div className="skeleton w-9 h-9 rounded-full flex-shrink-0" />
+              <div className="flex-1 space-y-2"><div className="skeleton h-4 rounded w-1/3" /><div className="skeleton h-3 rounded w-1/4" /></div>
+              <div className="skeleton h-4 rounded w-20" />
+            </div>
+          ))}
+        </div>
+      ) : displayed.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Users size={28} className="mb-3 opacity-20" style={{ color: 'var(--text-3)' }} />
+          <p className="font-semibold" style={{ color: 'var(--text-2)' }}>
+            {search || typeFilter ? 'No resources match filters' : 'No resources yet'}
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>Click "Add Resource" above to get started</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ minWidth: 640 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Resource', 'Project', 'Role / Type', 'Cost', 'Hours', 'Revenue', ''].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider"
+                      style={{ color: 'var(--text-3)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {displayed.map(r => {
+                  const f = r.fields || {}
+                  const projLabel = Array.isArray(f['Project'])
+                    ? f['Project'].map(p => p.title || p.value || '').filter(Boolean).join(', ')
+                    : f['Project'] || '—'
+                  const cost    = Number(f['Total Cost'] || 0)
+                  const hours   = Number(f['Man Hours'] || 0)
+                  const revenue = Number(f['Revenue Generated'] || 0)
+                  const margin  = Number(f['Resource Margin %'] || 0)
+                  // Find linked project id for pre-filling edit form
+                  const linkedProjId = Array.isArray(f['Project']) && f['Project'][0]?.id
+                  return (
+                    <tr key={r.id} className="tbl-row" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="tbl-cell">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                            style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
+                            {(f['Resource Name'] || '?')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{f['Resource Name'] || '—'}</p>
+                            {f['Rate (₹)'] && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{formatInr(f['Rate (₹)'])}/{f['Rate Unit'] || 'unit'}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="tbl-cell">
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{projLabel}</p>
+                      </td>
+                      <td className="tbl-cell">
+                        <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Role'] || '—'}</p>
+                        {f['Type'] && <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>{f['Type']}</span>}
+                      </td>
+                      <td className="tbl-cell">
+                        <p className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                          {cost ? formatInr(cost) : '—'}
+                        </p>
+                      </td>
+                      <td className="tbl-cell">
+                        <p className="text-sm tabular-nums" style={{ color: 'var(--text-2)' }}>
+                          {hours > 0 ? `${hours}h` : '—'}
+                        </p>
+                      </td>
+                      <td className="tbl-cell">
+                        {revenue > 0 ? (
+                          <div>
+                            <p className="text-sm font-semibold tabular-nums" style={{ color: '#4ade80' }}>{formatInr(revenue)}</p>
+                            {margin > 0 && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{margin.toFixed(1)}% margin</p>}
+                          </div>
+                        ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                      </td>
+                      <td className="tbl-cell" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => {
+                            setEditingRec({
+                              id: r.id,
+                              initial: {
+                                resource_name:  f['Resource Name'] || '',
+                                role:           f['Role']          || '',
+                                type_:          f['Type']          || 'Employee',
+                                rate:           f['Rate (₹)']      != null ? String(f['Rate (₹)'])      : '',
+                                rate_unit:      f['Rate Unit']     || 'Per Month',
+                                units:          f['Units']         != null ? String(f['Units'])         : '',
+                                man_hours:      f['Man Hours']     != null ? String(f['Man Hours'])     : '',
+                                planned_hours:  f['Planned Hours'] != null ? String(f['Planned Hours']) : '',
+                                billing_rate:   f['Billing Rate (₹)'] != null ? String(f['Billing Rate (₹)']) : '',
+                                billable_units: f['Billable Units'] != null ? String(f['Billable Units']) : '',
+                                from_date:      f['From Date']?.split('T')[0] || '',
+                                to_date:        f['To Date']?.split('T')[0]   || '',
+                                notes:          f['Notes']         || '',
+                                project_id:     linkedProjId || '',
+                              },
+                            })
+                            setDrawer('edit')
+                          }}
+                          className="btn-ghost flex items-center gap-1.5"
+                          style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
+                          <Edit2 size={11} /><span className="text-[11px] font-semibold">Edit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Resource Drawer */}
+      <ResourceDrawer
+        open={drawer === 'new' || drawer === 'edit'}
+        onClose={() => { setDrawer(null); setEditingRec(null) }}
+        initial={editingRec?.initial || {}}
+        onSubmit={handleSave}
+        onDelete={drawer === 'edit' ? handleDelete : undefined}
+        saving={saving}
+        isEdit={drawer === 'edit'}
+        projectNames={projectNames}
+      />
     </div>
   )
 }

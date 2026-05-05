@@ -23,16 +23,16 @@ WEB_PROJECT_FIELD_IDS: dict[str, str] = {
     "Priority":                        "fldM9D8QOfhWZuqqWWp",
     "Project Lead":                    "fldlb1f10F5tM7s2kfO",
     "Tags":                            "fld2SooiQMdsOOjZhzc",
-    "Progress %":                      "fldecShINcwfe4DhJ8n",
+    "Progress (%)":                     "fldecShINcwfe4DhJ8n",
     # Context
     "Description":                     "fld11GeONsRbsPuWiAn",
     "Context & Notes":                 "fldvYsmSkyysZ5hogcl",
     "Risks & Blockers":                "fldANT9it3OTJgELC3U",
-    # Dates
-    "Est. Start":                      "fldLWvp2Wuc4Mf3F8bx",
-    "Est. End":                        "fldcTExw2Q8UoIrKrnV",
-    "Actual Start":                    "fldW7BEFe1rK1qpQbXX",
-    "Actual End":                      "fldPIE1uuWn2Pmx0MPt",
+    # Dates — actual Teable field names include "Date" suffix
+    "Est. Start Date":                 "fldLWvp2Wuc4Mf3F8bx",
+    "Est. End Date":                   "fldcTExw2Q8UoIrKrnV",
+    "Actual Start Date":               "fldW7BEFe1rK1qpQbXX",
+    "Actual End Date":                 "fldPIE1uuWn2Pmx0MPt",
     # Financial (editable)
     "Estimated Budget":                "fldF8zoFCwa96N5Ze1S",
     "Client Charge":                   "fldB6348zP63PPcQhFW",
@@ -63,7 +63,7 @@ WEB_RESOURCE_FIELD_IDS: dict[str, str] = {
     "Resource Name":         "fldGziN024fBytTHbxc",
     "Role":                  "fldkrQDHgMrfD9DjZG0",
     "Type":                  "fldaRgLjZWkR3iV2e5A",
-    "Rate ₹":                "fldkqwQErwSdDESQa6q",
+    "Rate (₹)":              "fldkqwQErwSdDESQa6q",
     "Rate Unit":             "fldBdHq5RaaGmkZ3vmk",
     "Units":                 "fld2EOpGBDHojqJfKAL",
     "From Date":             "fldelZHMgbnp8f4UE1V",
@@ -330,7 +330,7 @@ class WebProjectService:
                 total_planned_hours += ph
                 total_revenue_gen   += rev
 
-                if status in ("Active", "🟢 Active"):
+                if status in ("In Progress", "Active", "🟢 Active"):
                     active_count += 1
 
             overall_margin = (
@@ -398,6 +398,33 @@ class WebResourceService:
                         "value": project_id,
                     }],
                 }),
+            }
+            async with httpx.AsyncClient(timeout=20) as client_:
+                res = await client_.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                data = res.json()
+            return {"records": data.get("records", []), "total": data.get("total", 0)}
+
+        return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
+
+    # ── List all resources (global view) ─────────────────────────────────
+
+    async def list_all_resources(
+        self,
+        limit: int = 500,
+        skip: int = 0,
+    ) -> dict:
+        cache_key = f"webres:all:{limit}:{skip}"
+
+        async def _load():
+            params: dict[str, Any] = {
+                "fieldKeyType": "name",
+                "take": limit,
+                "skip": skip,
+                "orderBy": json.dumps([{
+                    "fieldId": WEB_RESOURCE_FIELD_IDS["Resource Name"],
+                    "order": "asc",
+                }]),
             }
             async with httpx.AsyncClient(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
