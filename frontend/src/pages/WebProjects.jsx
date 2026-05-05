@@ -249,9 +249,12 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
       setConfirmDel(false)
       setClientSuggestions([])
       setLeadSuggestions([])
-      // Fetch live picklists from the invoices module
+      // Fetch distinct client names from actual invoice records (most accurate)
+      api.webInvoices.clientNames().then(names => {
+        if (Array.isArray(names) && names.length) setClientSuggestions(names)
+      }).catch(() => {})
+      // Fetch lead options from invoices picklist schema
       api.webInvoices.picklists.get().then(pl => {
-        if (pl?.Project?.options?.length)       setClientSuggestions(pl.Project.options)
         if (pl?.['Raised By']?.options?.length) setLeadSuggestions(pl['Raised By'].options)
       }).catch(() => {})
     }

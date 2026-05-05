@@ -174,6 +174,31 @@ class WebInvoiceService:
         attachments = fields.get(field_id) or fields.get(field_name) or []
         return {"record": data, "attachments": attachments}
 
+    async def get_distinct_client_names(self) -> list[str]:
+        """
+        Return sorted distinct Project values from actual invoice records.
+        Much more accurate than the picklist schema, which can contain
+        stale / test entries that were never actually used on a real invoice.
+        """
+        async def _load():
+            params: dict[str, Any] = {
+                "fieldKeyType": "name",
+                "take": 1000,
+                "skip": 0,
+            }
+            async with httpx.AsyncClient(timeout=20) as client_:
+                res = await client_.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                records = res.json().get("records", [])
+            names = sorted({
+                r["fields"]["Project"]
+                for r in records
+                if r.get("fields", {}).get("Project") and isinstance(r["fields"]["Project"], str)
+            })
+            return names
+
+        return await cache.get_or_set("webinv:client_names", ttl=60, loader=_load)
+
     async def list_invoices(
         self,
         status: Optional[str] = None,

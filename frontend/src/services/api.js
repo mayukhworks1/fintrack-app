@@ -203,6 +203,7 @@ export const api = {
     create:   (data)      => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
     update:   (id, data)  => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:   (id)        => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
+    clientNames: ()              => request('/api/web-invoices/client-names'),
     picklists: {
       get:    ()                   => request('/api/web-invoices/picklists'),
       add:    (fieldName, option)  => request(`/api/web-invoices/picklists/${encodeURIComponent(fieldName)}`, {

@@ -68,6 +68,15 @@ class WebInvoiceFields(BaseModel):
         return {k: v for k, v in m.items() if v is not None}
 
 
+@router.get("/client-names")
+async def get_client_names(_role: str = Depends(require_web_access)):
+    """Distinct project/client names from actual invoice records (for autocomplete)."""
+    try:
+        return await WebInvoiceService().get_distinct_client_names()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/picklists")
 async def get_picklists(_role: str = Depends(require_web_access)):
     """Return current single-select options for all editable picklist fields."""
