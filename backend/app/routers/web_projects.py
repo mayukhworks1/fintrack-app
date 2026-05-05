@@ -139,8 +139,15 @@ async def list_web_projects(
 
 
 @projects_router.get("/{project_id}/resources")
-async def list_project_resources(project_id: str, _role: str = Depends(require_all)):
+async def list_project_resources(
+    project_id: str,
+    bust: bool = Query(False, description="Set true to bypass cache"),
+    _role: str = Depends(require_all),
+):
     """List all resources linked to a specific project."""
+    from ..utils.cache import cache as _cache
+    if bust:
+        _cache.bust(prefix=f"webres:proj:{project_id}")
     try:
         return await WebResourceService().list_resources(project_id)
     except Exception as e:

@@ -385,57 +385,43 @@ class WebResourceService:
 
     async def list_resources(self, project_id: str) -> dict:
         """
-        Fetch resources linked to a project.
+        Fetch resources linked to a specific project.
 
-        Strategy: read the bidirectional 'Resources' link array on the project
-        record (each entry is {id, title}), then batch-fetch those resource
-        records in parallel.  This avoids filtering on a link field, which
-        Teable does not support reliably via the filter query parameter.
+        Strategy: fetch ALL resources from the table (no server-side filter —
+        Teable link-field filtering is unreliable) and filter client-side by
+        checking whether each resource's Project link array contains project_id.
+        Guaranteed to work regardless of Teable back-link behaviour.
         """
         cache_key = f"webres:proj:{project_id}"
 
         async def _load():
-            # Step 1 — get the project record to discover linked resource IDs
-            proj_url = (
-                f"{self.base_url}/api/table/"
-                f"{settings.teable_web_projects_table_id}"
-                f"/record/{project_id}?fieldKeyType=name"
-            )
-            async with httpx.AsyncClient(timeout=10) as client_:
-                proj_res = await client_.get(proj_url, headers=self._headers)
-                proj_res.raise_for_status()
-                proj_data = proj_res.json()
-
-            resource_links = proj_data.get("fields", {}).get("Resources", [])
-            if not resource_links:
-                return {"records": [], "total": 0}
-
-            resource_ids = [
-                r["id"] for r in resource_links
-                if isinstance(r, dict) and r.get("id")
-            ]
-            if not resource_ids:
-                return {"records": [], "total": 0}
-
-            # Step 2 — fetch all resource records in parallel
+            params: dict[str, Any] = {
+                "fieldKeyType": "name",
+                "take": 500,
+                "skip": 0,
+            }
             async with httpx.AsyncClient(timeout=20) as client_:
-                responses = await asyncio.gather(
-                    *[
-                        client_.get(
-                            f"{self._record_url}/{rid}?fieldKeyType=name",
-                            headers=self._headers,
-                        )
-                        for rid in resource_ids
-                    ],
-                    return_exceptions=True,
-                )
+                res = await client_.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                data = res.json()
 
-            records = [
-                resp.json()
-                for resp in responses
-                if not isinstance(resp, Exception) and resp.status_code == 200
-            ]
-            return {"records": records, "total": len(records)}
+            all_records = data.get("records", [])
+
+            # Filter: keep records whose Project link field contains project_id
+            filtered = []
+            for r in all_records:
+                proj_field = r.get("fields", {}).get("Project", [])
+                # Teable returns link fields as [{id, title}, ...] or []
+                if isinstance(proj_field, list):
+                    if any(
+                        isinstance(p, dict) and p.get("id") == project_id
+                        for p in proj_field
+                    ):
+                        filtered.append(r)
+                elif isinstance(proj_field, dict) and proj_field.get("id") == project_id:
+                    filtered.append(r)
+
+            return {"records": filtered, "total": len(filtered)}
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 

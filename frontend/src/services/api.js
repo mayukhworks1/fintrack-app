@@ -224,7 +224,7 @@ export const api = {
     delete:  (id)       => request(`/api/web-projects/${id}`, { method: 'DELETE' }),
     resources: {
       listAll: (params = {})    => { const q = new URLSearchParams(params).toString(); return request(`/api/web-resources?${q}`) },
-      list:    (projectId)      => request(`/api/web-projects/${projectId}/resources`),
+      list:    (projectId)      => request(`/api/web-projects/${projectId}/resources?bust=true`),
       get:     (id)             => request(`/api/web-resources/${id}`),
       create:  (data)           => request('/api/web-resources', { method: 'POST',   body: JSON.stringify(data) }),
       update:  (id, data)       => request(`/api/web-resources/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
