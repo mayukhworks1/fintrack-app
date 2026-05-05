@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import Optional, List, Any
 from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
+from ..config import settings
 from .deps import require_web_access
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
@@ -66,6 +67,33 @@ class WebInvoiceFields(BaseModel):
         }
         # Include lists even if empty (allows clearing attachments); exclude only None
         return {k: v for k, v in m.items() if v is not None}
+
+
+@router.get("/debug-config")
+async def debug_config(_role: str = Depends(require_web_access)):
+    """Returns active table ID and masked token — for diagnosing connection issues."""
+    svc = WebInvoiceService()
+    token = svc.token or ""
+    masked = (token[:6] + "…" + token[-4:]) if len(token) > 10 else ("(not set)" if not token else token)
+    # Try a single lightweight read to see if Teable responds
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                f"{svc.base_url}/api/table/{svc.table_id}/record?take=1&fieldKeyType=name",
+                headers=svc._headers,
+            )
+            teable_status = res.status_code
+            teable_total  = res.json().get("total", "?") if res.status_code == 200 else None
+    except Exception as exc:
+        teable_status = f"error: {exc}"
+        teable_total  = None
+    return {
+        "table_id":      svc.table_id,
+        "base_url":      svc.base_url,
+        "token_preview": masked,
+        "teable_status": teable_status,
+        "teable_total":  teable_total,
+    }
 
 
 @router.get("/client-names")
