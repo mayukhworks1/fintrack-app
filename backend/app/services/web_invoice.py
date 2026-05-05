@@ -1,5 +1,5 @@
 """
-Web Invoice Teable service — table tblT6iQNKe8CfAUN2iR
+Web Invoice Teable service — table tbllkYiaS68BlcOc1Jy
 Handles CRUD + summary for the Web Invoice Tracker module.
 Accessible only to the "web" role.
 """
@@ -11,26 +11,26 @@ from ..utils.cache import cache
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
 WEB_INVOICE_FIELD_IDS = {
-    "Invoice Number":     "fld9NKldSx0rFGnFdAs",
-    "Project":            "fldbU5l9SOZ6VgtmdsR",
-    "Category":           "fldtxnhxAECH3dLZbhO",
-    "Description":        "fldKPY6Mm1tFDYj9FbK",
-    "Milestone":          "fldbvfo2TUOpYc1ZfBs",
-    "Raised By":          "fldXRtzmmLZopr8YI4G",
-    "Raised Date":        "fldgkMfEb0qlDb9Xgrb",
-    "Cleared Date":       "fldPH7jhl96qhg6B2NO",
-    "Amount Raised":      "fldAKunNMMpKEC29alB",
-    "Amount with Tax":    "fldC71Slo4jYZL3fOMs",
-    "Amount Received":    "fldKZIKFmlnkVkgRMet",
-    "Payment Status":     "fldvxAgRvd3kvxcSwX8",
-    "Remark":             "fldyqcD1uUb8DB8Kql6",
-    "Reference":          "fldWrG9UBgQEu2ygAjz",
-    "Invoice PDF":        "fldsx1YOgmSiBK4kyU1",
-    "Days To Clear":      "fldTTWIpOOJEM5F34Dq",   # READ-ONLY
-    "Speed":              "fldIQ1wsdDtmEF6p9v0",   # READ-ONLY
-    "Agening (Days)":     "fld5HN0SZChZc4ZQmRw",   # READ-ONLY
-    "Next followup":      "fldhO3z53mtKJB1aUjl",
-    "Outstanding Amount": "fld5vFCd0NIAPpVQ393",   # READ-ONLY
+    "Invoice Number":     "fldXpxJBRJxdGPCRziL",
+    "Project":            "fld6wyPMcUFOkzH6dtr",
+    "Category":           "fld9w6Z9t9u40H8mnEY",
+    "Description":        "fldbBRRtK1cC0E5E6Jx",
+    "Milestone":          "fldaQ4b2ZYp8JDOfiEu",
+    "Raised By":          "fldPYX6jPmQlIQvo1Ey",
+    "Raised Date":        "fldjeBEOG3XuLpMzhiD",
+    "Cleared Date":       "fldmBQ2yrTu4YnDeox7",
+    "Amount Raised":      "fldw9TLKQFNf6Ae4PtN",
+    "Amount with Tax":    "fld432vdrYYdypf2vX9",
+    "Amount Received":    "fldpKfiq7ZjEqCSc9IW",
+    "Payment Status":     "fldmOgiRUeth1pVylov",
+    "Remark":             "fldMtqIMiTbrQaIyOEd",
+    "Reference":          "fldLzPglDqQTFEheizk",
+    "Invoice PDF":        "fldLu7PC8dc38glTE6Z",
+    "Days To Clear":      "fldIRk9nE5kgqhdr8Vq",   # READ-ONLY
+    "Speed":              "fldjnJipl6TpyuIGAbm",    # READ-ONLY
+    "Agening (Days)":     "fldF9K89V9PsqV9iwjG",   # READ-ONLY
+    "Next followup":      "fldrACt52G4Zga9SZzD",
+    "Outstanding Amount": "fld4CDalvu2blFUVH4W",   # READ-ONLY
 }
 
 _TTL_LIST    = 15

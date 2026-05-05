@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     app_view_password:  str = ""
     app_web_password:   str = ""
     # Web invoice table — may live in a different Teable space with its own token.
-    # TEABLE_WEB_API_TOKEN: token for tblT6iQNKe8CfAUN2iR (falls back to TEABLE_API_TOKEN if not set)
+    # TEABLE_WEB_API_TOKEN: token for tbllkYiaS68BlcOc1Jy (falls back to TEABLE_API_TOKEN if not set)
     teable_web_api_token: Optional[str] = None
-    teable_web_invoice_table_id: str = "tblT6iQNKe8CfAUN2iR"
+    teable_web_invoice_table_id: str = "tbllkYiaS68BlcOc1Jy"
     # "all" role — web project tracker (Web Projects + Web Resources tables)
     # APP_ALL_PASSWORD → All@2024 (set via HF Space secret)
     app_all_password: str = ""
