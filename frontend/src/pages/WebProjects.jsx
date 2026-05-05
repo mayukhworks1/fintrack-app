@@ -190,9 +190,9 @@ function Drawer({ open, onClose, title, children, footer }) {
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} onClick={onClose} />
       <div className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl"
-        style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
+        style={{ background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
-          style={{ borderBottom: '1px solid var(--border)' }}>
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
           <h2 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{title}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-3)' }}>
@@ -284,7 +284,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div className="relative ml-auto flex flex-col h-full shadow-2xl"
-        style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
+        style={{ width: '100%', maxWidth: 480, background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
@@ -311,7 +311,8 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
 
         {/* Body */}
         <form id="project-form" onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+          className="flex-1 overflow-y-auto px-5 py-5 space-y-6"
+          style={{ background: 'var(--card-bg)' }}>
 
           {/* ── Identity ── */}
           <div>
@@ -334,11 +335,12 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
               <FormRow label="Tags" hint="Pick any that apply">
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {TAG_OPTIONS.map(tag => {
-                    const selected = d.tags ? d.tags.split(',').map(t => t.trim()).includes(tag) : false
+                    const tagStr = Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || '')
+                    const cur = tagStr ? tagStr.split(',').map(t => t.trim()).filter(Boolean) : []
+                    const selected = cur.includes(tag)
                     return (
                       <button key={tag} type="button"
                         onClick={() => {
-                          const cur = d.tags ? d.tags.split(',').map(t => t.trim()).filter(Boolean) : []
                           const next = selected ? cur.filter(t => t !== tag) : [...cur, tag]
                           set('tags')(next.join(', '))
                         }}
@@ -561,7 +563,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div className="relative ml-auto flex flex-col h-full shadow-2xl"
-        style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)' }}>
+        style={{ width: '100%', maxWidth: 480, background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
@@ -588,7 +590,8 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
 
         {/* Body */}
         <form id="resource-form" onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+          className="flex-1 overflow-y-auto px-5 py-5 space-y-6"
+          style={{ background: 'var(--card-bg)' }}>
 
           {/* ── Identity ── */}
           <div>
@@ -890,22 +893,23 @@ function ProjectDetailView({
   onBack, onEditProject, onDeleteProject,
   onAddResource, onEditResource, onDeleteResource, onRefresh,
 }) {
-  const f          = project.fields || {}
-  const profit     = Number(f['Actual Profit'] || 0)
-  const margin     = Number(f['Profit Margin %'] || 0)
-  const charge     = Number(f['Client Charge'] || 0)
-  const budget     = Number(f['Estimated Budget'] || 0)
-  const inputCost  = Number(f['Total Input Cost'] || 0)
-  const budgetVar  = Number(f['Budget Variance'] || 0)
-  const schedVar   = Number(f['Schedule Variance Days'] || 0)
-  const totalManHours = useMemo(
-    () => resources.reduce((s, r) => s + Number(r.fields?.['Man Hours'] || 0), 0),
-    [resources]
-  )
-  const totalRevenue = useMemo(
-    () => resources.reduce((s, r) => s + Number(r.fields?.['Revenue Generated'] || 0), 0),
-    [resources]
-  )
+  const f            = project.fields || {}
+  const profit       = Number(f['Actual Profit'] || 0)
+  const margin       = Number(f['Profit Margin %'] || 0)
+  const charge       = Number(f['Client Charge'] || 0)
+  const budget       = Number(f['Estimated Budget'] || 0)
+  const inputCost    = Number(f['Total Input Cost'] || 0)
+  const budgetVar    = Number(f['Budget Variance'] || 0)
+  const budgetVarPct = Number(f['Budget Variance %'] || 0)
+  const schedVar     = Number(f['Schedule Variance (Days)'] || 0)
+  // Use rollup fields from the project record (more reliable than summing local resources array)
+  const totalManHours   = Number(f['Total Man Hours']    || 0)
+  const totalPlannedHrs = Number(f['Total Planned Hours']|| 0)
+  const hoursVariance   = Number(f['Hours Variance']     || 0)
+  const totalRevenue    = Number(f['Total Revenue Generated'] || 0)
+  const resourceCount   = Number(f['Resource Count']     || 0)
+  const effCostPerHr    = Number(f['Effective Cost Per Hour']         || 0)
+  const effBillPerHr    = Number(f['Effective Billing Rate Per Hour'] || 0)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -961,40 +965,46 @@ function ProjectDetailView({
         </div>
       </div>
 
-      {/* KPI row */}
+      {/* KPI row — Financial */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Client Charge"  value={charge ? formatInr(charge) : '—'} />
-        <KpiCard label="Total Cost"     value={inputCost ? formatInr(inputCost) : '—'} />
-        <KpiCard label="Actual Profit"  value={profit ? formatInr(profit) : '—'}
+        <KpiCard label="Client Charge" value={charge ? formatInr(charge) : '—'} />
+        <KpiCard label="Total Cost"    value={inputCost ? formatInr(inputCost) : '—'} />
+        <KpiCard label="Actual Profit" value={profit ? formatInr(profit) : '—'}
           accent={profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : undefined} />
         <KpiCard label="Margin %"
           value={margin ? `${margin.toFixed(1)}%` : '—'}
           accent={margin > 0 ? '#4ade80' : margin < 0 ? '#f87171' : undefined} />
       </div>
 
-      {/* Man hours + Revenue row (shown once resources have data) */}
-      {(totalManHours > 0 || totalRevenue > 0) && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {totalManHours > 0 && (
-            <KpiCard label="Total Man Hours" value={`${totalManHours}h`}
-              sub={inputCost > 0 ? `₹${Math.round(inputCost / totalManHours)}/hr cost` : undefined} />
-          )}
-          {totalRevenue > 0 && (
-            <KpiCard label="Total Revenue" value={formatInr(totalRevenue)}
-              accent="#4ade80"
-              sub={totalManHours > 0 ? `₹${Math.round(totalRevenue / totalManHours)}/hr billed` : undefined} />
-          )}
-          {f['Schedule Variance Days'] != null && (
-            <KpiCard label="Schedule Var."
-              value={`${schedVar > 0 ? '+' : ''}${schedVar}d`}
-              accent={schedVar > 0 ? '#f87171' : schedVar < 0 ? '#4ade80' : undefined} />
-          )}
-        </div>
-      )}
-
-      {/* Progress */}
+      {/* Progress bar */}
       {f['Progress (%)'] != null && (
         <div className="card"><ProgressBar value={f['Progress (%)']} /></div>
+      )}
+
+      {/* KPI row — Hours & Revenue tracking */}
+      {(totalManHours > 0 || totalRevenue > 0 || totalPlannedHrs > 0) && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {totalManHours > 0 && (
+            <KpiCard label="Man Hours (Actual)" value={`${totalManHours}h`}
+              sub={effCostPerHr > 0 ? `₹${Math.round(effCostPerHr)}/hr cost` : undefined} />
+          )}
+          {totalPlannedHrs > 0 && (
+            <KpiCard label="Planned Hours" value={`${totalPlannedHrs}h`}
+              sub={totalManHours > 0 ? `${hoursVariance >= 0 ? '+' : ''}${hoursVariance}h variance` : undefined}
+              accent={hoursVariance > 0 ? '#f87171' : hoursVariance < 0 ? '#4ade80' : undefined} />
+          )}
+          {totalRevenue > 0 && (
+            <KpiCard label="Revenue Generated" value={formatInr(totalRevenue)}
+              accent="#4ade80"
+              sub={effBillPerHr > 0 ? `₹${Math.round(effBillPerHr)}/hr billed` : undefined} />
+          )}
+          {f['Schedule Variance (Days)'] != null && schedVar !== 0 && (
+            <KpiCard label="Schedule Var."
+              value={`${schedVar > 0 ? '+' : ''}${schedVar}d`}
+              sub={schedVar > 0 ? 'Behind schedule' : 'Ahead of schedule'}
+              accent={schedVar > 0 ? '#f87171' : '#4ade80'} />
+          )}
+        </div>
       )}
 
       {/* Detail fields */}
@@ -1009,7 +1019,7 @@ function ProjectDetailView({
             ['Actual End',    f['Actual End Date']   ? new Date(f['Actual End Date']).toLocaleDateString('en-IN') : null],
             ['Est. Budget',   budget ? formatInr(budget) : null],
             ['Budget Var.',   budgetVar ? `${budgetVar > 0 ? '+' : ''}${formatInr(budgetVar)}` : null],
-            ['Tags',          f['Tags']],
+            ['Tags',          Array.isArray(f['Tags']) ? f['Tags'].join(', ') : f['Tags']],
           ].filter(([, v]) => v != null && v !== '').map(([label, value]) => (
             <div key={label}>
               <dt className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</dt>
@@ -1510,7 +1520,7 @@ export function ProjectsWorkspace() {
                   estimated_budget: f['Estimated Budget'] != null ? String(f['Estimated Budget']) : '',
                   client_charge:    f['Client Charge']  != null ? String(f['Client Charge'])  : '',
                   progress_pct:     f['Progress (%)']     != null ? String(f['Progress (%)'])     : '',
-                  tags:             f['Tags']            || '',
+                  tags:             Array.isArray(f['Tags']) ? f['Tags'].join(', ') : (f['Tags'] || ''),
                   context_notes:    f['Context & Notes'] || '',
                   risks_blockers:   f['Risks & Blockers'] || '',
                 },
@@ -1518,7 +1528,7 @@ export function ProjectsWorkspace() {
               setDrawer('edit-project')
             }}
             onDeleteProject={handleDeleteProject}
-            onAddResource={() => { setEditingRecord(null); setDrawer('new-resource') }}
+            onAddResource={() => { setEditingRecord({ initial: { project_id: selectedProjectId } }); setDrawer('new-resource') }}
             onEditResource={(resource) => {
               const f = resource.fields || {}
               setEditingRecord({
@@ -1853,7 +1863,7 @@ export default function WebProjects() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-base)' }}>
       <header className="sticky top-0 z-30 px-4 sm:px-6 py-3 flex items-center gap-3"
-        style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
+        style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ background: 'var(--accent-btn)' }}>

@@ -46,7 +46,7 @@ WEB_PROJECT_FIELD_IDS: dict[str, str] = {
     "Profit Margin %":                 "fld958CNUGlr8wJN4eN",
     "Budget Variance":                 "fldqA9lxP0up2bS7yQE",
     "Budget Variance %":               "fldKean3sTfB3hc7a6B",
-    "Schedule Variance Days":          "fldOOS4lb8SkdBoEowc",
+    "Schedule Variance (Days)":        "fldOOS4lb8SkdBoEowc",
     "Resource Names":                  "flddomupp7AkgH9l0KH",
     # READ-ONLY — new rollup / formula fields
     "Total Man Hours":                 "fldnzvyZRobz913Y6AQ",
@@ -91,7 +91,7 @@ WEB_RESOURCE_FIELD_IDS: dict[str, str] = {
 # Fields that Teable computes — never send in POST/PATCH
 _PROJECT_READ_ONLY = {
     "Total Input Cost", "Actual Profit", "Profit Margin %",
-    "Budget Variance", "Budget Variance %", "Schedule Variance Days",
+    "Budget Variance", "Budget Variance %", "Schedule Variance (Days)",
     "Resource Names",
     "Total Man Hours", "Total Planned Hours", "Total Revenue Generated",
     "Resource Count", "Hours Variance", "Effective Cost Per Hour",
