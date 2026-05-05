@@ -7,7 +7,8 @@ import {
   AlertOctagon, User, Tag, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
-  ChevronLeft, ChevronRight, Briefcase, RotateCcw
+  ChevronLeft, ChevronRight, Briefcase, RotateCcw,
+  Users, HelpCircle, Mail, BookOpen, X as XIcon
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -15,7 +16,7 @@ import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
-import { ProjectsWorkspace } from './WebProjects'
+import { ProjectsWorkspace, AllResourcesView } from './WebProjects'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -902,15 +903,160 @@ function SkeletonRow() {
   )
 }
 
+/* ── Help Modal ── */
+const HELP_CONTACT = 'Mayukh@theworks.in'
+
+function HelpModal({ open, onClose }) {
+  if (!open) return null
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'var(--accent-btn)' }}>
+              <BookOpen size={14} className="text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>App Guide</p>
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>How to use TheWorks Web Tracker</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ color: 'var(--text-3)' }}>
+            <XIcon size={16} />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          {/* Overview */}
+          <section>
+            <h3 className="font-bold text-sm mb-2" style={{ color: 'var(--text-1)' }}>📌 Overview</h3>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              TheWorks Web Tracker is an all-in-one billing and project management tool. It has three modules —
+              <strong> Invoices</strong>, <strong>Retainers</strong>, and <strong>Projects + Resources</strong> (for admin users).
+              Use the left sidebar to switch between them.
+            </p>
+          </section>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Invoices */}
+          <section>
+            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
+              <FileText size={14} style={{ color: 'var(--accent)' }} /> Invoices
+            </h3>
+            <ul className="space-y-2 text-sm" style={{ color: 'var(--text-2)' }}>
+              <li><strong style={{ color: 'var(--text-1)' }}>Raise Externally</strong> — Click this button to open the Zoho invoice request form. Use this for all official invoices that need to go to the client.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>New Invoice</strong> — Record an invoice entry directly in the tracker (e.g. for internal tracking or bulk data entry).</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Filters</strong> — Filter by billing type (All / Projects / Retainers), month, project, category, or raised by. The search bar works across invoice number, project name, and description.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Status</strong> — Set to <em>Pending</em>, <em>Paid</em>, or <em>Cancelled</em>. Pending invoices older than 30 days show as overdue at the top.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Attachments</strong> — Upload invoice PDFs and payment references directly on each invoice record.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Project Snapshot</strong> — Click a project card to filter the invoice list to that project only.</li>
+            </ul>
+          </section>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Retainers */}
+          <section>
+            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
+              <RotateCcw size={14} style={{ color: 'var(--accent)' }} /> Retainers
+            </h3>
+            <ul className="space-y-2 text-sm" style={{ color: 'var(--text-2)' }}>
+              <li><strong style={{ color: 'var(--text-1)' }}>What is a Retainer?</strong> — A recurring monthly billing arrangement with a client. The Project field holds the client/retainer name.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Recording a month</strong> — Navigate to the month, then click <em>Record Invoice</em>. This pre-fills the form with last month's details so you only need to update what changed.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Pause a month</strong> — If billing is skipped for a month, use <em>Pause month</em> to record a zero-value cancelled entry for your records.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Invoice number</strong> — Leave blank and fill in later once the Zoho invoice is formally raised. The account manager can update it.</li>
+            </ul>
+          </section>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Projects */}
+          <section>
+            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
+              <Briefcase size={14} style={{ color: 'var(--accent)' }} /> Projects <span className="text-[10px] px-1.5 py-0.5 rounded-full ml-1" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>Admin only</span>
+            </h3>
+            <ul className="space-y-2 text-sm" style={{ color: 'var(--text-2)' }}>
+              <li><strong style={{ color: 'var(--text-1)' }}>Create a project</strong> — Click <em>+ New Project</em>. Fill in name, client, status, priority, timeline, and budget. The profit preview updates live as you type.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Project cards</strong> — Show live status, priority, progress, client charge, and profit. Click any card to open the project detail.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Project detail</strong> — Shows full KPIs (cost, profit, margin, man hours, revenue), all linked resources, and all invoices raised for this project automatically.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Progress slider</strong> — Drag to update completion % directly in the edit form.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Linked Invoices</strong> — Invoices whose Project field matches this project name are automatically shown with totals (raised / collected / outstanding).</li>
+            </ul>
+          </section>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Resources */}
+          <section>
+            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
+              <Users size={14} style={{ color: 'var(--accent)' }} /> Resources <span className="text-[10px] px-1.5 py-0.5 rounded-full ml-1" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>Admin only</span>
+            </h3>
+            <ul className="space-y-2 text-sm" style={{ color: 'var(--text-2)' }}>
+              <li><strong style={{ color: 'var(--text-1)' }}>What is a Resource?</strong> — Any person, tool, or vendor contributing to a project. Examples: a developer (Employee), a SaaS tool (Tool), an external agency (Vendor).</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Adding a resource</strong> — Open a project → click <em>Add Resource</em>. Set the rate, rate unit (per month / per hour / etc.), and units. Total cost is calculated automatically.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Man Hours</strong> — Enter actual hours worked and planned hours. The variance indicator turns green if under estimate, red if over.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>Revenue tracking</strong> — Set a billing rate and billable units to track how much you charge vs. what the resource costs. Margin is calculated automatically in Teable.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>All Resources view</strong> — The Resources tab in the sidebar shows every resource across all projects in one table, with cost, hours, and revenue columns.</li>
+              <li><strong style={{ color: 'var(--text-1)' }}>⚠️ Teable link setup</strong> — Make sure the <em>Project</em> link field in Web Resources is configured as a bidirectional link to Web Projects. If rollup fields (Total Man Hours, Total Cost) show blank in Teable, re-create the link field from the Web Resources side to ensure both tables are properly connected.</li>
+            </ul>
+          </section>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Tips */}
+          <section>
+            <h3 className="font-bold text-sm mb-3" style={{ color: 'var(--text-1)' }}>💡 Tips</h3>
+            <ul className="space-y-1.5 text-sm" style={{ color: 'var(--text-2)' }}>
+              <li>• Project names in invoices and projects <strong>must match exactly</strong> for the Linked Invoices section to work.</li>
+              <li>• The app auto-syncs invoice data every 10 seconds — no need to manually refresh.</li>
+              <li>• Use <kbd className="px-1.5 py-0.5 rounded text-xs font-mono" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>⌘K</kbd> in the Projects search bar to quickly focus it.</li>
+              <li>• Overdue invoices (pending &gt; 30 days) are highlighted in red at the top of the Invoices view.</li>
+            </ul>
+          </section>
+
+        </div>
+
+        {/* Footer — contact */}
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
+          <div>
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Have a question or found a bug?</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Reach out and we'll get back to you.</p>
+          </div>
+          <a href={`mailto:${HELP_CONTACT}`}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+            style={{ background: 'var(--accent-btn)', color: '#fff', textDecoration: 'none', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+            <Mail size={14} /> Raise a concern
+          </a>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 /* ── Collapsible app sidebar ── */
-function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle }) {
+function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) {
   const { logout } = useAuth()
   const { dark, toggle } = useTheme()
 
   const navItems = [
-    { value: 'invoices',  label: 'Invoices',  icon: FileText },
-    { value: 'retainers', label: 'Retainers', icon: RotateCcw },
-    ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
+    { value: 'invoices',   label: 'Invoices',   icon: FileText },
+    { value: 'retainers',  label: 'Retainers',  icon: RotateCcw },
+    ...(isAll ? [
+      { value: 'projects',  label: 'Projects',  icon: Briefcase },
+      { value: 'resources', label: 'Resources', icon: Users },
+    ] : []),
   ]
 
   return (
@@ -971,9 +1117,17 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle }) {
         })}
       </nav>
 
-      {/* Footer: theme + logout */}
+      {/* Footer: help + theme + logout */}
       <div className="px-2 pb-3 flex-shrink-0 space-y-0.5"
         style={{ borderTop: '1px solid var(--sidebar-border)', paddingTop: '0.5rem' }}>
+        {onHelp && (
+          <button onClick={onHelp} title="Help & Guide"
+            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
+            style={{ color: 'var(--text-3)' }}>
+            <HelpCircle size={15} />
+            {open && <span className="text-xs">Help & Guide</span>}
+          </button>
+        )}
         <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'}
           className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
           style={{ color: 'var(--text-3)' }}>
@@ -998,6 +1152,7 @@ export default function WebInvoices() {
   const toast = useToast()
   const { isAll } = useAuth()
   const [sidebarOpen,    setSidebarOpen]    = useState(true)
+  const [helpOpen,       setHelpOpen]       = useState(false)
   const [workspace,      setWorkspace]      = useState('invoices')
   const [selectedRetainer, setSelectedRetainer] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
@@ -1336,6 +1491,7 @@ export default function WebInvoices() {
         isAll={isAll}
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(v => !v)}
+        onHelp={() => setHelpOpen(true)}
       />
 
       {/* ── Content area ── */}
@@ -1391,7 +1547,7 @@ export default function WebInvoices() {
 
 
           {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
-          {workspace !== 'projects' && (
+          {workspace !== 'projects' && workspace !== 'resources' && (
             <>
               {/* KPIs */}
               <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -1477,6 +1633,12 @@ export default function WebInvoices() {
           {workspace === 'projects' && isAll && (
             <section>
               <ProjectsWorkspace />
+            </section>
+          )}
+
+          {workspace === 'resources' && isAll && (
+            <section>
+              <AllResourcesView />
             </section>
           )}
 
@@ -1717,9 +1879,7 @@ export default function WebInvoices() {
             </section>
           )}
 
-          {workspace === 'invoices' && (
-          <>
-          {projectSummaryCards.length > 0 && (
+          {workspace === 'invoices' && projectSummaryCards.length > 0 && (
             <section className="card space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
@@ -1779,8 +1939,8 @@ export default function WebInvoices() {
             </section>
           )}
 
-          {/* Filter bar */}
-          <div className="card space-y-3">
+          {/* Filter bar + invoice table — only on invoices / retainers tabs */}
+          {(workspace === 'invoices' || workspace === 'retainers') && <div className="card space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <div>
@@ -1919,8 +2079,9 @@ export default function WebInvoices() {
                 </button>
               </div>
             )}
-          </div>
+          </div>}
 
+          {(workspace === 'invoices' || workspace === 'retainers') && <>
           {/* Error */}
           {error && (
             <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs"
@@ -2078,8 +2239,7 @@ export default function WebInvoices() {
               </table>
             </div>
           </div>
-          </>
-          )}
+          </>}
 
         </div>
       </main>
@@ -2101,6 +2261,10 @@ export default function WebInvoices() {
           canEditPicklists={canEditPicklists}
           onPicklistPermissionError={handlePicklistPermissionError}
         />,
+        document.body
+      )}
+      {helpOpen && createPortal(
+        <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />,
         document.body
       )}
       </div>
