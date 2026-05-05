@@ -229,6 +229,8 @@ export const api = {
       create:  (data)           => request('/api/web-resources', { method: 'POST',   body: JSON.stringify(data) }),
       update:  (id, data)       => request(`/api/web-resources/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
       delete:  (id)             => request(`/api/web-resources/${id}`, { method: 'DELETE' }),
+      assign:   (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'POST' }),
+      unassign: (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'DELETE' }),
     },
   },
   health: () => request('/health', {}, 0),

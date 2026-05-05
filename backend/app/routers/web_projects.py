@@ -249,3 +249,21 @@ async def delete_web_resource(resource_id: str, _role: str = Depends(require_all
         await WebResourceService().delete_resource(resource_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@resources_router.post("/{resource_id}/assign/{project_id}", status_code=200)
+async def assign_resource(resource_id: str, project_id: str, _role: str = Depends(require_all)):
+    """Add a project link to a resource (supports multi-project resources)."""
+    try:
+        return await WebResourceService().assign_resource_to_project(resource_id, project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@resources_router.delete("/{resource_id}/assign/{project_id}", status_code=204)
+async def unassign_resource(resource_id: str, project_id: str, _role: str = Depends(require_all)):
+    """Remove a project link from a resource."""
+    try:
+        await WebResourceService().unassign_resource_from_project(resource_id, project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

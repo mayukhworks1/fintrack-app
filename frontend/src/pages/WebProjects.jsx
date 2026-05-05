@@ -859,6 +859,7 @@ function ProjectCard({ record, onClick }) {
   const profit = Number(f['Actual Profit'] || 0)
   const margin = Number(f['Profit Margin %'] || 0)
   const charge = Number(f['Client Charge'] || 0)
+  const progressVal = f['Progress (%)'] ?? f['Progress %'] ?? f['Progress'] ?? null
 
   return (
     <button onClick={() => onClick(record)}
@@ -874,7 +875,7 @@ function ProjectCard({ record, onClick }) {
         {f['Client'] && <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{f['Client']}</span>}
         {f['Status'] && <StatusBadge status={f['Status']} />}
       </div>
-      {f['Progress (%)'] != null && <div className="mb-3"><ProgressBar value={f['Progress (%)']} /></div>}
+      {progressVal != null && <div className="mb-3"><ProgressBar value={progressVal} /></div>}
       <div className="grid grid-cols-2 gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
         <div>
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>Charge</p>
@@ -907,7 +908,7 @@ function ProjectDetailView({
   project, resources, resourcesLoading,
   linkedInvoices, invoicesLoading,
   onBack, onEditProject, onDeleteProject,
-  onAddResource, onEditResource, onDeleteResource, onRefresh,
+  onAddResource, onEditResource, onDeleteResource, onRefresh, onManageResources,
 }) {
   const f            = project.fields || {}
   const profit       = Number(f['Actual Profit'] || 0)
@@ -926,6 +927,8 @@ function ProjectDetailView({
   const resourceCount   = Number(f['Resource Count']     || 0)
   const effCostPerHr    = Number(f['Effective Cost Per Hour']         || 0)
   const effBillPerHr    = Number(f['Effective Billing Rate Per Hour'] || 0)
+  // Progress — try multiple field name variants since Teable may use different casing
+  const progressVal = f['Progress (%)'] ?? f['Progress %'] ?? f['Progress'] ?? null
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -993,8 +996,8 @@ function ProjectDetailView({
       </div>
 
       {/* Progress bar */}
-      {f['Progress (%)'] != null && (
-        <div className="card"><ProgressBar value={f['Progress (%)']} /></div>
+      {progressVal != null && (
+        <div className="card"><ProgressBar value={progressVal} /></div>
       )}
 
       {/* KPI row — Hours & Revenue tracking */}
@@ -1073,11 +1076,18 @@ function ProjectDetailView({
               {totalManHours > 0 && <span> · {totalManHours}h total</span>}
             </p>
           </div>
-          <button onClick={onAddResource}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold"
-            style={{ background: 'var(--accent-btn)', color: '#fff' }}>
-            <Plus size={13} /> Add Resource
-          </button>
+          <div className="flex gap-2">
+            <button onClick={onManageResources}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+              style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+              <Users size={13} /> Assign
+            </button>
+            <button onClick={onAddResource}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold"
+              style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+              <Plus size={13} /> New
+            </button>
+          </div>
         </div>
         {resourcesLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -1186,6 +1196,133 @@ function ProjectDetailView({
   )
 }
 
+// ── Resource Assignment Panel ─────────────────────────────────────────────────
+// Shows all system resources; user can toggle which ones are assigned to a project
+
+function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allResources = [], onAssign, onUnassign }) {
+  const [toggling, setToggling] = useState({}) // resourceId → boolean (loading)
+  const [localAssigned, setLocalAssigned] = useState(new Set(assignedIds))
+
+  useEffect(() => {
+    if (open) setLocalAssigned(new Set(assignedIds))
+  }, [open, assignedIds])
+
+  useEffect(() => {
+    if (!open) return
+    const h = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [open, onClose])
+
+  const toggle = async (resource) => {
+    const rid = resource.id
+    const isAssigned = localAssigned.has(rid)
+    setToggling(t => ({ ...t, [rid]: true }))
+    // Optimistic update
+    setLocalAssigned(prev => {
+      const next = new Set(prev)
+      if (isAssigned) next.delete(rid)
+      else next.add(rid)
+      return next
+    })
+    try {
+      if (isAssigned) await onUnassign(rid)
+      else await onAssign(rid)
+    } catch {
+      // Revert optimistic update on error
+      setLocalAssigned(prev => {
+        const next = new Set(prev)
+        if (isAssigned) next.add(rid)
+        else next.delete(rid)
+        return next
+      })
+    } finally {
+      setToggling(t => ({ ...t, [rid]: false }))
+    }
+  }
+
+  if (!open) return null
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="relative flex flex-col rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh]"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)', borderRadius: '1rem 1rem 0 0' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'var(--accent-btn)' }}>
+              <Users size={14} className="text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>Assign Resources</p>
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                {localAssigned.size} assigned · toggle to add or remove
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ color: 'var(--text-3)' }}>
+            <X size={16} />
+          </button>
+        </div>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {allResources.length === 0 ? (
+            <div className="text-center py-8">
+              <Users size={24} className="mx-auto mb-2 opacity-20" style={{ color: 'var(--text-3)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-3)' }}>No resources in the system yet</p>
+            </div>
+          ) : (
+            allResources.map(r => {
+              const f = r.fields || {}
+              const assigned = localAssigned.has(r.id)
+              const loading  = toggling[r.id]
+              return (
+                <button key={r.id} onClick={() => toggle(r)} disabled={loading}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all"
+                  style={{
+                    background: assigned ? 'var(--accent-dim)' : 'var(--bg-input)',
+                    border: `1px solid ${assigned ? 'var(--accent-soft)' : 'var(--border)'}`,
+                    opacity: loading ? 0.6 : 1,
+                  }}>
+                  {/* Avatar */}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                    style={{ background: assigned ? 'rgba(79,70,229,0.2)' : 'rgba(59,130,246,0.12)', color: assigned ? 'var(--accent)' : '#60a5fa' }}>
+                    {(f['Resource Name'] || '?')[0].toUpperCase()}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{f['Resource Name'] || '—'}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>
+                      {[f['Role'], f['Type']].filter(Boolean).join(' · ') || 'No role'}
+                    </p>
+                  </div>
+                  {/* Checkbox */}
+                  <div className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center"
+                    style={{ background: assigned ? 'var(--accent-btn)' : 'transparent', border: `2px solid ${assigned ? 'var(--accent-btn)' : 'var(--border)'}` }}>
+                    {loading ? <Loader2 size={11} className="animate-spin text-white" /> : assigned ? <Check size={11} className="text-white" /> : null}
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </div>
+        {/* Footer */}
+        <div className="px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--sidebar-bg)', borderRadius: '0 0 1rem 1rem' }}>
+          <button onClick={onClose}
+            className="w-full py-2 rounded-xl text-sm font-semibold"
+            style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── ProjectsWorkspace — the embeddable component ──────────────────────────────
 
 export function ProjectsWorkspace() {
@@ -1215,6 +1352,10 @@ export function ProjectsWorkspace() {
 
   // Deleting
   const [deletingResourceId, setDeletingResourceId] = useState(null)
+
+  // Resource assignment panel
+  const [assignPanelOpen,  setAssignPanelOpen]  = useState(false)
+  const [allSystemResources, setAllSystemResources] = useState([])
 
   // Filters
   const [search,         setSearch]         = useState('')
@@ -1264,6 +1405,11 @@ export function ProjectsWorkspace() {
       setResources(res.records || [])
     } catch (e) { toast('Failed to load resources: ' + e.message, 'error') }
     finally { setResourcesLoading(false) }
+    // Load all system resources for the assignment panel
+    try {
+      const allRes = await api.webProjects.resources.listAll()
+      setAllSystemResources(allRes.records || [])
+    } catch { /* non-critical */ }
     // Linked invoices (by project name match)
     if (projectName) {
       try {
@@ -1368,6 +1514,22 @@ export function ProjectsWorkspace() {
       setSelectedProject(proj)
     } catch (e) { toast('Delete failed: ' + e.message, 'error') }
     finally { setDeletingResourceId(null) }
+  }
+
+  const handleAssignResource = async (resourceId) => {
+    await api.webProjects.resources.assign(resourceId, selectedProjectId)
+    const res = await api.webProjects.resources.list(selectedProjectId)
+    setResources(res.records || [])
+    const proj = await api.webProjects.get(selectedProjectId)
+    setSelectedProject(proj)
+  }
+
+  const handleUnassignResource = async (resourceId) => {
+    await api.webProjects.resources.unassign(resourceId, selectedProjectId)
+    const res = await api.webProjects.resources.list(selectedProjectId)
+    setResources(res.records || [])
+    const proj = await api.webProjects.get(selectedProjectId)
+    setSelectedProject(proj)
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -1510,6 +1672,7 @@ export function ProjectsWorkspace() {
             <Loader2 size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
           </div>
         ) : selectedProject ? (
+          <>
           <ProjectDetailView
             project={selectedProject}
             resources={resources}
@@ -1568,7 +1731,18 @@ export function ProjectsWorkspace() {
               setDrawer('edit-resource')
             }}
             onDeleteResource={handleDeleteResource}
+            onManageResources={() => setAssignPanelOpen(true)}
           />
+          <ResourceAssignPanel
+            open={assignPanelOpen}
+            onClose={() => setAssignPanelOpen(false)}
+            projectId={selectedProjectId}
+            assignedIds={resources.map(r => r.id)}
+            allResources={allSystemResources}
+            onAssign={handleAssignResource}
+            onUnassign={handleUnassignResource}
+          />
+          </>
         ) : null
       )}
 

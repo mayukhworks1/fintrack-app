@@ -89,19 +89,17 @@ WEB_RESOURCE_FIELD_IDS: dict[str, str] = {
     "Revenue Contribution %":"fldoQooZ3SQvRO8E4eW",
 }
 
-# Fields that Teable computes — never send in POST/PATCH
-_PROJECT_READ_ONLY = {
-    "Total Input Cost", "Actual Profit", "Profit Margin %",
-    "Budget Variance", "Budget Variance %", "Schedule Variance (Days)",
-    "Resource Names",
-    "Total Man Hours", "Total Planned Hours", "Total Revenue Generated",
-    "Resource Count", "Hours Variance", "Effective Cost Per Hour",
-    "Effective Billing Rate Per Hour",
+# Whitelist: ONLY these fields will be sent to Teable in POST/PATCH
+_PROJECT_EDITABLE = {
+    "Project Name", "Client", "Status", "Priority", "Project Lead",
+    "Tags", "Progress (%)", "Description", "Context & Notes",
+    "Risks & Blockers", "Est. Start Date", "Est. End Date",
+    "Actual Start Date", "Actual End Date", "Estimated Budget", "Client Charge",
 }
-_RESOURCE_READ_ONLY = {
-    "Total Cost",
-    "Revenue Generated", "Resource Gross Margin", "Resource Margin %",
-    "Project Client Charge", "Revenue Contribution %",
+_RESOURCE_EDITABLE = {
+    "Resource Name", "Role", "Type", "Rate (₹)", "Rate Unit", "Units",
+    "Man Hours", "Planned Hours", "Billing Rate (₹)", "Billable Units",
+    "From Date", "To Date", "Notes", "Project",
 }
 
 _TTL_LIST    = 15
@@ -118,19 +116,28 @@ def _bust_resource_cache() -> None:
 
 
 def _clean_project_fields(fields: dict) -> dict:
-    """Strip read-only and empty fields before sending to Teable."""
+    """Only send whitelisted editable fields to Teable."""
     return {
         k: v for k, v in fields.items()
-        if k not in _PROJECT_READ_ONLY and v is not None and v != ""
+        if k in _PROJECT_EDITABLE and v is not None and v != ""
     }
 
 
 def _clean_resource_fields(fields: dict) -> dict:
-    """Strip read-only and empty fields before sending to Teable."""
+    """Only send whitelisted editable fields to Teable."""
     return {
         k: v for k, v in fields.items()
-        if k not in _RESOURCE_READ_ONLY and v is not None and v != ""
+        if k in _RESOURCE_EDITABLE and v is not None and v != ""
     }
+
+
+def _teable_error(res) -> str:
+    """Extract a useful error message from a Teable error response."""
+    try:
+        body = res.json()
+        return body.get("message") or body.get("error") or res.text
+    except Exception:
+        return res.text
 
 
 class WebProjectService:
@@ -479,7 +486,8 @@ class WebResourceService:
         }
         async with httpx.AsyncClient(timeout=15) as client_:
             res = await client_.post(self._record_url, json=body, headers=self._headers)
-            res.raise_for_status()
+            if not res.is_success:
+                raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
         _bust_resource_cache()
         _bust_project_cache()   # resource count / rollups changed
         data = res.json()
@@ -500,7 +508,8 @@ class WebResourceService:
         }
         async with httpx.AsyncClient(timeout=15) as client_:
             res = await client_.patch(url, json=body, headers=self._headers)
-            res.raise_for_status()
+            if not res.is_success:
+                raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
         _bust_resource_cache()
         _bust_project_cache()
         return res.json()
@@ -514,3 +523,48 @@ class WebResourceService:
             res.raise_for_status()
         _bust_resource_cache()
         _bust_project_cache()
+
+    # ── Assign / unassign a resource to/from a project ────────────────────
+
+    async def assign_resource_to_project(self, resource_id: str, project_id: str) -> dict:
+        """Add project_id to the resource's Project link array (multi-link safe)."""
+        # Read current links
+        resource = await self.get_resource(resource_id)
+        existing = resource.get("fields", {}).get("Project", [])
+        existing_ids = [p["id"] for p in existing if isinstance(p, dict) and p.get("id")]
+        if project_id not in existing_ids:
+            existing_ids.append(project_id)
+        # Patch with updated array
+        url  = f"{self._record_url}/{resource_id}"
+        body = {
+            "fieldKeyType": "name",
+            "record": {"fields": {"Project": [{"id": pid} for pid in existing_ids]}},
+        }
+        async with httpx.AsyncClient(timeout=15) as client_:
+            res = await client_.patch(url, json=body, headers=self._headers)
+            if not res.is_success:
+                raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
+        _bust_resource_cache()
+        _bust_project_cache()
+        return res.json()
+
+    async def unassign_resource_from_project(self, resource_id: str, project_id: str) -> dict:
+        """Remove project_id from the resource's Project link array."""
+        resource = await self.get_resource(resource_id)
+        existing = resource.get("fields", {}).get("Project", [])
+        remaining_ids = [
+            p["id"] for p in existing
+            if isinstance(p, dict) and p.get("id") and p["id"] != project_id
+        ]
+        url  = f"{self._record_url}/{resource_id}"
+        body = {
+            "fieldKeyType": "name",
+            "record": {"fields": {"Project": [{"id": pid} for pid in remaining_ids]}},
+        }
+        async with httpx.AsyncClient(timeout=15) as client_:
+            res = await client_.patch(url, json=body, headers=self._headers)
+            if not res.is_success:
+                raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
+        _bust_resource_cache()
+        _bust_project_cache()
+        return res.json()
