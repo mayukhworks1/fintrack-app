@@ -95,6 +95,18 @@ function KpiCard({ label, value, sub, accent }) {
   )
 }
 
+// ── Safe field value renderer (prevents React error #31 on {id,title} link fields) ──
+function safeStr(v) {
+  if (v == null) return null
+  if (typeof v === 'string' || typeof v === 'number') return String(v)
+  if (Array.isArray(v)) {
+    const parts = v.map(x => (x && typeof x === 'object' ? (x.title || x.name || x.value || '') : String(x))).filter(Boolean)
+    return parts.join(', ') || null
+  }
+  if (typeof v === 'object') return v.title || v.name || v.value || JSON.stringify(v)
+  return String(v)
+}
+
 // ── Form helpers ──────────────────────────────────────────────────────────────
 
 function FormRow({ label, required, hint, children }) {
@@ -225,7 +237,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
   const [leadSuggestions,   setLeadSuggestions]   = useState([])
   const set = k => v => setD(p => ({ ...p, [k]: v }))
 
-  // Reset form when drawer opens; seed suggestions from Teable options
+  // Reset form when drawer opens; fetch live suggestions from invoice picklists
   useEffect(() => {
     if (open) {
       setD({
@@ -236,8 +248,14 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
         ...initial,
       })
       setConfirmDel(false)
+      // Seed with hardcoded fallbacks immediately, then overwrite with live data
       setClientSuggestions(CLIENT_OPTIONS)
       setLeadSuggestions(LEAD_OPTIONS)
+      // Fetch live picklists from the invoices module
+      api.webInvoices.picklists.get().then(pl => {
+        if (pl?.Project?.options?.length)   setClientSuggestions(pl.Project.options)
+        if (pl?.['Raised By']?.options?.length) setLeadSuggestions(pl['Raised By'].options)
+      }).catch(() => { /* keep fallbacks */ })
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -875,10 +893,10 @@ function ProjectCard({ record, onClick }) {
           </p>
         </div>
       </div>
-      {f['Resource Names'] && (
+      {safeStr(f['Resource Names']) && (
         <p className="text-xs mt-2 truncate" style={{ color: 'var(--text-3)' }}>
           <Users size={10} className="inline mr-1" />
-          {Array.isArray(f['Resource Names']) ? f['Resource Names'].join(', ') : f['Resource Names']}
+          {safeStr(f['Resource Names'])}
         </p>
       )}
     </button>
@@ -1012,14 +1030,14 @@ function ProjectDetailView({
         <h2 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-3)' }}>Project Details</h2>
         <dl className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
-            ['Project Lead',  f['Project Lead']],
+            ['Project Lead',  safeStr(f['Project Lead'])],
             ['Est. Start',    f['Est. Start Date']   ? new Date(f['Est. Start Date']).toLocaleDateString('en-IN') : null],
             ['Est. End',      f['Est. End Date']     ? new Date(f['Est. End Date']).toLocaleDateString('en-IN') : null],
             ['Actual Start',  f['Actual Start Date'] ? new Date(f['Actual Start Date']).toLocaleDateString('en-IN') : null],
             ['Actual End',    f['Actual End Date']   ? new Date(f['Actual End Date']).toLocaleDateString('en-IN') : null],
             ['Est. Budget',   budget ? formatInr(budget) : null],
             ['Budget Var.',   budgetVar ? `${budgetVar > 0 ? '+' : ''}${formatInr(budgetVar)}` : null],
-            ['Tags',          Array.isArray(f['Tags']) ? f['Tags'].join(', ') : f['Tags']],
+            ['Tags',          safeStr(f['Tags'])],
           ].filter(([, v]) => v != null && v !== '').map(([label, value]) => (
             <div key={label}>
               <dt className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</dt>

@@ -16,7 +16,7 @@ import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
-import { ProjectsWorkspace, AllResourcesView } from './WebProjects'
+import { ProjectsWorkspace } from './WebProjects'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -1055,7 +1055,6 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
     { value: 'retainers',  label: 'Retainers',  icon: RotateCcw },
     ...(isAll ? [
       { value: 'projects',  label: 'Projects',  icon: Briefcase },
-      { value: 'resources', label: 'Resources', icon: Users },
     ] : []),
   ]
 
@@ -1547,7 +1546,7 @@ export default function WebInvoices() {
 
 
           {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
-          {workspace !== 'projects' && workspace !== 'resources' && (
+          {workspace !== 'projects' && (
             <>
               {/* KPIs */}
               <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -1633,12 +1632,6 @@ export default function WebInvoices() {
           {workspace === 'projects' && isAll && (
             <section>
               <ProjectsWorkspace />
-            </section>
-          )}
-
-          {workspace === 'resources' && isAll && (
-            <section>
-              <AllResourcesView />
             </section>
           )}
 
