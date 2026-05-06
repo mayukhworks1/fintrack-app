@@ -173,9 +173,11 @@ function StatusPill({ status }) {
   )
 }
 
-function AgingBadge({ days }) {
-  if (days == null || days === '') return <span style={{ color: 'var(--text-3)' }}>—</span>
+function AgingBadge({ days, status }) {
+  // Only show aging for Pending invoices — Paid/Cancelled don't need it
+  if (status && status !== 'Pending') return <span style={{ color: 'var(--text-3)' }}>—</span>
   const d = Number(days)
+  if (!d && d !== 0) return <span style={{ color: 'var(--text-3)' }}>—</span>
   const color = d > 30 ? 'var(--fin-negative)' : d > 14 ? 'var(--fin-warning)' : 'var(--fin-positive)'
   const bg    = d > 30 ? 'var(--fin-neg-bg)'   : d > 14 ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)'
   const bdr   = d > 30 ? 'var(--fin-neg-border)': d > 14 ? 'var(--fin-warn-border)': 'var(--fin-pos-border)'
@@ -896,7 +898,7 @@ function InvoiceDrawer({
 function SkeletonRow() {
   return (
     <tr aria-hidden="true" className="tbl-row">
-      {[80, 100, 90, 80, 100, 90, 90, 72, 72, 48, 56, 60].map((w, i) => (
+      {[80, 100, 90, 72, 72, 80, 100, 90, 90, 72, 72, 48, 64, 56, 60].map((w, i) => (
         <td key={i} className="tbl-cell"><div className="skeleton h-3 rounded" style={{ width: w }} /></td>
       ))}
     </tr>
@@ -1262,12 +1264,14 @@ export default function WebInvoices() {
 
   const fetchRecords = useCallback(() =>
     api.webInvoices.list({
-      status:   statusFilter  || undefined,
+      // When overdueOnly is active, push Pending filter to server so we only
+      // fetch the relevant subset — client then refines by aging > 30 days.
+      status:   overdueOnly ? 'Pending' : (statusFilter || undefined),
       project:  projectFilter || undefined,
       limit:    500,
       order_by: sortCol,
       order:    sortDir,
-    }), [statusFilter, projectFilter, sortCol, sortDir])
+    }), [statusFilter, projectFilter, sortCol, sortDir, overdueOnly])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const allRecords = listData?.records || []
@@ -1286,6 +1290,15 @@ export default function WebInvoices() {
 
   const todayIso = new Date().toISOString().slice(0, 10)
 
+  // Compute effective aging — prefer Teable's computed field, fallback to days since Raised Date
+  function effectiveAging(f) {
+    const teableVal = f['Agening (Days)']
+    if (teableVal != null && teableVal !== '') return Number(teableVal)
+    const raised = parseIsoDate(f['Raised Date'])
+    if (!raised) return 0
+    return Math.floor((Date.now() - raised.getTime()) / 86_400_000)
+  }
+
   const records = allRecords.filter(r => {
     const f = r.fields || {}
     const retainer = isRetainerCategory(f['Category'])
@@ -1294,7 +1307,7 @@ export default function WebInvoices() {
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' && Number(f['Agening (Days)'] || 0) > 30)) return false
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' && effectiveAging(f) > 30)) return false
     if (followupDueOnly) {
       const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
       if (!nextFollowup || nextFollowup > todayIso) return false
@@ -2201,12 +2214,14 @@ export default function WebInvoices() {
           {/* Desktop table */}
           <div className="hidden md:block card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
             <div className="overflow-x-auto">
-              <table className="w-full" style={{ minWidth: 960 }}>
+              <table className="w-full" style={{ minWidth: 1200 }}>
                 <thead>
                   <tr>
                     <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
                     <th className="tbl-head">Category</th>
+                    <th className="tbl-head">Milestone</th>
+                    <th className="tbl-head">Raised By</th>
                     <th className="tbl-head"><SortLabel col="Raised Date">Raised</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Amount Raised">Amount</SortLabel></th>
                     <th className="tbl-head">GST Total</th>
@@ -2214,6 +2229,7 @@ export default function WebInvoices() {
                     <th className="tbl-head">Outstanding</th>
                     <th className="tbl-head">Status</th>
                     <th className="tbl-head"><SortLabel col="Agening (Days)">Aging</SortLabel></th>
+                    <th className="tbl-head">Next Followup</th>
                     <th className="tbl-head">Docs</th>
                     <th className="tbl-head" style={{ width: 80 }} />
                   </tr>
@@ -2222,7 +2238,7 @@ export default function WebInvoices() {
                   {loading && !listData
                     ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                     : records.length === 0
-                      ? <tr><td colSpan={12} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
+                      ? <tr><td colSpan={15} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
                           <div className="flex flex-col items-center gap-2">
                             <Receipt size={28} style={{ opacity: 0.3 }} />
                             <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
@@ -2244,6 +2260,14 @@ export default function WebInvoices() {
                               <td className="tbl-cell"><span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span></td>
+                              <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Milestone'] || '—'}</span></td>
+                              <td className="tbl-cell">
+                                {f['Raised By']
+                                  ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
+                                      <User size={9} />{f['Raised By']}
+                                    </span>
+                                  : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                              </td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span></td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{fmt(f['Amount Raised'])}</span></td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmt(f['Amount with Tax'])}</span></td>
@@ -2254,7 +2278,14 @@ export default function WebInvoices() {
                                   : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>
                               <td className="tbl-cell"><StatusPill status={f['Payment Status']} /></td>
-                              <td className="tbl-cell"><AgingBadge days={f['Agening (Days)']} /></td>
+                              <td className="tbl-cell"><AgingBadge days={effectiveAging(f)} status={f['Payment Status']} /></td>
+                              <td className="tbl-cell">
+                                {f['Next followup']
+                                  ? <span className="text-xs tabular-nums" style={{ color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>
+                                      {fmtDate(f['Next followup'])}
+                                    </span>
+                                  : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                              </td>
                               <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                                 {allFiles.length > 0 ? (
                                   <div className="flex items-center gap-1">
