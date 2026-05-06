@@ -31,6 +31,7 @@ WEB_INVOICE_FIELD_IDS = {
     "Agening (Days)":     "fldF9K89V9PsqV9iwjG",   # READ-ONLY
     "Next followup":      "fldrACt52G4Zga9SZzD",
     "Outstanding Amount": "fld4CDalvu2blFUVH4W",   # READ-ONLY
+    "Currency":           "fldc7dtnrwczd5TyFVV",
 }
 
 _TTL_LIST    = 15
@@ -65,7 +66,7 @@ class WebInvoiceService:
 
     # ── Picklist (single-select field options) ────────────────────────────
     # Which fields are user-editable select fields (not Payment Status which is fixed)
-    PICKLIST_FIELDS = ["Project", "Category", "Milestone", "Raised By"]
+    PICKLIST_FIELDS = ["Project", "Category", "Milestone", "Raised By", "Currency"]
 
     async def get_picklists(self) -> dict:
         """Fetch current options for all single-select fields from Teable."""

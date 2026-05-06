@@ -35,6 +35,19 @@ const EMPTY_FORM = {
   amount_raised: '', amount_with_tax: '', amount_received: '',
   payment_status: 'Pending', remark: '', next_followup: '',
   reference: [], invoice_pdf: [],
+  currency: 'RS',
+}
+
+// Currency helpers
+const CURRENCY_SYMBOLS = { RS: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ' }
+function currencySymbol(code) {
+  return CURRENCY_SYMBOLS[code] || (code ? `${code} ` : '₹')
+}
+function fmtCurrency(n, currency) {
+  if (n == null || n === '' || Number.isNaN(Number(n))) return '—'
+  const sym = currencySymbol(currency || 'RS')
+  const formatted = Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return `${sym}${formatted}`
 }
 
 const monthKey = (iso) => {
@@ -490,6 +503,7 @@ function InvoiceDetail({ invoice, onClose, onEdit }) {
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const outstanding = Number(f['Outstanding Amount'] || 0)
+  const cur = f['Currency'] || 'RS'
 
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in">
@@ -499,7 +513,12 @@ function InvoiceDetail({ invoice, onClose, onEdit }) {
 
         <div className="flex items-start justify-between px-5 py-4 gap-3" style={{ borderBottom: '1px solid var(--glass-border)' }}>
           <div className="min-w-0">
-            <p className="font-bold text-sm" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{f['Invoice Number'] || '—'}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-sm" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{f['Invoice Number'] || '—'}</p>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                {currencySymbol(cur)}{cur}
+              </span>
+            </div>
             <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>
               {[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
             </p>
@@ -535,13 +554,13 @@ function InvoiceDetail({ invoice, onClose, onEdit }) {
           <div className="grid grid-cols-2 gap-2.5">
             {[
               ['Amount Raised',   f['Amount Raised'],      'var(--text-1)'],
-              ['With GST (18%)',  f['Amount with Tax'],    'var(--text-1)'],
+              ['With GST',        f['Amount with Tax'],    'var(--text-1)'],
               ['Received',        f['Amount Received'],    'var(--fin-positive)'],
               ['Outstanding',     f['Outstanding Amount'], outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)'],
             ].map(([lbl, val, clr]) => (
               <div key={lbl} className="rounded-xl p-3" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
                 <p className="label mb-1.5">{lbl}</p>
-                <p className="font-bold tabular-nums text-base leading-none" style={{ color: clr }}>{fmt(val)}</p>
+                <p className="font-bold tabular-nums text-base leading-none" style={{ color: clr }}>{fmtCurrency(val, cur)}</p>
               </div>
             ))}
           </div>
@@ -649,6 +668,7 @@ function InvoiceDrawer({
       amount_received: f['Amount Received'] ?? '',
       payment_status:  f['Payment Status']  || 'Pending',
       remark:          f['Remark']          || '',
+      currency:        f['Currency']        || 'RS',
       next_followup:   f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
       reference:       Array.isArray(f['Reference'])   ? f['Reference']   : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
@@ -774,6 +794,21 @@ function InvoiceDrawer({
             <FieldRow label="Payment Status">
               <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
             </FieldRow>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FieldRow label="Currency">
+              <PicklistSelect
+                fieldName="Currency"
+                value={form.currency}
+                onChange={set('currency')}
+                options={picklists?.Currency || ['RS', 'USD']}
+                onOptionsUpdate={onOptionsUpdate}
+                placeholder="Select currency…"
+                canAddOptions={canEditPicklists}
+                onPermissionError={onPicklistPermissionError}
+              />
+            </FieldRow>
+            <div />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Project">
@@ -2253,11 +2288,19 @@ export default function WebInvoices() {
                           const refs = parseAttachments(f['Reference'])
                           const pdfs = parseAttachments(f['Invoice PDF'])
                           const allFiles = [...refs, ...pdfs]
+                          const cur = f['Currency'] || 'RS'
                           return (
                             <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }} onClick={() => openView(r)}
                               onMouseEnter={e => e.currentTarget.style.borderLeft = '2px solid var(--accent)'}
                               onMouseLeave={e => e.currentTarget.style.borderLeft = ''}>
-                              <td className="tbl-cell"><span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</span></td>
+                              <td className="tbl-cell">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</span>
+                                  {cur !== 'RS' && (
+                                    <span className="text-[10px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>{cur}</span>
+                                  )}
+                                </div>
+                              </td>
                               <td className="tbl-cell"><span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span></td>
                               <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Milestone'] || '—'}</span></td>
@@ -2269,12 +2312,12 @@ export default function WebInvoices() {
                                   : <span style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span></td>
-                              <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{fmt(f['Amount Raised'])}</span></td>
-                              <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmt(f['Amount with Tax'])}</span></td>
-                              <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>{fmt(f['Amount Received'])}</span></td>
+                              <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{fmtCurrency(f['Amount Raised'], cur)}</span></td>
+                              <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtCurrency(f['Amount with Tax'], cur)}</span></td>
+                              <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>{fmtCurrency(f['Amount Received'], cur)}</span></td>
                               <td className="tbl-cell">
                                 {outstanding > 0
-                                  ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
+                                  ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmtCurrency(outstanding, cur)}</span>
                                   : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>
                               <td className="tbl-cell"><StatusPill status={f['Payment Status']} /></td>

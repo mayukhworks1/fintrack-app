@@ -45,6 +45,7 @@ class WebInvoiceFields(BaseModel):
     next_followup:   Optional[str]        = None
     reference:       Optional[List[Any]]  = None  # attachment objects from Teable
     invoice_pdf:     Optional[List[Any]]  = None  # attachment objects from Teable
+    currency:        Optional[str]        = None  # e.g. "RS", "USD"
 
     def to_teable_fields(self) -> dict:
         m = {
@@ -64,6 +65,7 @@ class WebInvoiceFields(BaseModel):
             "Next followup":   self.next_followup,
             "Reference":       self.reference,
             "Invoice PDF":     self.invoice_pdf,
+            "Currency":        self.currency,
         }
         # Include lists even if empty (allows clearing attachments); exclude only None
         return {k: v for k, v in m.items() if v is not None}
