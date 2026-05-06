@@ -866,9 +866,9 @@ function InvoiceDrawer({
             <FieldRow label="Cleared Date"><input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} /></FieldRow>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FieldRow label="Raised (₹)"><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></FieldRow>
-            <FieldRow label="With GST (₹)"><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></FieldRow>
-            <FieldRow label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></FieldRow>
+            <FieldRow label={`Raised (${currencySymbol(form.currency)})`}><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></FieldRow>
+            <FieldRow label={`With GST (${currencySymbol(form.currency)})`}><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></FieldRow>
+            <FieldRow label={`Received (${currencySymbol(form.currency)})`}><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></FieldRow>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Next Followup"><input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} /></FieldRow>
@@ -1642,30 +1642,60 @@ export default function WebInvoices() {
           {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
           {workspace !== 'projects' && (
             <>
-              {/* KPIs */}
-              <section aria-label="Invoice metrics" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-                <KpiCard tone={0} label="Total Raised"    value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
-                <KpiCard tone={1} label="Incl. GST"       value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
-                <KpiCard tone={2} label="Collected"       value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
-                <KpiCard tone={3} label="Outstanding"
+              {/* ── RS Primary KPIs ── */}
+              <section aria-label="Invoice metrics (₹)" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+                <KpiCard tone={0} label="Total Raised (₹)"   value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
+                <KpiCard tone={1} label="Incl. GST (₹)"      value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
+                <KpiCard tone={2} label="Collected (₹)"      value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
+                <KpiCard tone={3} label="Outstanding (₹)"
                   value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
                   icon={CalendarClock}
                   semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
-                  sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_status?.Pending || 0} pending` : 'Fully collected'} />
-                <KpiCard tone={4} label="Collection Rate"
+                  sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_currency?.RS?.pending_count || s?.by_status?.Pending || 0} pending` : 'Fully collected'} />
+                <KpiCard tone={4} label="Collection Rate (₹)"
                   value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
                   icon={Percent}
                   semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
               </section>
 
-              {/* Status chips */}
+              {/* ── Foreign Currency KPI rows (auto-appear when non-RS invoices exist) ── */}
+              {s?.by_currency && Object.entries(s.by_currency)
+                .filter(([cur]) => cur !== 'RS')
+                .map(([cur, data]) => (
+                  <section key={cur} aria-label={`Invoice metrics (${cur})`}
+                    className="rounded-2xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3"
+                    style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
+                    <div className="col-span-full flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-btn)', color: '#fff' }}>{cur}</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{cur} Invoices — {data.count} total</span>
+                    </div>
+                    {[
+                      { label: 'Raised',      val: data.raised,      tone: 0 },
+                      { label: 'Incl. Tax',   val: data.with_tax,    tone: 1 },
+                      { label: 'Collected',   val: data.received,    tone: 2, semantic: 'positive' },
+                      { label: 'Outstanding', val: data.outstanding, tone: 3, semantic: data.outstanding > 0 ? 'warning' : 'positive',
+                        sub: data.pending_count > 0 ? `${data.pending_count} pending` : 'Fully collected' },
+                    ].map(({ label, val, tone, semantic, sub }) => (
+                      <KpiCard key={label} tone={tone} label={`${label} (${currencySymbol(cur)})`}
+                        value={fmtCurrency(val, cur)} semantic={semantic} sub={sub} />
+                    ))}
+                  </section>
+                ))}
+
+              {/* ── Status chips ── */}
               {s?.by_status && Object.keys(s.by_status).length > 0 && (
                 <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {Object.entries(s.by_status).map(([status, count]) => {
                     const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
                     const Icon = m.icon
                     const active = statusFilter === status
-                    const amount = s?.by_status_amounts?.[status]
+                    // Show RS amount for this status from by_currency
+                    const rsAmt = (() => {
+                      if (!s?.by_currency?.RS) return null
+                      if (status === 'Paid') return s.by_currency.RS.received
+                      if (status === 'Pending') return s.by_currency.RS.outstanding
+                      return null
+                    })()
                     return (
                       <button key={status}
                         onClick={() => setStatusFilter(active ? '' : status)}
@@ -1682,8 +1712,8 @@ export default function WebInvoices() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
                           <p className="font-bold text-2xl tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
-                          {amount != null && (
-                            <p className="text-[11px] tabular-nums mt-1 font-medium" style={{ color: 'var(--text-2)' }}>{fmt(amount)}</p>
+                          {rsAmt != null && (
+                            <p className="text-[11px] tabular-nums mt-1 font-medium" style={{ color: 'var(--text-2)' }}>{fmt(rsAmt)}</p>
                           )}
                         </div>
                         {active && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.color }} />}
@@ -1693,7 +1723,7 @@ export default function WebInvoices() {
                 </section>
               )}
 
-              {/* Overdue alert */}
+              {/* ── Overdue alert (currency-aware amounts) ── */}
               {overdue.length > 0 && (
                 <section className="rounded-2xl p-4 animate-slide-down"
                   style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.16)' }}>
@@ -1710,10 +1740,15 @@ export default function WebInvoices() {
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
                           <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
+                          {inv.currency && inv.currency !== 'RS' && (
+                            <span className="text-[10px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>{inv.currency}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(inv.amount)}</span>
-                          <AgingBadge days={inv.aging} />
+                          <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>
+                            {fmtCurrency(inv.amount, inv.currency || 'RS')}
+                          </span>
+                          <AgingBadge days={inv.aging} status="Pending" />
                         </div>
                       </div>
                     ))}

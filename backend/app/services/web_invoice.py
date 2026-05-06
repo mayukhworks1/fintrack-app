@@ -306,7 +306,13 @@ class WebInvoiceService:
 
         records = await self.get_all_invoices()
 
-        total_raised = total_with_tax = total_received = total_outstanding = 0.0
+        # ── Per-currency accumulators ──────────────────────────────────────
+        # by_currency[cur] = {raised, with_tax, received, outstanding, count, pending_count}
+        def _empty_cur():
+            return {"raised": 0.0, "with_tax": 0.0, "received": 0.0,
+                    "outstanding": 0.0, "count": 0, "pending_count": 0}
+
+        by_currency: dict[str, dict] = {}
         by_status: dict[str, int] = {}
         by_project: dict[str, dict] = {}
         pending_invoices: list[dict] = []
@@ -314,40 +320,63 @@ class WebInvoiceService:
 
         for r in records:
             f = r.get("fields", {})
-            raised      = float(f.get("Amount Raised")      or 0)
-            with_tax    = float(f.get("Amount with Tax")    or 0)
-            received    = float(f.get("Amount Received")    or 0)
-            status      = f.get("Payment Status", "Unknown")
-            project     = f.get("Project", "Unknown")
-            aging       = float(f.get("Agening (Days)")     or 0)
-            cancelled   = status == "Cancelled"
+            raised    = float(f.get("Amount Raised")   or 0)
+            with_tax  = float(f.get("Amount with Tax") or 0)
+            received  = float(f.get("Amount Received") or 0)
+            status    = f.get("Payment Status", "Unknown")
+            project   = f.get("Project", "Unknown")
+            aging     = float(f.get("Agening (Days)")  or 0)
+            currency  = (f.get("Currency") or "RS").strip() or "RS"
+            cancelled = status == "Cancelled"
 
+            # ── Per-currency totals ──
+            if currency not in by_currency:
+                by_currency[currency] = _empty_cur()
+            cur = by_currency[currency]
+            cur["count"] += 1
             if not cancelled:
-                total_raised    += raised
-                total_with_tax  += with_tax
+                cur["raised"]    += raised
+                cur["with_tax"]  += with_tax
                 if status == "Paid":
-                    total_received    += raised
+                    cur["received"]    += raised
                 else:
-                    total_outstanding += raised
+                    cur["outstanding"] += raised
+                    if status == "Pending":
+                        cur["pending_count"] += 1
 
             by_status[status] = by_status.get(status, 0) + 1
 
+            # ── Per-project totals (RS/primary only for project cards) ──
             if project not in by_project:
-                by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
+                by_project[project] = {"raised": 0.0, "received": 0.0,
+                                       "outstanding": 0.0, "count": 0,
+                                       "currencies": set()}
             if not cancelled:
-                by_project[project]["raised"] += raised
-                if status == "Paid":
-                    by_project[project]["received"]    += raised
-                else:
-                    by_project[project]["outstanding"] += raised
+                by_project[project]["currencies"].add(currency)
+                if currency == "RS":
+                    by_project[project]["raised"] += raised
+                    if status == "Paid":
+                        by_project[project]["received"]    += raised
+                    else:
+                        by_project[project]["outstanding"] += raised
             by_project[project]["count"] += 1
 
             if status == "Pending":
+                # Compute aging fallback if Teable field is 0/null
+                if not aging and f.get("Raised Date"):
+                    from datetime import datetime, timezone
+                    try:
+                        rd = datetime.fromisoformat(
+                            f["Raised Date"].replace("Z", "+00:00"))
+                        aging = (datetime.now(timezone.utc) - rd).days
+                    except Exception:
+                        pass
                 pending_invoices.append({
                     "id":          r.get("id"),
                     "invoice_no":  f.get("Invoice Number", ""),
                     "project":     project,
                     "amount":      with_tax,
+                    "currency":    currency,
                     "raised_date": f.get("Raised Date"),
                     "followup":    f.get("Next followup"),
                     "aging":       aging,
@@ -359,23 +388,50 @@ class WebInvoiceService:
                     "project":    project,
                     "aging":      aging,
                     "amount":     with_tax,
+                    "currency":   currency,
                 })
 
         pending_invoices.sort(key=lambda x: x["aging"], reverse=True)
         overdue_invoices.sort(key=lambda x: x["aging"], reverse=True)
 
+        # ── Finalise per-currency stats ──
+        for cur_data in by_currency.values():
+            r_ = cur_data["raised"]
+            rec_ = cur_data["received"]
+            cur_data["collection_rate"] = round((rec_ / r_ * 100), 2) if r_ > 0 else 0.0
+            cur_data["raised"]       = round(cur_data["raised"],       2)
+            cur_data["with_tax"]     = round(cur_data["with_tax"],     2)
+            cur_data["received"]     = round(cur_data["received"],     2)
+            cur_data["outstanding"]  = round(cur_data["outstanding"],  2)
+
+        # ── Serialise set → list for JSON ──
+        for proj_data in by_project.values():
+            proj_data["currencies"] = sorted(proj_data["currencies"])
+
+        # ── Derive RS-primary totals (backward-compat) ──
+        rs = by_currency.get("RS", _empty_cur())
+        total_raised      = rs["raised"]
+        total_with_tax    = rs["with_tax"]
+        total_received    = rs["received"]
+        total_outstanding = rs["outstanding"]
+        collection_rate   = rs["collection_rate"] if "RS" in by_currency else 0.0
+
         summary = {
-            "total_raised":      round(total_raised, 2),
-            "total_with_tax":    round(total_with_tax, 2),
-            "total_received":    round(total_received, 2),
-            "total_outstanding": round(total_outstanding, 2),
-            "total_invoices":    len(records),
-            "active_invoices":   len(records) - by_status.get("Cancelled", 0),
-            "by_status":         by_status,
-            "by_project":        by_project,
-            "pending_invoices":  pending_invoices[:10],
-            "overdue_invoices":  overdue_invoices[:5],
-            "collection_rate":   round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
+            # RS-primary totals (labelled as such in the frontend)
+            "total_raised":      total_raised,
+            "total_with_tax":    total_with_tax,
+            "total_received":    total_received,
+            "total_outstanding": total_outstanding,
+            "collection_rate":   collection_rate,
+            # Counts
+            "total_invoices":  len(records),
+            "active_invoices": len(records) - by_status.get("Cancelled", 0),
+            # Breakdowns
+            "by_status":       by_status,
+            "by_project":      by_project,
+            "by_currency":     by_currency,          # full per-currency breakdown
+            "pending_invoices": pending_invoices[:10],
+            "overdue_invoices": overdue_invoices[:5],
         }
         cache.set("webinv:summary", summary, ttl=_TTL_SUMMARY)
         return summary
