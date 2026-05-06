@@ -1370,7 +1370,8 @@ export default function WebInvoices() {
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
-      .sort(([, a], [, b]) => (b?.raised || 0) - (a?.raised || 0))
+      // Sort by total invoice count (universal — not RS-only raised)
+      .sort(([, a], [, b]) => (b?.count || 0) - (a?.count || 0))
       .slice(0, 8)
     return entries.map(([project, metrics]) => ({ project, metrics }))
   }, [s])
@@ -2022,6 +2023,10 @@ export default function WebInvoices() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {projectSummaryCards.map(({ project, metrics }) => {
                   const active = projectFilter === project
+                  // Currencies used by this project, RS first
+                  const currencies = (metrics.currencies || []).slice().sort((a, b) => a === 'RS' ? -1 : b === 'RS' ? 1 : 0)
+                  const byCur = metrics.by_currency || {}
+                  const hasMultiCur = currencies.length > 1 || (currencies.length === 1 && currencies[0] !== 'RS')
                   return (
                     <button
                       key={project}
@@ -2033,26 +2038,59 @@ export default function WebInvoices() {
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
                         boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--shadow-sm)',
                       }}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
-                          <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{metrics.count || 0} invoice{metrics.count === 1 ? '' : 's'}</p>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{metrics.count || 0} invoice{metrics.count === 1 ? '' : 's'}</p>
+                            {hasMultiCur && currencies.filter(c => c !== 'RS').map(c => (
+                              <span key={c} className="text-[10px] font-bold px-1 py-0.5 rounded"
+                                style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                                {c}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        {active && <CheckCircle2 size={14} style={{ color: 'var(--accent)' }} />}
+                        {active && <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />}
                       </div>
-                      <div className="grid grid-cols-3 gap-2 mt-4">
-                        <div>
-                          <p className="label">Raised</p>
-                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmt(metrics.raised)}</p>
-                        </div>
-                        <div>
-                          <p className="label">Received</p>
-                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{fmt(metrics.received)}</p>
-                        </div>
-                        <div>
-                          <p className="label">Open</p>
-                          <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(metrics.outstanding)}</p>
-                        </div>
+
+                      {/* Per-currency amount rows */}
+                      <div className="mt-3 space-y-2">
+                        {currencies.length === 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {['Raised','Received','Open'].map(lbl => (
+                              <div key={lbl}><p className="label">{lbl}</p><p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>—</p></div>
+                            ))}
+                          </div>
+                        ) : currencies.map((cur) => {
+                          const d = byCur[cur] || { raised: 0, received: 0, outstanding: 0 }
+                          return (
+                            <div key={cur}>
+                              {hasMultiCur && (
+                                <p className="text-[10px] font-bold mb-1 uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                                  {cur} {currencySymbol(cur)}
+                                </p>
+                              )}
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <p className="label">Raised</p>
+                                  <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmtCurrency(d.raised, cur)}</p>
+                                </div>
+                                <div>
+                                  <p className="label">Received</p>
+                                  <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{fmtCurrency(d.received, cur)}</p>
+                                </div>
+                                <div>
+                                  <p className="label">Open</p>
+                                  <p className="text-xs font-semibold tabular-nums" style={{ color: d.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
+                                    {fmtCurrency(d.outstanding, cur)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </button>
                   )

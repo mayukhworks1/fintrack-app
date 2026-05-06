@@ -346,13 +346,24 @@ class WebInvoiceService:
 
             by_status[status] = by_status.get(status, 0) + 1
 
-            # ── Per-project totals (RS/primary only for project cards) ──
+            # ── Per-project totals ──
             if project not in by_project:
                 by_project[project] = {"raised": 0.0, "received": 0.0,
                                        "outstanding": 0.0, "count": 0,
-                                       "currencies": set()}
+                                       "currencies": set(),
+                                       "by_currency": {}}   # per-currency breakdown
             if not cancelled:
                 by_project[project]["currencies"].add(currency)
+                # Per-currency sub-totals (for multi-currency project cards)
+                pc = by_project[project]["by_currency"]
+                if currency not in pc:
+                    pc[currency] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0}
+                pc[currency]["raised"] += raised
+                if status == "Paid":
+                    pc[currency]["received"]    += raised
+                else:
+                    pc[currency]["outstanding"] += raised
+                # RS totals kept at top level for backward compat
                 if currency == "RS":
                     by_project[project]["raised"] += raised
                     if status == "Paid":
@@ -404,9 +415,16 @@ class WebInvoiceService:
             cur_data["received"]     = round(cur_data["received"],     2)
             cur_data["outstanding"]  = round(cur_data["outstanding"],  2)
 
-        # ── Serialise set → list for JSON ──
+        # ── Serialise set → list for JSON; round project sub-totals ──
         for proj_data in by_project.values():
             proj_data["currencies"] = sorted(proj_data["currencies"])
+            proj_data["raised"]      = round(proj_data["raised"],      2)
+            proj_data["received"]    = round(proj_data["received"],    2)
+            proj_data["outstanding"] = round(proj_data["outstanding"], 2)
+            for cur_amounts in proj_data["by_currency"].values():
+                cur_amounts["raised"]      = round(cur_amounts["raised"],      2)
+                cur_amounts["received"]    = round(cur_amounts["received"],    2)
+                cur_amounts["outstanding"] = round(cur_amounts["outstanding"], 2)
 
         # ── Derive RS-primary totals (backward-compat) ──
         rs = by_currency.get("RS", _empty_cur())
