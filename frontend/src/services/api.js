@@ -171,6 +171,26 @@ export const api = {
     create:  (data)     => request('/api/invoices', { method: 'POST',   body: JSON.stringify(data) }),
     update:  (id, data) => request(`/api/invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
+    // Upload an invoice file (PDF/image) and get AI-extracted fields back.
+    // Uses multipart/form-data — do NOT set Content-Type header (browser sets boundary).
+    parse: (file) => {
+      const form = new FormData()
+      form.append('file', file)
+      const token = getAuthToken()
+      return fetch(`${BASE_URL}/api/invoices/parse`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }))
+          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          e.status = res.status
+          throw e
+        }
+        return res.json()
+      })
+    },
   },
   webInvoices: {
     // File upload bypasses the standard request() so the browser sets the

@@ -3,10 +3,11 @@ Invoice Tracking router — /api/invoices
 GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import Optional
 from pydantic import BaseModel
 from ..services.invoice import InvoiceService
+from ..services.openrouter import parse_invoice_document
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
@@ -130,3 +131,40 @@ async def delete_invoice(record_id: str, _role: str = Depends(require_editor)):
         await InvoiceService().delete_invoice(record_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/parse")
+async def parse_invoice(
+    file: UploadFile = File(...),
+    _role: str = Depends(require_editor),
+):
+    """
+    Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
+    Uses AI vision/text models to populate as many fields as possible.
+    """
+    MAX_BYTES = 10 * 1024 * 1024  # 10 MB guard
+    content   = await file.read()
+    if len(content) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+
+    mime = file.content_type or "application/octet-stream"
+    fname = file.filename or ""
+
+    # Guess MIME from extension if browser sent a generic type
+    if mime in ("application/octet-stream", "binary/octet-stream"):
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        mime = {
+            "pdf":  "application/pdf",
+            "png":  "image/png",
+            "jpg":  "image/jpeg",
+            "jpeg": "image/jpeg",
+            "webp": "image/webp",
+        }.get(ext, mime)
+
+    try:
+        fields = await parse_invoice_document(content, fname, mime)
+        return {"fields": fields}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Parse failed: {str(e)}")

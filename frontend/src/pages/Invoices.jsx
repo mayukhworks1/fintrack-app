@@ -5,7 +5,8 @@ import {
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, CalendarDays, User, Tag, ArrowRight, Eye,
-  IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw
+  IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw,
+  Sparkles, Upload, Loader2
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -434,6 +435,10 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
   const [deleting,   setDeleting]  = useState(false)
   const [confirmDel, setConfirmDel]= useState(false)
   const [error,      setError]     = useState('')
+  const [parsing,    setParsing]   = useState(false)
+  const [parseNote,  setParseNote] = useState('')   // "Filled N fields" banner text
+  const [parseError, setParseError]= useState('')
+  const parseFileRef = useRef(null)
   const paidSelected = form.payment_status === 'Paid'
   const projectOptions  = options.projects  || []
   const categoryOptions = options.categories || []
@@ -508,6 +513,63 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
     finally { setDeleting(false) }
   }
 
+  async function handleParseFile(file) {
+    if (!file) return
+    setParsing(true); setParseError(''); setParseNote('')
+    try {
+      const { fields } = await api.invoices.parse(file)
+      if (!fields || Object.keys(fields).length === 0) {
+        setParseError('AI could not extract any fields from this document. Please fill manually.')
+        return
+      }
+      // Map returned fields onto the form — only overwrite blank fields (preserve user edits)
+      const FIELD_MAP = {
+        invoice_number:  'invoice_number',
+        project:         'project',
+        description:     'description',
+        raised_date:     'raised_date',
+        cleared_date:    'cleared_date',
+        amount_raised:   'amount_raised',
+        amount_with_tax: 'amount_with_tax',
+        amount_received: 'amount_received',
+        payment_status:  'payment_status',
+        milestone:       'milestone',
+        raised_by:       'raised_by',
+        remark:          'remark',
+      }
+      let filled = 0
+      setForm(prev => {
+        const next = { ...prev }
+        for (const [aiKey, formKey] of Object.entries(FIELD_MAP)) {
+          const val = fields[aiKey]
+          if (val == null || val === '') continue
+          // Only overwrite if the current field is blank / default
+          const cur = prev[formKey]
+          const isEmpty = cur === '' || cur === null || cur === undefined ||
+                          cur === 'Pending'  // default status — safe to overwrite
+          if (formKey === 'payment_status' || isEmpty) {
+            // Normalise dates — strip time portion
+            const normalised = (formKey.endsWith('_date') && typeof val === 'string')
+              ? val.slice(0, 10)
+              : val
+            next[formKey] = String(normalised)
+            if (isEmpty) filled++
+          }
+        }
+        return next
+      })
+      // Use a small delay so `filled` captures the final count
+      setTimeout(() => {
+        setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review and correct`)
+      }, 50)
+    } catch (e) {
+      setParseError(e.message || 'Parse failed')
+    } finally {
+      setParsing(false)
+      if (parseFileRef.current) parseFileRef.current.value = ''
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
@@ -523,6 +585,52 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+
+          {/* ── AI Invoice Scanner ── */}
+          <div>
+            <input
+              ref={parseFileRef}
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              className="hidden"
+              onChange={e => handleParseFile(e.target.files?.[0])}
+            />
+            {parsing ? (
+              <div className="flex items-center justify-center gap-2.5 p-4 rounded-xl"
+                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
+                <Loader2 size={15} className="animate-spin flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
+                  AI is reading your invoice…
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => parseFileRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border-2 border-dashed transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{ borderColor: 'var(--accent-soft)', background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                <Sparkles size={14} />
+                <span className="text-xs font-semibold">Scan Invoice with AI</span>
+                <Upload size={12} className="opacity-60" />
+                <span className="text-[11px] opacity-60">PDF · PNG · JPG</span>
+              </button>
+            )}
+            {parseNote && !parsing && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
+                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
+                <CheckCircle2 size={12} className="flex-shrink-0" />
+                {parseNote}
+              </div>
+            )}
+            {parseError && !parsing && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
+                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
+                <AlertTriangle size={12} className="flex-shrink-0" />
+                {parseError}
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
               style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>

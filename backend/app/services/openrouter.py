@@ -24,6 +24,8 @@ Architecture
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import re
 from dataclasses import dataclass
@@ -79,6 +81,27 @@ def _ordered_models() -> list[ModelSpec]:
 
 def _short(model_id: str) -> str:
     return model_id.split("/")[-1].replace(":free", "")
+
+
+# ── Vision-capable models (support image_url content blocks) ──────────
+VISION_MODEL_IDS = {
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash-preview:free",
+    "meta-llama/llama-3.2-90b-vision-instruct:free",
+    "qwen/qwen-2-vl-7b-instruct:free",
+    "qwen/qwen2.5-vl-72b-instruct:free",
+}
+
+def _vision_models_first() -> list[ModelSpec]:
+    """Return model list with vision-capable models at the front."""
+    ordered = _ordered_models()
+    vision  = [m for m in ordered if m.id in VISION_MODEL_IDS]
+    others  = [m for m in ordered if m.id not in VISION_MODEL_IDS]
+    # Also add any vision models not already in the registry
+    for vid in ("google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-90b-vision-instruct:free", "qwen/qwen-2-vl-7b-instruct:free"):
+        if not any(m.id == vid for m in vision):
+            vision.append(ModelSpec(vid, leakage=0))
+    return vision + others
 
 
 # ── System prompt — strict, explicit, single-purpose ──────────────────
@@ -277,6 +300,7 @@ async def _try_chat(
     max_tokens: int = 1024,
     temperature: float = 0.5,
     extract: bool = True,
+    models: list[ModelSpec] | None = None,
 ) -> dict:
     """
     Try each model in order until one returns usable content.
@@ -289,7 +313,7 @@ async def _try_chat(
 
     errors: list[str] = []
 
-    for spec in _ordered_models():
+    for spec in (models if models is not None else _ordered_models()):
         try:
             payload: dict[str, Any] = {
                 "model": spec.id,
@@ -480,6 +504,123 @@ async def analyze_project(project_fields: dict) -> dict:
         {"role": "user", "content": prompt},
     ]
     return await _try_chat(messages, max_tokens=1024, temperature=0.5)
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    """Extract plain text from a PDF byte-string. Returns '' on failure or empty PDF."""
+    try:
+        from pypdf import PdfReader  # type: ignore
+        reader = PdfReader(io.BytesIO(content))
+        parts: list[str] = []
+        for page in reader.pages[:8]:  # cap at 8 pages
+            t = page.extract_text()
+            if t:
+                parts.append(t)
+        return "\n\n".join(parts).strip()
+    except Exception:
+        return ""
+
+
+_INVOICE_EXTRACT_SYSTEM = """\
+You are an invoice data extractor. The company using you is an Indian digital agency called TheWorks.
+Extract structured fields from the provided invoice document.
+Return ONLY a JSON object inside ===ANSWER=== / ===END=== markers. No prose, no explanation outside the block.
+All monetary amounts must be plain numbers (no currency symbols, no commas). Dates must be YYYY-MM-DD.
+If a field cannot be determined, use null.
+"""
+
+_INVOICE_SCHEMA = """{
+  "invoice_number": "invoice/ref number shown on the doc, or null",
+  "project": "client or project name, or null",
+  "description": "service description or invoice title, or null",
+  "raised_date": "invoice/issue date as YYYY-MM-DD, or null",
+  "cleared_date": "payment cleared/received date as YYYY-MM-DD, or null",
+  "amount_raised": base_amount_before_tax_as_number_or_null,
+  "amount_with_tax": total_amount_including_tax_as_number_or_null,
+  "amount_received": amount_actually_received_as_number_or_null,
+  "payment_status": "Paid or Pending or Cancelled, or null",
+  "milestone": "milestone or phase name, or null",
+  "raised_by": "sender/issuer person name, or null",
+  "remark": "any notes or payment terms worth capturing, or null"
+}"""
+
+
+async def parse_invoice_document(content: bytes, filename: str, mime_type: str) -> dict:
+    """
+    Parse an invoice file (image or PDF) and return extracted form fields.
+
+    For images → uses vision-capable models (Gemini, LLaMA Vision).
+    For PDFs   → extracts text with pypdf, then uses text models.
+
+    Returns a dict matching InvoiceFields keys (snake_case, nulls omitted).
+    """
+    if not settings.openrouter_api_key:
+        raise ValueError("OPENROUTER_API_KEY is not configured.")
+
+    prompt_suffix = (
+        f"Extract all invoice fields you can find.\n\n"
+        f"Return this exact JSON schema inside ===ANSWER=== / ===END=== markers:\n{_INVOICE_SCHEMA}"
+    )
+
+    is_image = mime_type.startswith("image/")
+    is_pdf   = "pdf" in mime_type.lower() or filename.lower().endswith(".pdf")
+
+    if is_image:
+        b64 = base64.b64encode(content).decode()
+        messages = [
+            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
+            {"role": "user", "content": [
+                {"type": "text",      "text": prompt_suffix},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+            ]},
+        ]
+        specs = _vision_models_first()
+
+    elif is_pdf:
+        text = _extract_pdf_text(content)
+        if not text:
+            raise ValueError(
+                "Could not extract text from this PDF (may be scanned). "
+                "Try uploading a PNG/JPG screenshot of the invoice instead."
+            )
+        messages = [
+            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
+            {"role": "user",   "content": f"Invoice text:\n\n{text[:5000]}\n\n{prompt_suffix}"},
+        ]
+        specs = _ordered_models()
+
+    else:
+        raise ValueError(f"Unsupported file type '{mime_type}'. Upload a PDF, PNG, or JPG.")
+
+    result  = await _try_chat(messages, max_tokens=600, temperature=0.05, models=specs)
+    raw     = result["content"].strip()
+
+    # Strip markdown fences if the model wrapped the JSON
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        parsed: dict = json.loads(match.group())
+    except json.JSONDecodeError:
+        return {}
+
+    # Normalise: drop nulls, coerce numbers
+    clean: dict = {}
+    for k, v in parsed.items():
+        if v is None or v == "null" or v == "":
+            continue
+        if k in ("amount_raised", "amount_with_tax", "amount_received"):
+            try:
+                clean[k] = float(str(v).replace(",", "").replace("₹", "").strip())
+            except (ValueError, TypeError):
+                pass
+        else:
+            clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
+
+    return clean
 
 
 async def generate_report(summary: dict, records: list[dict]) -> dict:
