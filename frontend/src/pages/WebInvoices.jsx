@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
 import { ProjectsWorkspace } from './WebProjects'
+import { DocPreviewModal } from '../components/DocPreviewModal'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -202,45 +203,64 @@ function AgingBadge({ days, status }) {
   )
 }
 
-function AttachThumb({ a, size = 28 }) {
+function AttachThumb({ a, size = 28, onPreview }) {
   const [err, setErr] = useState(false)
+  const inner = isImage(a) && !err
+    ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
+    : isPdf(a)
+      ? <FileText size={Math.round(size * 0.45)} style={{ color: '#f87171' }} />
+      : <ImageIcon size={Math.round(size * 0.45)} style={{ color: 'var(--text-3)' }} />
+  const sharedStyle = { width: size, height: size, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.08)' : 'var(--glass-bg)' }
+  const sharedClass = 'flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center border transition-opacity hover:opacity-75'
+  if (onPreview) {
+    return (
+      <button type="button" title={a.name} className={sharedClass} style={sharedStyle}
+        onClick={e => { e.stopPropagation(); onPreview() }}>
+        {inner}
+      </button>
+    )
+  }
   return (
     <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.name}
-      className="flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center border transition-opacity hover:opacity-75"
-      style={{ width: size, height: size, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.08)' : 'var(--glass-bg)' }}
+      className={sharedClass} style={sharedStyle}
       onClick={e => e.stopPropagation()}>
-      {isImage(a) && !err
-        ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
-        : isPdf(a)
-          ? <FileText size={Math.round(size * 0.45)} style={{ color: '#f87171' }} />
-          : <ImageIcon size={Math.round(size * 0.45)} style={{ color: 'var(--text-3)' }} />}
+      {inner}
     </a>
   )
 }
 
-function AttachCard({ a }) {
+function AttachCard({ a, onPreview }) {
   const [err, setErr] = useState(false)
-  return (
-    <a href={a.url} target="_blank" rel="noopener noreferrer"
-      className="group flex items-center gap-3 p-2.5 rounded-xl border transition-all"
-      style={{ background: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'var(--glass-bg-hover)'; e.currentTarget.style.borderColor = 'var(--glass-border-hi)' }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'var(--glass-bg)';       e.currentTarget.style.borderColor = 'var(--glass-border)' }}>
-      <div className="rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
-        style={{ width: 44, height: 44, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.10)' : 'var(--bg-input)' }}>
-        {isImage(a) && !err
-          ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
-          : isPdf(a)
-            ? <FileText size={20} style={{ color: '#f87171' }} />
-            : <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />}
-      </div>
+  const thumb = (
+    <div className="rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
+      style={{ width: 44, height: 44, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.10)' : 'var(--bg-input)' }}>
+      {isImage(a) && !err
+        ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
+        : isPdf(a)
+          ? <FileText size={20} style={{ color: '#f87171' }} />
+          : <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />}
+    </div>
+  )
+  const content = (
+    <>
+      {thumb}
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{a.name}</p>
-        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{isPdf(a) ? 'PDF Document' : 'Image'} · click to open</p>
+        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{isPdf(a) ? 'PDF Document' : 'Image'} · click to preview</p>
       </div>
       <ExternalLink size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--text-2)' }} />
-    </a>
+    </>
   )
+  const sharedProps = {
+    className: 'group flex items-center gap-3 p-2.5 rounded-xl border transition-all w-full text-left',
+    style: { background: 'var(--glass-bg)', borderColor: 'var(--glass-border)' },
+    onMouseEnter: e => { e.currentTarget.style.background = 'var(--glass-bg-hover)'; e.currentTarget.style.borderColor = 'var(--glass-border-hi)' },
+    onMouseLeave: e => { e.currentTarget.style.background = 'var(--glass-bg)';       e.currentTarget.style.borderColor = 'var(--glass-border)' },
+  }
+  if (onPreview) {
+    return <button type="button" {...sharedProps} onClick={onPreview}>{content}</button>
+  }
+  return <a href={a.url} target="_blank" rel="noopener noreferrer" {...sharedProps}>{content}</a>
 }
 
 function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
@@ -497,11 +517,12 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ens
 }
 
 /* ── Detail panel ── */
-function InvoiceDetail({ invoice, onClose, onEdit }) {
+function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
   if (!invoice) return null
   const f = invoice.fields || {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
+  const allDetailFiles = [...refs, ...pdfs]
   const outstanding = Number(f['Outstanding Amount'] || 0)
   const cur = f['Currency'] || 'RS'
 
@@ -593,13 +614,13 @@ function InvoiceDetail({ invoice, onClose, onEdit }) {
               {refs.length > 0 && (
                 <div>
                   <p className="label mb-2">Payment Reference{refs.length > 1 ? 's' : ''}</p>
-                  <div className="space-y-2">{refs.map((a, i) => <AttachCard key={i} a={a} />)}</div>
+                  <div className="space-y-2">{refs.map((a, i) => <AttachCard key={i} a={a} onPreview={onPreview ? () => onPreview(allDetailFiles, i) : undefined} />)}</div>
                 </div>
               )}
               {pdfs.length > 0 && (
                 <div>
                   <p className="label mb-2">Invoice PDF{pdfs.length > 1 ? 's' : ''}</p>
-                  <div className="space-y-2">{pdfs.map((a, i) => <AttachCard key={i} a={a} />)}</div>
+                  <div className="space-y-2">{pdfs.map((a, i) => <AttachCard key={i} a={a} onPreview={onPreview ? () => onPreview(allDetailFiles, refs.length + i) : undefined} />)}</div>
                 </div>
               )}
             </div>
@@ -1251,6 +1272,7 @@ export default function WebInvoices() {
   const [canEditPicklists, setCanEditPicklists] = useState(true)
   const [picklistPermissionMsg, setPicklistPermissionMsg] = useState('')
   const [retainerActionBusy, setRetainerActionBusy] = useState('')
+  const [previewDocs, setPreviewDocs] = useState(null)
 
   useEffect(() => {
     // 1. Load Category / Milestone / Raised By options from Teable field schema
@@ -1568,11 +1590,19 @@ export default function WebInvoices() {
 
   function SortLabel({ col, children }) {
     const active = sortCol === col
+    const asc    = sortDir === 'asc'
     return (
       <button onClick={() => handleSort(col)}
-        className="inline-flex items-center gap-1 cursor-pointer select-none section-title"
-        style={{ color: active ? 'var(--text-2)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
-        {children}<ArrowUpDown size={10} style={{ opacity: active ? 0.9 : 0.25 }} />
+        className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
+        title={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
+        style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
+        {children}
+        <ArrowUpDown size={10} style={{
+          opacity: active ? 1 : 0.3,
+          color: active ? 'var(--accent)' : undefined,
+          transform: active && asc ? 'rotate(180deg)' : 'none',
+          transition: 'transform 0.15s',
+        }} className="group-hover/sort:opacity-80" />
       </button>
     )
   }
@@ -2328,17 +2358,17 @@ export default function WebInvoices() {
                   <tr>
                     <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
-                    <th className="tbl-head">Category</th>
-                    <th className="tbl-head">Milestone</th>
-                    <th className="tbl-head">Raised By</th>
+                    <th className="tbl-head"><SortLabel col="Category">Category</SortLabel></th>
+                    <th className="tbl-head"><SortLabel col="Milestone">Milestone</SortLabel></th>
+                    <th className="tbl-head"><SortLabel col="Raised By">Raised By</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Raised Date">Raised</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Amount Raised">Amount</SortLabel></th>
-                    <th className="tbl-head">GST Total</th>
-                    <th className="tbl-head">Received</th>
-                    <th className="tbl-head">Outstanding</th>
-                    <th className="tbl-head">Status</th>
+                    <th className="tbl-head"><SortLabel col="Amount with Tax">GST Total</SortLabel></th>
+                    <th className="tbl-head"><SortLabel col="Amount Received">Received</SortLabel></th>
+                    <th className="tbl-head"><SortLabel col="Outstanding Amount">Outstanding</SortLabel></th>
+                    <th className="tbl-head"><SortLabel col="Payment Status">Status</SortLabel></th>
                     <th className="tbl-head"><SortLabel col="Agening (Days)">Aging</SortLabel></th>
-                    <th className="tbl-head">Next Followup</th>
+                    <th className="tbl-head"><SortLabel col="Next followup">Next Followup</SortLabel></th>
                     <th className="tbl-head">Docs</th>
                     <th className="tbl-head" style={{ width: 80 }} />
                   </tr>
@@ -2406,7 +2436,7 @@ export default function WebInvoices() {
                               <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                                 {allFiles.length > 0 ? (
                                   <div className="flex items-center gap-1">
-                                    {allFiles.slice(0, 2).map((a, i) => <AttachThumb key={i} a={a} size={28} />)}
+                                    {allFiles.slice(0, 2).map((a, i) => <AttachThumb key={i} a={a} size={28} onPreview={() => setPreviewDocs({ docs: allFiles, index: i })} />)}
                                     {allFiles.length > 2 && <span className="text-[10px] px-1" style={{ color: 'var(--text-3)' }}>+{allFiles.length - 2}</span>}
                                   </div>
                                 ) : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
@@ -2433,7 +2463,7 @@ export default function WebInvoices() {
 
       {/* Drawers */}
       {drawer?.mode === 'view' && createPortal(
-        <InvoiceDetail invoice={drawer.invoice} onClose={closeDrawer} onEdit={() => setDrawer({ mode: 'edit', invoice: drawer.invoice })} />,
+        <InvoiceDetail invoice={drawer.invoice} onClose={closeDrawer} onEdit={() => setDrawer({ mode: 'edit', invoice: drawer.invoice })} onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })} />,
         document.body
       )}
       {(drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
@@ -2454,6 +2484,7 @@ export default function WebInvoices() {
         <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />,
         document.body
       )}
+      <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
       </div>
     </div>
   )
