@@ -748,12 +748,12 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     raw = re.sub(r"\s*```$", "", raw)
 
     match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not match:
-        return {}
-    try:
-        parsed: dict = json.loads(match.group())
-    except json.JSONDecodeError:
-        return {}
+    parsed: dict = {}
+    if match:
+        try:
+            parsed = json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
 
     # Normalise: drop nulls, coerce numbers
     clean: dict = {}
