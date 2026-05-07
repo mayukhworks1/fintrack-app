@@ -303,7 +303,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div className="relative ml-auto flex flex-col h-full shadow-2xl"
-        style={{ width: '100%', maxWidth: 480, background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
+        style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
@@ -341,7 +341,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
                 <TextInput value={d.project_name} onChange={set('project_name')}
                   placeholder="e.g. Web Portal Redesign" required />
               </FormRow>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Client">
                   <ComboInput id="proj-client" value={d.client} onChange={set('client')}
                     placeholder="Select or type" suggestions={clientSuggestions} />
@@ -387,7 +387,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
           <div>
             <SectionLabel icon={Check}>Status & Progress</SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Status">
                   <SelectInput value={d.status} onChange={set('status')} options={STATUSES} />
                 </FormRow>
@@ -414,7 +414,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
           <div>
             <SectionLabel icon={Calendar}>Timeline</SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Est. Start">
                   <TextInput type="date" value={d.est_start} onChange={set('est_start')} />
                 </FormRow>
@@ -422,7 +422,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
                   <TextInput type="date" value={d.est_end} onChange={set('est_end')} />
                 </FormRow>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Actual Start">
                   <TextInput type="date" value={d.actual_start} onChange={set('actual_start')} />
                 </FormRow>
@@ -437,7 +437,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
           <div>
             <SectionLabel icon={IndianRupee}>Financials</SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Est. Budget (₹)">
                   <NumberInput value={d.estimated_budget} onChange={set('estimated_budget')} placeholder="0" min={0} />
                 </FormRow>
@@ -582,7 +582,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div className="relative ml-auto flex flex-col h-full shadow-2xl"
-        style={{ width: '100%', maxWidth: 480, background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
+        style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
@@ -620,7 +620,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
                 <TextInput value={d.resource_name} onChange={set('resource_name')}
                   placeholder="e.g. Rahul Sharma" required />
               </FormRow>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Role">
                   <TextInput value={d.role} onChange={set('role')} placeholder="e.g. Frontend Dev" />
                 </FormRow>
@@ -640,7 +640,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
           <div>
             <SectionLabel icon={IndianRupee}>Cost <span className="normal-case font-normal">(what you pay)</span></SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Rate (₹)">
                   <NumberInput value={d.rate} onChange={set('rate')} placeholder="0" min={0} />
                 </FormRow>
@@ -667,7 +667,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
           <div>
             <SectionLabel icon={Clock}>Man Hours</SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Actual Hours" hint="Total worked">
                   <NumberInput value={d.man_hours} onChange={set('man_hours')} placeholder="e.g. 160" min={0} step={0.5} />
                 </FormRow>
@@ -694,7 +694,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
           <div>
             <SectionLabel icon={TrendingUp}>Revenue <span className="normal-case font-normal">(what you charge)</span></SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="Billing Rate (₹)" hint="Rate charged to client">
                   <NumberInput value={d.billing_rate} onChange={set('billing_rate')} placeholder="0" min={0} />
                 </FormRow>
@@ -724,7 +724,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
           <div>
             <SectionLabel icon={Calendar}>Dates &amp; Notes</SectionLabel>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormRow label="From Date">
                   <TextInput type="date" value={d.from_date} onChange={set('from_date')} />
                 </FormRow>
@@ -988,7 +988,7 @@ function ProjectDetailView({
       </div>
 
       {/* KPI row — Financial */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Client Charge" value={charge ? formatInr(charge) : '—'} />
         <KpiCard label="Total Cost"    value={inputCost ? formatInr(inputCost) : '—'} />
         <KpiCard label="Actual Profit" value={profit ? formatInr(profit) : '—'}
@@ -1579,7 +1579,7 @@ export function ProjectsWorkspace() {
 
           {/* Search + filters + New button */}
           <div className="flex gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[160px]">
+            <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
               <input ref={searchRef}
                 className="w-full rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none"
@@ -1888,7 +1888,7 @@ export function AllResourcesView() {
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[160px]">
+        <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
           <input className="w-full rounded-xl pl-8 pr-3 py-2.5 text-sm outline-none"
             style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}

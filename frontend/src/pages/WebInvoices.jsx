@@ -572,7 +572,7 @@ function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {[
               ['Amount Raised',   f['Amount Raised'],      'var(--text-1)'],
               ['With GST',        f['Amount with Tax'],    'var(--text-1)'],
@@ -586,7 +586,7 @@ function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
               ['Raised',        fmtDateFull(f['Raised Date'])],
               ['Cleared',       fmtDateFull(f['Cleared Date'])],
@@ -1894,7 +1894,7 @@ export default function WebInvoices() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div className="card p-3">
                           <p className="label">Tracking month</p>
                           <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{monthLabel(retainerMonth)}</p>
@@ -2092,7 +2092,7 @@ export default function WebInvoices() {
                       {/* Per-currency amount rows */}
                       <div className="mt-3 space-y-2">
                         {currencies.length === 0 ? (
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
                             {['Raised','Received','Open'].map(lbl => (
                               <div key={lbl}><p className="label">{lbl}</p><p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>—</p></div>
                             ))}
@@ -2106,7 +2106,7 @@ export default function WebInvoices() {
                                   {cur} {currencySymbol(cur)}
                                 </p>
                               )}
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
                                 <div>
                                   <p className="label">Raised</p>
                                   <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmtCurrency(d.raised, cur)}</p>
@@ -2158,7 +2158,7 @@ export default function WebInvoices() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[180px]">
+              <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                 <input value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="Search invoice #, project, description…"

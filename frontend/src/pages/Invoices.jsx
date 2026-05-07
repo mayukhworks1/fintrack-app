@@ -308,7 +308,7 @@ function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
         onClick={onClose} aria-hidden="true" />
       <aside className="relative ml-auto flex flex-col h-full animate-slide-in"
-        style={{ width: 'min(100vw,500px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
+        style={{ width: 'min(calc(100vw - 1rem), 500px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
 
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 gap-3" style={{ borderBottom: '1px solid var(--glass-border)' }}>
@@ -357,7 +357,7 @@ function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
           )}
 
           {/* Amount grid */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {[
               ['Amount Raised',   f['Amount Raised'],       'var(--text-1)'],
               ['With GST (18%)',  f['Amount with Tax'],     'var(--text-1)'],
@@ -372,7 +372,7 @@ function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
           </div>
 
           {/* Dates + computed */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
               ['Raised',      fmtDateFull(f['Raised Date'])],
               ['Cleared',     fmtDateFull(f['Cleared Date'])],
@@ -581,7 +581,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
         onClick={onClose} aria-hidden="true" />
       <aside className="relative ml-auto flex flex-col h-full overflow-hidden animate-slide-in"
-        style={{ width: 'min(100vw,520px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
+        style={{ width: 'min(calc(100vw - 1rem), 520px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
 
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--glass-border)' }}>
           <h2 className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>
@@ -644,7 +644,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Invoice Number">
               <input className="input" value={form.invoice_number} onChange={setE('invoice_number')} placeholder="WM/25-26/001" />
             </Field>
@@ -652,7 +652,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
               <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Project">
               <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project…" />
             </Field>
@@ -683,7 +683,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Milestone">
               <SelectInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Select…" />
             </Field>
@@ -694,16 +694,16 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
           <Field label="Description">
             <textarea className="input resize-none" rows={2} value={form.description} onChange={setE('description')} placeholder="Brief description…" />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Raised Date"><input type="date" className="input" value={form.raised_date} onChange={setE('raised_date')} /></Field>
             <Field label="Cleared Date"><input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Raised (₹)"><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></Field>
             <Field label="With GST (₹)"><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></Field>
             <Field label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Next Followup"><input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} /></Field>
           </div>
           <Field label="Remark">
@@ -1491,7 +1491,7 @@ export default function Invoices() {
                     </div>
                     {active && <CheckCircle2 size={14} style={{ color: 'var(--accent)' }} />}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-4">
+                  <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 mt-4">
                     <div>
                       <p className="label">Raised</p>
                       <p className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmt(metrics.raised)}</p>
@@ -1515,7 +1515,7 @@ export default function Invoices() {
       {/* ── Filter bar ── */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px]">
+          <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search invoice #, project, description…"
