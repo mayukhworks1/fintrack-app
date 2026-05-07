@@ -528,6 +528,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         project:         'project',
         description:     'description',
         raised_date:     'raised_date',
+        next_followup:   'next_followup',
         cleared_date:    'cleared_date',
         amount_raised:   'amount_raised',
         amount_with_tax: 'amount_with_tax',
@@ -537,21 +538,46 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         raised_by:       'raised_by',
         remark:          'remark',
       }
+
+      // Fuzzy-match the AI project string against existing picklist options.
+      // e.g. "Innovine Universal Solutions Private Limited" → "Innovine Platform"
+      const fuzzyMatchProject = (aiProject) => {
+        if (!aiProject || !projectOptions.length) return aiProject
+        const lower = aiProject.toLowerCase()
+        // Exact match first
+        const exact = projectOptions.find(o => o.toLowerCase() === lower)
+        if (exact) return exact
+        // Check if any picklist option is a substring of the AI value (common case)
+        const sub = projectOptions.find(o => lower.includes(o.toLowerCase()))
+        if (sub) return sub
+        // Check if the AI value starts with any picklist option word
+        const firstWord = lower.split(/\s+/)[0]
+        const wordMatch = projectOptions.find(o => o.toLowerCase().startsWith(firstWord))
+        if (wordMatch) return wordMatch
+        // Return as-is — user can correct
+        return aiProject
+      }
+
       let filled = 0
       setForm(prev => {
         const next = { ...prev }
         for (const [aiKey, formKey] of Object.entries(FIELD_MAP)) {
-          const val = fields[aiKey]
+          let val = fields[aiKey]
           if (val == null || val === '') continue
+
+          // Fuzzy-match project against existing picklist
+          if (formKey === 'project') val = fuzzyMatchProject(String(val))
+
           // Only overwrite if the current field is blank / default
           const cur = prev[formKey]
           const isEmpty = cur === '' || cur === null || cur === undefined ||
                           cur === 'Pending'  // default status — safe to overwrite
           if (formKey === 'payment_status' || isEmpty) {
             // Normalise dates — strip time portion
-            const normalised = (formKey.endsWith('_date') && typeof val === 'string')
-              ? val.slice(0, 10)
-              : val
+            const normalised = (
+              (formKey.endsWith('_date') || formKey === 'next_followup') &&
+              typeof val === 'string'
+            ) ? val.slice(0, 10) : val
             next[formKey] = String(normalised)
             if (isEmpty) filled++
           }

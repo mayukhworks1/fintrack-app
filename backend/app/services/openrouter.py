@@ -561,12 +561,13 @@ def _parse_indian_date(s: str) -> str | None:
 def _regex_extract_invoice(text: str) -> dict:
     """
     Fast regex-based extraction for TheWorks invoice format (and similar Indian tax invoices).
-    Returns partial dict — AI fills any gaps. Keys use the same snake_case as InvoiceFields.
+    Covers: invoice_number, raised_date, next_followup, cleared_date, amount_raised,
+            amount_with_tax, project, description (line items), milestone.
+    No AI needed for PDFs that match this format — returns enough for all form fields.
     """
     out: dict = {}
 
     # ── Invoice number ──────────────────────────────────────────────────────
-    # Matches:  # WM/26-27/049  or  Invoice No: WM/26-27/049  or  No. WM-2526-001
     m = re.search(r'(?:^|\s)#\s*(WM/[\d/\-]+)', text)
     if not m:
         m = re.search(r'(?:invoice\s*(?:no|number|#)\s*[:\.]?\s*)([A-Z]{1,4}[/\-]\d[\d/\-]+)',
@@ -575,21 +576,20 @@ def _regex_extract_invoice(text: str) -> dict:
         out["invoice_number"] = m.group(1).strip()
 
     # ── Dates ───────────────────────────────────────────────────────────────
-    # "Invoice Date : 30/04/2026" or "Invoice Date: 30/04/2026"
     m = re.search(r'Invoice\s*Date\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})', text, re.IGNORECASE)
     if m:
         d = _parse_indian_date(m.group(1))
         if d:
             out["raised_date"] = d
 
-    # "Due Date : 15/05/2026" → use as next_followup hint if no followup set
+    # Due Date → next_followup (the date to follow up for payment)
     m = re.search(r'Due\s*Date\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})', text, re.IGNORECASE)
     if m:
         d = _parse_indian_date(m.group(1))
         if d:
-            out["_due_date"] = d   # internal hint for the caller to map to next_followup
+            out["next_followup"] = d
 
-    # "Payment Date" or "Paid On"
+    # Payment/cleared date
     for pat in [r'(?:Payment|Paid|Cleared)\s*(?:Date|On)\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})',
                 r'(\d{1,2}/\d{1,2}/\d{4})\s*(?:cleared|paid)']:
         m = re.search(pat, text, re.IGNORECASE)
@@ -600,42 +600,74 @@ def _regex_extract_invoice(text: str) -> dict:
                 break
 
     # ── Amounts ─────────────────────────────────────────────────────────────
-    # Sub Total (base, before GST)
     m = re.search(r'Sub\s*Total\s+([\d,]+\.\d{2})', text, re.IGNORECASE)
     if m:
         v = _parse_indian_amount(m.group(1))
         if v is not None:
             out["amount_raised"] = v
 
-    # Total (after tax) — pick the largest "Total" line to avoid sub-items
+    # Largest "Total …" line = grand total (includes GST)
     totals = re.findall(r'\bTotal\s+([\d,]+\.\d{2})', text, re.IGNORECASE)
     if totals:
         vals = [_parse_indian_amount(t) for t in totals if _parse_indian_amount(t) is not None]
         if vals:
-            out["amount_with_tax"] = max(vals)  # largest Total = grand total
+            out["amount_with_tax"] = max(vals)
 
-    # If no Sub Total found, infer base from total / 1.18 (18% GST)
+    # Infer base if only grand total found (18% GST)
     if "amount_with_tax" in out and "amount_raised" not in out:
         out["amount_raised"] = round(out["amount_with_tax"] / 1.18, 2)
 
     # ── Client / Project (Bill To section) ─────────────────────────────────
-    m = re.search(r'Bill\s*To\s*\n(.+?)(?:\n(?:GSTIN|Place|GST|\d{6})|$)',
+    m = re.search(r'Bill\s*To\s*[\r\n]+(.+?)(?:[\r\n]+(?:GSTIN|Place|GST|\d{6})|$)',
                   text, re.DOTALL | re.IGNORECASE)
     if m:
         client = m.group(1).strip().splitlines()[0].strip()
         if len(client) > 3:
             out["project"] = client
 
-    # ── Description (first line-item description) ──────────────────────────
-    # Format:  1  Website Development\nSome description\n998314  Amount
-    m = re.search(r'\d+\s+([A-Za-z ]+(?:Development|Design|Marketing|SEO|Content|Maintenance|Support)[^\n]*)\n(.+?)(?:\n\d{6}|\n\d+\s+\d)',
-                  text, re.DOTALL | re.IGNORECASE)
-    if not m:
-        m = re.search(r'\d+\s+(.{10,80})\n(.{10,120})', text)
-    if m:
-        service_type = m.group(1).strip()
-        detail = m.group(2).strip()[:120]
-        out["description"] = f"{service_type} – {detail}" if detail else service_type
+    # ── Line items → description + milestone ────────────────────────────────
+    # Format (TheWorks): \d+  ServiceType\nDetail line(s)\n998314  Amount
+    # HSN/SAC codes are 6-digit numbers (e.g. 998314) — they delimit item end.
+    item_blocks = re.findall(
+        r'(\d+)\s{1,4}([A-Za-z][^\n]{3,60})\n((?:(?!\d{6}\b).+\n?)*?)(?=\d{6}\b)',
+        text
+    )
+    descriptions: list[str] = []
+    milestones:   list[str] = []
+
+    for _num, service, detail_raw in item_blocks:
+        svc    = service.strip()
+        detail = " ".join(ln.strip() for ln in detail_raw.splitlines() if ln.strip())
+
+        # Remove leading repetition of the service name in the detail line
+        if detail.lower().startswith(svc.lower()):
+            detail = detail[len(svc):].lstrip(" –-")
+
+        # Extract milestone from parenthetical: "(April 2026  Pending – 50 %)"
+        ms_m = re.search(
+            r'\(([A-Z][a-z]+\s+\d{4}[^)]*?\d+\s*%[^)]*?)\)',
+            detail, re.IGNORECASE
+        )
+        if ms_m:
+            raw_ms = re.sub(r'\s+', ' ', ms_m.group(1).strip())
+            raw_ms = raw_ms.replace(" – ", " ").replace(" - ", " ")
+            raw_ms = re.sub(r'(\d+)\s*%', r'\1%', raw_ms)
+            milestones.append(raw_ms)
+            # Strip milestone parenthetical from description
+            detail = detail[:ms_m.start()].strip().rstrip("–-").strip()
+
+        desc = f"{svc} – {detail}" if detail else svc
+        # Avoid "Website Development – Website Development – ..."
+        parts = desc.split(" – ", 1)
+        if len(parts) == 2 and parts[1].lower().startswith(parts[0].lower()):
+            desc = parts[1]
+        descriptions.append(desc)
+
+    if descriptions:
+        # Deduplicate (items may share the same service line)
+        out["description"] = "; ".join(list(dict.fromkeys(descriptions)))
+    if milestones:
+        out["milestone"] = milestones[0]   # first item's milestone
 
     return out
 
@@ -663,16 +695,17 @@ Return ONLY valid JSON inside ===ANSWER=== / ===END=== markers. No prose outside
 _INVOICE_SCHEMA = """{
   "invoice_number": "e.g. WM/26-27/049 — strip # prefix, or null",
   "project": "client company name from Bill To section, or null",
-  "description": "service type and description (first line item), or null",
+  "description": "service type + detail from line items only (NOT tax/GST rows), or null",
   "raised_date": "Invoice Date as YYYY-MM-DD (convert from DD/MM/YYYY), or null",
+  "next_followup": "Due Date as YYYY-MM-DD (convert from DD/MM/YYYY), or null",
   "cleared_date": "payment cleared date as YYYY-MM-DD, or null",
   "amount_raised": sub_total_before_gst_as_plain_number_or_null,
   "amount_with_tax": grand_total_including_gst_as_plain_number_or_null,
   "amount_received": amount_already_received_as_plain_number_or_null,
   "payment_status": "Paid if paid, Pending if unpaid, or null",
-  "milestone": "project phase e.g. April 2026 50%, Advance, or null",
+  "milestone": "project phase from line item parenthetical e.g. April 2026 Pending 50%, or null",
   "raised_by": "issuer person name if mentioned, or null",
-  "remark": "due date or payment terms if relevant, or null"
+  "remark": "payment terms or any other relevant note, or null"
 }"""
 
 
@@ -680,8 +713,9 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     """
     Parse an invoice file (image or PDF) and return extracted form fields.
 
-    For PDFs:   pypdf text extraction + regex pre-pass + AI gap-fill
-    For images: base64 to vision model
+    PDFs  → pypdf text + regex (instant).  AI is only called when regex
+            coverage is thin (< 4 key fields found).
+    Images → base64 sent to a vision model (AI required).
 
     Returns a dict matching InvoiceFields keys (snake_case, nulls omitted).
     """
@@ -691,16 +725,92 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     is_image = mime_type.startswith("image/")
     is_pdf   = "pdf" in mime_type.lower() or filename.lower().endswith(".pdf")
 
-    regex_fields: dict = {}
-    messages: list[dict] = []
-    specs: list[ModelSpec] = []
+    # Fields that determine whether regex coverage is sufficient to skip AI
+    _KEY_FIELDS = {"invoice_number", "raised_date", "amount_raised", "amount_with_tax", "project"}
+
+    def _normalise(parsed: dict) -> dict:
+        """Drop nulls, coerce numeric fields."""
+        clean: dict = {}
+        for k, v in parsed.items():
+            if v is None or v == "null" or v == "":
+                continue
+            if k in ("amount_raised", "amount_with_tax", "amount_received"):
+                try:
+                    clean[k] = float(str(v).replace(",", "").replace("₹", "").strip())
+                except (ValueError, TypeError):
+                    pass
+            else:
+                clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
+        return clean
+
+    def _merge_regex(clean: dict, regex_fields: dict) -> dict:
+        """
+        Merge regex_fields over AI output.
+        Authoritative fields (amounts, dates, invoice number): regex wins.
+        Text fields (description, milestone, project): regex fills gaps only.
+        """
+        REGEX_WINS = {"amount_raised", "amount_with_tax", "raised_date",
+                      "invoice_number", "next_followup"}
+        for k, v in regex_fields.items():
+            if k in REGEX_WINS or k not in clean:
+                clean[k] = v
+        return clean
 
     prompt_text = (
-        "Extract all invoice fields you can find. Apply the format rules from the system prompt strictly.\n\n"
-        f"Return EXACTLY this JSON schema inside ===ANSWER=== / ===END=== markers — no markdown, no prose:\n{_INVOICE_SCHEMA}"
+        "Extract all invoice fields you can find. Apply the format rules strictly.\n\n"
+        f"Return EXACTLY this JSON inside ===ANSWER=== / ===END=== — no markdown, no prose:\n{_INVOICE_SCHEMA}"
     )
 
-    if is_image:
+    # ── PDF path ─────────────────────────────────────────────────────────────
+    if is_pdf:
+        text = _extract_pdf_text(content)
+        if not text:
+            raise ValueError(
+                "Could not extract text from this PDF — it may be a scanned/image-only PDF. "
+                "Try uploading a PNG or JPG screenshot of the invoice instead."
+            )
+
+        regex_fields = _regex_extract_invoice(text)
+
+        # Fast path: if regex got ≥ 4 key fields, skip AI entirely (instant result)
+        key_coverage = sum(1 for f in _KEY_FIELDS if f in regex_fields)
+        if key_coverage >= 4:
+            return _normalise(regex_fields)
+
+        # Slow path: ask AI to fill gaps — only send a compact context
+        hints = {k: v for k, v in regex_fields.items()}
+        context_lines = ["INVOICE TEXT (draw-order PDF — fields may appear out of sequence):"]
+        context_lines.append(text[:2500])
+        if hints:
+            context_lines.append("\nPRE-EXTRACTED (verified — use these values directly):")
+            for k, v in hints.items():
+                context_lines.append(f"  {k}: {v}")
+
+        messages: list[dict] = [
+            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
+            {"role": "user",   "content": "\n".join(context_lines) + "\n\n" + prompt_text},
+        ]
+        specs = _ordered_models()
+
+        ai_clean: dict = {}
+        try:
+            result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
+            raw = result["content"].strip()
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$",          "", raw)
+            m   = re.search(r"\{.*\}", raw, re.DOTALL)
+            if m:
+                ai_clean = _normalise(json.loads(m.group()))
+        except (json.JSONDecodeError, ValueError) as e:
+            if "OPENROUTER" in str(e) or "quota" in str(e).lower():
+                raise
+        except Exception:
+            pass  # AI failed — regex result is still returned
+
+        return _merge_regex(ai_clean, regex_fields)
+
+    # ── Image path ───────────────────────────────────────────────────────────
+    elif is_image:
         b64 = base64.b64encode(content).decode()
         messages = [
             {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
@@ -711,86 +821,20 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
         ]
         specs = _vision_models_first()
 
-    elif is_pdf:
-        text = _extract_pdf_text(content)
-        if not text:
-            raise ValueError(
-                "Could not extract text from this PDF — it may be a scanned/image-only PDF. "
-                "Try uploading a PNG or JPG screenshot of the invoice instead."
-            )
-
-        # Pre-extract with regex (fast, reliable for known format)
-        regex_fields = _regex_extract_invoice(text)
-
-        # Build a structured context block for the AI so it doesn't need to parse layout
-        context_lines = ["RAW INVOICE TEXT (may be in draw-order, not reading order):"]
-        context_lines.append(text[:3000])
-        if regex_fields:
-            context_lines.append("\nPRE-EXTRACTED HINTS (already parsed from text — verify and use):")
-            for k, v in regex_fields.items():
-                if not k.startswith("_"):
-                    context_lines.append(f"  {k}: {v}")
-
-        messages = [
-            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
-            {"role": "user",   "content": "\n".join(context_lines) + "\n\n" + prompt_text},
-        ]
-        specs = _ordered_models()
+        result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
+        raw = result["content"].strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$",          "", raw)
+        m   = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not m:
+            return {}
+        try:
+            return _normalise(json.loads(m.group()))
+        except json.JSONDecodeError:
+            return {}
 
     else:
         raise ValueError(f"Unsupported file type '{mime_type}'. Upload a PDF, PNG, or JPG.")
-
-    def _merge_regex(clean: dict) -> dict:
-        """
-        Merge regex_fields into clean dict.
-        - Numeric/date/invoice fields: regex always wins (most reliable).
-        - Text fields: regex fills gaps only.
-        - _due_date hint → remark if not set.
-        """
-        REGEX_AUTHORITATIVE = {"amount_raised", "amount_with_tax", "raised_date", "invoice_number"}
-        for k, v in regex_fields.items():
-            if k.startswith("_"):
-                continue
-            if k in REGEX_AUTHORITATIVE or k not in clean:
-                clean[k] = v
-        if "_due_date" in regex_fields and not clean.get("remark"):
-            clean["remark"] = f"Due: {regex_fields['_due_date']}"
-        return clean
-
-    # Try AI extraction
-    ai_clean: dict = {}
-    try:
-        result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
-        raw    = result["content"].strip()
-
-        # Strip markdown fences if the model wrapped the JSON
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            try:
-                parsed: dict = json.loads(match.group())
-                # Normalise: drop nulls, coerce numbers
-                for k, v in parsed.items():
-                    if v is None or v == "null" or v == "":
-                        continue
-                    if k in ("amount_raised", "amount_with_tax", "amount_received"):
-                        try:
-                            ai_clean[k] = float(str(v).replace(",", "").replace("₹", "").strip())
-                        except (ValueError, TypeError):
-                            pass
-                    else:
-                        ai_clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
-            except json.JSONDecodeError:
-                pass  # regex fields still available below
-    except ValueError:
-        raise   # Hard errors (auth, quota) bubble up
-    except Exception:
-        pass    # AI failed transiently — fall back to regex only
-
-    # Regex fields override AI for authoritative fields; fill gaps otherwise
-    return _merge_regex(ai_clean)
 
 
 async def generate_report(summary: dict, records: list[dict]) -> dict:
