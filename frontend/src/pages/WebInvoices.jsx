@@ -1299,8 +1299,8 @@ export default function WebInvoices() {
 
   const fetchRecords = useCallback(() =>
     api.webInvoices.list({
-      // When overdueOnly is active, push Pending filter to server so we only
-      // fetch the relevant subset — client then refines by aging > 30 days.
+      // When overdueOnly is active pre-filter to Pending server-side for efficiency;
+      // outstanding-balance check is applied client-side below.
       status:   overdueOnly ? 'Pending' : (statusFilter || undefined),
       project:  projectFilter || undefined,
       limit:    500,
@@ -1342,7 +1342,8 @@ export default function WebInvoices() {
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' && effectiveAging(f) > 30)) return false
+    // "Overdue only" = Pending status OR has an outstanding balance
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
     if (followupDueOnly) {
       const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
       if (!nextFollowup || nextFollowup > todayIso) return false
@@ -2211,7 +2212,7 @@ export default function WebInvoices() {
                     borderColor: overdueOnly ? 'var(--fin-neg-border)' : 'var(--card-border)',
                     background: overdueOnly ? 'var(--fin-neg-bg)' : 'var(--card-bg)',
                   }}>
-                  Overdue only
+                  Pending / Outstanding
                 </button>
                 <button
                   onClick={() => setFollowupDueOnly(v => !v)}

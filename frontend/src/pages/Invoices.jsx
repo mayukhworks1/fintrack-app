@@ -805,7 +805,8 @@ export default function Invoices() {
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' && effectiveAging(f) > 30)) return false
+    // "Overdue only" = Pending status OR has an outstanding balance
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
     if (followupDueOnly) {
       const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
       if (!nextFollowup || nextFollowup > todayIso) return false
@@ -1469,7 +1470,7 @@ export default function Invoices() {
                 borderColor: overdueOnly ? 'var(--fin-neg-border)' : 'var(--card-border)',
                 background: overdueOnly ? 'var(--fin-neg-bg)' : 'var(--card-bg)',
               }}>
-              Overdue only
+              Pending / Outstanding
             </button>
             <button
               onClick={() => setFollowupDueOnly(v => !v)}
