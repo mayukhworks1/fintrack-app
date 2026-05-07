@@ -189,7 +189,15 @@ class InvoiceService:
             outstanding = float(f.get("Outstanding Amount")  or 0)
             status      = f.get("Payment Status", "Unknown")
             project     = f.get("Project", "Unknown")
-            aging       = float(f.get("Agening (Days)")      or 0)
+            aging       = float(f.get("Agening (Days)") or 0)
+            # Fallback: compute from Raised Date if Teable field is 0/null
+            if not aging and f.get("Raised Date"):
+                from datetime import datetime, timezone
+                try:
+                    rd = datetime.fromisoformat(f["Raised Date"].replace("Z", "+00:00"))
+                    aging = (datetime.now(timezone.utc) - rd).days
+                except Exception:
+                    pass
             cancelled   = status == "Cancelled"
 
             # Cancelled = voided, excluded from everything.
@@ -228,13 +236,14 @@ class InvoiceService:
                     "followup":    f.get("Next followup"),
                     "aging":       aging,
                 })
-            if status == "Pending" and aging > 30:
+            if status == "Pending":
                 overdue_invoices.append({
                     "id":         r.get("id"),
                     "invoice_no": f.get("Invoice Number", ""),
                     "project":    project,
                     "aging":      aging,
                     "amount":     with_tax,
+                    "currency":   "",
                 })
 
         # Sort pending by aging desc

@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, CalendarDays, User, Tag, ArrowRight, Eye,
-  IndianRupee, TrendingUp, Percent, CalendarClock
+  IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -615,7 +615,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
 function SkeletonRow() {
   return (
     <tr aria-hidden="true" className="tbl-row">
-      {[80, 100, 90, 80, 100, 90, 90, 72, 72, 48, 56, 60].map((w, i) => (
+      {[80, 100, 90, 72, 72, 80, 100, 90, 90, 72, 72, 48, 64, 56, 60].map((w, i) => (
         <td key={i} className="tbl-cell">
           <div className="skeleton h-3 rounded" style={{ width: w }} />
         </td>
@@ -977,7 +977,7 @@ export default function Invoices() {
         </div>
       </div>
 
-      {/* ── Workspace + Billing switcher ── */}
+      {/* ── Workspace switcher ── */}
       <div className="card" style={{ padding: '0.85rem 1rem' }}>
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -986,17 +986,6 @@ export default function Invoices() {
                 <button key={value} onClick={() => setWorkspace(value)}
                   className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
                   style={workspace === value
-                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                    : { color: 'var(--text-3)' }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-              {[['all', 'All'], ['project', 'Projects'], ['retainer', 'Retainers']].map(([value, label]) => (
-                <button key={value} onClick={() => setBillingFilter(value)}
-                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                  style={billingFilter === value
                     ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
                     : { color: 'var(--text-3)' }}>
                   {label}
@@ -1078,7 +1067,7 @@ export default function Invoices() {
           <div className="flex items-center gap-2 mb-3">
             <AlertOctagon size={14} style={{ color: '#f87171' }} />
             <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
-              {overdue.length} Overdue — pending more than 30 days
+              {overdue.length} Pending Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
             </p>
           </div>
           <div className="space-y-1.5">
@@ -1091,7 +1080,7 @@ export default function Invoices() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(inv.amount)}</span>
-                  <AgingBadge days={inv.aging} />
+                  <AgingBadge days={inv.aging} status="Pending" />
                 </div>
               </div>
             ))}
@@ -1421,6 +1410,18 @@ export default function Invoices() {
         {showFilters && (
           <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
             style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+            {/* Billing type */}
+            <div className="inline-flex items-center p-0.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              {[['all','All'],['project','Projects'],['retainer','Retainers']].map(([v, l]) => (
+                <button key={v} onClick={() => setBillingFilter(v)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                  style={billingFilter === v
+                    ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                    : { color: 'var(--text-3)' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
             {/* Project — server-side */}
             <div className="relative">
               <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -1547,6 +1548,14 @@ export default function Invoices() {
                       </div>
                       <StatusPill status={f['Payment Status']} />
                     </div>
+                    {f['Raised By'] && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-3)' }}>
+                          <User size={8} />{f['Raised By']}
+                        </span>
+                        {f['Milestone'] && <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-3)' }}>{f['Milestone']}</span>}
+                      </div>
+                    )}
                     {/* Middle: amounts */}
                     <div className="flex items-end justify-between gap-3 mb-2">
                       <div>
@@ -1568,6 +1577,11 @@ export default function Invoices() {
                     <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-3)' }}>
                       <span className="tabular-nums">{fmtDate(f['Raised Date'])}</span>
                       <div className="flex items-center gap-2">
+                        {f['Next followup'] && (
+                          <span className="flex items-center gap-0.5 tabular-nums" style={{ color: 'var(--fin-warning)' }}>
+                            <CalendarClock size={9} />{fmtDate(f['Next followup'])}
+                          </span>
+                        )}
                         {allFiles.length > 0 && (
                           <span className="flex items-center gap-0.5"><FileText size={10} />{allFiles.length}</span>
                         )}
@@ -1583,12 +1597,14 @@ export default function Invoices() {
       {/* ── Desktop table (md+) ── */}
       <div className="hidden md:block card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: 960 }}>
+          <table className="w-full" style={{ minWidth: 1200 }}>
             <thead>
               <tr>
                 <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
                 <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
                 <th className="tbl-head">Category</th>
+                <th className="tbl-head">Milestone</th>
+                <th className="tbl-head">Raised By</th>
                 <th className="tbl-head"><SortLabel col="Raised Date">Raised</SortLabel></th>
                 <th className="tbl-head"><SortLabel col="Amount Raised">Amount</SortLabel></th>
                 <th className="tbl-head">GST Total</th>
@@ -1596,6 +1612,7 @@ export default function Invoices() {
                 <th className="tbl-head">Outstanding</th>
                 <th className="tbl-head">Status</th>
                 <th className="tbl-head"><SortLabel col="Agening (Days)">Aging</SortLabel></th>
+                <th className="tbl-head">Next Followup</th>
                 <th className="tbl-head">Docs</th>
                 <th className="tbl-head" style={{ width: 80 }} />
               </tr>
@@ -1604,9 +1621,14 @@ export default function Invoices() {
               {loading && !listData
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : records.length === 0
-                  ? <tr><td colSpan={12} className="px-4 py-14 text-center text-sm" style={{ color: 'var(--text-3)' }}>
-                      No invoices found.{' '}
-                      <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">Create one</button>
+                  ? <tr><td colSpan={15} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
+                      <div className="flex flex-col items-center gap-2">
+                        <Receipt size={28} style={{ opacity: 0.3 }} />
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
+                        <p className="text-xs">Adjust your filters or{' '}
+                          <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
+                        </p>
+                      </div>
                     </td></tr>
                   : records.map(r => {
                       const f = r.fields || {}
@@ -1617,7 +1639,9 @@ export default function Invoices() {
 
                       return (
                         <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }}
-                          onClick={() => openView(r)}>
+                          onClick={() => openView(r)}
+                          onMouseEnter={e => e.currentTarget.style.borderLeft = '2px solid var(--accent)'}
+                          onMouseLeave={e => e.currentTarget.style.borderLeft = ''}>
 
                           <td className="tbl-cell">
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
@@ -1629,6 +1653,14 @@ export default function Invoices() {
                           </td>
                           <td className="tbl-cell">
                             <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span>
+                          </td>
+                          <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Milestone'] || '—'}</span></td>
+                          <td className="tbl-cell">
+                            {f['Raised By']
+                              ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
+                                  <User size={9} />{f['Raised By']}
+                                </span>
+                              : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
                           <td className="tbl-cell">
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
@@ -1658,6 +1690,13 @@ export default function Invoices() {
                           </td>
                           <td className="tbl-cell">
                             <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
+                          </td>
+                          <td className="tbl-cell">
+                            {f['Next followup']
+                              ? <span className="text-xs tabular-nums" style={{ color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>
+                                  {fmtDate(f['Next followup'])}
+                                </span>
+                              : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
 
                           {/* Attachment thumbs */}
