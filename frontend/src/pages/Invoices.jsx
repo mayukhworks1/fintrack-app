@@ -15,11 +15,8 @@ import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
-const PROJECTS   = ['Innovine', 'PMS', 'Maitrimetal Workspace migration']
-const CATEGORIES = ['BUG Fixing', 'Development- Retainer', 'Phase 1.1', 'Phase 1.2', 'Change Request', 'ZOHO', 'Overtime', 'Phase 1.3']
-const MILESTONES = ['Advance', 'Prehandover', 'Post go Live', 'Bug Fix']
-const RAISED_BY  = ['Mayukh', 'Hardik']
-const STATUSES   = ['Paid', 'Pending', 'Cancelled']
+// Dropdown options are derived live from invoice records — no hardcoded fallbacks
+const STATUSES = ['Paid', 'Pending', 'Cancelled']
 
 const EMPTY_FORM = {
   invoice_number: '', project: '', category: '', description: '',
@@ -158,7 +155,18 @@ function StatusPill({ status }) {
 }
 
 /* ── Aging badge ─────────────────────────────────────────────────────────── */
-function AgingBadge({ days }) {
+// Aging fallback: use Teable formula when available, else compute from Raised Date
+function effectiveAging(f) {
+  const teableVal = f['Agening (Days)']
+  if (teableVal != null && teableVal !== '' && Number(teableVal) > 0) return Number(teableVal)
+  const raised = parseIsoDate(f['Raised Date'])
+  if (!raised) return 0
+  return Math.floor((Date.now() - raised.getTime()) / 86_400_000)
+}
+
+function AgingBadge({ days, status }) {
+  // Only relevant for Pending invoices
+  if (status && status !== 'Pending') return <span style={{ color: 'var(--text-3)' }}>—</span>
   if (days == null || days === '') return <span style={{ color: 'var(--text-3)' }}>—</span>
   const d = Number(days)
   const color = d > 30 ? 'var(--fin-negative)' : d > 14 ? 'var(--fin-warning)' : 'var(--fin-positive)'
@@ -400,7 +408,7 @@ function Field({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
+function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options = {} }) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]      = useState(EMPTY_FORM)
   const [saving,     setSaving]    = useState(false)
@@ -408,7 +416,11 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
   const [confirmDel, setConfirmDel]= useState(false)
   const [error,      setError]     = useState('')
   const paidSelected = form.payment_status === 'Paid'
-  const retainerCategoryOption = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+  const projectOptions  = options.projects  || []
+  const categoryOptions = options.categories || []
+  const milestoneOptions= options.milestones || []
+  const raisedByOptions = options.raisedBy  || []
+  const retainerCategoryOption = categoryOptions.find(c => /retainer/i.test(c)) || 'Development- Retainer'
   const retainerSelected = isRetainerCategory(form.category)
 
   useEffect(() => {
@@ -509,10 +521,10 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Project">
-              <SelectInput value={form.project} onChange={set('project')} options={PROJECTS} placeholder="Select project…" />
+              <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project…" />
             </Field>
             <Field label="Category">
-              <SelectInput value={form.category} onChange={set('category')} options={CATEGORIES} placeholder="Select…" />
+              <SelectInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Select…" />
             </Field>
           </div>
           <div>
@@ -520,7 +532,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, category: CATEGORIES.find(c => !isRetainerCategory(c)) || '' }))}
+                onClick={() => setForm(f => ({ ...f, category: categoryOptions.find(c => !isRetainerCategory(c)) || '' }))}
                 className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
                 style={!retainerSelected
                   ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
@@ -540,10 +552,10 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Milestone">
-              <SelectInput value={form.milestone} onChange={set('milestone')} options={MILESTONES} placeholder="Select…" />
+              <SelectInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Select…" />
             </Field>
             <Field label="Raised By">
-              <SelectInput value={form.raised_by} onChange={set('raised_by')} options={RAISED_BY} placeholder="Select…" />
+              <SelectInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Select…" />
             </Field>
           </div>
           <Field label="Description">
@@ -651,6 +663,31 @@ export default function Invoices() {
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const allRecords = listData?.records || []
+
+  /* ── Dynamic filter/form options derived from actual records ── */
+  const projectOptions = useMemo(() => (
+    [...new Set(allRecords.map(r => r.fields?.['Project']).filter(Boolean))].sort()
+  ), [allRecords])
+
+  const categoryOptions = useMemo(() => (
+    [...new Set(allRecords.map(r => r.fields?.['Category']).filter(Boolean))].sort()
+  ), [allRecords])
+
+  const milestoneOptions = useMemo(() => (
+    [...new Set(allRecords.map(r => r.fields?.['Milestone']).filter(Boolean))].sort()
+  ), [allRecords])
+
+  const raisedByOptions = useMemo(() => (
+    [...new Set(allRecords.map(r => r.fields?.['Raised By']).filter(Boolean))].sort()
+  ), [allRecords])
+
+  // Bundle for InvoiceDrawer
+  const formOptions = useMemo(() => ({
+    projects:   projectOptions,
+    categories: categoryOptions,
+    milestones: milestoneOptions,
+    raisedBy:   raisedByOptions,
+  }), [projectOptions, categoryOptions, milestoneOptions, raisedByOptions])
 
   /* ── Client-side filter (category, raisedBy, freetext) ── */
   const monthOptions = useMemo(() => (
@@ -768,7 +805,7 @@ export default function Invoices() {
     if (categoryFilter && f['Category'] !== categoryFilter) return false
     if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
     if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' && Number(f['Agening (Days)'] || 0) > 30)) return false
+    if (overdueOnly && !(f['Payment Status'] === 'Pending' && effectiveAging(f) > 30)) return false
     if (followupDueOnly) {
       const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
       if (!nextFollowup || nextFollowup > todayIso) return false
@@ -797,7 +834,7 @@ export default function Invoices() {
 
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
-      .sort(([, a], [, b]) => (b?.raised || 0) - (a?.raised || 0))
+      .sort(([, a], [, b]) => (b?.count || 0) - (a?.count || 0))
       .slice(0, 8)
     return entries.map(([project, metrics]) => ({ project, metrics }))
   }, [s])
@@ -817,7 +854,7 @@ export default function Invoices() {
     setRetainerActionBusy(key)
     try {
       const base = group.latestActive.fields || {}
-      const retainerCat = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+      const retainerCat = categoryOptions.find(c => /retainer/i.test(c)) || base['Category'] || 'Development- Retainer'
       const payload = {
         invoice_number: '',
         project: group.project,
@@ -858,7 +895,7 @@ export default function Invoices() {
   function openRetainerRecordForm(group, monthKeyValue) {
     const base = group?.latestActive?.fields || {}
     const label = monthLabel(monthKeyValue)
-    const retainerCat = CATEGORIES.find(c => /retainer/i.test(c)) || 'Development- Retainer'
+    const retainerCat = categoryOptions.find(c => /retainer/i.test(c)) || base['Category'] || 'Development- Retainer'
     setDrawer({
       mode: 'new',
       invoice: null,
@@ -1389,7 +1426,7 @@ export default function Invoices() {
               <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
                 className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 140, paddingRight: '1.5rem' }}>
                 <option value="">All projects</option>
-                {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+                {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
               <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             </div>
@@ -1408,7 +1445,7 @@ export default function Invoices() {
               <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
                 className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 160, paddingRight: '1.5rem' }}>
                 <option value="">All categories</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             </div>
@@ -1418,7 +1455,7 @@ export default function Invoices() {
               <select value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}
                 className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 130, paddingRight: '1.5rem' }}>
                 <option value="">Anyone</option>
-                {RAISED_BY.map(r => <option key={r} value={r}>{r}</option>)}
+                {raisedByOptions.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             </div>
@@ -1533,7 +1570,7 @@ export default function Invoices() {
                         {allFiles.length > 0 && (
                           <span className="flex items-center gap-0.5"><FileText size={10} />{allFiles.length}</span>
                         )}
-                        <AgingBadge days={f['Agening (Days)']} />
+                        <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                       </div>
                     </div>
                   </button>
@@ -1619,7 +1656,7 @@ export default function Invoices() {
                             <StatusPill status={f['Payment Status']} />
                           </td>
                           <td className="tbl-cell">
-                            <AgingBadge days={f['Agening (Days)']} />
+                            <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                           </td>
 
                           {/* Attachment thumbs */}
@@ -1680,6 +1717,7 @@ export default function Invoices() {
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
+          options={formOptions}
         />,
         document.body
       )}
