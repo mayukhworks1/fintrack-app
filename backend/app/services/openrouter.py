@@ -740,50 +740,57 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     else:
         raise ValueError(f"Unsupported file type '{mime_type}'. Upload a PDF, PNG, or JPG.")
 
-    result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
-    raw    = result["content"].strip()
+    def _merge_regex(clean: dict) -> dict:
+        """
+        Merge regex_fields into clean dict.
+        - Numeric/date/invoice fields: regex always wins (most reliable).
+        - Text fields: regex fills gaps only.
+        - _due_date hint → remark if not set.
+        """
+        REGEX_AUTHORITATIVE = {"amount_raised", "amount_with_tax", "raised_date", "invoice_number"}
+        for k, v in regex_fields.items():
+            if k.startswith("_"):
+                continue
+            if k in REGEX_AUTHORITATIVE or k not in clean:
+                clean[k] = v
+        if "_due_date" in regex_fields and not clean.get("remark"):
+            clean["remark"] = f"Due: {regex_fields['_due_date']}"
+        return clean
 
-    # Strip markdown fences if the model wrapped the JSON
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not match:
-        return {}
+    # Try AI extraction
+    ai_clean: dict = {}
     try:
-        parsed: dict = json.loads(match.group())
-    except json.JSONDecodeError:
-        return {}
+        result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
+        raw    = result["content"].strip()
 
-    # Normalise: drop nulls, coerce numbers
-    clean: dict = {}
-    for k, v in parsed.items():
-        if v is None or v == "null" or v == "":
-            continue
-        if k in ("amount_raised", "amount_with_tax", "amount_received"):
+        # Strip markdown fences if the model wrapped the JSON
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
             try:
-                clean[k] = float(str(v).replace(",", "").replace("₹", "").strip())
-            except (ValueError, TypeError):
-                pass
-        else:
-            clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
+                parsed: dict = json.loads(match.group())
+                # Normalise: drop nulls, coerce numbers
+                for k, v in parsed.items():
+                    if v is None or v == "null" or v == "":
+                        continue
+                    if k in ("amount_raised", "amount_with_tax", "amount_received"):
+                        try:
+                            ai_clean[k] = float(str(v).replace(",", "").replace("₹", "").strip())
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        ai_clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
+            except json.JSONDecodeError:
+                pass  # regex fields still available below
+    except ValueError:
+        raise   # Hard errors (auth, quota) bubble up
+    except Exception:
+        pass    # AI failed transiently — fall back to regex only
 
-    # Merge regex pre-extracted fields — regex is more reliable than AI for
-    # known numeric/date/invoice-number patterns in this invoice format.
-    # Numeric & date fields: regex always wins (it explicitly parsed Sub Total, DD/MM/YYYY, etc.)
-    # Text fields (project, invoice_number, description): regex fills only if AI missed it.
-    REGEX_AUTHORITATIVE = {"amount_raised", "amount_with_tax", "raised_date", "invoice_number"}
-    for k, v in regex_fields.items():
-        if k.startswith("_"):
-            continue  # skip internal hints like _due_date
-        if k in REGEX_AUTHORITATIVE or k not in clean:
-            clean[k] = v
-
-    # Map _due_date hint → remark field (e.g. "Due: 2026-05-15") if not already set
-    if "_due_date" in regex_fields and not clean.get("remark"):
-        clean["remark"] = f"Due: {regex_fields['_due_date']}"
-
-    return clean
+    # Regex fields override AI for authoritative fields; fill gaps otherwise
+    return _merge_regex(ai_clean)
 
 
 async def generate_report(summary: dict, records: list[dict]) -> dict:
