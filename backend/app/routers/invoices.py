@@ -165,6 +165,9 @@ async def parse_invoice(
         fields = await parse_invoice_document(content, fname, mime)
         return {"fields": fields}
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        # 400 = bad request from caller (wrong file type, unreadable PDF, etc.)
+        # NOTE: Do NOT use 422 here — FastAPI reserves 422 for its own request-validation
+        # errors and that makes the frontend receive a [{loc,msg,type}] array as detail.
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parse failed: {str(e)}")

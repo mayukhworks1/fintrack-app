@@ -183,8 +183,19 @@ export const api = {
         body: form,
       }).then(async res => {
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: res.statusText }))
-          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          const body = await res.json().catch(() => null)
+          // FastAPI validation errors (422) have detail = [{loc,msg,type}] array.
+          // Our own errors (400/500) have detail = string.
+          // Never let an array reach Error() constructor — it prints as [object Object].
+          let msg
+          if (body?.detail) {
+            msg = Array.isArray(body.detail)
+              ? (body.detail[0]?.msg || 'Request validation failed')
+              : String(body.detail)
+          } else {
+            msg = `HTTP ${res.status}`
+          }
+          const e = new Error(msg)
           e.status = res.status
           throw e
         }

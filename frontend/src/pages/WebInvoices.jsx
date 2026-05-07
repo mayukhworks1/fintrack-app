@@ -1321,14 +1321,14 @@ export default function WebInvoices() {
 
   const fetchRecords = useCallback(() =>
     api.webInvoices.list({
-      // When overdueOnly is active pre-filter to Pending server-side for efficiency;
-      // outstanding-balance check is applied client-side below.
-      status:   overdueOnly ? 'Pending' : (statusFilter || undefined),
+      // overdueOnly is purely a client-side filter — never pass status='Pending'
+      // server-side or it silently drops invoices with Outstanding > 0 but non-Pending status.
+      status:   statusFilter || undefined,
       project:  projectFilter || undefined,
       limit:    500,
       order_by: sortCol,
       order:    sortDir,
-    }), [statusFilter, projectFilter, sortCol, sortDir, overdueOnly])
+    }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const allRecords = listData?.records || []

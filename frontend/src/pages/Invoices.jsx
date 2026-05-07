@@ -563,7 +563,13 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review and correct`)
       }, 50)
     } catch (e) {
-      setParseError(e.message || 'Parse failed')
+      const status = e.status
+      const msg = status === 400 ? e.message               // our explicit error (bad file, unreadable PDF, etc.)
+               : status === 413 ? 'File too large (max 10 MB)'
+               : status === 403 ? 'Not authorized to use this feature'
+               : e.message && !e.message.startsWith('[') ? e.message
+               : 'AI parse failed — try a clearer image or a text-based PDF'
+      setParseError(msg)
     } finally {
       setParsing(false)
       if (parseFileRef.current) parseFileRef.current.value = ''
