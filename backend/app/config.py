@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     teable_table_id: str = "tbl4fi155DuWlh40By3"
     teable_invoice_table_id: str = "tblyWvNkprE1HnaVZIH"
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    openrouter_model: str = "meta-llama/llama-4-maverick:free"
     frontend_url: str = "*"
 
     # Passwords — set via env vars / HF Space secrets, never hard-coded.

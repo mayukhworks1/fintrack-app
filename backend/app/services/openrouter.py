@@ -49,15 +49,32 @@ class ModelSpec:
     notes: str = ""
 
 
-# Ordered preference list: clean instruction-tuned models first.
+# Ordered preference list — regularly pruned to only include models with
+# live endpoints on OpenRouter free tier. Remove any model that starts
+# returning "No endpoints found" and replace with a working alternative.
 MODELS: list[ModelSpec] = [
+    # ── Tier 1: large, clean, reliably available ──────────────────────
+    ModelSpec("meta-llama/llama-4-maverick:free",                leakage=0,
+              notes="128K ctx, vision-capable"),
+    ModelSpec("meta-llama/llama-4-scout:free",                   leakage=0,
+              notes="Fast, vision-capable"),
     ModelSpec("meta-llama/llama-3.3-70b-instruct:free",          leakage=0),
-    ModelSpec("google/gemini-2.0-flash-exp:free",                leakage=0),
-    ModelSpec("meta-llama/llama-3.1-8b-instruct:free",           leakage=1),
-    ModelSpec("mistralai/mistral-7b-instruct:free",              leakage=1),
-    ModelSpec("nvidia/llama-3.3-nemotron-super-49b-v1:free",     leakage=3, supports_reasoning_param=True),
-    ModelSpec("nvidia/nemotron-3-super-120b-a12b:free",          leakage=5, supports_reasoning_param=True,
-              notes="Heavy reasoning leakage even with reasoning:exclude — last resort only"),
+    ModelSpec("deepseek/deepseek-chat-v3-0324:free",             leakage=0),
+    ModelSpec("google/gemini-2.5-pro-exp-03-25:free",            leakage=0,
+              notes="Vision-capable, generous context"),
+    # ── Tier 2: good but sometimes busy ──────────────────────────────
+    ModelSpec("qwen/qwen3-235b-a22b:free",                       leakage=1),
+    ModelSpec("qwen/qwen3-30b-a3b:free",                         leakage=0),
+    ModelSpec("qwen/qwen2.5-vl-72b-instruct:free",               leakage=0,
+              notes="Vision-capable"),
+    ModelSpec("deepseek/deepseek-r1:free",                       leakage=2,
+              notes="Reasoning model — may include <think> blocks"),
+    ModelSpec("microsoft/phi-4:free",                            leakage=0),
+    ModelSpec("mistralai/mistral-small-3.1-24b-instruct:free",   leakage=0),
+    # ── Tier 3: last resort ───────────────────────────────────────────
+    ModelSpec("nvidia/nemotron-3-super-120b-a12b:free",          leakage=5,
+              supports_reasoning_param=True,
+              notes="Heavy reasoning leakage — last resort only"),
 ]
 
 
@@ -85,11 +102,14 @@ def _short(model_id: str) -> str:
 
 # ── Vision-capable models (support image_url content blocks) ──────────
 VISION_MODEL_IDS = {
+    "meta-llama/llama-4-maverick:free",
+    "meta-llama/llama-4-scout:free",
+    "google/gemini-2.5-pro-exp-03-25:free",
+    "qwen/qwen2.5-vl-72b-instruct:free",
+    # Legacy — kept in case they come back
     "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash-preview:free",
     "meta-llama/llama-3.2-90b-vision-instruct:free",
     "qwen/qwen-2-vl-7b-instruct:free",
-    "qwen/qwen2.5-vl-72b-instruct:free",
 }
 
 def _vision_models_first() -> list[ModelSpec]:
@@ -97,10 +117,6 @@ def _vision_models_first() -> list[ModelSpec]:
     ordered = _ordered_models()
     vision  = [m for m in ordered if m.id in VISION_MODEL_IDS]
     others  = [m for m in ordered if m.id not in VISION_MODEL_IDS]
-    # Also add any vision models not already in the registry
-    for vid in ("google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-90b-vision-instruct:free", "qwen/qwen-2-vl-7b-instruct:free"):
-        if not any(m.id == vid for m in vision):
-            vision.append(ModelSpec(vid, leakage=0))
     return vision + others
 
 
@@ -331,8 +347,13 @@ async def _try_chat(
             if r.status_code == 402:
                 raise ValueError("OpenRouter quota exceeded — check free-tier limits")
             if r.status_code == 429:
-                errors.append(f"{_short(spec.id)}: rate-limited")
-                continue
+                # One short backoff retry before skipping to the next model
+                await asyncio.sleep(1.2)
+                r2 = await _post_with_retries(payload, retries=1)
+                if r2.status_code == 429:
+                    errors.append(f"{_short(spec.id)}: rate-limited")
+                    continue
+                r = r2  # use the retried response below
             if r.status_code >= 400:
                 try:
                     data = r.json()
