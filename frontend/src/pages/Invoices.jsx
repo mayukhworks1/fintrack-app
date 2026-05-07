@@ -942,8 +942,9 @@ export default function Invoices() {
     // "Overdue only" = Pending status OR has an outstanding balance
     if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
     if (followupDueOnly) {
-      const nextFollowup = String(f['Next followup'] || '').slice(0, 10)
-      if (!nextFollowup || nextFollowup > todayIso) return false
+      // Show any invoice that has a Next followup date set — past, today, or future.
+      const raw = f['Next followup']
+      if (!raw) return false
     }
     if (hasDocsOnly) {
       const refs = parseAttachments(f['Reference'])

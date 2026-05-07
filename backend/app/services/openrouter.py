@@ -528,7 +528,7 @@ async def analyze_project(project_fields: dict) -> dict:
 
 
 def _extract_pdf_text(content: bytes) -> str:
-    """Extract plain text from a PDF byte-string. Returns '' on failure or empty PDF."""
+    """Extract plain text from a PDF byte-string. Returns '' on failure or scanned PDF."""
     try:
         from pypdf import PdfReader  # type: ignore
         reader = PdfReader(io.BytesIO(content))
@@ -542,27 +542,137 @@ def _extract_pdf_text(content: bytes) -> str:
         return ""
 
 
+def _parse_indian_amount(s: str) -> float | None:
+    """Convert Indian-format amount string to float: '1,60,000.00' → 160000.0"""
+    try:
+        return float(s.replace(",", "").strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _parse_indian_date(s: str) -> str | None:
+    """Convert DD/MM/YYYY → YYYY-MM-DD. Returns None if parsing fails."""
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", s.strip())
+    if m:
+        return f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"
+    return None
+
+
+def _regex_extract_invoice(text: str) -> dict:
+    """
+    Fast regex-based extraction for TheWorks invoice format (and similar Indian tax invoices).
+    Returns partial dict — AI fills any gaps. Keys use the same snake_case as InvoiceFields.
+    """
+    out: dict = {}
+
+    # ── Invoice number ──────────────────────────────────────────────────────
+    # Matches:  # WM/26-27/049  or  Invoice No: WM/26-27/049  or  No. WM-2526-001
+    m = re.search(r'(?:^|\s)#\s*(WM/[\d/\-]+)', text)
+    if not m:
+        m = re.search(r'(?:invoice\s*(?:no|number|#)\s*[:\.]?\s*)([A-Z]{1,4}[/\-]\d[\d/\-]+)',
+                      text, re.IGNORECASE)
+    if m:
+        out["invoice_number"] = m.group(1).strip()
+
+    # ── Dates ───────────────────────────────────────────────────────────────
+    # "Invoice Date : 30/04/2026" or "Invoice Date: 30/04/2026"
+    m = re.search(r'Invoice\s*Date\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})', text, re.IGNORECASE)
+    if m:
+        d = _parse_indian_date(m.group(1))
+        if d:
+            out["raised_date"] = d
+
+    # "Due Date : 15/05/2026" → use as next_followup hint if no followup set
+    m = re.search(r'Due\s*Date\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})', text, re.IGNORECASE)
+    if m:
+        d = _parse_indian_date(m.group(1))
+        if d:
+            out["_due_date"] = d   # internal hint for the caller to map to next_followup
+
+    # "Payment Date" or "Paid On"
+    for pat in [r'(?:Payment|Paid|Cleared)\s*(?:Date|On)\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{4})',
+                r'(\d{1,2}/\d{1,2}/\d{4})\s*(?:cleared|paid)']:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            d = _parse_indian_date(m.group(1))
+            if d:
+                out["cleared_date"] = d
+                break
+
+    # ── Amounts ─────────────────────────────────────────────────────────────
+    # Sub Total (base, before GST)
+    m = re.search(r'Sub\s*Total\s+([\d,]+\.\d{2})', text, re.IGNORECASE)
+    if m:
+        v = _parse_indian_amount(m.group(1))
+        if v is not None:
+            out["amount_raised"] = v
+
+    # Total (after tax) — pick the largest "Total" line to avoid sub-items
+    totals = re.findall(r'\bTotal\s+([\d,]+\.\d{2})', text, re.IGNORECASE)
+    if totals:
+        vals = [_parse_indian_amount(t) for t in totals if _parse_indian_amount(t) is not None]
+        if vals:
+            out["amount_with_tax"] = max(vals)  # largest Total = grand total
+
+    # If no Sub Total found, infer base from total / 1.18 (18% GST)
+    if "amount_with_tax" in out and "amount_raised" not in out:
+        out["amount_raised"] = round(out["amount_with_tax"] / 1.18, 2)
+
+    # ── Client / Project (Bill To section) ─────────────────────────────────
+    m = re.search(r'Bill\s*To\s*\n(.+?)(?:\n(?:GSTIN|Place|GST|\d{6})|$)',
+                  text, re.DOTALL | re.IGNORECASE)
+    if m:
+        client = m.group(1).strip().splitlines()[0].strip()
+        if len(client) > 3:
+            out["project"] = client
+
+    # ── Description (first line-item description) ──────────────────────────
+    # Format:  1  Website Development\nSome description\n998314  Amount
+    m = re.search(r'\d+\s+([A-Za-z ]+(?:Development|Design|Marketing|SEO|Content|Maintenance|Support)[^\n]*)\n(.+?)(?:\n\d{6}|\n\d+\s+\d)',
+                  text, re.DOTALL | re.IGNORECASE)
+    if not m:
+        m = re.search(r'\d+\s+(.{10,80})\n(.{10,120})', text)
+    if m:
+        service_type = m.group(1).strip()
+        detail = m.group(2).strip()[:120]
+        out["description"] = f"{service_type} – {detail}" if detail else service_type
+
+    return out
+
+
+# ── AI prompt (explicit about Indian invoice conventions) ─────────────
 _INVOICE_EXTRACT_SYSTEM = """\
-You are an invoice data extractor. The company using you is an Indian digital agency called TheWorks.
-Extract structured fields from the provided invoice document.
-Return ONLY a JSON object inside ===ANSWER=== / ===END=== markers. No prose, no explanation outside the block.
-All monetary amounts must be plain numbers (no currency symbols, no commas). Dates must be YYYY-MM-DD.
-If a field cannot be determined, use null.
+You are an invoice data extractor for TheWorks (Works Media and Allied Services LLP), an Indian digital agency.
+Extract invoice fields from the document text or image provided.
+
+CRITICAL FORMAT RULES — these are non-negotiable:
+1. DATES: Indian invoices use DD/MM/YYYY. Convert to ISO YYYY-MM-DD.
+   Example: "30/04/2026" → "2026-04-30", "15/05/2026" → "2026-05-15"
+2. AMOUNTS: Indian lakh notation uses extra commas. Strip ALL commas, then parse.
+   Example: "1,60,000.00" → 160000, "14,400.00" → 14400
+3. INVOICE NUMBER: appears after "#" symbol. Strip the "#".
+   Example: "# WM/26-27/049" → "WM/26-27/049"
+4. BASE AMOUNT: labeled "Sub Total" — this is amount BEFORE GST/tax → amount_raised
+5. GRAND TOTAL: labeled "Total" (largest total line) — amount WITH GST → amount_with_tax
+6. CLIENT NAME: found in the "Bill To" section → use as project field
+7. PDF text may be jumbled (rendered in draw-order not read-order) — find fields wherever they appear
+
+Return ONLY valid JSON inside ===ANSWER=== / ===END=== markers. No prose outside.
 """
 
 _INVOICE_SCHEMA = """{
-  "invoice_number": "invoice/ref number shown on the doc, or null",
-  "project": "client or project name, or null",
-  "description": "service description or invoice title, or null",
-  "raised_date": "invoice/issue date as YYYY-MM-DD, or null",
-  "cleared_date": "payment cleared/received date as YYYY-MM-DD, or null",
-  "amount_raised": base_amount_before_tax_as_number_or_null,
-  "amount_with_tax": total_amount_including_tax_as_number_or_null,
-  "amount_received": amount_actually_received_as_number_or_null,
-  "payment_status": "Paid or Pending or Cancelled, or null",
-  "milestone": "milestone or phase name, or null",
-  "raised_by": "sender/issuer person name, or null",
-  "remark": "any notes or payment terms worth capturing, or null"
+  "invoice_number": "e.g. WM/26-27/049 — strip # prefix, or null",
+  "project": "client company name from Bill To section, or null",
+  "description": "service type and description (first line item), or null",
+  "raised_date": "Invoice Date as YYYY-MM-DD (convert from DD/MM/YYYY), or null",
+  "cleared_date": "payment cleared date as YYYY-MM-DD, or null",
+  "amount_raised": sub_total_before_gst_as_plain_number_or_null,
+  "amount_with_tax": grand_total_including_gst_as_plain_number_or_null,
+  "amount_received": amount_already_received_as_plain_number_or_null,
+  "payment_status": "Paid if paid, Pending if unpaid, or null",
+  "milestone": "project phase e.g. April 2026 50%, Advance, or null",
+  "raised_by": "issuer person name if mentioned, or null",
+  "remark": "due date or payment terms if relevant, or null"
 }"""
 
 
@@ -570,28 +680,32 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     """
     Parse an invoice file (image or PDF) and return extracted form fields.
 
-    For images → uses vision-capable models (Gemini, LLaMA Vision).
-    For PDFs   → extracts text with pypdf, then uses text models.
+    For PDFs:   pypdf text extraction + regex pre-pass + AI gap-fill
+    For images: base64 to vision model
 
     Returns a dict matching InvoiceFields keys (snake_case, nulls omitted).
     """
     if not settings.openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY is not configured.")
 
-    prompt_suffix = (
-        f"Extract all invoice fields you can find.\n\n"
-        f"Return this exact JSON schema inside ===ANSWER=== / ===END=== markers:\n{_INVOICE_SCHEMA}"
-    )
-
     is_image = mime_type.startswith("image/")
     is_pdf   = "pdf" in mime_type.lower() or filename.lower().endswith(".pdf")
+
+    regex_fields: dict = {}
+    messages: list[dict] = []
+    specs: list[ModelSpec] = []
+
+    prompt_text = (
+        "Extract all invoice fields you can find. Apply the format rules from the system prompt strictly.\n\n"
+        f"Return EXACTLY this JSON schema inside ===ANSWER=== / ===END=== markers — no markdown, no prose:\n{_INVOICE_SCHEMA}"
+    )
 
     if is_image:
         b64 = base64.b64encode(content).decode()
         messages = [
             {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
             {"role": "user", "content": [
-                {"type": "text",      "text": prompt_suffix},
+                {"type": "text",      "text": prompt_text},
                 {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
             ]},
         ]
@@ -601,20 +715,33 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
         text = _extract_pdf_text(content)
         if not text:
             raise ValueError(
-                "Could not extract text from this PDF (may be scanned). "
-                "Try uploading a PNG/JPG screenshot of the invoice instead."
+                "Could not extract text from this PDF — it may be a scanned/image-only PDF. "
+                "Try uploading a PNG or JPG screenshot of the invoice instead."
             )
+
+        # Pre-extract with regex (fast, reliable for known format)
+        regex_fields = _regex_extract_invoice(text)
+
+        # Build a structured context block for the AI so it doesn't need to parse layout
+        context_lines = ["RAW INVOICE TEXT (may be in draw-order, not reading order):"]
+        context_lines.append(text[:3000])
+        if regex_fields:
+            context_lines.append("\nPRE-EXTRACTED HINTS (already parsed from text — verify and use):")
+            for k, v in regex_fields.items():
+                if not k.startswith("_"):
+                    context_lines.append(f"  {k}: {v}")
+
         messages = [
             {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
-            {"role": "user",   "content": f"Invoice text:\n\n{text[:5000]}\n\n{prompt_suffix}"},
+            {"role": "user",   "content": "\n".join(context_lines) + "\n\n" + prompt_text},
         ]
         specs = _ordered_models()
 
     else:
         raise ValueError(f"Unsupported file type '{mime_type}'. Upload a PDF, PNG, or JPG.")
 
-    result  = await _try_chat(messages, max_tokens=600, temperature=0.05, models=specs)
-    raw     = result["content"].strip()
+    result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
+    raw    = result["content"].strip()
 
     # Strip markdown fences if the model wrapped the JSON
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -640,6 +767,21 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
                 pass
         else:
             clean[k] = str(v).strip() if not isinstance(v, (int, float)) else v
+
+    # Merge regex pre-extracted fields — regex is more reliable than AI for
+    # known numeric/date/invoice-number patterns in this invoice format.
+    # Numeric & date fields: regex always wins (it explicitly parsed Sub Total, DD/MM/YYYY, etc.)
+    # Text fields (project, invoice_number, description): regex fills only if AI missed it.
+    REGEX_AUTHORITATIVE = {"amount_raised", "amount_with_tax", "raised_date", "invoice_number"}
+    for k, v in regex_fields.items():
+        if k.startswith("_"):
+            continue  # skip internal hints like _due_date
+        if k in REGEX_AUTHORITATIVE or k not in clean:
+            clean[k] = v
+
+    # Map _due_date hint → remark field (e.g. "Due: 2026-05-15") if not already set
+    if "_due_date" in regex_fields and not clean.get("remark"):
+        clean["remark"] = f"Due: {regex_fields['_due_date']}"
 
     return clean
 
