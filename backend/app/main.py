@@ -34,7 +34,8 @@ async def lifespan(app: FastAPI):
     if settings.valkey_url:
         await vk.init_client(settings.valkey_url)
 
-    if postgres.get_pool() and settings.teable_api_token:
+    # Start sync if EITHER main or web token is available — don't require both
+    if postgres.get_pool() and (settings.teable_api_token or settings.teable_web_api_token):
         _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
         logger.info("Background Teable sync task started")
 

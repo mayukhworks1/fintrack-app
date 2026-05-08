@@ -167,3 +167,45 @@ async def verify(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     return {"valid": True, "role": role}
+
+
+@router.post("/logout")
+async def logout(authorization: str | None = Header(default=None)):
+    """
+    Server-side session termination.
+    Marks the login_session row as inactive (is_active=false) and
+    sets expires_at=NOW() so the admin panel shows it as 'Logged out'
+    instead of 'Valid/Idle' for the rest of the 7-day token TTL.
+
+    The HMAC token itself is still technically valid (we don't blacklist
+    it) but the client discards it after calling this endpoint.  For a
+    personal-use app this is the right trade-off: zero extra latency on
+    authenticated requests while still showing honest session history.
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+
+    if not token:
+        return {"logged_out": False, "reason": "no_token"}
+
+    token_hint = token[:16]
+
+    try:
+        from ..db.postgres import get_pool
+        pool = get_pool()
+        if pool:
+            await pool.execute(
+                """
+                UPDATE login_sessions
+                   SET is_active  = false,
+                       expires_at = NOW()
+                 WHERE token_hint = $1
+                   AND is_active  = true
+                """,
+                token_hint,
+            )
+    except Exception:
+        pass   # never let DB errors break logout — client still discards token
+
+    return {"logged_out": True}

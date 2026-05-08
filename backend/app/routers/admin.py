@@ -22,6 +22,7 @@ GET /api/admin/mirror/invoices      — invoices_mirror table
 GET /api/admin/record-history       — field-level change log
 """
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -56,6 +57,34 @@ def _no_db():
         status_code=503,
         content={"error": "PostgreSQL unavailable"},
     )
+
+
+# ── Manual sync trigger ───────────────────────────────────────────────────────
+
+@router.post("/sync/trigger")
+async def admin_trigger_sync(_: str = Depends(require_admin)):
+    """
+    Kick off a full Teable → PostgreSQL sync immediately (fire-and-forget).
+    Useful when the auto-sync hasn't run yet or you just changed data in Teable.
+    The sync result will appear in the Sync Log within a few seconds.
+    Returns 503 if the sync loop is not configured (no Teable token set).
+    """
+    from ..db.sync import run_sync
+    from ..db.postgres import get_pool
+    from ..config import settings
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    if not (settings.teable_api_token or settings.teable_web_api_token):
+        return JSONResponse(
+            status_code=503,
+            content={"error": "No Teable API token configured — set TEABLE_API_TOKEN or TEABLE_WEB_API_TOKEN"},
+        )
+
+    asyncio.create_task(run_sync(incremental=False))
+    return {"status": "sync_started", "message": "Full sync triggered — check Sync Log in a few seconds"}
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
@@ -207,7 +236,8 @@ async def admin_sessions(
     idx = 1
 
     if active_only:
-        where.append("expires_at > NOW()")
+        # "active" = token not expired AND not explicitly logged out
+        where.append("is_active = true AND expires_at > NOW()")
     if role:
         where.append(f"role = ${idx}"); params.append(role); idx += 1
 
@@ -219,7 +249,16 @@ async def admin_sessions(
         SELECT id, token_hint, role, created_at, last_seen_at, expires_at,
                ip, os, browser, device, country, country_code, city,
                is_active, request_count,
-               (expires_at > NOW()) AS currently_valid
+               -- Honest 4-state status
+               CASE
+                 WHEN NOT is_active OR expires_at <= NOW()
+                   THEN 'logged_out'
+                 WHEN last_seen_at > NOW() - INTERVAL '30 minutes'
+                   THEN 'online'
+                 WHEN expires_at > NOW()
+                   THEN 'idle'
+                 ELSE 'expired'
+               END AS session_status
         FROM login_sessions {where_sql}
         ORDER BY last_seen_at DESC
         LIMIT ${idx} OFFSET ${idx+1}

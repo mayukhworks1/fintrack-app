@@ -277,6 +277,7 @@ export const api = {
     mirrorInvoices:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/invoices?${q}`) },
     mirrorWebInvoices:(p = {})  => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/web-invoices?${q}`) },
     recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
+    triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
   },
   health: () => request('/health', {}, 0),
   auth: {
@@ -284,5 +285,8 @@ export const api = {
     // Only the returned token persists in localStorage.
     login:  (password) => request('/api/auth/login',  { method: 'POST', body: JSON.stringify({ password }) }),
     verify: ()         => request('/api/auth/verify', {}, 0),
+    // Fire-and-forget server-side session invalidation — marks the session as
+    // logged_out in login_sessions so the admin panel shows honest status.
+    logout: ()         => request('/api/auth/logout', { method: 'POST' }, 0),
   },
 }

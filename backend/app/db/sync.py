@@ -267,47 +267,66 @@ async def _fetch_page(
     headers: dict,
     params: dict,
 ) -> list[dict]:
-    try:
-        r = await http.get(url, headers=headers, params=params)
-        r.raise_for_status()
-        return r.json().get("records", [])
-    except Exception as exc:
-        logger.error("Teable fetch error (%s): %s", url, exc)
-        return []
+    """
+    Fetch one page from Teable.  Raises on HTTP errors so callers can
+    distinguish a genuine empty table from a 401/403/timeout.
+    The caller (_fetch_all / _fetch_recent) is responsible for catch.
+    """
+    r = await http.get(url, headers=headers, params=params)
+    if not r.is_success:
+        # Include response body in the error for better diagnostics
+        body = ""
+        try:
+            body = r.json().get("message") or r.text[:200]
+        except Exception:
+            body = r.text[:200]
+        raise RuntimeError(f"Teable HTTP {r.status_code} for {url}: {body}")
+    return r.json().get("records", [])
 
 
 async def _fetch_all(table_id: str, token: str) -> list[dict]:
-    """Paginate through every record."""
+    """
+    Paginate through every record for a table.
+    Raises RuntimeError on Teable API errors (401, 403, 404, etc.)
+    so run_sync() can write a meaningful error to sync_log instead of
+    silently recording 0 rows.
+    """
     url     = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
     headers = {"Authorization": f"Bearer {token}"}
     records: list[dict] = []
     offset = 0
-    async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
-        while True:
-            page = await _fetch_page(http, url, headers, {"take": _PAGE_SIZE, "skip": offset})
-            records.extend(page)
-            if len(page) < _PAGE_SIZE:
-                break
-            offset += _PAGE_SIZE
+    try:
+        async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
+            while True:
+                page = await _fetch_page(http, url, headers, {"take": _PAGE_SIZE, "skip": offset})
+                records.extend(page)
+                if len(page) < _PAGE_SIZE:
+                    break
+                offset += _PAGE_SIZE
+    except RuntimeError:
+        raise   # already has good message
+    except Exception as exc:
+        raise RuntimeError(f"Teable fetch failed for table {table_id}: {exc}") from exc
     return records
 
 
 async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE) -> list[dict]:
     """
-    Fetch the `take` most-recently-modified records, ordered by
-    lastModifiedTime descending.  Used for incremental syncs.
+    Fetch the `take` most-recently-modified records.
+    Raises RuntimeError on Teable API errors.
     """
-    import json as _json
-    url     = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
-    headers = {"Authorization": f"Bearer {token}"}
-    # Teable orderBy is a JSON-encoded array
-    order_by = _json.dumps([{"fieldName": "lastModifiedTime", "order": "desc"}])
-    async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
-        return await _fetch_page(http, url, headers, {
-            "take": take,
-            "skip": 0,
-            "orderBy": order_by,
-        })
+    url      = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
+    headers  = {"Authorization": f"Bearer {token}"}
+    order_by = json.dumps([{"fieldName": "lastModifiedTime", "order": "desc"}])
+    try:
+        async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
+            return await _fetch_page(http, url, headers, {
+                "take": take, "skip": 0, "orderBy": order_by,
+            })
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Teable recent-fetch failed for table {table_id}: {exc}") from exc
 
 
 # ── Batch sync helpers ───────────────────────────────────────────────────────

@@ -64,6 +64,10 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Fire server-side session invalidation first (fire-and-forget).
+    // The backend marks is_active=false so the admin panel shows "Logged out"
+    // rather than "Idle/Valid" for the rest of the 7-day token TTL.
+    api.auth.logout().catch(() => {})  // never block logout on network failure
     clearAuthToken()
     setStoredRole(null)
     setRole('editor')

@@ -23,7 +23,7 @@ import {
   TrendingUp, ChevronLeft, ChevronRight, Search,
   Activity, Globe, Monitor, Smartphone, Tablet,
   CheckCircle2, XCircle, AlertCircle, History,
-  ShieldAlert, Zap, BarChart2, Link2
+  ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -436,6 +436,23 @@ function AuditLogTab() {
 
 // ── Tab: Sessions ─────────────────────────────────────────────────────────────
 
+// Session status chip — 4 honest states derived from server-computed session_status
+function SessionStatusChip({ status }) {
+  const cfg = {
+    online:     { label: 'Online',      color: '#16a34a', bg: 'rgba(22,163,74,0.10)',   icon: <CheckCircle2 size={11} /> },
+    idle:       { label: 'Idle',        color: '#d97706', bg: 'rgba(217,119,6,0.10)',   icon: <Clock size={11} /> },
+    logged_out: { label: 'Logged out',  color: 'var(--text-3)', bg: 'var(--bg-input)',  icon: <MinusCircle size={11} /> },
+    expired:    { label: 'Expired',     color: '#dc2626', bg: 'rgba(220,38,38,0.08)',   icon: <XCircle size={11} /> },
+  }
+  const s = cfg[status] || cfg.expired
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{ background: s.bg, color: s.color }}>
+      {s.icon}{s.label}
+    </span>
+  )
+}
+
 function SessionsTab() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -447,8 +464,7 @@ function SessionsTab() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      // active_only must be serialised as the string "true" / "false"
-      // (api.js sessions() uses String(v) to guarantee this)
+      // api.js sessions() serialises booleans with String(v) → "true"/"false"
       setData(await api.admin.sessions({ limit, offset, active_only: activeOnly }))
     }
     catch (e) { setError(e.message) }
@@ -460,8 +476,26 @@ function SessionsTab() {
 
   return (
     <div className="space-y-3">
+      {/* Legend */}
+      <div className="rounded-xl border p-3 text-[11px] space-y-1"
+        style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+        <p className="font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Session status explained</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { status: 'online',     desc: 'Active in last 30 min' },
+            { status: 'idle',       desc: 'Token valid, no recent activity' },
+            { status: 'logged_out', desc: 'User explicitly signed out' },
+            { status: 'expired',    desc: '7-day token TTL reached' },
+          ].map(({ status, desc }) => (
+            <div key={status} className="flex items-start gap-1.5">
+              <SessionStatusChip status={status} />
+              <span style={{ color: 'var(--text-3)' }}>{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-3 items-center">
-        {/* Styled toggle instead of plain checkbox */}
         <button
           onClick={() => setAO(v => !v)}
           className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors select-none"
@@ -474,13 +508,12 @@ function SessionsTab() {
             ? <><CheckCircle2 size={12} /> Active sessions only</>
             : <><XCircle size={12} /> Show all sessions</>}
         </button>
-
         <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>
         {data && (
           <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total.toLocaleString()} sessions
+            {data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -488,13 +521,13 @@ function SessionsTab() {
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
-            ? <Empty label={activeOnly ? 'No active sessions' : 'No sessions recorded yet'} />
+            ? <Empty label={activeOnly ? 'No active sessions — log in again to create one' : 'No sessions recorded yet'} />
             : (
               <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Role','Status','IP','Device / OS','Browser','Geo','Logged In','Last Seen','Expires','Reqs'].map(h => (
+                      {['Role','Status','IP','Device / OS','Browser','Geo','Logged In','Last Seen','Requests'].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
                           style={{ color: 'var(--text-2)' }}>{h}</th>
                       ))}
@@ -503,19 +536,14 @@ function SessionsTab() {
                   <tbody>
                     {(data?.rows || []).map(row => (
                       <tr key={row.id} className="border-b transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
+                        style={{
+                          borderColor: 'var(--border)',
+                          opacity: row.session_status === 'logged_out' || row.session_status === 'expired' ? 0.6 : 1,
+                        }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
                         onMouseLeave={e => e.currentTarget.style.background = ''}>
                         <td className="px-3 py-2">{roleBadge(row.role)}</td>
-                        <td className="px-3 py-2">
-                          {row.currently_valid
-                            ? <span className="flex items-center gap-1 text-[11px]" style={{ color: '#16a34a' }}>
-                                <CheckCircle2 size={11} /> Active
-                              </span>
-                            : <span className="flex items-center gap-1 text-[11px]" style={{ color: '#dc2626' }}>
-                                <XCircle size={11} /> Expired
-                              </span>}
-                        </td>
+                        <td className="px-3 py-2"><SessionStatusChip status={row.session_status} /></td>
                         <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>
                           {row.ip || '—'}
                         </td>
@@ -533,9 +561,6 @@ function SessionsTab() {
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                           {relTime(row.last_seen_at)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: row.currently_valid ? 'var(--text-3)' : '#dc2626', fontSize: 11 }}>
-                          {ts(row.expires_at)}
                         </td>
                         <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
                           {fmt(row.request_count)}
@@ -673,11 +698,13 @@ function ChatsTab() {
 // ── Tab: Sync Log ─────────────────────────────────────────────────────────────
 
 function SyncLogTab() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [offset, setOffset]   = useState(0)
-  const [filterSource, setFs] = useState('')
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [offset, setOffset]     = useState(0)
+  const [filterSource, setFs]   = useState('')
+  const [triggering, setTrig]   = useState(false)
+  const [trigMsg, setTrigMsg]   = useState(null)
   const limit = 50
 
   const load = useCallback(async () => {
@@ -689,6 +716,20 @@ function SyncLogTab() {
 
   useEffect(() => { setOffset(0) }, [filterSource])
   useEffect(() => { load() }, [load])
+
+  const triggerSync = useCallback(async () => {
+    setTrig(true); setTrigMsg(null)
+    try {
+      await api.admin.triggerSync()
+      setTrigMsg({ ok: true, text: 'Full sync triggered — results appear in a few seconds' })
+      // auto-refresh after 4 s to catch the new log entries
+      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+    } catch (e) {
+      setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
+    } finally {
+      setTrig(false)
+    }
+  }, [load])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
 
@@ -703,12 +744,33 @@ function SyncLogTab() {
         <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>
+        {/* Manual sync trigger */}
+        <button onClick={triggerSync} disabled={triggering}
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: triggering ? 'var(--bg-input)' : 'rgba(37,99,235,0.08)',
+            border: '1px solid rgba(37,99,235,0.25)',
+            color: triggering ? 'var(--text-3)' : '#2563eb',
+            opacity: triggering ? 0.6 : 1,
+          }}>
+          <Play size={11} /> {triggering ? 'Triggering…' : 'Trigger Full Sync Now'}
+        </button>
         {data && (
           <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
             {data.total} runs
           </span>
         )}
       </div>
+      {trigMsg && (
+        <div className="text-xs px-3 py-2 rounded-lg"
+          style={{
+            background: trigMsg.ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
+            color: trigMsg.ok ? '#16a34a' : '#dc2626',
+            border: `1px solid ${trigMsg.ok ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
+          }}>
+          {trigMsg.ok ? '✓' : '✕'} {trigMsg.text}
+        </div>
+      )}
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
