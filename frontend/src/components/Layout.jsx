@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, ShieldCheck
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -39,7 +39,7 @@ function OfflineBanner({ collapsed }) {
 
 function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
-  const { logout } = useAuth()
+  const { logout, isEditor } = useAuth()
   const location = useLocation()
 
   // Close mobile drawer on navigation
@@ -110,6 +110,41 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
             )}
           </NavLink>
         ))}
+
+        {/* Admin — visible only for editor (master) role */}
+        {isEditor && (
+          <>
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: 'var(--text-3)' }}>
+                Admin
+              </p>
+            )}
+            {collapsed && <div className="my-1 mx-2" style={{ borderTop: '1px solid var(--border)' }} />}
+            <NavLink
+              to="/admin"
+              title={collapsed ? 'Admin Panel' : undefined}
+              className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'}`}
+              style={({ isActive }) => isActive
+                ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)' }
+                : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <ShieldCheck size={15} aria-hidden="true"
+                    style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }} />
+                  {!collapsed && (
+                    <span className="flex-1 truncate font-medium"
+                      style={{ color: isActive ? 'var(--nav-active-color)' : 'var(--text-2)' }}>
+                      Admin Panel
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          </>
+        )}
       </nav>
 
       <OfflineBanner collapsed={collapsed} />

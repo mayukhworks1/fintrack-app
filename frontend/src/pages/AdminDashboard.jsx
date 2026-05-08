@@ -825,13 +825,84 @@ const TABS = [
   { id: 'history',   label: 'History',   icon: History          },
 ]
 
-export default function AdminDashboard() {
+/**
+ * AdminDashboard can run in two modes:
+ *
+ * embedded={false}  (default)
+ *   Full-screen standalone page with its own sticky header + sign-out.
+ *   Used when role === 'admin' logs in (no sidebar).
+ *
+ * embedded={true}
+ *   Renders as a regular page inside the existing Layout/sidebar.
+ *   Used when role === 'editor' navigates to /admin via the sidebar.
+ *   Drops the duplicate header — Layout already provides nav + sign-out.
+ */
+export default function AdminDashboard({ embedded = false }) {
   const { logout } = useAuth()
   const [tab, setTab] = useState('overview')
 
+  const tabBar = (
+    <div className={`flex overflow-x-auto gap-0.5 px-3 py-2 ${embedded ? 'rounded-xl border mb-4' : 'sticky top-[49px] z-10'}`}
+      style={embedded
+        ? { background: 'var(--bg-card)', borderColor: 'var(--border)' }
+        : { background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
+      {TABS.map(({ id, label, icon: Icon }) => (
+        <button key={id} onClick={() => setTab(id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
+          style={tab === id
+            ? { background: 'rgba(220,38,38,0.10)', color: '#dc2626' }
+            : { color: 'var(--text-3)', background: 'transparent' }}
+          onMouseEnter={e => { if (tab !== id) e.currentTarget.style.background = 'var(--bg-input)' }}
+          onMouseLeave={e => { if (tab !== id) e.currentTarget.style.background = 'transparent' }}>
+          <Icon size={12} />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  const content = (
+    <>
+      {tab === 'overview'  && <OverviewTab />}
+      {tab === 'audit'     && <AuditLogTab />}
+      {tab === 'sessions'  && <SessionsTab />}
+      {tab === 'chats'     && <ChatsTab />}
+      {tab === 'sync'      && <SyncLogTab />}
+      {tab === 'projects'  && <ProjectsMirrorTab />}
+      {tab === 'invoices'  && <InvoicesMirrorTab />}
+      {tab === 'history'   && <HistoryTab />}
+    </>
+  )
+
+  /* ── Embedded inside Layout ── */
+  if (embedded) {
+    return (
+      <div className="p-4 space-y-4 max-w-[1400px] mx-auto w-full">
+        {/* Page heading */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(220,38,38,0.10)' }}>
+            <Activity size={15} style={{ color: '#dc2626' }} />
+          </div>
+          <div>
+            <h1 className="font-bold text-base leading-tight" style={{ color: 'var(--text-1)' }}>
+              Admin Panel
+            </h1>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+              PostgreSQL database dashboard
+            </p>
+          </div>
+        </div>
+
+        {tabBar}
+        {content}
+      </div>
+    )
+  }
+
+  /* ── Standalone full-screen (admin role) ── */
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-base)' }}>
-      {/* Header */}
       <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3"
         style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2.5">
@@ -853,33 +924,10 @@ export default function AdminDashboard() {
         </button>
       </header>
 
-      {/* Tab bar */}
-      <div className="sticky top-[49px] z-10 flex overflow-x-auto gap-0.5 px-3 py-2"
-        style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
-            style={tab === id
-              ? { background: 'rgba(220,38,38,0.10)', color: '#dc2626' }
-              : { color: 'var(--text-3)', background: 'transparent' }}
-            onMouseEnter={e => { if (tab !== id) e.currentTarget.style.background = 'var(--bg-input)' }}
-            onMouseLeave={e => { if (tab !== id) e.currentTarget.style.background = 'transparent' }}>
-            <Icon size={12} />
-            {label}
-          </button>
-        ))}
-      </div>
+      {tabBar}
 
-      {/* Content */}
       <main className="flex-1 p-4 max-w-[1400px] mx-auto w-full">
-        {tab === 'overview'  && <OverviewTab />}
-        {tab === 'audit'     && <AuditLogTab />}
-        {tab === 'sessions'  && <SessionsTab />}
-        {tab === 'chats'     && <ChatsTab />}
-        {tab === 'sync'      && <SyncLogTab />}
-        {tab === 'projects'  && <ProjectsMirrorTab />}
-        {tab === 'invoices'  && <InvoicesMirrorTab />}
-        {tab === 'history'   && <HistoryTab />}
+        {content}
       </main>
     </div>
   )

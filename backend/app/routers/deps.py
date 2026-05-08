@@ -70,7 +70,11 @@ def require_all(role: str = Depends(require_auth)) -> str:
 
 
 def require_admin(role: str = Depends(require_auth)) -> str:
-    """Requires 'admin' role — full PostgreSQL dashboard access."""
-    if role != "admin":
+    """
+    Requires 'admin' OR 'editor' role — both get full PostgreSQL dashboard access.
+    'editor' is the master/owner role in the regular app.
+    'admin' is obtained via the dedicated Master@2026 password.
+    """
+    if role not in ("admin", "editor"):
         raise HTTPException(status_code=403, detail="Admin access required")
     return role

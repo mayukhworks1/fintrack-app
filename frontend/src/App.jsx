@@ -77,6 +77,7 @@ export default function App() {
               <Route path="/analytics"    element={<Analytics />} />
               <Route path="/ai"           element={<AIAssistant />} />
               <Route path="/report"       element={<Report />} />
+              <Route path="/admin"        element={<AdminDashboard embedded={true} />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>
           </Suspense>
