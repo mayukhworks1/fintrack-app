@@ -1,0 +1,186 @@
+"""
+Valkey (Redis-compatible) client — Aiven SSL (`rediss://`).
+
+Public helpers
+--------------
+init_client()          — call once at startup
+close_client()         — call at shutdown
+get_client()           — returns the redis.asyncio.Redis instance (or None)
+
+cache_get(key)         — returns deserialized value or None
+cache_set(key, value, ttl)  — serialise + store with TTL (seconds)
+cache_bust(prefix)     — delete all keys starting with prefix
+
+geo_get(ip)            — return cached geolocation dict or None
+geo_set(ip, data)      — store geolocation dict for 24 h
+
+rate_check(ip, limit, window_sec)
+                       — sliding-window rate limiter using a Sorted Set;
+                         returns (allowed: bool, remaining: int)
+"""
+
+import json
+import logging
+import time
+
+logger = logging.getLogger("fintrack.db.valkey")
+
+try:
+    import redis.asyncio as aioredis
+    _REDIS_AVAILABLE = True
+except ImportError:
+    _REDIS_AVAILABLE = False
+    logger.warning("redis package not installed — Valkey features disabled")
+
+_client: "aioredis.Redis | None" = None  # type: ignore[name-defined]
+
+_GEO_TTL  = 24 * 3600   # 24 h for IP geo cache
+_KEY_SEP  = ":"
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle
+# ---------------------------------------------------------------------------
+
+async def init_client(valkey_url: str) -> None:
+    global _client
+    if not _REDIS_AVAILABLE:
+        return
+    if not valkey_url:
+        logger.warning("VALKEY_URL not set — Valkey features disabled")
+        return
+    try:
+        _client = aioredis.from_url(
+            valkey_url,
+            decode_responses=False,   # keep bytes; we handle JSON ourselves
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            health_check_interval=30,
+        )
+        await _client.ping()
+        logger.info("Valkey connected")
+    except Exception as exc:
+        logger.error("Valkey init failed: %s", exc)
+        _client = None
+
+
+async def close_client() -> None:
+    global _client
+    if _client:
+        await _client.aclose()
+        _client = None
+
+
+def get_client():
+    return _client
+
+
+# ---------------------------------------------------------------------------
+# Serialisation helpers
+# ---------------------------------------------------------------------------
+
+def _encode(value) -> bytes:
+    return json.dumps(value, default=str).encode()
+
+
+def _decode(raw: bytes):
+    return json.loads(raw)
+
+
+# ---------------------------------------------------------------------------
+# Generic cache helpers
+# ---------------------------------------------------------------------------
+
+async def cache_get(key: str):
+    """Return decoded value or None."""
+    if not _client:
+        return None
+    try:
+        raw = await _client.get(key)
+        return _decode(raw) if raw is not None else None
+    except Exception as exc:
+        logger.debug("cache_get(%s) error: %s", key, exc)
+        return None
+
+
+async def cache_set(key: str, value, ttl: int) -> None:
+    """Store value with TTL (seconds). Silently no-ops if Valkey is down."""
+    if not _client:
+        return
+    try:
+        await _client.set(key, _encode(value), ex=ttl)
+    except Exception as exc:
+        logger.debug("cache_set(%s) error: %s", key, exc)
+
+
+async def cache_bust(prefix: str) -> int:
+    """
+    Delete all keys starting with `prefix:*`.
+    Returns the number of keys deleted.
+    Uses SCAN to avoid blocking; safe on large keyspaces.
+    """
+    if not _client:
+        return 0
+    try:
+        pattern = f"{prefix}*" if not prefix.endswith("*") else prefix
+        deleted = 0
+        async for key in _client.scan_iter(pattern, count=100):
+            await _client.delete(key)
+            deleted += 1
+        return deleted
+    except Exception as exc:
+        logger.debug("cache_bust(%s) error: %s", prefix, exc)
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# IP geolocation cache (24 h)
+# ---------------------------------------------------------------------------
+
+def _geo_key(ip: str) -> str:
+    return f"geo:{ip}"
+
+
+async def geo_get(ip: str) -> dict | None:
+    return await cache_get(_geo_key(ip))
+
+
+async def geo_set(ip: str, data: dict) -> None:
+    await cache_set(_geo_key(ip), data, _GEO_TTL)
+
+
+# ---------------------------------------------------------------------------
+# Sliding-window rate limiter  (Sorted Set approach)
+# ---------------------------------------------------------------------------
+
+async def rate_check(ip: str, limit: int = 60, window_sec: int = 60) -> tuple[bool, int]:
+    """
+    Sliding-window rate limiter.
+    - key   : ratelimit:{ip}
+    - score : current epoch-ms (float)
+    - Returns (allowed, remaining) — safe to call even if Valkey is down.
+    """
+    if not _client:
+        return True, limit   # fail open
+
+    key  = f"ratelimit:{ip}"
+    now  = time.time()
+    pipe = _client.pipeline()
+
+    try:
+        # Remove entries outside the window
+        pipe.zremrangebyscore(key, 0, now - window_sec)
+        # Add this request
+        pipe.zadd(key, {str(now): now})
+        # Count entries in window
+        pipe.zcard(key)
+        # Expire the key slightly beyond the window
+        pipe.expire(key, window_sec + 10)
+        results = await pipe.execute()
+        count = results[2]   # zcard result
+        allowed   = count <= limit
+        remaining = max(0, limit - count)
+        return allowed, remaining
+    except Exception as exc:
+        logger.debug("rate_check(%s) error: %s", ip, exc)
+        return True, limit   # fail open

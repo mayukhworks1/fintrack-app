@@ -1,27 +1,12 @@
 """
 TTL cache + in-flight request coalescing.
 
-Single source of truth for in-process caching across services.
-Replaces the ad-hoc {key: (timestamp, value)} dicts that were sprinkled
-through invoice.py, teable.py, and ai.py.
+Backing store priority:
+  1. Valkey (Aiven)  — persistent, shared across restarts / replicas
+  2. In-process dict — fallback when Valkey is unavailable
 
-Features:
-- Namespaced keys (so cache_bust("invoice") only nukes invoice keys)
-- Per-entry TTL (seconds)
-- Async-safe in-flight coalescing: concurrent calls for the same key
-  share one upstream request (avoids dog-piling Teable/OpenRouter)
-- Stats accessor for /health diagnostics
-
-Usage:
-    from .utils.cache import TTLCache
-
-    cache = TTLCache()
-    data  = await cache.get_or_set(
-        "invoice:list:Paid",
-        ttl=15,
-        loader=lambda: svc.list_invoices(status="Paid"),
-    )
-    cache.bust(prefix="invoice")
+Public API is identical to the original TTLCache; existing call-sites need
+no changes.  The module-level `cache` singleton is what all services import.
 """
 from __future__ import annotations
 import asyncio
@@ -37,16 +22,34 @@ class _Entry:
 
 
 class TTLCache:
-    """In-process TTL cache with async coalescing."""
+    """
+    In-process TTL cache with async coalescing.
+
+    When Valkey is available (the `db.valkey` module is initialised),
+    get/set operations are mirrored to Valkey so the cache survives
+    container restarts and is shared across any replicas.
+    """
 
     def __init__(self) -> None:
-        self._store:  dict[str, _Entry]              = {}
-        self._locks:  dict[str, asyncio.Lock]        = {}
-        self._inflight: dict[str, asyncio.Future]    = {}
-        self._hits = 0
+        self._store:    dict[str, _Entry]           = {}
+        self._locks:    dict[str, asyncio.Lock]     = {}
+        self._inflight: dict[str, asyncio.Future]   = {}
+        self._hits   = 0
         self._misses = 0
 
-    # ── Sync API ──
+    # ── Valkey helpers (gracefully absent if not configured) ────────────
+
+    @staticmethod
+    def _vk():
+        """Return the valkey module if initialised, else None."""
+        try:
+            from ..db import valkey as _vk
+            return _vk if _vk.get_client() else None
+        except Exception:
+            return None
+
+    # ── Sync API (in-process only) ──────────────────────────────────────
+
     def get(self, key: str) -> Optional[Any]:
         e = self._store.get(key)
         if not e:
@@ -71,9 +74,19 @@ class TTLCache:
         keys = [k for k in self._store if k.startswith(prefix)]
         for k in keys:
             del self._store[k]
+        # Also schedule async bust in Valkey (fire-and-forget)
+        vk = self._vk()
+        if vk:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(vk.cache_bust(prefix))
+            except RuntimeError:
+                pass
         return len(keys)
 
-    # ── Async coalesced loader ──
+    # ── Async coalesced loader (Valkey-aware) ───────────────────────────
+
     async def get_or_set(
         self,
         key: str,
@@ -81,13 +94,24 @@ class TTLCache:
         loader: Callable[[], Awaitable[Any]],
     ) -> Any:
         """
-        If the key is fresh, return cached value.
-        If not, call `loader` exactly once even under concurrent access —
-        all other waiters get the same result.
+        1. Check in-process store.
+        2. Check Valkey.
+        3. Call loader(), populate both stores.
+        Concurrent calls for the same key share one upstream request.
         """
+        # Fast path: in-process hit
         cached = self.get(key)
         if cached is not None:
             return cached
+
+        # Valkey hit (async)
+        vk = self._vk()
+        if vk:
+            remote = await vk.cache_get(key)
+            if remote is not None:
+                self.set(key, remote, ttl)      # warm local store
+                self._hits += 1
+                return remote
 
         # Coalesce: piggy-back on an in-flight request for the same key
         existing = self._inflight.get(key)
@@ -96,16 +120,24 @@ class TTLCache:
 
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
-            # Re-check after acquiring lock (might have been populated)
+            # Re-check after acquiring lock
             cached = self.get(key)
             if cached is not None:
                 return cached
+            if vk:
+                remote = await vk.cache_get(key)
+                if remote is not None:
+                    self.set(key, remote, ttl)
+                    self._hits += 1
+                    return remote
 
             fut: asyncio.Future = asyncio.get_event_loop().create_future()
             self._inflight[key] = fut
             try:
                 result = await loader()
                 self.set(key, result, ttl)
+                if vk:
+                    await vk.cache_set(key, result, int(ttl))
                 fut.set_result(result)
                 return result
             except Exception as e:
@@ -114,19 +146,21 @@ class TTLCache:
             finally:
                 self._inflight.pop(key, None)
 
-    # ── Diagnostics ──
+    # ── Diagnostics ─────────────────────────────────────────────────────
+
     def stats(self) -> dict:
         total = self._hits + self._misses
+        vk    = self._vk()
         return {
-            "size":   len(self._store),
-            "hits":   self._hits,
-            "misses": self._misses,
+            "size":     len(self._store),
+            "hits":     self._hits,
+            "misses":   self._misses,
             "hit_rate": round(self._hits / total, 3) if total else 0.0,
             "inflight": len(self._inflight),
+            "valkey":   "connected" if vk else "unavailable",
         }
 
 
-# ── Module-level singleton ───────────────────────────────────────────
-# All services share this one cache so /admin/cache and /health
-# can report a single coherent view.
+# ── Module-level singleton ───────────────────────────────────────────────────
+# All services share this one cache so /health can report a coherent view.
 cache = TTLCache()

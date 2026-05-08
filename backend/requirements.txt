@@ -6,3 +6,5 @@ pydantic==2.10.3
 pydantic-settings==2.6.1
 python-multipart==0.0.18
 pypdf==4.3.1
+asyncpg==0.29.0
+redis[asyncio]==5.0.8

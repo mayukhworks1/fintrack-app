@@ -121,6 +121,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
+    session_id: Optional[str] = None   # pass back the UUID to continue a session
 
 
 class AutofillRequest(BaseModel):

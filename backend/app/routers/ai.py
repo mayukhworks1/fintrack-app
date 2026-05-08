@@ -1,5 +1,8 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+import json
+import time
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.openrouter import (
@@ -8,6 +11,7 @@ from ..services.openrouter import (
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 from .deps import require_auth
+from ..db.postgres import get_pool
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -41,8 +45,114 @@ def _format_invoice_context(summary: dict, records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _get_client_ip(request: Request) -> str:
+    for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
+        val = request.headers.get(header, "")
+        if val:
+            return val.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+# ── Chat session persistence helpers ────────────────────────────────────────
+
+async def _ensure_session(
+    pool,
+    session_id: Optional[str],
+    role: str,
+    request: Request,
+) -> str:
+    """
+    Return an existing session UUID or create a new one.
+    Updates last_at and msg_count on every call.
+    """
+    if not pool:
+        return session_id or ""
+
+    from ..db.audit import parse_ua
+    from ..db.geo import lookup as geo_lookup
+
+    ip = _get_client_ip(request)
+    ua = request.headers.get("user-agent", "")
+    os_str, browser, _ = parse_ua(ua)
+
+    if session_id:
+        # Touch the session (bump last_at; msg_count incremented separately)
+        existing = await pool.fetchval(
+            "SELECT id FROM chat_sessions WHERE id = $1",
+            session_id,
+        )
+        if existing:
+            await pool.execute(
+                "UPDATE chat_sessions SET last_at = NOW() WHERE id = $1",
+                session_id,
+            )
+            return session_id
+
+    # Create new session
+    geo = await geo_lookup(ip)
+    new_id = await pool.fetchval(
+        """
+        INSERT INTO chat_sessions (role, ip, country, city, os, browser)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
+        """,
+        role,
+        ip[:45] if ip else None,
+        geo.get("country", "")[:80] or None,
+        geo.get("city", "")[:100] or None,
+        os_str[:100],
+        browser[:100],
+    )
+    return str(new_id)
+
+
+async def _save_messages(
+    pool,
+    session_id: str,
+    user_message: str,
+    assistant_reply: str,
+    model: str,
+    tokens_used: Optional[int],
+    duration_ms: int,
+) -> None:
+    """Persist user + assistant turns and update session msg_count."""
+    if not pool or not session_id:
+        return
+    try:
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    INSERT INTO chat_messages (session_id, role, content)
+                    VALUES ($1, 'user', $2)
+                    """,
+                    session_id, user_message,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO chat_messages
+                        (session_id, role, content, model, tokens_used, duration_ms)
+                    VALUES ($1, 'assistant', $2, $3, $4, $5)
+                    """,
+                    session_id, assistant_reply, model, tokens_used, duration_ms,
+                )
+                await conn.execute(
+                    """
+                    UPDATE chat_sessions
+                    SET msg_count = msg_count + 2, last_at = NOW()
+                    WHERE id = $1
+                    """,
+                    session_id,
+                )
+    except Exception as exc:
+        import logging
+        logging.getLogger("fintrack.ai").debug("Failed to save chat messages: %s", exc)
+
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
+
 @router.post("/chat")
-async def ai_chat(body: ChatRequest, _role: str = Depends(require_auth)):
+async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(require_auth)):
     """Natural language chat about projects + invoices with full live data context."""
     try:
         teable  = TeableService()
@@ -71,8 +181,31 @@ async def ai_chat(body: ChatRequest, _role: str = Depends(require_auth)):
         context = project_text + "\n" + records_text + "\n\n" + invoice_text
 
         history = [{"role": m.role, "content": m.content} for m in body.history]
+
+        t0 = time.time()
         result = await chat_with_ai(body.message, history, context)
-        return {"reply": result["content"], "model": result["model_short"]}
+        duration_ms = int((time.time() - t0) * 1000)
+
+        # ── Persist conversation (fire-and-forget) ───────────────────────
+        pool = get_pool()
+        session_id = getattr(body, "session_id", None)
+        if pool:
+            session_id = await _ensure_session(pool, session_id, role, request)
+            asyncio.create_task(_save_messages(
+                pool,
+                session_id,
+                body.message,
+                result["content"],
+                result.get("model", ""),
+                result.get("tokens_used"),
+                duration_ms,
+            ))
+
+        resp = {"reply": result["content"], "model": result["model_short"]}
+        if session_id:
+            resp["session_id"] = session_id
+        return resp
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
+    # ── Aiven PostgreSQL (1 GB) ─────────────────────────────────────────────
+    # Set POSTGRES_URL in HF Space secrets.
+    # Format: postgres://user:pass@host:port/db?sslmode=require
+    postgres_url: Optional[str] = None
+
+    # ── Aiven Valkey (1 GB, Redis-compatible, TLS) ──────────────────────────
+    # Set VALKEY_URL in HF Space secrets.
+    # Format: rediss://user:pass@host:port
+    valkey_url: Optional[str] = None
+
     class Config:
         env_file = ".env"
 
