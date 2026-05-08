@@ -265,6 +265,17 @@ export const api = {
       unassign: (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'DELETE' }),
     },
   },
+  admin: {
+    stats:         ()           => request('/api/admin/stats'),
+    auditLog:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/audit-log?${q}`) },
+    sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/sessions?${q}`) },
+    chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
+    chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
+    syncLog:       (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/sync-log?${q}`) },
+    mirrorProjects:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/projects?${q}`) },
+    mirrorInvoices:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/invoices?${q}`) },
+    recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
+  },
   health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.

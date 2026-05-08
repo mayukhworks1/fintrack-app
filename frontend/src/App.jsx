@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'           // eager — landing route
 import Login from './pages/Login'                   // eager — auth gate
+import AdminDashboard from './pages/AdminDashboard' // eager — admin role
 import { useAuth } from './context/AuthContext'
 
 /* Lazy-loaded routes — split into separate chunks for snappier initial paint */
@@ -27,7 +28,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { status, isWeb, isAll } = useAuth()
+  const { status, isWeb, isAll, isAdmin } = useAuth()
 
   if (status === 'loading') {
     return (
@@ -38,6 +39,16 @@ export default function App() {
   }
 
   if (status !== 'authed') return <Login />
+
+  // Admin role: full PostgreSQL dashboard
+  if (isAdmin) {
+    return (
+      <ErrorBoundary>
+        <AdminDashboard />
+        <VercelAnalytics />
+      </ErrorBoundary>
+    )
+  }
 
   // Web + All roles: isolated experience — web invoice module (+ project workspace for 'all')
   if (isWeb || isAll) {
