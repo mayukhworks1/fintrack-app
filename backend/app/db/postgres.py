@@ -3,6 +3,7 @@ PostgreSQL connection pool (Aiven, SSL) + schema bootstrap.
 
 Tables created on first startup:
   audit_log        — every API request with device/geo enrichment
+  login_sessions   — active login tokens with last-seen tracking
   chat_sessions    — AI assistant conversation groups
   chat_messages    — individual AI chat turns
   projects_mirror  — Teable project records (full replica)
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     ts           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
 
     role         VARCHAR(20),
-    token_hint   VARCHAR(20),          -- first 16 chars of token (correlation only)
+    token_hint   VARCHAR(20),
 
     method       VARCHAR(10),
     path         VARCHAR(500),
@@ -46,12 +47,38 @@ CREATE TABLE IF NOT EXISTS audit_log (
     city         VARCHAR(100),
     isp          VARCHAR(150),
 
-    extra        JSONB        DEFAULT '{}'
+    extra        JSONB        NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS al_ts_idx   ON audit_log (ts DESC);
 CREATE INDEX IF NOT EXISTS al_role_idx ON audit_log (role, ts DESC);
 CREATE INDEX IF NOT EXISTS al_ip_idx   ON audit_log (ip,   ts DESC);
 CREATE INDEX IF NOT EXISTS al_path_idx ON audit_log (path, ts DESC);
+
+-- ── Login sessions ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS login_sessions (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hint    VARCHAR(20)  NOT NULL,
+    role          VARCHAR(20)  NOT NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    expires_at    TIMESTAMPTZ  NOT NULL,
+
+    ip            VARCHAR(45),
+    user_agent    TEXT,
+    os            VARCHAR(100),
+    browser       VARCHAR(100),
+    device        VARCHAR(20),
+    country       VARCHAR(80),
+    country_code  VARCHAR(4),
+    city          VARCHAR(100),
+
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    request_count INTEGER      NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS ls_token_idx   ON login_sessions (token_hint);
+CREATE INDEX IF NOT EXISTS ls_role_idx    ON login_sessions (role, created_at DESC);
+CREATE INDEX IF NOT EXISTS ls_active_idx  ON login_sessions (is_active, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS ls_expires_idx ON login_sessions (expires_at DESC);
 
 -- ── AI chat sessions ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -86,7 +113,7 @@ CREATE INDEX IF NOT EXISTS cm_session_idx ON chat_messages (session_id, ts);
 CREATE TABLE IF NOT EXISTS projects_mirror (
     teable_id     VARCHAR(60)   PRIMARY KEY,
     synced_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    fields        JSONB         NOT NULL,
+    fields        JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     project_name  VARCHAR(255),
     client        VARCHAR(255),
@@ -104,7 +131,7 @@ CREATE INDEX IF NOT EXISTS pm_client_idx ON projects_mirror (client);
 CREATE TABLE IF NOT EXISTS invoices_mirror (
     teable_id        VARCHAR(60)   PRIMARY KEY,
     synced_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    fields           JSONB         NOT NULL,
+    fields           JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     invoice_number   VARCHAR(120),
     project          VARCHAR(255),

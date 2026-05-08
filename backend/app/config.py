@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
+    # ── Admin dashboard password ────────────────────────────────────────────
+    # Full PostgreSQL dashboard access.  Set APP_ADMIN_PASSWORD in HF secrets
+    # to override the default.
+    app_admin_password: str = "Master@2026"
+
     # ── Real-time webhook secret ────────────────────────────────────────────
     # Set TEABLE_WEBHOOK_SECRET in HF Space secrets (any random string).
     # Add the same value as X-Webhook-Secret header in every Teable Automation.

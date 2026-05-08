@@ -1,6 +1,10 @@
 """
 Shared FastAPI dependencies for auth + role checks.
 
+KEY FIX: require_auth now writes role AND token_hint to request.state
+so the audit middleware (which runs after the response) can pick them
+up correctly.  Previously role was always None in audit_log.
+
 Usage:
     from .deps import require_auth, require_editor
 
@@ -12,7 +16,7 @@ Usage:
     async def create_something(role: str = Depends(require_editor)):
         ...
 """
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from .auth import verify_token
 
 
@@ -22,52 +26,51 @@ def _get_token(authorization: str | None = Header(default=None)) -> str:
     return authorization.split(" ", 1)[1].strip()
 
 
-def require_auth(token: str = Depends(_get_token)) -> str:
-    """Accepts any valid token (editor or viewer). Returns the role."""
+def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
+    """
+    Accepts any valid token (editor / viewer / web / all / admin).
+    Stores role + token_hint on request.state for the audit middleware.
+    Returns the role string.
+    """
     role = verify_token(token)
     if role is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    # Store on state so audit middleware can read them after the response
+    request.state.role       = role
+    request.state.token_hint = token[:16]
     return role
 
 
 def require_editor(role: str = Depends(require_auth)) -> str:
-    """Requires a valid editor token. Raises 403 for viewer/web tokens."""
+    """Requires editor role. Raises 403 for all other roles."""
     if role != "editor":
-        raise HTTPException(
-            status_code=403,
-            detail="This action requires editor access",
-        )
+        raise HTTPException(status_code=403, detail="This action requires editor access")
     return role
 
 
 def require_web(role: str = Depends(require_auth)) -> str:
-    """Requires a web token. Only the web role can access web invoice routes."""
+    """Requires web role (web invoice module)."""
     if role != "web":
-        raise HTTPException(
-            status_code=403,
-            detail="Access restricted to web invoice module",
-        )
+        raise HTTPException(status_code=403, detail="Access restricted to web invoice module")
     return role
 
 
 def require_web_access(role: str = Depends(require_auth)) -> str:
-    """Accepts 'web' OR 'all' role — both have access to the web invoice module.
-    'web'  → invoice tracker only
-    'all'  → invoice tracker + project tracker
-    """
+    """Accepts 'web' OR 'all' — both can access the web invoice module."""
     if role not in ("web", "all"):
-        raise HTTPException(
-            status_code=403,
-            detail="Access restricted to web module",
-        )
+        raise HTTPException(status_code=403, detail="Access restricted to web module")
     return role
 
 
 def require_all(role: str = Depends(require_auth)) -> str:
-    """Requires an 'all' token. Only the all role can access web project tracker routes."""
+    """Requires 'all' role (web project tracker)."""
     if role != "all":
-        raise HTTPException(
-            status_code=403,
-            detail="Access restricted to web project tracker module",
-        )
+        raise HTTPException(status_code=403, detail="Access restricted to web project tracker module")
+    return role
+
+
+def require_admin(role: str = Depends(require_auth)) -> str:
+    """Requires 'admin' role — full PostgreSQL dashboard access."""
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
     return role

@@ -131,19 +131,22 @@ async def upsert_record(
 
         if existing_row is None:
             # ── INSERT ──
+            # Build column list; use ::jsonb cast for the fields column
             cols  = ["teable_id", "fields"] + list(typed.keys())
             vals  = [teable_id, json.dumps(fields, default=str)] + list(typed.values())
-            ph    = ", ".join(f"${i+1}" for i in range(len(vals)))
-            col_s = ", ".join(cols)
+            phs   = []
+            for i, col in enumerate(cols):
+                phs.append(f"${i+1}::jsonb" if col == "fields" else f"${i+1}")
             await conn.execute(
-                f"INSERT INTO {mirror_table} ({col_s}) VALUES ({ph})",
+                f"INSERT INTO {mirror_table} ({', '.join(cols)}) VALUES ({', '.join(phs)})",
                 *vals,
             )
+            # new_fields JSONB → must use ::jsonb cast
             await conn.execute(
                 """
                 INSERT INTO record_history
                     (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-                VALUES ($1, $2, 'create', NULL, $3, $4)
+                VALUES ($1, $2, 'create', NULL, $3::jsonb, $4)
                 """,
                 source, teable_id,
                 json.dumps(fields, default=str),
@@ -161,12 +164,12 @@ async def upsert_record(
         set_vals:  list      = []
         idx = 1
 
-        # fields JSONB column
+        # fields JSONB column — explicit ::jsonb cast
         set_parts.append(f"fields = ${idx}::jsonb")
         set_vals.append(json.dumps(fields, default=str))
         idx += 1
 
-        # typed columns
+        # typed columns (plain scalar values)
         for k, v in typed.items():
             set_parts.append(f"{k} = ${idx}")
             set_vals.append(v)
@@ -177,11 +180,12 @@ async def upsert_record(
             f"UPDATE {mirror_table} SET {', '.join(set_parts)} WHERE teable_id = ${idx}",
             *set_vals,
         )
+        # old_fields and new_fields are JSONB — must use ::jsonb cast
         await conn.execute(
             """
             INSERT INTO record_history
                 (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-            VALUES ($1, $2, 'update', $3, $4, $5)
+            VALUES ($1, $2, 'update', $3::jsonb, $4::jsonb, $5)
             """,
             source, teable_id,
             json.dumps(old_fields, default=str),
@@ -208,7 +212,7 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
             """
             INSERT INTO record_history
                 (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-            VALUES ($1, $2, 'delete', $3, NULL, '{}')
+            VALUES ($1, $2, 'delete', $3::jsonb, NULL, '{}')
             """,
             source, teable_id, row["fields"],
         )
