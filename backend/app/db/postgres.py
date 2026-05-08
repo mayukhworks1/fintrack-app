@@ -173,6 +173,46 @@ CREATE TABLE IF NOT EXISTS sync_log (
     duration_ms INTEGER,
     error       TEXT
 );
+
+-- ── Web invoices mirror (separate Teable table + token) ───────────────────
+CREATE TABLE IF NOT EXISTS web_invoices_mirror (
+    teable_id        VARCHAR(60)   PRIMARY KEY,
+    synced_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    fields           JSONB         NOT NULL DEFAULT '{}'::jsonb,
+
+    invoice_number   VARCHAR(120),
+    project          VARCHAR(255),
+    category         VARCHAR(120),
+    description      TEXT,
+    milestone        VARCHAR(255),
+    raised_by        VARCHAR(255),
+    payment_status   VARCHAR(60),
+    amount_raised    NUMERIC(15,2),
+    amount_with_tax  NUMERIC(15,2),
+    amount_received  NUMERIC(15,2),
+    raised_date      DATE,
+    cleared_date     DATE,
+    currency         VARCHAR(20),
+    remark           TEXT
+);
+CREATE INDEX IF NOT EXISTS wim_status_idx  ON web_invoices_mirror (payment_status);
+CREATE INDEX IF NOT EXISTS wim_project_idx ON web_invoices_mirror (project);
+CREATE INDEX IF NOT EXISTS wim_date_idx    ON web_invoices_mirror (raised_date DESC);
+
+-- ── Idempotent column migrations ──────────────────────────────────────────
+-- Safe to run on every startup — adds missing columns to existing tables
+-- without touching tables that already have them (IF NOT EXISTS guard).
+
+-- audit_log: detailed request fields (added in v2.3)
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS referer      TEXT;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS body_size    INTEGER;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS query_params TEXT;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS resp_size    INTEGER;
+
+-- login_sessions: device + location columns may be absent on old deployments
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device       VARCHAR(20);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS country_code VARCHAR(4);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS city         VARCHAR(100);
 """
 # ---------------------------------------------------------------------------
 

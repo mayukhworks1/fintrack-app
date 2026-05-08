@@ -92,12 +92,48 @@ def _extract_invoice(fields: dict) -> dict:
     }
 
 
+def _extract_web_invoice(fields: dict) -> dict:
+    """Extract typed columns from the web invoice Teable table."""
+    def _num(k):
+        v = fields.get(k)
+        try:
+            return float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    def _date(k):
+        v = fields.get(k)
+        return str(v)[:10] if v else None
+
+    def _str(k, maxlen=255):
+        return (str(fields.get(k, "") or "")[:maxlen]) or None
+
+    return {
+        "invoice_number":  _str("Invoice Number", 120),
+        "project":         _str("Project",         255),
+        "category":        _str("Category",        120),
+        "description":     _str("Description",     1000) or None,
+        "milestone":       _str("Milestone",       255),
+        "raised_by":       _str("Raised By",       255),
+        "payment_status":  _str("Payment Status",   60),
+        "amount_raised":   _num("Amount Raised"),
+        "amount_with_tax": _num("Amount with Tax"),
+        "amount_received": _num("Amount Received"),
+        "raised_date":     _date("Raised Date"),
+        "cleared_date":    _date("Cleared Date"),
+        "currency":        _str("Currency",         20),
+        "remark":          _str("Remark",          500),
+    }
+
+
 # Map table_id → (source name, mirror table, extractor)
 def _table_config(table_id: str) -> Optional[tuple]:
     if table_id == settings.teable_table_id:
         return ("projects", "projects_mirror", _extract_project)
     if table_id == settings.teable_invoice_table_id:
         return ("invoices", "invoices_mirror", _extract_invoice)
+    if table_id == settings.teable_web_invoice_table_id:
+        return ("web_invoices", "web_invoices_mirror", _extract_web_invoice)
     return None
 
 
@@ -329,9 +365,13 @@ async def _sync_records(
 
 async def run_sync(incremental: bool = False) -> None:
     """
-    Full or incremental sync of both tables.
+    Full or incremental sync of projects, main invoices, AND web invoices.
     `incremental=True` fetches only the 200 most recently modified records
     and skips any that haven't changed since the last run.
+
+    Tokens:
+      - projects + main invoices  → settings.teable_api_token
+      - web invoices              → settings.teable_web_api_token (falls back to main token)
     """
     global _last_full_at, _last_incremental_at
 
@@ -339,26 +379,38 @@ async def run_sync(incremental: bool = False) -> None:
     if not pool:
         return
 
-    token = settings.teable_api_token
-    if not token:
+    main_token = settings.teable_api_token
+    web_token  = settings.teable_web_api_token or main_token
+
+    if not main_token and not web_token:
         return
 
     label = "incremental" if incremental else "full"
     since = _last_incremental_at if incremental else 0.0
     fetch = _fetch_recent if incremental else _fetch_all
 
-    projects_records, invoices_records = await asyncio.gather(
-        fetch(settings.teable_table_id, token),
-        fetch(settings.teable_invoice_table_id, token),
+    # Build task list — only attempt tables whose token + ID are available
+    tasks: list[tuple] = []
+    if main_token:
+        if settings.teable_table_id:
+            tasks.append(("projects",     "projects_mirror",     settings.teable_table_id,         main_token, _extract_project))
+        if settings.teable_invoice_table_id:
+            tasks.append(("invoices",     "invoices_mirror",     settings.teable_invoice_table_id, main_token, _extract_invoice))
+    if web_token and settings.teable_web_invoice_table_id:
+        tasks.append(("web_invoices", "web_invoices_mirror", settings.teable_web_invoice_table_id, web_token, _extract_web_invoice))
+
+    if not tasks:
+        return
+
+    # Fetch all table records concurrently
+    fetched = await asyncio.gather(
+        *[fetch(tid, tok) for _, _, tid, tok, _ in tasks],
         return_exceptions=True,
     )
 
     now = time.time()
 
-    for source, mirror_table, records, extractor in [
-        ("projects", "projects_mirror", projects_records, _extract_project),
-        ("invoices", "invoices_mirror", invoices_records, _extract_invoice),
-    ]:
+    for (source, mirror_table, _tid, _tok, extractor), records in zip(tasks, fetched):
         if isinstance(records, Exception):
             logger.error("[%s] Fetch failed for %s: %s", label, source, records)
             await _write_sync_log(pool, source, 0, 0, 0, 0, 0, str(records))

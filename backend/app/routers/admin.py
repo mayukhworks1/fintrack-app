@@ -69,37 +69,54 @@ async def admin_stats(_: str = Depends(require_admin)):
 
     row = await pool.fetchrow("""
         SELECT
-            (SELECT COUNT(*)          FROM audit_log)                                    AS audit_total,
-            (SELECT COUNT(*)          FROM audit_log WHERE ts > NOW() - INTERVAL '24h')  AS audit_24h,
-            (SELECT COUNT(*)          FROM audit_log WHERE ts > NOW() - INTERVAL '1h')   AS audit_1h,
-            (SELECT COUNT(DISTINCT ip) FROM audit_log WHERE ts > NOW() - INTERVAL '24h') AS unique_ips_24h,
+            -- Audit log totals
+            (SELECT COUNT(*)           FROM audit_log)                                     AS audit_total,
+            (SELECT COUNT(*)           FROM audit_log WHERE ts > NOW() - INTERVAL '24h')   AS audit_24h,
+            (SELECT COUNT(*)           FROM audit_log WHERE ts > NOW() - INTERVAL '1h')    AS audit_1h,
+            (SELECT COUNT(DISTINCT ip) FROM audit_log WHERE ts > NOW() - INTERVAL '24h')  AS unique_ips_24h,
 
-            (SELECT COUNT(*) FROM login_sessions WHERE expires_at > NOW())               AS sessions_active,
-            (SELECT COUNT(*) FROM login_sessions)                                        AS sessions_total,
-            (SELECT MAX(last_seen_at) FROM login_sessions WHERE expires_at > NOW())      AS sessions_last_active,
+            -- Audit log by role
+            (SELECT COUNT(*) FROM audit_log WHERE role = 'editor')  AS audit_editor,
+            (SELECT COUNT(*) FROM audit_log WHERE role = 'viewer')  AS audit_viewer,
+            (SELECT COUNT(*) FROM audit_log WHERE role = 'web')     AS audit_web,
+            (SELECT COUNT(*) FROM audit_log WHERE role = 'all')     AS audit_all,
+            (SELECT COUNT(*) FROM audit_log WHERE role = 'admin')   AS audit_admin,
+            (SELECT COUNT(*) FROM audit_log WHERE role IS NULL)     AS audit_anon,
 
-            (SELECT COUNT(*) FROM chat_sessions)                                         AS chat_sessions_total,
-            (SELECT COUNT(*) FROM chat_messages)                                         AS chat_messages_total,
-            (SELECT MAX(last_at) FROM chat_sessions)                                     AS chat_last_at,
+            -- Error rates (last 24h)
+            (SELECT COUNT(*) FROM audit_log WHERE ts > NOW() - INTERVAL '24h' AND status >= 400 AND status < 500) AS audit_4xx_24h,
+            (SELECT COUNT(*) FROM audit_log WHERE ts > NOW() - INTERVAL '24h' AND status >= 500)                  AS audit_5xx_24h,
 
-            (SELECT COUNT(*) FROM projects_mirror)                                       AS projects_total,
-            (SELECT MAX(synced_at) FROM projects_mirror)                                 AS projects_last_sync,
-            (SELECT COUNT(*) FROM invoices_mirror)                                       AS invoices_total,
-            (SELECT MAX(synced_at) FROM invoices_mirror)                                 AS invoices_last_sync,
+            -- Login sessions
+            (SELECT COUNT(*) FROM login_sessions WHERE expires_at > NOW())            AS sessions_active,
+            (SELECT COUNT(*) FROM login_sessions)                                     AS sessions_total,
+            (SELECT MAX(last_seen_at) FROM login_sessions WHERE expires_at > NOW())   AS sessions_last_active,
 
-            (SELECT COUNT(*) FROM record_history)                                        AS history_total,
-            (SELECT COUNT(*) FROM record_history WHERE recorded_at > NOW() - INTERVAL '24h') AS history_24h,
+            -- AI chats
+            (SELECT COUNT(*) FROM chat_sessions)                                      AS chat_sessions_total,
+            (SELECT COUNT(*) FROM chat_messages)                                      AS chat_messages_total,
+            (SELECT MAX(last_at) FROM chat_sessions)                                  AS chat_last_at,
 
-            (SELECT synced_at  FROM sync_log ORDER BY id DESC LIMIT 1)                  AS last_sync_at,
-            (SELECT source     FROM sync_log ORDER BY id DESC LIMIT 1)                  AS last_sync_source,
-            (SELECT error      FROM sync_log WHERE error IS NOT NULL ORDER BY id DESC LIMIT 1) AS last_sync_error,
+            -- Mirror tables
+            (SELECT COUNT(*) FROM projects_mirror)                                    AS projects_total,
+            (SELECT MAX(synced_at) FROM projects_mirror)                              AS projects_last_sync,
+            (SELECT COUNT(*) FROM invoices_mirror)                                    AS invoices_total,
+            (SELECT MAX(synced_at) FROM invoices_mirror)                              AS invoices_last_sync,
+            (SELECT COUNT(*) FROM web_invoices_mirror)                                AS web_invoices_total,
+            (SELECT MAX(synced_at) FROM web_invoices_mirror)                          AS web_invoices_last_sync,
 
-            (SELECT COUNT(*) FROM audit_log WHERE role = 'editor')   AS audit_editor,
-            (SELECT COUNT(*) FROM audit_log WHERE role = 'viewer')   AS audit_viewer,
-            (SELECT COUNT(*) FROM audit_log WHERE role = 'web')      AS audit_web,
-            (SELECT COUNT(*) FROM audit_log WHERE role = 'all')      AS audit_all,
-            (SELECT COUNT(*) FROM audit_log WHERE role = 'admin')    AS audit_admin,
-            (SELECT COUNT(*) FROM audit_log WHERE role IS NULL)      AS audit_anon
+            -- Combined invoice totals (for overview)
+            (SELECT COUNT(*) FROM invoices_mirror    WHERE payment_status ILIKE '%paid%')     AS invoices_paid,
+            (SELECT COUNT(*) FROM web_invoices_mirror WHERE payment_status ILIKE '%paid%')    AS web_invoices_paid,
+
+            -- Change history
+            (SELECT COUNT(*) FROM record_history)                                                                  AS history_total,
+            (SELECT COUNT(*) FROM record_history WHERE recorded_at > NOW() - INTERVAL '24h')                       AS history_24h,
+
+            -- Last sync run
+            (SELECT synced_at FROM sync_log ORDER BY id DESC LIMIT 1)                           AS last_sync_at,
+            (SELECT source    FROM sync_log ORDER BY id DESC LIMIT 1)                           AS last_sync_source,
+            (SELECT error     FROM sync_log WHERE error IS NOT NULL ORDER BY id DESC LIMIT 1)   AS last_sync_error
     """)
 
     return _row_to_dict(row)
@@ -401,6 +418,58 @@ async def admin_mirror_invoices(
                raised_date, cleared_date,
                fields::text AS fields
         FROM invoices_mirror {where_sql}
+        ORDER BY raised_date DESC NULLS LAST, synced_at DESC
+        LIMIT ${idx} OFFSET ${idx+1}
+        """,
+        *params, limit, offset,
+    )
+
+    records = []
+    for row in rows:
+        d = _row_to_dict(row)
+        try:
+            d["fields"] = json.loads(d.get("fields") or "{}")
+        except Exception:
+            d["fields"] = {}
+        records.append(d)
+
+    return {"total": total, "limit": limit, "offset": offset, "rows": records}
+
+
+@router.get("/mirror/web-invoices")
+async def admin_mirror_web_invoices(
+    limit:          int           = Query(100, ge=1, le=500),
+    offset:         int           = Query(0, ge=0),
+    payment_status: Optional[str] = Query(None),
+    project:        Optional[str] = Query(None),
+    _:              str           = Depends(require_admin),
+):
+    """Web invoices mirror — typed columns from web invoice Teable table."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    where: list[str] = []
+    params: list     = []
+    idx = 1
+
+    if payment_status:
+        where.append(f"payment_status ILIKE ${idx}"); params.append(f"%{payment_status}%"); idx += 1
+    if project:
+        where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM web_invoices_mirror {where_sql}", *params)
+    rows  = await pool.fetch(
+        f"""
+        SELECT teable_id, synced_at,
+               invoice_number, project, category, description,
+               milestone, raised_by, payment_status, currency,
+               amount_raised, amount_with_tax, amount_received,
+               raised_date, cleared_date, remark,
+               fields::text AS fields
+        FROM web_invoices_mirror {where_sql}
         ORDER BY raised_date DESC NULLS LAST, synced_at DESC
         LIMIT ${idx} OFFSET ${idx+1}
         """,

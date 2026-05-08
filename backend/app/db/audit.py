@@ -98,20 +98,28 @@ def parse_ua(ua: str) -> tuple[str, str, str]:
 
 async def log_request(
     *,
-    role:        Optional[str],
-    token_hint:  Optional[str],
-    method:      str,
-    path:        str,
-    status:      int,
-    duration_ms: int,
-    request_id:  Optional[str],
-    ip:          str,
-    user_agent:  str,
-    extra:       Optional[dict] = None,
+    role:         Optional[str],
+    token_hint:   Optional[str],
+    method:       str,
+    path:         str,
+    status:       int,
+    duration_ms:  int,
+    request_id:   Optional[str],
+    ip:           str,
+    user_agent:   str,
+    referer:      Optional[str] = None,
+    body_size:    Optional[int] = None,
+    query_params: Optional[str] = None,
+    resp_size:    Optional[int] = None,
+    extra:        Optional[dict] = None,
 ) -> None:
     """
     Write one row to audit_log.
     Fire-and-forget from middleware — all exceptions caught silently.
+
+    New in v2.3: referer, body_size, query_params, resp_size columns.
+    Uses ALTER TABLE ADD COLUMN IF NOT EXISTS in schema so the INSERT
+    always works even on databases created before these columns existed.
     """
     pool = get_pool()
     if not pool:
@@ -128,13 +136,15 @@ async def log_request(
                 method, path, status, duration_ms, request_id,
                 ip, user_agent, os, browser, device,
                 country, country_code, region, city, isp,
+                referer, body_size, query_params, resp_size,
                 extra
             ) VALUES (
                 $1,  $2,
                 $3,  $4,  $5,  $6,  $7,
                 $8,  $9,  $10, $11, $12,
                 $13, $14, $15, $16, $17,
-                $18::jsonb
+                $18, $19, $20, $21,
+                $22::jsonb
             )
             """,
             role,
@@ -144,17 +154,21 @@ async def log_request(
             status,
             duration_ms,
             (request_id or "")[:50] or None,
-            (ip or "")[:45]          or None,
-            (user_agent or "")[:500] or None,
+            (ip or "")[:45]           or None,
+            (user_agent or "")[:500]  or None,
             os_str[:100],
             browser[:100],
             device[:20],
-            geo.get("country", "")[:80]      or None,
-            geo.get("country_code", "")[:4]  or None,
-            geo.get("region", "")[:100]      or None,
-            geo.get("city", "")[:100]        or None,
-            geo.get("isp", "")[:150]         or None,
-            json.dumps(extra or {}),          # ← JSONB: must be JSON string + ::jsonb cast
+            geo.get("country",      "")[:80]  or None,
+            geo.get("country_code", "")[:4]   or None,
+            geo.get("region",       "")[:100] or None,
+            geo.get("city",         "")[:100] or None,
+            geo.get("isp",          "")[:150] or None,
+            (referer or "")[:500]    or None,
+            body_size,
+            (query_params or "")[:500] or None,
+            resp_size,
+            json.dumps(extra or {}),   # ← JSONB: must be JSON string + ::jsonb cast
         )
     except Exception as exc:
         logger.warning("audit.log_request failed: %s", exc)

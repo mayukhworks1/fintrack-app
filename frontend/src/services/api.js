@@ -266,14 +266,16 @@ export const api = {
     },
   },
   admin: {
-    stats:         ()           => request('/api/admin/stats'),
+    stats:              ()       => request('/api/admin/stats'),
     auditLog:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/audit-log?${q}`) },
-    sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/sessions?${q}`) },
+    // sessions: booleans (active_only) are explicitly stringified so false→"false" reaches FastAPI
+    sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => { if (v != null) q.set(k, String(v)) }); return request(`/api/admin/sessions?${q}`) },
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
     syncLog:       (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/sync-log?${q}`) },
     mirrorProjects:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/projects?${q}`) },
     mirrorInvoices:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/invoices?${q}`) },
+    mirrorWebInvoices:(p = {})  => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/web-invoices?${q}`) },
     recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
   },
   health: () => request('/health', {}, 0),

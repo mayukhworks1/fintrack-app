@@ -138,6 +138,10 @@ async def request_middleware(request: Request, call_next):
             request_id=req_id,
             ip=ip,
             user_agent=request.headers.get("user-agent", ""),
+            referer=(request.headers.get("referer") or request.headers.get("origin") or "")[:500] or None,
+            body_size=int(request.headers.get("content-length") or 0) or None,
+            query_params=str(request.url.query)[:500] or None,
+            resp_size=int(response.headers.get("content-length") or 0) or None,
         ))
 
         # Keep login_sessions.last_seen_at fresh (rate-limited in touch_session)
