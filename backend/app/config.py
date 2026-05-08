@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
+    # ── Real-time webhook secret ────────────────────────────────────────────
+    # Set TEABLE_WEBHOOK_SECRET in HF Space secrets (any random string).
+    # Add the same value as X-Webhook-Secret header in every Teable Automation.
+    # If not set, the endpoint accepts all incoming webhooks (still safe behind HTTPS).
+    teable_webhook_secret: Optional[str] = None
+
     # ── Aiven PostgreSQL (1 GB) ─────────────────────────────────────────────
     # Set POSTGRES_URL in HF Space secrets.
     # Format: postgres://user:pass@host:port/db?sslmode=require

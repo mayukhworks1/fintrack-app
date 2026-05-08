@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .routers import projects, ai, auth, invoices, web_invoices
+from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -78,6 +78,7 @@ app.include_router(ai.router)
 app.include_router(web_invoices.router)
 app.include_router(web_projects_router)
 app.include_router(web_resources_router)
+app.include_router(webhooks.router)
 
 
 # ── Request ID + access log + audit ──────────────────────────────────────────
