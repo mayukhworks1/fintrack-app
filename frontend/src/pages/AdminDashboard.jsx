@@ -299,83 +299,270 @@ function OverviewTab() {
 // ── Country flag emoji from ISO 2-letter code ────────────────────────────────
 function countryFlag(code) {
   if (!code || code.length !== 2) return ''
-  const cp = code.toUpperCase()
-  return String.fromCodePoint(...[...cp].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))
+  try {
+    return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))
+  } catch { return '' }
 }
 
-// ── Inline pill input ────────────────────────────────────────────────────────
-function FPill({ label, value, onChange, type = 'text', placeholder }) {
+// ── Shared form controls ──────────────────────────────────────────────────────
+const CTRL_STYLE = {
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border)',
+  color: 'var(--text-1)',
+  borderRadius: 8,
+  fontSize: 12,
+  padding: '4px 8px',
+  outline: 'none',
+}
+
+function FLabel({ label, children }) {
   return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <input
-        type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder || ''}
-        className="input-field text-xs py-1 px-2" style={{ width: 130, minWidth: 90 }}
-      />
+    <label className="flex flex-col gap-0.5" style={{ minWidth: 90 }}>
+      <span style={{ color: 'var(--text-3)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </span>
+      {children}
     </label>
   )
 }
 
-function FSel({ label, value, onChange, opts }) {
+function FPill({ label, value, onChange, type = 'text', placeholder, width = 130 }) {
   return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="input-field text-xs py-1 px-2" style={{ width: 120 }}>
+    <FLabel label={label}>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder || ''} style={{ ...CTRL_STYLE, width }} />
+    </FLabel>
+  )
+}
+
+function FSel({ label, value, onChange, opts, width = 130 }) {
+  return (
+    <FLabel label={label}>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...CTRL_STYLE, width }}>
         {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
-    </label>
+    </FLabel>
+  )
+}
+
+// ── Multi-select pill dropdown ────────────────────────────────────────────────
+// selected: string[]  onChange: (string[]) => void  opts: [value, label][]
+function FMulti({ label, selected, onChange, opts, placeholder = 'Any', width = 150 }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const toggle = v => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+  const clear  = e => { e.stopPropagation(); onChange([]) }
+
+  const display = selected.length === 0 ? placeholder
+    : selected.length === 1 ? (opts.find(([v]) => v === selected[0])?.[1] || selected[0])
+    : `${selected.length} selected`
+
+  return (
+    <FLabel label={label}>
+      <div ref={ref} style={{ position: 'relative', width }}>
+        <button type="button" onClick={() => setOpen(v => !v)}
+          style={{
+            ...CTRL_STYLE, width: '100%', textAlign: 'left', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4,
+          }}>
+          <span style={{ color: selected.length ? 'var(--text-1)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {display}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            {selected.length > 0 && (
+              <span onClick={clear} style={{ color: 'var(--text-3)', lineHeight: 1, padding: '0 1px' }}>×</span>
+            )}
+            <ChevronDown size={10} style={{ color: 'var(--text-3)' }} />
+          </span>
+        </button>
+        {open && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, zIndex: 200, minWidth: width,
+            background: 'var(--card-bg)', border: '1px solid var(--border)',
+            borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            padding: '4px 0', marginTop: 4,
+          }}>
+            {opts.map(([v, l]) => (
+              <label key={v} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+                color: 'var(--text-1)',
+                background: selected.includes(v) ? 'rgba(99,102,241,0.08)' : 'transparent',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                onMouseLeave={e => e.currentTarget.style.background = selected.includes(v) ? 'rgba(99,102,241,0.08)' : 'transparent'}>
+                <input type="checkbox" checked={selected.includes(v)} onChange={() => toggle(v)}
+                  style={{ accentColor: '#6366f1', width: 13, height: 13 }} />
+                <span>{l}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </FLabel>
+  )
+}
+
+// ── Shared filter bar wrapper ─────────────────────────────────────────────────
+function FilterBar({ children, count, onReset, rightSlot }) {
+  return (
+    <div style={{
+      background: 'var(--card-bg)', border: '1px solid var(--border)',
+      borderRadius: 14, padding: '12px 14px',
+    }} className="space-y-3">
+      <div className="flex flex-wrap gap-2 items-end">
+        {children}
+        <div className="flex gap-2 ml-auto items-end flex-wrap">
+          {rightSlot}
+          {count > 0 && (
+            <button onClick={onReset}
+              style={{
+                ...CTRL_STYLE, display: 'flex', alignItems: 'center', gap: 4,
+                color: 'var(--text-3)', cursor: 'pointer',
+              }}>
+              <X size={11} /> Clear ({count})
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
 // ── Purge confirmation modal ──────────────────────────────────────────────────
 function PurgeModal({ onConfirm, onCancel, purging, result }) {
-  const [days, setDays] = useState(30)
-  const presets = [[3,'3 days'],[7,'1 week'],[30,'1 month'],[90,'3 months'],[180,'6 months'],[365,'1 year']]
+  // mode: 'hours' | 'days'
+  const [mode,       setMode]  = useState('days')
+  const [hours,      setHours] = useState(24)
+  const [days,       setDays]  = useState(30)
+
+  const hourPresets = [[1,'1 hr'],[6,'6 hrs'],[12,'12 hrs'],[24,'24 hrs']]
+  const dayPresets  = [[3,'3 days'],[7,'1 week'],[30,'1 month'],[90,'3 months'],[180,'6 months'],[365,'1 year']]
+
+  const activePreset = mode === 'hours' ? hours : days
+  const setActive    = mode === 'hours' ? setHours : setDays
+
+  const handleConfirm = () =>
+    onConfirm(mode === 'hours' ? { hours } : { days })
+
+  const label = mode === 'hours'
+    ? `${hours} hour${hours !== 1 ? 's' : ''}`
+    : `${days} day${days !== 1 ? 's' : ''}`
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div className="rounded-2xl p-6 shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Trash2 size={18} style={{ color: '#dc2626' }} />
-          <h3 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Purge Audit Log</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}>
+      <div style={{
+        background: 'var(--card-bg)', border: '1px solid var(--border)',
+        borderRadius: 18, padding: 28, width: '100%', maxWidth: 480,
+        boxShadow: '0 24px 60px rgba(0,0,0,0.3)',
+      }}>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <div style={{ background: 'rgba(220,38,38,0.12)', borderRadius: 10, padding: 8 }}>
+            <Trash2 size={18} style={{ color: '#dc2626' }} />
+          </div>
+          <div>
+            <h3 style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: 16, margin: 0 }}>Purge Audit Log</h3>
+            <p style={{ color: 'var(--text-3)', fontSize: 12, margin: 0 }}>Removes entries older than selected threshold</p>
+          </div>
+          <button onClick={onCancel} style={{ marginLeft: 'auto', color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
         </div>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-2)' }}>
-          Delete all audit log entries older than the selected threshold.<br />
-          <span className="font-semibold" style={{ color: '#f59e0b' }}>Always keeps the 200 most-recent rows.</span>
-        </p>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {presets.map(([d, l]) => (
-            <button key={d} onClick={() => setDays(d)}
-              className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
-              style={{
-                background: days === d ? '#dc2626' : 'var(--bg-input)',
-                color: days === d ? '#fff' : 'var(--text-2)',
-                border: '1px solid var(--border)',
-              }}>
+
+        {/* Safety notice */}
+        <div style={{
+          background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+          borderRadius: 10, padding: '8px 12px', marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+          <span style={{ color: '#92400e', fontSize: 12, fontWeight: 500 }}>
+            Always keeps the 200 most-recent rows as a safety floor.
+          </span>
+        </div>
+
+        {/* Mode tabs */}
+        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-input)', borderRadius: 10, padding: 4, marginBottom: 16 }}>
+          {[['hours','By Hours'],['days','By Days']].map(([m, l]) => (
+            <button key={m} onClick={() => setMode(m)} style={{
+              flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              background: mode === m ? 'var(--card-bg)' : 'transparent',
+              color: mode === m ? 'var(--text-1)' : 'var(--text-3)',
+              boxShadow: mode === m ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+              transition: 'all 0.15s',
+            }}>
               {l}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 mb-5">
-          <span className="text-xs" style={{ color: 'var(--text-3)' }}>Custom:</span>
-          <input type="number" min={1} max={3650} value={days}
-            onChange={e => setDays(Math.max(1, parseInt(e.target.value) || 1))}
-            className="input-field text-xs py-1 px-2" style={{ width: 80 }} />
-          <span className="text-xs" style={{ color: 'var(--text-3)' }}>days</span>
+
+        {/* Presets */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {(mode === 'hours' ? hourPresets : dayPresets).map(([v, l]) => (
+            <button key={v} onClick={() => setActive(v)} style={{
+              padding: '6px 14px', borderRadius: 8, border: '1px solid',
+              borderColor: activePreset === v ? '#dc2626' : 'var(--border)',
+              background: activePreset === v ? '#dc2626' : 'var(--bg-input)',
+              color: activePreset === v ? '#fff' : 'var(--text-2)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s',
+            }}>
+              {l}
+            </button>
+          ))}
         </div>
+
+        {/* Custom input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+          <span style={{ color: 'var(--text-3)', fontSize: 12 }}>Custom:</span>
+          <input type="number" min={mode === 'hours' ? 0.5 : 1} step={mode === 'hours' ? 0.5 : 1}
+            max={mode === 'hours' ? 8760 : 3650}
+            value={mode === 'hours' ? hours : days}
+            onChange={e => {
+              const n = parseFloat(e.target.value) || (mode === 'hours' ? 1 : 1)
+              mode === 'hours' ? setHours(Math.max(0.5, n)) : setDays(Math.max(1, Math.round(n)))
+            }}
+            style={{ ...CTRL_STYLE, width: 80, textAlign: 'center' }} />
+          <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{mode === 'hours' ? 'hours' : 'days'}</span>
+          <span style={{ color: 'var(--text-3)', fontSize: 11, marginLeft: 4 }}>
+            → older than <b style={{ color: 'var(--text-2)' }}>{label}</b>
+          </span>
+        </div>
+
+        {/* Result */}
         {result && (
-          <div className="rounded-lg px-3 py-2 mb-4 text-sm"
-            style={{ background: result.error ? 'rgba(220,38,38,0.1)' : 'rgba(22,163,74,0.1)', color: result.error ? '#dc2626' : '#16a34a' }}>
-            {result.error ? `Error: ${result.error}` : `✓ Deleted ${result.deleted?.toLocaleString()} rows`}
+          <div style={{
+            background: result.error ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
+            border: `1px solid ${result.error ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}`,
+            color: result.error ? '#dc2626' : '#16a34a',
+            borderRadius: 10, padding: '8px 12px', fontSize: 13, marginBottom: 16,
+          }}>
+            {result.error ? `✕ ${result.error}` : `✓ ${result.message || `Deleted ${result.deleted?.toLocaleString()} rows`}`}
           </div>
         )}
-        <div className="flex gap-2 justify-end">
-          <button onClick={onCancel} className="btn-secondary text-sm px-4 py-2">Cancel</button>
-          <button onClick={() => onConfirm(days)} disabled={purging}
-            className="text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2"
-            style={{ background: purging ? '#7f1d1d' : '#dc2626', color: '#fff', opacity: purging ? 0.7 : 1 }}>
-            {purging ? <><RefreshCw size={13} className="animate-spin" /> Purging…</> : <><Trash2 size={13} /> Delete older than {days}d</>}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{
+            ...CTRL_STYLE, padding: '8px 20px', cursor: 'pointer', fontWeight: 600,
+          }}>Cancel</button>
+          <button onClick={handleConfirm} disabled={purging} style={{
+            padding: '8px 20px', borderRadius: 10, border: 'none', cursor: purging ? 'not-allowed' : 'pointer',
+            background: purging ? '#991b1b' : '#dc2626', color: '#fff',
+            fontWeight: 700, fontSize: 13, opacity: purging ? 0.7 : 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {purging
+              ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Purging…</>
+              : <><Trash2 size={13} /> Delete &gt; {label}</>}
           </button>
         </div>
       </div>
@@ -393,8 +580,8 @@ function AuditLogTab() {
 
   // ── Basic filters ──────────────────────────────────────────────────────────
   const [limit,        setLimit]   = useState(100)
-  const [filterRole,   setRole]    = useState('')
-  const [filterMethod, setMeth]    = useState('')
+  const [filterRole,   setRole]    = useState([])
+  const [filterMethod, setMeth]    = useState([])
   const [filterStatus, setStat]    = useState('')
 
   // ── Advanced filters ───────────────────────────────────────────────────────
@@ -404,7 +591,7 @@ function AuditLogTab() {
   const [filterCountry,setCountry] = useState('')
   const [filterCity,   setCity]    = useState('')
   const [filterIsp,    setIsp]     = useState('')
-  const [filterDevice, setDevice]  = useState('')
+  const [filterDevice, setDevice]  = useState([])
   const [filterBrowser,setBrowser] = useState('')
   const [filterOs,     setOs]      = useState('')
   const [filterFrom,   setFrom]    = useState('')
@@ -418,19 +605,20 @@ function AuditLogTab() {
   const [purgeRes,   setPurgeRes]   = useState(null)
 
   // ── Active filter count badge ──────────────────────────────────────────────
-  const advFilters = [filterIp,filterPath,filterCountry,filterCity,filterIsp,
-                      filterDevice,filterBrowser,filterOs,filterFrom,filterTo,statusMin,statusMax]
-  const advCount   = advFilters.filter(Boolean).length
+  const advCount = [filterIp,filterPath,filterCountry,filterCity,filterIsp,
+                    filterBrowser,filterOs,filterFrom,filterTo,statusMin,statusMax].filter(Boolean).length
+                 + filterDevice.length
 
-  const basicFilters = [filterRole, filterMethod, filterStatus]
+  const basicFilters = [filterStatus]
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
       setData(await api.admin.auditLog({
         limit, offset,
-        role:       filterRole    || undefined,
-        method:     filterMethod  || undefined,
+        roles:      filterRole.length   ? filterRole.join(',')   : undefined,
+        methods:    filterMethod.length ? filterMethod.join(',') : undefined,
+        devices:    filterDevice.length ? filterDevice.join(',') : undefined,
         status:     filterStatus  || undefined,
         status_min: statusMin     || undefined,
         status_max: statusMax     || undefined,
@@ -439,7 +627,6 @@ function AuditLogTab() {
         country:    filterCountry || undefined,
         city:       filterCity    || undefined,
         isp:        filterIsp     || undefined,
-        device:     filterDevice  || undefined,
         browser:    filterBrowser || undefined,
         os:         filterOs      || undefined,
         from_ts:    filterFrom    || undefined,
@@ -453,8 +640,8 @@ function AuditLogTab() {
       filterFrom, filterTo])
 
   const resetFilters = () => {
-    setRole(''); setMeth(''); setStat(''); setIp(''); setPath('')
-    setCountry(''); setCity(''); setIsp(''); setDevice(''); setBrowser('')
+    setRole([]); setMeth([]); setStat(''); setIp(''); setPath('')
+    setCountry(''); setCity(''); setIsp(''); setDevice([]); setBrowser('')
     setOs(''); setFrom(''); setTo(''); setStMin(''); setStMax('')
     setOffset(0)
   }
@@ -466,17 +653,17 @@ function AuditLogTab() {
 
   useEffect(() => { load() }, [load])
 
-  const doPurge = async (days) => {
+  const doPurge = async ({ days, hours } = {}) => {
     setPurging(true); setPurgeRes(null)
     try {
-      const r = await api.admin.purgeAuditLog(days)
+      const r = await api.admin.purgeAuditLog({ days, hours })
       setPurgeRes(r)
       load()  // Refresh table
     } catch(e) { setPurgeRes({ error: e.message }) }
     finally { setPurging(false) }
   }
 
-  const hasAnyFilter = advCount > 0 || basicFilters.some(Boolean)
+  const hasAnyFilter = advCount > 0 || filterRole.length > 0 || filterMethod.length > 0 || basicFilters.some(Boolean)
 
   return (
     <div className="space-y-3">
@@ -490,12 +677,12 @@ function AuditLogTab() {
       )}
 
       {/* ── Basic filter bar ─────────────────────────────────────────────── */}
-      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
         <div className="flex flex-wrap gap-2 items-end">
-          <FSel label="Role" value={filterRole} onChange={setRole}
-            opts={[['','All roles'],['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
-          <FSel label="Method" value={filterMethod} onChange={setMeth}
-            opts={[['','All methods'],['GET','GET'],['POST','POST'],['PATCH','PATCH'],['DELETE','DELETE']]} />
+          <FMulti label="Role" selected={filterRole} onChange={setRole} width={140}
+            opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
+          <FMulti label="Method" selected={filterMethod} onChange={setMeth} width={130}
+            opts={[['GET','GET'],['POST','POST'],['PATCH','PATCH'],['DELETE','DELETE']]} />
           <FSel label="Status" value={filterStatus} onChange={setStat}
             opts={[['','All statuses'],['200','200 OK'],['201','201 Created'],['204','204 No Content'],
                    ['400','400 Bad Req'],['401','401 Unauth'],['403','403 Forbidden'],
@@ -547,8 +734,8 @@ function AuditLogTab() {
             <FPill label="Country"    value={filterCountry} onChange={setCountry} placeholder="US · India…" />
             <FPill label="City"       value={filterCity}    onChange={setCity}    placeholder="Mumbai…" />
             <FPill label="ISP / Org"  value={filterIsp}     onChange={setIsp}     placeholder="Airtel…" />
-            <FSel  label="Device"     value={filterDevice}  onChange={setDevice}
-              opts={[['','Any device'],['desktop','Desktop'],['mobile','Mobile'],['tablet','Tablet']]} />
+            <FMulti label="Device" selected={filterDevice} onChange={setDevice} width={140}
+              opts={[['desktop','🖥 Desktop'],['mobile','📱 Mobile'],['tablet','⬛ Tablet']]} />
             <FPill label="Browser"    value={filterBrowser} onChange={setBrowser} placeholder="Chrome…" />
             <FPill label="OS"         value={filterOs}      onChange={setOs}      placeholder="Windows…" />
             <FPill label="Status ≥"   value={statusMin}     onChange={setStMin}   type="number" placeholder="400" />
@@ -784,31 +971,41 @@ function SessionStatusChip({ status }) {
 }
 
 function SessionsTab() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [offset, setOffset]   = useState(0)
-  const [activeOnly, setAO]   = useState(true)
-  const limit = 50
+  const [data, setData]            = useState(null)
+  const [loading, setLoading]      = useState(true)
+  const [error, setError]          = useState(null)
+  const [offset, setOffset]        = useState(0)
+  const [activeOnly, setAO]        = useState(true)
+  const [filterRole,   setSRole]   = useState([])
+  const [filterStatus, setSStatus] = useState([])
+  const [filterCountry,setSCountry]= useState('')
+  const [filterDevice, setSDevice] = useState([])
+  const [limit, setLimit]          = useState(50)
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      // api.js sessions() serialises booleans with String(v) → "true"/"false"
-      setData(await api.admin.sessions({ limit, offset, active_only: activeOnly }))
+      setData(await api.admin.sessions({
+        limit, offset,
+        active_only:    activeOnly,
+        role:           filterRole[0]    || undefined,
+        session_status: filterStatus[0]  || undefined,
+        country:        filterCountry    || undefined,
+        device:         filterDevice[0]  || undefined,
+      }))
     }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, activeOnly])
+  }, [offset, activeOnly, limit, filterRole, filterStatus, filterCountry, filterDevice])
 
-  useEffect(() => { setOffset(0) }, [activeOnly])
+  useEffect(() => { setOffset(0) }, [activeOnly, filterRole, filterStatus, filterCountry, filterDevice, limit])
   useEffect(() => { load() }, [load])
 
   return (
     <div className="space-y-3">
       {/* Legend */}
       <div className="rounded-xl border p-3 text-[11px] space-y-1"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+        style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
         <p className="font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Session status explained</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
@@ -825,28 +1022,40 @@ function SessionsTab() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <button
-          onClick={() => setAO(v => !v)}
-          className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors select-none"
-          style={{
-            background: activeOnly ? 'rgba(22,163,74,0.08)' : 'var(--bg-input)',
-            borderColor: activeOnly ? 'rgba(22,163,74,0.3)' : 'var(--border)',
-            color: activeOnly ? '#16a34a' : 'var(--text-2)',
-          }}>
-          {activeOnly
-            ? <><CheckCircle2 size={12} /> Active sessions only</>
-            : <><XCircle size={12} /> Show all sessions</>}
-        </button>
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
-        {data && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
+      <FilterBar
+        count={filterRole.length + filterStatus.length + filterDevice.length + (filterCountry ? 1 : 0)}
+        onReset={() => { setSRole([]); setSStatus([]); setSCountry(''); setSDevice([]) }}
+        rightSlot={<>
+          <button onClick={() => setAO(v => !v)}
+            className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors select-none"
+            style={{
+              background: activeOnly ? 'rgba(22,163,74,0.08)' : 'var(--bg-input)',
+              borderColor: activeOnly ? 'rgba(22,163,74,0.3)' : 'var(--border)',
+              color: activeOnly ? '#16a34a' : 'var(--text-2)',
+            }}>
+            {activeOnly
+              ? <><CheckCircle2 size={12} /> Active only</>
+              : <><XCircle size={12} /> All sessions</>}
+          </button>
+          <FSel label="Limit" value={String(limit)} onChange={v => setLimit(Number(v))}
+            opts={[['25','25'],['50','50'],['100','100']]} />
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </>}>
+        <FMulti label="Role" selected={filterRole} onChange={setSRole} width={140}
+          opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
+        <FMulti label="Status" selected={filterStatus} onChange={setSStatus} width={150}
+          opts={[['online','🟢 Online'],['idle','🟡 Idle'],['logged_out','⚫ Logged out'],['expired','🔴 Expired']]} />
+        <FPill label="Country" value={filterCountry} onChange={setSCountry} placeholder="US · India…" width={130} />
+        <FMulti label="Device" selected={filterDevice} onChange={setSDevice} width={140}
+          opts={[['desktop','🖥 Desktop'],['mobile','📱 Mobile'],['tablet','⬛ Tablet']]} />
+      </FilterBar>
+      {data && (
+        <div className="text-xs" style={{ color: 'var(--text-3)' }}>
+          {data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}
+        </div>
+      )}
 
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
@@ -911,22 +1120,29 @@ function SessionsTab() {
 // ── Tab: AI Chats ─────────────────────────────────────────────────────────────
 
 function ChatsTab() {
-  const [list, setList]         = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
-  const [offset, setOffset]     = useState(0)
-  const [selected, setSelected] = useState(null)
-  const [msgs, setMsgs]         = useState(null)
-  const [msgsLoading, setML]    = useState(false)
-  const limit = 30
+  const [list, setList]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
+  const [offset, setOffset]       = useState(0)
+  const [selected, setSelected]   = useState(null)
+  const [msgs, setMsgs]           = useState(null)
+  const [msgsLoading, setML]      = useState(false)
+  const [filterRole,   setCRole]  = useState([])
+  const [filterCountry,setCCountry]= useState('')
+  const [limit, setCLimit]        = useState(30)
 
   const loadList = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setList(await api.admin.chatSessions({ limit, offset })) }
+    try { setList(await api.admin.chatSessions({
+      limit, offset,
+      role:    filterRole[0]    || undefined,
+      country: filterCountry    || undefined,
+    })) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset])
+  }, [offset, limit, filterRole, filterCountry])
 
+  useEffect(() => { setOffset(0) }, [filterRole, filterCountry, limit])
   useEffect(() => { loadList() }, [loadList])
 
   const openSession = useCallback(async (id) => {
@@ -970,12 +1186,21 @@ function ChatsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 items-center">
-        <button onClick={loadList} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
-        {list && <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{list.total} sessions</span>}
-      </div>
+      <FilterBar
+        count={filterRole.length + (filterCountry ? 1 : 0)}
+        onReset={() => { setCRole([]); setCCountry('') }}
+        rightSlot={<>
+          <FSel label="Limit" value={String(limit)} onChange={v => setCLimit(Number(v))}
+            opts={[['15','15'],['30','30'],['50','50'],['100','100']]} />
+          <button onClick={loadList} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </>}>
+        <FMulti label="Role" selected={filterRole} onChange={setCRole} width={140}
+          opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
+        <FPill label="Country" value={filterCountry} onChange={setCCountry} placeholder="US · India…" width={130} />
+      </FilterBar>
+      {list && <div className="text-xs" style={{ color: 'var(--text-3)' }}>{list.total} sessions</div>}
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={loadList} /> : (
         <>
           {(list?.rows || []).length === 0
@@ -1033,20 +1258,25 @@ function SyncLogTab() {
   const [error, setError]         = useState(null)
   const [offset, setOffset]       = useState(0)
   const [filterSource, setFs]     = useState('')
+  const [filterError,  setFErr]   = useState('')   // '' | 'errors_only' | 'success_only'
+  const [limit, setSLimit]        = useState(50)
   const [triggering, setTrig]     = useState(false)
   const [trigMsg, setTrigMsg]     = useState(null)
   const [diagnosing, setDiag]     = useState(false)
   const [diagResult, setDiagRes]  = useState(null)
-  const limit = 50
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.syncLog({ limit, offset, source: filterSource || undefined })) }
+    try { setData(await api.admin.syncLog({
+      limit, offset,
+      source:    filterSource || undefined,
+      has_error: filterError === 'errors_only' ? true : filterError === 'success_only' ? false : undefined,
+    })) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, filterSource])
+  }, [offset, limit, filterSource, filterError])
 
-  useEffect(() => { setOffset(0) }, [filterSource])
+  useEffect(() => { setOffset(0) }, [filterSource, filterError, limit])
   useEffect(() => { load() }, [load])
 
   const triggerSync = useCallback(async () => {
@@ -1078,15 +1308,24 @@ function SyncLogTab() {
 
   return (
     <div className="space-y-3">
+      <FilterBar
+        count={(filterSource ? 1 : 0) + (filterError ? 1 : 0)}
+        onReset={() => { setFs(''); setFErr('') }}
+        rightSlot={<>
+          <FSel label="Limit" value={String(limit)} onChange={v => setSLimit(Number(v))}
+            opts={[['25','25'],['50','50'],['100','100'],['200','200']]} />
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </>}>
+        <FSel label="Source" value={filterSource} onChange={setFs} width={140}
+          opts={[['','All sources'],['projects','projects'],['invoices','invoices'],['web_invoices','web_invoices']]} />
+        <FSel label="Result" value={filterError} onChange={setFErr} width={140}
+          opts={[['','All results'],['errors_only','Errors only'],['success_only','Success only']]} />
+      </FilterBar>
+      {data && <div className="text-xs" style={{ color: 'var(--text-3)' }}>{data.total} runs</div>}
+
       <div className="flex flex-wrap gap-2 items-center">
-        <select value={filterSource} onChange={e => setFs(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 140 }}>
-          <option value="">All sources</option>
-          {['projects','invoices','web_invoices'].map(s => <option key={s}>{s}</option>)}
-        </select>
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
         <button onClick={triggerSync} disabled={triggering}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
@@ -1107,11 +1346,6 @@ function SyncLogTab() {
           }}>
           🔍 {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
         </button>
-        {data && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total} runs
-          </span>
-        )}
       </div>
 
       {/* Diagnose results panel */}
@@ -1219,33 +1453,46 @@ function SyncLogTab() {
 // ── Tab: Projects mirror ──────────────────────────────────────────────────────
 
 function ProjectsMirrorTab() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [offset, setOffset]   = useState(0)
-  const [q, setQ]             = useState('')
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [offset, setOffset]     = useState(0)
+  const [q, setQ]               = useState('')
+  const [filterStatus, setPStatus]= useState([])
+  const [filterName, setPName]  = useState('')
   const limit = 50
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.mirrorProjects({ limit, offset, client: q || undefined })) }
+    try { setData(await api.admin.mirrorProjects({
+      limit, offset,
+      client:       q            || undefined,
+      project_name: filterName   || undefined,
+      status:       filterStatus[0] || undefined,
+    })) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, q])
+  }, [offset, q, filterStatus, filterName])
 
-  useEffect(() => { setOffset(0) }, [q])
+  useEffect(() => { setOffset(0) }, [q, filterStatus, filterName])
   useEffect(() => { load() }, [load])
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 items-center">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter by client…"
-          className="input-field text-xs py-1 px-2" style={{ width: 180 }} />
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
-        {data && <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{data.total.toLocaleString()} rows</span>}
-      </div>
+      <FilterBar
+        count={(q ? 1 : 0) + filterStatus.length + (filterName ? 1 : 0)}
+        onReset={() => { setQ(''); setPStatus([]); setPName('') }}
+        rightSlot={
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        }>
+        <FPill label="Client" value={q} onChange={setQ} placeholder="Acme…" width={150} />
+        <FPill label="Project" value={filterName} onChange={setPName} placeholder="Project name…" width={160} />
+        <FMulti label="Status" selected={filterStatus} onChange={setPStatus} width={140}
+          opts={[['Active','Active'],['Completed','Completed'],['On Hold','On Hold'],['Cancelled','Cancelled']]} />
+      </FilterBar>
+      {data && <div className="text-xs" style={{ color: 'var(--text-3)' }}>{data.total.toLocaleString()} rows</div>}
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
@@ -1296,17 +1543,28 @@ function ProjectsMirrorTab() {
 // ── Tab: All Invoices (main + web) ────────────────────────────────────────────
 
 function InvoicesTab() {
-  const [source, setSource]   = useState('all')   // 'all' | 'main' | 'web'
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
-  const [offset, setOffset]   = useState(0)
-  const [statusF, setStatF]   = useState('')
+  const [source, setSource]       = useState('all')   // 'all' | 'main' | 'web'
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
+  const [offset, setOffset]       = useState(0)
+  const [statusF, setStatF]       = useState('')
+  const [filterProject, setFProject] = useState('')
+  const [filterNumber,  setFNumber]  = useState('')
+  const [filterFrom,    setFFrom]    = useState('')
+  const [filterTo,      setFTo]      = useState('')
   const limit = 50
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    const p = { limit, offset, payment_status: statusF || undefined }
+    const p = {
+      limit, offset,
+      payment_status: statusF        || undefined,
+      project:        filterProject  || undefined,
+      invoice_number: filterNumber   || undefined,
+      from_ts:        filterFrom     || undefined,
+      to_ts:          filterTo       || undefined,
+    }
     try {
       if (source === 'main') {
         const d = await api.admin.mirrorInvoices(p)
@@ -1335,15 +1593,17 @@ function InvoicesTab() {
       }
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [source, offset, statusF])
+  }, [source, offset, statusF, filterProject, filterNumber, filterFrom, filterTo])
 
-  useEffect(() => { setOffset(0) }, [source, statusF])
+  useEffect(() => { setOffset(0) }, [source, statusF, filterProject, filterNumber, filterFrom, filterTo])
   useEffect(() => { load() }, [load])
+
+  const advCount = [statusF, filterProject, filterNumber, filterFrom, filterTo].filter(Boolean).length
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 items-center">
-        {/* Source selector */}
+      {/* Source selector */}
+      <div className="flex gap-2 items-center flex-wrap">
         {['all','main','web'].map(s => (
           <button key={s} onClick={() => setSource(s)}
             className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
@@ -1355,20 +1615,28 @@ function InvoicesTab() {
             {s === 'all' ? 'All invoices' : s === 'main' ? 'Main (Teable)' : 'Web invoices'}
           </button>
         ))}
-        <select value={statusF} onChange={e => setStatF(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 140 }}>
-          <option value="">All statuses</option>
-          {['Paid','Pending','Partial','Overdue'].map(s => <option key={s}>{s}</option>)}
-        </select>
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
-        {data && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total.toLocaleString()} invoices
-          </span>
-        )}
       </div>
+
+      <FilterBar
+        count={advCount}
+        onReset={() => { setStatF(''); setFProject(''); setFNumber(''); setFFrom(''); setFTo('') }}
+        rightSlot={
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        }>
+        <FSel label="Status" value={statusF} onChange={setStatF} width={140}
+          opts={[['','All statuses'],['Paid','Paid'],['Pending','Pending'],['Partial','Partial'],['Overdue','Overdue']]} />
+        <FPill label="Invoice #" value={filterNumber} onChange={setFNumber} placeholder="INV-…" width={120} />
+        <FPill label="Project" value={filterProject} onChange={setFProject} placeholder="Project name…" width={150} />
+        <FPill label="From" value={filterFrom} onChange={setFFrom} type="date" width={130} />
+        <FPill label="To" value={filterTo} onChange={setFTo} type="date" width={130} />
+      </FilterBar>
+      {data && (
+        <div className="text-xs" style={{ color: 'var(--text-3)' }}>
+          {data.total.toLocaleString()} invoices
+        </div>
+      )}
 
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
@@ -1489,9 +1757,9 @@ function HistoryTab() {
                     style={{ borderColor: 'var(--border)' }}>
                     <button
                       className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-                      style={{ background: 'var(--bg-card)' }}
+                      style={{ background: 'var(--card-bg)' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'var(--card-bg)'}
                       onClick={() => setExp(expanded === row.id ? null : row.id)}>
                       <Badge color={row.change_type === 'create' ? 'green' : row.change_type === 'delete' ? 'red' : 'amber'}>
                         {row.change_type}
@@ -1555,7 +1823,7 @@ export default function AdminDashboard({ embedded = false }) {
   const tabBar = (
     <div className={`flex overflow-x-auto gap-0.5 px-2 py-2 ${embedded ? 'rounded-xl border mb-4' : 'sticky top-[49px] z-10'}`}
       style={embedded
-        ? { background: 'var(--bg-card)', borderColor: 'var(--border)' }
+        ? { background: 'var(--card-bg)', borderColor: 'var(--border)' }
         : { background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
       {TABS.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => setTab(id)}

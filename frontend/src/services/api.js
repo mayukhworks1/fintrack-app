@@ -268,7 +268,7 @@ export const api = {
   admin: {
     stats:              ()       => request('/api/admin/stats'),
     auditLog:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/audit-log?${q}`) },
-    purgeAuditLog: (days)       => request(`/api/admin/audit-log/purge?older_than_days=${days}`, { method: 'DELETE' }),
+    purgeAuditLog: ({ days, hours } = {}) => { const q = new URLSearchParams(); if (hours != null) q.set('older_than_hours', hours); else if (days != null) q.set('older_than_days', days); return request(`/api/admin/audit-log/purge?${q}`, { method: 'DELETE' }) },
     // sessions: booleans (active_only) are explicitly stringified so false→"false" reaches FastAPI
     sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => { if (v != null) q.set(k, String(v)) }); return request(`/api/admin/sessions?${q}`) },
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },

@@ -256,6 +256,9 @@ async def admin_audit_log(
     offset:     int           = Query(0,   ge=0),
     role:       Optional[str] = Query(None),
     method:     Optional[str] = Query(None),
+    roles:      Optional[str] = Query(None, description="Comma-separated roles: editor,admin"),
+    methods:    Optional[str] = Query(None, description="Comma-separated methods: GET,POST"),
+    devices:    Optional[str] = Query(None, description="Comma-separated devices: desktop,mobile"),
     status:     Optional[int] = Query(None),
     status_min: Optional[int] = Query(None, description="Min HTTP status (e.g. 400)"),
     status_max: Optional[int] = Query(None, description="Max HTTP status (e.g. 499)"),
@@ -290,8 +293,16 @@ async def admin_audit_log(
         params.append(value)
         idx += 1
 
-    if role:        _add("role = ?",                       role)
-    if method:      _add("method = ?",                     method.upper())
+    if roles:
+        rl = [r.strip() for r in roles.split(',') if r.strip()]
+        if rl:
+            phs = ','.join(f'${idx+i}' for i in range(len(rl))); params.extend(rl); where.append(f"role IN ({phs})"); idx += len(rl)
+    elif role:      _add("role = ?", role)
+    if methods:
+        ml = [m.strip().upper() for m in methods.split(',') if m.strip()]
+        if ml:
+            phs = ','.join(f'${idx+i}' for i in range(len(ml))); params.extend(ml); where.append(f"method IN ({phs})"); idx += len(ml)
+    elif method:    _add("method = ?", method.upper())
     if status:      _add("status = ?",                     status)
     if status_min:  _add("status >= ?",                    status_min)
     if status_max:  _add("status <= ?",                    status_max)
@@ -307,7 +318,11 @@ async def admin_audit_log(
         where.append(f"(isp ILIKE ${idx} OR org ILIKE ${idx+1})")
         params += [f"%{isp}%", f"%{isp}%"]
         idx += 2
-    if device:      _add("device = ?",                     device.lower())
+    if devices:
+        dl = [d.strip().lower() for d in devices.split(',') if d.strip()]
+        if dl:
+            phs = ','.join(f'${idx+i}' for i in range(len(dl))); params.extend(dl); where.append(f"device IN ({phs})"); idx += len(dl)
+    elif device:    _add("device = ?", device.lower())
     if browser:     _add("browser ILIKE ?",                f"%{browser}%")
     if os_name:     _add("os ILIKE ?",                     f"%{os_name}%")
     if from_ts:
@@ -349,20 +364,33 @@ async def admin_audit_log(
 
 @router.delete("/audit-log/purge")
 async def admin_purge_audit_log(
-    older_than_days: int = Query(30, ge=1, le=3650, description="Delete rows older than N days"),
+    older_than_days:  Optional[int]   = Query(None, ge=1,  le=3650, description="Delete rows older than N days"),
+    older_than_hours: Optional[float] = Query(None, ge=0.5, le=8760, description="Delete rows older than N hours (overrides days)"),
     _: str = Depends(require_admin),
 ):
     """
-    Bulk-delete audit log rows older than `older_than_days` days.
-    Safeguard: always keeps at least the 200 most-recent rows regardless of age.
+    Bulk-delete audit log rows older than the specified age.
+    Use older_than_hours for sub-day precision (e.g. 1, 6, 12, 24 hours).
+    Use older_than_days for coarser ranges (e.g. 7, 30, 90 days).
+    Safeguard: always keeps at least the 200 most-recent rows regardless of cutoff.
     Returns count of deleted rows.
     """
     pool = get_pool()
     if not pool:
         return _no_db()
 
+    # Resolve threshold: hours take priority over days; default = 30 days
+    if older_than_hours is not None:
+        hours = float(older_than_hours)
+        interval_expr = f"({hours} * INTERVAL '1 hour')"
+        label = f"{hours:g} hour{'s' if hours != 1 else ''}"
+    else:
+        days = int(older_than_days or 30)
+        interval_expr = f"({days} * INTERVAL '1 day')"
+        label = f"{days} day{'s' if days != 1 else ''}"
+
     count = await pool.fetchval(
-        """
+        f"""
         WITH ranked AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY ts DESC) AS rn FROM audit_log
         ),
@@ -371,21 +399,20 @@ async def admin_purge_audit_log(
             WHERE rn > 200
               AND id IN (
                   SELECT id FROM audit_log
-                  WHERE ts < NOW() - ($1 * INTERVAL '1 day')
+                  WHERE ts < NOW() - {interval_expr}
               )
         ),
         deleted AS (
             DELETE FROM audit_log WHERE id IN (SELECT id FROM to_delete) RETURNING id
         )
         SELECT COUNT(*) FROM deleted
-        """,
-        older_than_days,
+        """
     )
 
     return {
         "deleted": int(count or 0),
-        "older_than_days": older_than_days,
-        "message": f"Deleted {count or 0} audit log entries older than {older_than_days} days (kept ≥200 most recent rows)",
+        "label": label,
+        "message": f"Deleted {count or 0} audit log entries older than {label} (kept ≥200 most recent rows)",
     }
 
 
@@ -393,11 +420,14 @@ async def admin_purge_audit_log(
 
 @router.get("/sessions")
 async def admin_sessions(
-    active_only: bool         = Query(True),
-    role:        Optional[str] = Query(None),
-    limit:       int           = Query(100, ge=1, le=500),
-    offset:      int           = Query(0, ge=0),
-    _:           str           = Depends(require_admin),
+    active_only:    bool           = Query(True),
+    role:           Optional[str]  = Query(None),
+    session_status: Optional[str]  = Query(None, description="online | idle | logged_out | expired"),
+    country:        Optional[str]  = Query(None, description="Country name or code substring"),
+    device:         Optional[str]  = Query(None, description="desktop | mobile | tablet"),
+    limit:          int            = Query(100, ge=1, le=500),
+    offset:         int            = Query(0, ge=0),
+    _:              str            = Depends(require_admin),
 ):
     """
     Login sessions.  active_only=true (default) filters to non-expired sessions.
@@ -415,16 +445,25 @@ async def admin_sessions(
         where.append("is_active = true AND expires_at > NOW()")
     if role:
         where.append(f"role = ${idx}"); params.append(role); idx += 1
+    if country:
+        where.append(f"(country ILIKE ${idx} OR country_code ILIKE ${idx+1})")
+        params += [f"%{country}%", country]; idx += 2
+    if device:
+        where.append(f"device = ${idx}"); params.append(device.lower()); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
-    total = await pool.fetchval(f"SELECT COUNT(*) FROM login_sessions {where_sql}", *params)
-    rows  = await pool.fetch(
-        f"""
+    # session_status is a computed CASE column — filter via subquery when requested
+    status_filter = ""
+    if session_status:
+        status_filter = f"WHERE session_status = ${idx}"
+        params.append(session_status)
+        idx += 1
+
+    base_query = f"""
         SELECT id, token_hint, role, created_at, last_seen_at, expires_at,
                ip, os, browser, device, country, country_code, city,
                is_active, request_count,
-               -- Honest 4-state status
                CASE
                  WHEN NOT is_active OR expires_at <= NOW()
                    THEN 'logged_out'
@@ -435,11 +474,21 @@ async def admin_sessions(
                  ELSE 'expired'
                END AS session_status
         FROM login_sessions {where_sql}
-        ORDER BY last_seen_at DESC
-        LIMIT ${idx} OFFSET ${idx+1}
-        """,
-        *params, limit, offset,
-    )
+    """
+
+    if status_filter:
+        count_sql = f"SELECT COUNT(*) FROM ({base_query}) sub {status_filter}"
+        rows_sql  = f"""
+            SELECT * FROM ({base_query}) sub {status_filter}
+            ORDER BY last_seen_at DESC
+            LIMIT ${idx} OFFSET ${idx+1}
+        """
+    else:
+        count_sql = f"SELECT COUNT(*) FROM login_sessions {where_sql}"
+        rows_sql  = f"{base_query} ORDER BY last_seen_at DESC LIMIT ${idx} OFFSET ${idx+1}"
+
+    total = await pool.fetchval(count_sql, *params)
+    rows  = await pool.fetch(rows_sql, *params, limit, offset)
 
     return {
         "total":  total,
@@ -453,25 +502,38 @@ async def admin_sessions(
 
 @router.get("/chat-sessions")
 async def admin_chat_sessions(
-    limit:  int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    _:      str = Depends(require_admin),
+    limit:   int           = Query(50, ge=1, le=200),
+    offset:  int           = Query(0, ge=0),
+    role:    Optional[str] = Query(None),
+    country: Optional[str] = Query(None, description="Country name or code substring"),
+    _:       str           = Depends(require_admin),
 ):
     """List all AI chat sessions, newest first."""
     pool = get_pool()
     if not pool:
         return _no_db()
 
-    total = await pool.fetchval("SELECT COUNT(*) FROM chat_sessions")
+    where: list[str] = []
+    params: list     = []
+    idx = 1
+
+    if role:
+        where.append(f"role = ${idx}"); params.append(role); idx += 1
+    if country:
+        where.append(f"country ILIKE ${idx}"); params.append(f"%{country}%"); idx += 1
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM chat_sessions {where_sql}", *params)
     rows  = await pool.fetch(
-        """
+        f"""
         SELECT id, started_at, last_at, role, ip, country, city,
                os, browser, msg_count, title
-        FROM chat_sessions
+        FROM chat_sessions {where_sql}
         ORDER BY started_at DESC
-        LIMIT $1 OFFSET $2
+        LIMIT ${idx} OFFSET ${idx+1}
         """,
-        limit, offset,
+        *params, limit, offset,
     )
     return {
         "total":  total,
@@ -514,19 +576,29 @@ async def admin_chat_messages(
 
 @router.get("/sync-log")
 async def admin_sync_log(
-    limit:  int           = Query(50, ge=1, le=200),
-    offset: int           = Query(0, ge=0),
-    source: Optional[str] = Query(None),
-    _:      str           = Depends(require_admin),
+    limit:     int            = Query(50, ge=1, le=200),
+    offset:    int            = Query(0, ge=0),
+    source:    Optional[str]  = Query(None),
+    has_error: Optional[bool] = Query(None, description="true=errors only, false=successes only"),
+    _:         str            = Depends(require_admin),
 ):
     """Teable → PostgreSQL sync history."""
     pool = get_pool()
     if not pool:
         return _no_db()
 
-    where  = f"WHERE source = $1" if source else ""
-    params = [source] if source else []
-    idx    = len(params) + 1
+    where_parts: list[str] = []
+    params: list = []
+    idx = 1
+
+    if source:
+        where_parts.append(f"source = ${idx}"); params.append(source); idx += 1
+    if has_error is True:
+        where_parts.append("error IS NOT NULL")
+    elif has_error is False:
+        where_parts.append("error IS NULL")
+
+    where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
     total = await pool.fetchval(f"SELECT COUNT(*) FROM sync_log {where}", *params)
     rows  = await pool.fetch(
@@ -550,11 +622,12 @@ async def admin_sync_log(
 
 @router.get("/mirror/projects")
 async def admin_mirror_projects(
-    limit:  int           = Query(100, ge=1, le=500),
-    offset: int           = Query(0, ge=0),
-    status: Optional[str] = Query(None),
-    client: Optional[str] = Query(None),
-    _:      str           = Depends(require_admin),
+    limit:        int           = Query(100, ge=1, le=500),
+    offset:       int           = Query(0, ge=0),
+    status:       Optional[str] = Query(None),
+    client:       Optional[str] = Query(None),
+    project_name: Optional[str] = Query(None, description="Project name substring"),
+    _:            str           = Depends(require_admin),
 ):
     """Projects mirror — typed columns (fields JSONB excluded by default)."""
     pool = get_pool()
@@ -569,6 +642,8 @@ async def admin_mirror_projects(
         where.append(f"status ILIKE ${idx}"); params.append(f"%{status}%"); idx += 1
     if client:
         where.append(f"client ILIKE ${idx}"); params.append(f"%{client}%"); idx += 1
+    if project_name:
+        where.append(f"project_name ILIKE ${idx}"); params.append(f"%{project_name}%"); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -605,6 +680,9 @@ async def admin_mirror_invoices(
     offset:         int           = Query(0, ge=0),
     payment_status: Optional[str] = Query(None),
     project:        Optional[str] = Query(None),
+    invoice_number: Optional[str] = Query(None, description="Invoice number substring"),
+    from_ts:        Optional[str] = Query(None, description="Raised date range start (YYYY-MM-DD)"),
+    to_ts:          Optional[str] = Query(None, description="Raised date range end (YYYY-MM-DD)"),
     _:              str           = Depends(require_admin),
 ):
     """Invoices mirror — typed columns."""
@@ -620,6 +698,12 @@ async def admin_mirror_invoices(
         where.append(f"payment_status ILIKE ${idx}"); params.append(f"%{payment_status}%"); idx += 1
     if project:
         where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
+    if invoice_number:
+        where.append(f"invoice_number ILIKE ${idx}"); params.append(f"%{invoice_number}%"); idx += 1
+    if from_ts:
+        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+    if to_ts:
+        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -656,6 +740,9 @@ async def admin_mirror_web_invoices(
     offset:         int           = Query(0, ge=0),
     payment_status: Optional[str] = Query(None),
     project:        Optional[str] = Query(None),
+    invoice_number: Optional[str] = Query(None, description="Invoice number substring"),
+    from_ts:        Optional[str] = Query(None, description="Raised date range start (YYYY-MM-DD)"),
+    to_ts:          Optional[str] = Query(None, description="Raised date range end (YYYY-MM-DD)"),
     _:              str           = Depends(require_admin),
 ):
     """Web invoices mirror — typed columns from web invoice Teable table."""
@@ -671,6 +758,12 @@ async def admin_mirror_web_invoices(
         where.append(f"payment_status ILIKE ${idx}"); params.append(f"%{payment_status}%"); idx += 1
     if project:
         where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
+    if invoice_number:
+        where.append(f"invoice_number ILIKE ${idx}"); params.append(f"%{invoice_number}%"); idx += 1
+    if from_ts:
+        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+    if to_ts:
+        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
