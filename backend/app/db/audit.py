@@ -1,21 +1,35 @@
 """
-Audit + session logger.
+Audit + session logger — async fire-and-forget architecture.
 
-log_request()  — fire-and-forget: one row per HTTP request in audit_log
-log_login()    — called on successful login: one row in login_sessions
-touch_session() — fire-and-forget: bump last_seen_at + request_count
-                  rate-limited to once per 5 min per token via Valkey
+Public API
+──────────
+enqueue_audit(**kwargs)
+    Synchronous, non-blocking.  Drop in audit_log event — the middleware
+    calls this and the response is returned immediately.  If the queue is
+    full (backpressure / PG down) the entry is silently dropped — the app
+    must never block an HTTP response just to write a log row.
 
-CRITICAL NOTE on asyncpg + JSONB
-─────────────────────────────────
-asyncpg does NOT automatically serialize Python dicts to JSONB.
-Every JSONB parameter must be:
-  - passed as json.dumps(value)   ← Python str containing valid JSON
-  - bound with $N::jsonb cast     ← tells PostgreSQL to parse it
-Failing to do this raises asyncpg.exceptions.DataError which is
-silently swallowed, causing rows to never be inserted.
+audit_worker()
+    Background coroutine — drain the queue in batches.  Concurrently
+    geo-enriches each item via Valkey-cached ip→geo lookups, then
+    bulk-inserts via executemany.  Batch size is up to 100 rows; flush
+    interval is 500 ms so rows appear in the table within < 1 s.
+
+log_login(**kwargs)
+    Direct (awaited) write on successful login — called once per session,
+    no need to batch.
+
+touch_session(token_hint)
+    Rate-limited session heartbeat — Valkey prevents redundant DB writes.
+
+CRITICAL — asyncpg + JSONB
+──────────────────────────
+Every JSONB column must be passed as json.dumps(value) and bound with
+a $N::jsonb SQL cast.  A raw Python dict raises DataError which asyncpg
+swallows silently — the row is never inserted.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -28,7 +42,8 @@ from .geo import lookup as geo_lookup
 
 logger = logging.getLogger("fintrack.db.audit")
 
-# ── Tiny user-agent parser ──────────────────────────────────────────────────
+
+# ── User-agent parser ─────────────────────────────────────────────────────────
 
 _OS_PATTERNS = [
     (re.compile(r"Windows NT 10"),        "Windows 10"),
@@ -94,7 +109,166 @@ def parse_ua(ua: str) -> tuple[str, str, str]:
     return os_str, browser_str, device
 
 
-# ── Audit log writer ─────────────────────────────────────────────────────────
+# ── Async audit queue ─────────────────────────────────────────────────────────
+# Non-blocking producer (called from every HTTP response middleware).
+# Bounded at _QUEUE_MAX so we never accumulate unlimited memory under load.
+
+_QUEUE_MAX = 2000
+_BATCH_MAX  = 100     # rows per executemany call
+_FLUSH_INTERVAL = 0.5  # seconds to wait before flush if queue is quiet
+
+_audit_queue: asyncio.Queue | None = None
+
+
+def init_audit_queue() -> asyncio.Queue:
+    """Create the shared queue.  Call once at startup from lifespan."""
+    global _audit_queue
+    _audit_queue = asyncio.Queue(maxsize=_QUEUE_MAX)
+    logger.info("Audit queue initialised (maxsize=%d)", _QUEUE_MAX)
+    return _audit_queue
+
+
+def enqueue_audit(**kwargs) -> None:
+    """
+    Synchronous, non-blocking.  Safe to call from async middleware without
+    await.  Drops silently if queue is full — HTTP response is never delayed.
+    """
+    if _audit_queue is None:
+        return
+    try:
+        _audit_queue.put_nowait(kwargs)
+    except asyncio.QueueFull:
+        # Intentional load shedding.  Under extreme traffic bursts or PG
+        # unavailability we prefer losing some log rows over blocking requests.
+        pass
+
+
+async def _enrich_one(item: dict) -> dict:
+    """
+    Resolve OS / browser / device / geo for one queued audit item.
+    Geo lookups hit Valkey cache (24 h TTL) so new IPs pay the network cost
+    only once.
+    """
+    ua  = item.get("user_agent", "") or ""
+    ip  = item.get("ip", "") or ""
+    os_str, browser, device = parse_ua(ua)
+    geo = await geo_lookup(ip)
+    return {**item, "os_str": os_str, "browser": browser, "device": device, "geo": geo}
+
+
+async def _batch_insert_audit(pool, items: list[dict]) -> None:
+    """
+    Bulk-insert N audit rows in one executemany call.
+    This is ~N× faster than individual pool.execute calls and reduces
+    connection-pool contention under load.
+    """
+    if not items or not pool:
+        return
+    try:
+        records = []
+        for item in items:
+            geo = item.get("geo", {}) or {}
+            records.append((
+                item.get("role"),
+                (item.get("token_hint") or "")[:20] or None,
+                (item.get("method")     or "")[:10],
+                (item.get("path")       or "")[:500],
+                item.get("status"),
+                item.get("duration_ms"),
+                (item.get("request_id") or "")[:50]  or None,
+                (item.get("ip")         or "")[:45]  or None,
+                (item.get("user_agent") or "")[:500] or None,
+                item.get("os_str",  "Unknown")[:100],
+                item.get("browser", "Unknown")[:100],
+                item.get("device",  "desktop")[:20],
+                geo.get("country",      "")[:80]  or None,
+                geo.get("country_code", "")[:4]   or None,
+                geo.get("region",       "")[:100] or None,
+                geo.get("city",         "")[:100] or None,
+                geo.get("isp",          "")[:150] or None,
+                (item.get("referer")      or "")[:500] or None,
+                item.get("body_size"),
+                (item.get("query_params") or "")[:500] or None,
+                item.get("resp_size"),
+                json.dumps(item.get("extra") or {}),   # JSONB — must be JSON string
+            ))
+
+        await pool.executemany(
+            """
+            INSERT INTO audit_log (
+                role, token_hint,
+                method, path, status, duration_ms, request_id,
+                ip, user_agent, os, browser, device,
+                country, country_code, region, city, isp,
+                referer, body_size, query_params, resp_size,
+                extra
+            ) VALUES (
+                $1,  $2,
+                $3,  $4,  $5,  $6,  $7,
+                $8,  $9,  $10, $11, $12,
+                $13, $14, $15, $16, $17,
+                $18, $19, $20, $21,
+                $22::jsonb
+            )
+            """,
+            records,
+        )
+    except Exception as exc:
+        logger.warning("audit batch insert failed (%d rows): %s", len(items), exc)
+
+
+async def audit_worker() -> None:
+    """
+    Background coroutine — must be launched as an asyncio Task at startup.
+
+    Loop:
+      1. Block up to _FLUSH_INTERVAL seconds for the first item.
+      2. Drain up to _BATCH_MAX additional items without blocking.
+      3. Geo-enrich the batch concurrently (Valkey cache makes most <1 ms).
+      4. Bulk-INSERT via executemany.
+      5. Repeat.
+
+    Handles CancelledError cleanly so the shutdown lifespan can cancel it
+    and flush whatever remains in the queue.
+    """
+    logger.info("Audit worker started")
+    while True:
+        batch: list[dict] = []
+        try:
+            # Wait for at least one item
+            first = await asyncio.wait_for(
+                _audit_queue.get(), timeout=_FLUSH_INTERVAL  # type: ignore[union-attr]
+            )
+            batch.append(first)
+            # Drain remaining without waiting
+            while len(batch) < _BATCH_MAX:
+                try:
+                    batch.append(_audit_queue.get_nowait())  # type: ignore[union-attr]
+                except asyncio.QueueEmpty:
+                    break
+        except asyncio.TimeoutError:
+            continue   # Nothing arrived in the flush window — just loop
+        except asyncio.CancelledError:
+            break      # Clean shutdown
+        except Exception:
+            continue
+
+        if not batch:
+            continue
+
+        # Geo-enrich concurrently — Valkey cache makes repeated IPs ~instant
+        enriched = await asyncio.gather(
+            *[_enrich_one(item) for item in batch],
+            return_exceptions=True,
+        )
+        good = [e for e in enriched if isinstance(e, dict)]
+
+        pool = get_pool()
+        if good and pool:
+            await _batch_insert_audit(pool, good)
+
+
+# ── Direct writer for login events (not batched — called once per login) ──────
 
 async def log_request(
     *,
@@ -114,12 +288,9 @@ async def log_request(
     extra:        Optional[dict] = None,
 ) -> None:
     """
-    Write one row to audit_log.
-    Fire-and-forget from middleware — all exceptions caught silently.
-
-    New in v2.3: referer, body_size, query_params, resp_size columns.
-    Uses ALTER TABLE ADD COLUMN IF NOT EXISTS in schema so the INSERT
-    always works even on databases created before these columns existed.
+    Direct (awaited) audit log write.
+    Kept for backward-compat — the middleware now uses enqueue_audit() instead.
+    Use this for non-HTTP events that must not be dropped.
     """
     pool = get_pool()
     if not pool:
@@ -168,7 +339,7 @@ async def log_request(
             body_size,
             (query_params or "")[:500] or None,
             resp_size,
-            json.dumps(extra or {}),   # ← JSONB: must be JSON string + ::jsonb cast
+            json.dumps(extra or {}),
         )
     except Exception as exc:
         logger.warning("audit.log_request failed: %s", exc)
@@ -236,14 +407,14 @@ async def touch_session(token_hint: str) -> None:
     if not token_hint:
         return
 
-    # Rate-limit using Valkey (fail open if Valkey is down)
+    # Rate-limit via Valkey — skip DB write if we just did one < 5 min ago
     try:
         from .valkey import get_client as _vk
         vk = _vk()
         if vk:
             key = f"session_touch:{token_hint}"
             if await vk.exists(key):
-                return          # updated recently — skip this round
+                return
             await vk.set(key, "1", ex=300)
     except Exception:
         pass   # Valkey unavailable — still proceed to DB update

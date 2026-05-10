@@ -17,36 +17,45 @@ from .routers.web_projects import projects_router as web_projects_router, resour
 from .utils.cache import cache
 from .db import postgres, valkey as vk
 from .db.sync import sync_loop
-from .db.audit import log_request, touch_session
+from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-_sync_task: Optional[asyncio.Task] = None
+_sync_task:  Optional[asyncio.Task] = None
+_audit_task: Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _sync_task
+    global _sync_task, _audit_task
     logger.info("FinTrack API starting (version=%s)", app.version)
 
     await postgres.init_pool()
     if settings.valkey_url:
         await vk.init_client(settings.valkey_url)
 
-    # Start sync if EITHER main or web token is available — don't require both
+    # ── Async audit log queue ────────────────────────────────────────────
+    # Must be started before any requests arrive so middleware can enqueue.
+    init_audit_queue()
+    _audit_task = asyncio.create_task(audit_worker(), name="audit-worker")
+    logger.info("Async audit log worker started")
+
+    # ── Teable → PG background sync ──────────────────────────────────────
     if postgres.get_pool() and (settings.teable_api_token or settings.teable_web_api_token):
         _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
         logger.info("Background Teable sync task started")
 
     yield
 
-    if _sync_task and not _sync_task.done():
-        _sync_task.cancel()
-        try:
-            await _sync_task
-        except asyncio.CancelledError:
-            pass
+    # ── Graceful shutdown ─────────────────────────────────────────────────
+    for task in (_sync_task, _audit_task):
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     await postgres.close_pool()
     await vk.close_client()
@@ -128,8 +137,9 @@ async def request_middleware(request: Request, call_next):
         token_hint = getattr(request.state, "token_hint", None)
         ip         = _get_client_ip(request)
 
-        # Fire-and-forget — never blocks the response
-        asyncio.create_task(log_request(
+        # Non-blocking enqueue — audit_worker batches + inserts asynchronously.
+        # enqueue_audit() is synchronous (just queue.put_nowait) so no await needed.
+        enqueue_audit(
             role=role,
             token_hint=token_hint,
             method=request.method,
@@ -143,7 +153,7 @@ async def request_middleware(request: Request, call_next):
             body_size=int(request.headers.get("content-length") or 0) or None,
             query_params=str(request.url.query)[:500] or None,
             resp_size=int(response.headers.get("content-length") or 0) or None,
-        ))
+        )
 
         # Keep login_sessions.last_seen_at fresh (rate-limited in touch_session)
         if token_hint:

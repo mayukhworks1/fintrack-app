@@ -37,8 +37,12 @@ logger = logging.getLogger("fintrack.db.sync")
 _INCREMENTAL_INTERVAL = 30    # seconds between incremental syncs
 _FULL_INTERVAL        = 300   # seconds between full syncs
 _TEABLE_TIMEOUT       = 30
-_PAGE_SIZE            = 1000
+_PAGE_SIZE            = 500   # Teable enforces a per-page max; 500 is safe for all deployments
 _INCREMENTAL_TAKE     = 200   # most-recently-modified records to check
+
+# Valkey key for chat context cache — busted after every successful sync so the
+# AI always uses fresh data without making live Teable calls on every chat request.
+_CHAT_CONTEXT_CACHE_KEY = "chat:context"
 
 # Track timestamps so incremental runs only touch changed records
 _last_full_at: float        = 0.0
@@ -313,16 +317,35 @@ async def _fetch_all(table_id: str, token: str) -> list[dict]:
 async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE) -> list[dict]:
     """
     Fetch the `take` most-recently-modified records.
-    Raises RuntimeError on Teable API errors.
+
+    Strategy:
+    1. Try with orderBy=[{lastModifiedTime,desc}] — most efficient.
+    2. If Teable returns HTTP 400 (field disabled / API version mismatch),
+       silently retry WITHOUT orderBy.  We still get the right records on the
+       next full sync; incremental just becomes slightly less targeted.
+
+    Raises RuntimeError on non-recoverable Teable errors (401/403/5xx).
     """
     url      = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
     headers  = {"Authorization": f"Bearer {token}"}
     order_by = json.dumps([{"fieldName": "lastModifiedTime", "order": "desc"}])
     try:
         async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
-            return await _fetch_page(http, url, headers, {
-                "take": take, "skip": 0, "orderBy": order_by,
-            })
+            try:
+                return await _fetch_page(http, url, headers, {
+                    "take": take, "skip": 0, "orderBy": order_by,
+                })
+            except RuntimeError as exc:
+                # 400 = Teable rejected orderBy (field name / API version issue)
+                # Fall back to unordered fetch so sync still works.
+                if "HTTP 400" in str(exc):
+                    logger.warning(
+                        "table %s: orderBy rejected (HTTP 400) — "
+                        "falling back to unordered fetch. Detail: %s",
+                        table_id, str(exc)[:300],
+                    )
+                    return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
+                raise  # 401/403/5xx → propagate so run_sync logs the real error
     except RuntimeError:
         raise
     except Exception as exc:
@@ -475,6 +498,17 @@ async def _write_sync_log(
         )
     except Exception as exc:
         logger.debug("sync_log write failed: %s", exc)
+
+    # Bust the AI chat context cache on any successful sync so the assistant
+    # always sees fresh mirror data without making live Teable API calls.
+    if error is None:
+        try:
+            from .valkey import get_client as _vk
+            vk = _vk()
+            if vk:
+                await vk.delete(_CHAT_CONTEXT_CACHE_KEY)
+        except Exception:
+            pass  # Valkey unavailable — context will expire naturally
 
 
 # ── Background loop ──────────────────────────────────────────────────────────
