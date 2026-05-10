@@ -698,13 +698,15 @@ function ChatsTab() {
 // ── Tab: Sync Log ─────────────────────────────────────────────────────────────
 
 function SyncLogTab() {
-  const [data, setData]         = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
-  const [offset, setOffset]     = useState(0)
-  const [filterSource, setFs]   = useState('')
-  const [triggering, setTrig]   = useState(false)
-  const [trigMsg, setTrigMsg]   = useState(null)
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
+  const [offset, setOffset]       = useState(0)
+  const [filterSource, setFs]     = useState('')
+  const [triggering, setTrig]     = useState(false)
+  const [trigMsg, setTrigMsg]     = useState(null)
+  const [diagnosing, setDiag]     = useState(false)
+  const [diagResult, setDiagRes]  = useState(null)
   const limit = 50
 
   const load = useCallback(async () => {
@@ -722,7 +724,6 @@ function SyncLogTab() {
     try {
       await api.admin.triggerSync()
       setTrigMsg({ ok: true, text: 'Full sync triggered — results appear in a few seconds' })
-      // auto-refresh after 4 s to catch the new log entries
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
@@ -730,6 +731,18 @@ function SyncLogTab() {
       setTrig(false)
     }
   }, [load])
+
+  const diagnoseSync = useCallback(async () => {
+    setDiag(true); setDiagRes(null)
+    try {
+      const res = await api.admin.diagnoseSync()
+      setDiagRes(res)
+    } catch (e) {
+      setDiagRes({ error: e.message })
+    } finally {
+      setDiag(false)
+    }
+  }, [])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
 
@@ -744,7 +757,6 @@ function SyncLogTab() {
         <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>
-        {/* Manual sync trigger */}
         <button onClick={triggerSync} disabled={triggering}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
@@ -755,12 +767,64 @@ function SyncLogTab() {
           }}>
           <Play size={11} /> {triggering ? 'Triggering…' : 'Trigger Full Sync Now'}
         </button>
+        <button onClick={diagnoseSync} disabled={diagnosing}
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: 'rgba(234,179,8,0.08)',
+            border: '1px solid rgba(234,179,8,0.3)',
+            color: '#b45309',
+            opacity: diagnosing ? 0.6 : 1,
+          }}>
+          🔍 {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
+        </button>
         {data && (
           <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
             {data.total} runs
           </span>
         )}
       </div>
+
+      {/* Diagnose results panel */}
+      {diagResult && !diagResult.error && (
+        <div className="rounded-xl border p-3 space-y-2 text-xs"
+          style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.04)' }}>
+          <div className="font-semibold" style={{ color: '#b45309' }}>
+            Token/Table connectivity — {diagResult.configured_tokens} token(s) configured
+          </div>
+          {Object.entries(diagResult.tables || {}).map(([tname, info]) => (
+            <div key={tname} className="rounded-lg p-2 border" style={{ borderColor: 'var(--border)', background: 'var(--bg-layer)' }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge color={sourceColor[tname] || 'default'}>{tname}</Badge>
+                <span style={{ color: 'var(--text-3)' }}>{info.table_id || 'not configured'}</span>
+                {info.mirror_rows != null && (
+                  <span className="ml-auto font-mono" style={{ color: 'var(--text-2)' }}>
+                    {info.mirror_rows} rows in mirror
+                  </span>
+                )}
+              </div>
+              {info.note && <div style={{ color: 'var(--text-3)' }}>{info.note}</div>}
+              {Object.entries(info.token_results || {}).map(([tok, res]) => (
+                <div key={tok} className="flex items-center gap-2 pl-2 py-0.5">
+                  <span className={res.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
+                    {res.status === 'ok' ? '✓' : '✕'}
+                  </span>
+                  <span style={{ color: 'var(--text-2)' }}>{tok}</span>
+                  {res.status === 'ok'
+                    ? <span style={{ color: 'var(--text-3)' }}>HTTP {res.http} · {res.total_records} records in Teable</span>
+                    : <span className="text-red-400">HTTP {res.http} — {res.detail}</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {diagResult?.error && (
+        <div className="text-xs px-3 py-2 rounded-lg text-red-500"
+          style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
+          ✕ Diagnose failed: {diagResult.error}
+        </div>
+      )}
+
       {trigMsg && (
         <div className="text-xs px-3 py-2 rounded-lg"
           style={{

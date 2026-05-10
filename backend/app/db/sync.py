@@ -265,6 +265,32 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
 
 # ── Teable HTTP helpers ──────────────────────────────────────────────────────
 
+# CRITICAL: always include fieldKeyType=name so Teable returns human-readable
+# field names as keys (e.g. "Invoice Number") not field IDs (e.g. "fldKSN…").
+# Without this the extractors get all-None typed columns and mirrors look empty.
+_BASE_PARAMS: dict = {"fieldKeyType": "name"}
+
+
+def _is_auth_error(exc: RuntimeError) -> bool:
+    msg = str(exc)
+    return "HTTP 401" in msg or "HTTP 403" in msg
+
+
+def _all_tokens() -> list[str]:
+    """Return all configured Teable tokens, deduped, in priority order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in (
+        settings.teable_api_token,
+        settings.teable_web_api_token,
+        settings.teable_all_api_token,
+    ):
+        if t and t not in seen:
+            out.append(t)
+            seen.add(t)
+    return out
+
+
 async def _fetch_page(
     http: httpx.AsyncClient,
     url: str,
@@ -272,33 +298,33 @@ async def _fetch_page(
     params: dict,
 ) -> list[dict]:
     """
-    Fetch one page from Teable.  Raises on HTTP errors so callers can
-    distinguish a genuine empty table from a 401/403/timeout.
-    The caller (_fetch_all / _fetch_recent) is responsible for catch.
+    Fetch one page from Teable.
+    Always merges _BASE_PARAMS (fieldKeyType=name) so extractors can use
+    human-readable field names instead of field IDs.
+    Raises RuntimeError on HTTP errors — callers distinguish auth vs bad-request.
     """
-    r = await http.get(url, headers=headers, params=params)
+    merged = {**_BASE_PARAMS, **params}   # fieldKeyType always present
+    r = await http.get(url, headers=headers, params=merged)
     if not r.is_success:
-        # Include response body in the error for better diagnostics
         body = ""
         try:
-            body = r.json().get("message") or r.text[:200]
+            body = r.json().get("message") or r.text[:300]
         except Exception:
-            body = r.text[:200]
+            body = r.text[:300]
         raise RuntimeError(f"Teable HTTP {r.status_code} for {url}: {body}")
     return r.json().get("records", [])
 
 
 async def _fetch_all(table_id: str, token: str) -> list[dict]:
     """
-    Paginate through every record for a table.
-    Raises RuntimeError on Teable API errors (401, 403, 404, etc.)
-    so run_sync() can write a meaningful error to sync_log instead of
-    silently recording 0 rows.
+    Paginate through every record for a table using the given token.
+    Raises RuntimeError on Teable API errors so run_sync() can write a
+    meaningful error to sync_log rather than silently recording 0 rows.
     """
     url     = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
     headers = {"Authorization": f"Bearer {token}"}
     records: list[dict] = []
-    offset = 0
+    offset  = 0
     try:
         async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
             while True:
@@ -308,10 +334,45 @@ async def _fetch_all(table_id: str, token: str) -> list[dict]:
                     break
                 offset += _PAGE_SIZE
     except RuntimeError:
-        raise   # already has good message
+        raise
     except Exception as exc:
         raise RuntimeError(f"Teable fetch failed for table {table_id}: {exc}") from exc
     return records
+
+
+async def _fetch_all_with_token_fallback(table_id: str, primary_token: str) -> tuple[list[dict], str]:
+    """
+    Try `primary_token` first, then every other configured token on 401/403.
+
+    Many setups have invoices in a different Teable space than projects.
+    If the primary token returns an auth error, silently retry with the
+    next available token.  Returns (records, winning_token).
+
+    Raises RuntimeError only when ALL tokens fail.
+    """
+    tokens = [primary_token] + [t for t in _all_tokens() if t != primary_token]
+    last_err: Optional[RuntimeError] = None
+
+    for token in tokens:
+        try:
+            records = await _fetch_all(table_id, token)
+            if token != primary_token:
+                logger.info(
+                    "table %s: primary token failed auth — succeeded with fallback token (hint: %s…)",
+                    table_id, token[:8],
+                )
+            return records, token
+        except RuntimeError as exc:
+            if _is_auth_error(exc):
+                last_err = exc
+                logger.debug(
+                    "table %s: token %s… rejected (%s) — trying next token",
+                    table_id, token[:8], str(exc)[:80],
+                )
+                continue
+            raise  # Non-auth error (400, 404, 5xx) → don't retry with different token
+
+    raise last_err or RuntimeError(f"All tokens failed (auth) for table {table_id}")
 
 
 async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE) -> list[dict]:
@@ -319,37 +380,48 @@ async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE
     Fetch the `take` most-recently-modified records.
 
     Strategy:
-    1. Try with orderBy=[{lastModifiedTime,desc}] — most efficient.
-    2. If Teable returns HTTP 400 (field disabled / API version mismatch),
-       silently retry WITHOUT orderBy.  We still get the right records on the
-       next full sync; incremental just becomes slightly less targeted.
-
-    Raises RuntimeError on non-recoverable Teable errors (401/403/5xx).
+    1. Try orderBy=[{__lastModifiedTime,desc}] (Teable system field, correct name).
+    2. If HTTP 400 (field rejected), retry WITHOUT orderBy — incremental just
+       becomes unordered; the 5-min full sync keeps data consistent regardless.
+    3. On 401/403, try all configured tokens (same fallback as _fetch_all).
     """
     url      = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
-    headers  = {"Authorization": f"Bearer {token}"}
-    order_by = json.dumps([{"fieldName": "lastModifiedTime", "order": "desc"}])
-    try:
-        async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
-            try:
-                return await _fetch_page(http, url, headers, {
-                    "take": take, "skip": 0, "orderBy": order_by,
-                })
-            except RuntimeError as exc:
-                # 400 = Teable rejected orderBy (field name / API version issue)
-                # Fall back to unordered fetch so sync still works.
-                if "HTTP 400" in str(exc):
-                    logger.warning(
-                        "table %s: orderBy rejected (HTTP 400) — "
-                        "falling back to unordered fetch. Detail: %s",
-                        table_id, str(exc)[:300],
-                    )
-                    return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
-                raise  # 401/403/5xx → propagate so run_sync logs the real error
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        raise RuntimeError(f"Teable recent-fetch failed for table {table_id}: {exc}") from exc
+    # Use the Teable system-field name for modification time (__lastModifiedTime)
+    order_by = json.dumps([{"fieldName": "__lastModifiedTime", "order": "desc"}])
+
+    async def _attempt(tok: str) -> list[dict]:
+        headers = {"Authorization": f"Bearer {tok}"}
+        try:
+            async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
+                try:
+                    return await _fetch_page(http, url, headers, {
+                        "take": take, "skip": 0, "orderBy": order_by,
+                    })
+                except RuntimeError as exc:
+                    if "HTTP 400" in str(exc):
+                        logger.warning(
+                            "table %s: orderBy rejected (HTTP 400) — "
+                            "falling back to unordered. Detail: %s",
+                            table_id, str(exc)[:200],
+                        )
+                        return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
+                    raise
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Teable recent-fetch failed for {table_id}: {exc}") from exc
+
+    tokens = [token] + [t for t in _all_tokens() if t != token]
+    last_err: Optional[RuntimeError] = None
+    for tok in tokens:
+        try:
+            return await _attempt(tok)
+        except RuntimeError as exc:
+            if _is_auth_error(exc):
+                last_err = exc
+                continue
+            raise
+    raise last_err or RuntimeError(f"All tokens failed for incremental fetch of table {table_id}")
 
 
 # ── Batch sync helpers ───────────────────────────────────────────────────────
@@ -408,12 +480,18 @@ async def _sync_records(
 async def run_sync(incremental: bool = False) -> None:
     """
     Full or incremental sync of projects, main invoices, AND web invoices.
-    `incremental=True` fetches only the 200 most recently modified records
-    and skips any that haven't changed since the last run.
 
-    Tokens:
-      - projects + main invoices  → settings.teable_api_token
-      - web invoices              → settings.teable_web_api_token (falls back to main token)
+    Token strategy (per-table, with fallback):
+    ─────────────────────────────────────────
+    Each table first tries its "natural" token, then automatically falls back
+    to every other configured token on 401/403.  This handles setups where
+    invoices and projects live in different Teable spaces, or where only one
+    token covers all tables.
+
+    Priority per table:
+      projects         → TEABLE_API_TOKEN → TEABLE_WEB_API_TOKEN → TEABLE_ALL_API_TOKEN
+      invoices         → TEABLE_WEB_API_TOKEN → TEABLE_API_TOKEN → TEABLE_ALL_API_TOKEN
+      web_invoices     → TEABLE_WEB_API_TOKEN → TEABLE_API_TOKEN → TEABLE_ALL_API_TOKEN
     """
     global _last_full_at, _last_incremental_at
 
@@ -421,66 +499,87 @@ async def run_sync(incremental: bool = False) -> None:
     if not pool:
         return
 
-    main_token = settings.teable_api_token
-    web_token  = settings.teable_web_api_token or main_token
-
-    if not main_token and not web_token:
+    all_tokens = _all_tokens()
+    if not all_tokens:
         return
+
+    main_token = settings.teable_api_token
+    web_token  = settings.teable_web_api_token
+    # For invoices: prefer web token (often same space as web invoices), fallback to main
+    inv_token  = web_token or main_token
+    # Ensure we have at least one token
+    any_token  = all_tokens[0]
 
     label = "incremental" if incremental else "full"
     since = _last_incremental_at if incremental else 0.0
-    fetch = _fetch_recent if incremental else _fetch_all
 
-    # Build task list — only attempt tables whose token + ID are available
+    # Build task list: (source, mirror_table, table_id, preferred_token, extractor)
+    # Every fetch uses _fetch_all_with_token_fallback / _fetch_recent which tries
+    # the preferred token first, then falls back to others on auth failure.
     tasks: list[tuple] = []
-    if main_token:
-        if settings.teable_table_id:
-            tasks.append(("projects",     "projects_mirror",     settings.teable_table_id,         main_token, _extract_project))
-        if settings.teable_invoice_table_id:
-            tasks.append(("invoices",     "invoices_mirror",     settings.teable_invoice_table_id, main_token, _extract_invoice))
-    if web_token and settings.teable_web_invoice_table_id:
-        tasks.append(("web_invoices", "web_invoices_mirror", settings.teable_web_invoice_table_id, web_token, _extract_web_invoice))
+    if settings.teable_table_id and (main_token or any_token):
+        tasks.append(("projects", "projects_mirror",
+                       settings.teable_table_id, main_token or any_token, _extract_project))
+    if settings.teable_invoice_table_id and (inv_token or any_token):
+        tasks.append(("invoices", "invoices_mirror",
+                       settings.teable_invoice_table_id, inv_token or any_token, _extract_invoice))
+    if settings.teable_web_invoice_table_id and (web_token or any_token):
+        tasks.append(("web_invoices", "web_invoices_mirror",
+                       settings.teable_web_invoice_table_id, web_token or any_token, _extract_web_invoice))
 
     if not tasks:
+        logger.warning("run_sync: no tables configured — check TEABLE_*_TABLE_ID settings")
         return
 
-    # Fetch all table records concurrently
+    logger.info("[%s] Syncing %d tables: %s",
+                label, len(tasks), ", ".join(t[0] for t in tasks))
+
+    # ── Full sync: use fallback-aware fetch; incremental uses _fetch_recent ──
+    async def _do_fetch(source: str, table_id: str, token: str) -> tuple[list[dict], str]:
+        """Returns (records, winning_token)."""
+        if incremental:
+            recs = await _fetch_recent(table_id, token, take=_INCREMENTAL_TAKE)
+            return recs, token   # _fetch_recent handles its own token fallback
+        return await _fetch_all_with_token_fallback(table_id, token)
+
     fetched = await asyncio.gather(
-        *[fetch(tid, tok) for _, _, tid, tok, _ in tasks],
+        *[_do_fetch(src, tid, tok) for src, _, tid, tok, _ in tasks],
         return_exceptions=True,
     )
 
     now = time.time()
 
-    for (source, mirror_table, _tid, _tok, extractor), records in zip(tasks, fetched):
-        if isinstance(records, Exception):
-            logger.error("[%s] Fetch failed for %s: %s", label, source, records)
-            await _write_sync_log(pool, source, 0, 0, 0, 0, 0, str(records))
+    for (source, mirror_table, _tid, preferred_tok, extractor), result in zip(tasks, fetched):
+        if isinstance(result, Exception):
+            err_msg = str(result)
+            logger.error("[%s] Fetch failed for %s: %s", label, source, err_msg)
+            await _write_sync_log(pool, source, 0, 0, 0, 0, 0, err_msg[:500])
             continue
+
+        records, winning_tok = result if isinstance(result, tuple) else (result, preferred_tok)
 
         try:
             stats = await _sync_records(pool, source, mirror_table, records, extractor, since=since)
-            if stats["created"] or stats["updated"]:
-                logger.info(
-                    "[%s] %s: total=%d created=%d updated=%d unchanged=%d skipped=%d (%dms)",
-                    label, source,
-                    stats["total"], stats["created"], stats["updated"],
-                    stats["unchanged"], stats.get("skipped", 0), stats["duration_ms"],
-                )
+            logger.info(
+                "[%s] %s: total=%d created=%d updated=%d unchanged=%d skipped=%d (%dms)",
+                label, source,
+                stats["total"], stats["created"], stats["updated"],
+                stats["unchanged"], stats.get("skipped", 0), stats["duration_ms"],
+            )
             await _write_sync_log(
                 pool, source,
                 stats["total"], stats["created"], stats["updated"],
                 stats["unchanged"], stats["duration_ms"], None,
             )
         except Exception as exc:
-            logger.error("[%s] Sync error for %s: %s", label, source, exc)
-            await _write_sync_log(pool, source, 0, 0, 0, 0, 0, str(exc))
+            logger.error("[%s] Upsert error for %s: %s", label, source, exc)
+            await _write_sync_log(pool, source, 0, 0, 0, 0, 0, str(exc)[:500])
 
     if incremental:
         _last_incremental_at = now
     else:
         _last_full_at = now
-        _last_incremental_at = now   # full sync resets incremental cursor too
+        _last_incremental_at = now
 
 
 async def _write_sync_log(

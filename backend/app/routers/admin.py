@@ -65,19 +65,16 @@ def _no_db():
 async def admin_trigger_sync(_: str = Depends(require_admin)):
     """
     Kick off a full Teable → PostgreSQL sync immediately (fire-and-forget).
-    Useful when the auto-sync hasn't run yet or you just changed data in Teable.
     The sync result will appear in the Sync Log within a few seconds.
-    Returns 503 if the sync loop is not configured (no Teable token set).
     """
-    from ..db.sync import run_sync
-    from ..db.postgres import get_pool
+    from ..db.sync import run_sync, _all_tokens
     from ..config import settings
 
     pool = get_pool()
     if not pool:
         return _no_db()
 
-    if not (settings.teable_api_token or settings.teable_web_api_token):
+    if not _all_tokens():
         return JSONResponse(
             status_code=503,
             content={"error": "No Teable API token configured — set TEABLE_API_TOKEN or TEABLE_WEB_API_TOKEN"},
@@ -85,6 +82,94 @@ async def admin_trigger_sync(_: str = Depends(require_admin)):
 
     asyncio.create_task(run_sync(incremental=False))
     return {"status": "sync_started", "message": "Full sync triggered — check Sync Log in a few seconds"}
+
+
+@router.get("/sync/diagnose")
+async def admin_sync_diagnose(_: str = Depends(require_admin)):
+    """
+    Test each configured Teable token against each table.
+    Returns reachability matrix so you can see exactly which token/table
+    combinations work and which return 401/403.
+
+    Also shows mirror table row counts for quick sanity check.
+    """
+    import httpx as _httpx
+    from ..config import settings
+    from ..db.sync import _BASE_PARAMS, _all_tokens
+
+    base = settings.teable_base_url.rstrip("/")
+    tables = {
+        "projects":   settings.teable_table_id,
+        "invoices":   settings.teable_invoice_table_id,
+        "web_invoices": settings.teable_web_invoice_table_id,
+    }
+    mirrors = {
+        "projects":    "projects_mirror",
+        "invoices":    "invoices_mirror",
+        "web_invoices": "web_invoices_mirror",
+    }
+    token_names = {
+        settings.teable_api_token:     "TEABLE_API_TOKEN",
+        settings.teable_web_api_token: "TEABLE_WEB_API_TOKEN",
+        settings.teable_all_api_token: "TEABLE_ALL_API_TOKEN",
+    }
+
+    results: dict = {}
+    pool = get_pool()
+
+    async with _httpx.AsyncClient(timeout=10) as http:
+        for name, table_id in tables.items():
+            results[name] = {
+                "table_id": table_id,
+                "token_results": {},
+                "mirror_rows": None,
+            }
+            if not table_id:
+                results[name]["note"] = "not configured"
+                continue
+
+            # Test every configured token against this table
+            for token in _all_tokens():
+                tok_name = token_names.get(token, f"token-{token[:8]}…")
+                try:
+                    url = f"{base}/api/table/{table_id}/record"
+                    r = await http.get(
+                        url,
+                        headers={"Authorization": f"Bearer {token}"},
+                        params={**_BASE_PARAMS, "take": 1},
+                    )
+                    if r.is_success:
+                        count = r.json().get("total", "?")
+                        results[name]["token_results"][tok_name] = {
+                            "status": "ok", "http": r.status_code,
+                            "total_records": count,
+                        }
+                    else:
+                        try:
+                            body = r.json().get("message") or r.text[:150]
+                        except Exception:
+                            body = r.text[:150]
+                        results[name]["token_results"][tok_name] = {
+                            "status": "error", "http": r.status_code, "detail": body,
+                        }
+                except Exception as exc:
+                    results[name]["token_results"][tok_name] = {
+                        "status": "exception", "detail": str(exc)[:150],
+                    }
+
+            # Mirror row count
+            if pool:
+                mirror = mirrors.get(name)
+                try:
+                    cnt = await pool.fetchval(f"SELECT COUNT(*) FROM {mirror}")
+                    results[name]["mirror_rows"] = cnt
+                except Exception:
+                    results[name]["mirror_rows"] = "error"
+
+    return {
+        "configured_tokens": len(_all_tokens()),
+        "tables": results,
+    }
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
