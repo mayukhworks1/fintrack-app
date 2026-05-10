@@ -22,6 +22,7 @@ is identical regardless of which path triggers the update.
 """
 
 import asyncio
+import datetime
 import json
 import logging
 import time
@@ -47,6 +48,45 @@ _CHAT_CONTEXT_CACHE_KEY = "chat:context"
 # Track timestamps so incremental runs only touch changed records
 _last_full_at: float        = 0.0
 _last_incremental_at: float = 0.0
+
+
+# ── Field extractor helpers ──────────────────────────────────────────────────
+
+def _parse_date(v) -> Optional[datetime.date]:
+    """
+    Convert a Teable date value (ISO string or None) to a Python datetime.date.
+
+    asyncpg is strict: passing a str to a DATE column raises
+    "invalid input for query argument $N". We must pass a real
+    datetime.date object (or None).
+
+    Teable returns dates as "2024-01-15" or "2024-01-15T00:00:00.000Z".
+    Slicing [:10] normalises both forms to "2024-01-15".
+    """
+    if not v:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(v)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _coerce_str(v, maxlen: int) -> Optional[str]:
+    """
+    Safely coerce any Teable field value to a plain string.
+
+    Teable linked-record fields return a list of dicts:
+      [{"id": "recXXX", "title": "Project Name"}, ...]
+    We want just the title(s), not the raw Python repr.
+    All other values are str()-coerced and truncated normally.
+    """
+    if v is None or v == "":
+        return None
+    if isinstance(v, list):
+        # Linked records — join titles; fall back to first element str repr
+        titles = [item.get("title", "") for item in v if isinstance(item, dict)]
+        v = ", ".join(t for t in titles if t) or str(v[0]) if v else ""
+    return (str(v) or "")[:maxlen] or None
 
 
 # ── Field extractors ────────────────────────────────────────────────────────
@@ -75,24 +115,22 @@ def _extract_invoice(fields: dict) -> dict:
     def _num(k):
         v = fields.get(k)
         try:
-            return float(v) if v not in (None, "") else None
+            return float(v) if v not in (None, "", []) else None
         except (TypeError, ValueError):
             return None
 
-    def _date(k):
-        v = fields.get(k)
-        return str(v)[:10] if v else None
-
     return {
-        "invoice_number":  str(fields.get("Invoice Number", "") or "")[:120] or None,
-        "project":         str(fields.get("Project", "") or "")[:255] or None,
-        "category":        str(fields.get("Category", "") or "")[:120] or None,
-        "payment_status":  str(fields.get("Payment Status", "") or "")[:60] or None,
+        "invoice_number":  _coerce_str(fields.get("Invoice Number"),  120),
+        "project":         _coerce_str(fields.get("Project"),         255),
+        "category":        _coerce_str(fields.get("Category"),        120),
+        "payment_status":  _coerce_str(fields.get("Payment Status"),   60),
         "amount_raised":   _num("Amount Raised"),
         "amount_with_tax": _num("Amount with Tax"),
         "amount_received": _num("Amount Received"),
-        "raised_date":     _date("Raised Date"),
-        "cleared_date":    _date("Cleared Date"),
+        # _parse_date returns datetime.date (or None) — asyncpg requires this
+        # for DATE columns; passing a string raises "invalid input for $N".
+        "raised_date":     _parse_date(fields.get("Raised Date")),
+        "cleared_date":    _parse_date(fields.get("Cleared Date")),
     }
 
 
@@ -101,32 +139,27 @@ def _extract_web_invoice(fields: dict) -> dict:
     def _num(k):
         v = fields.get(k)
         try:
-            return float(v) if v not in (None, "") else None
+            return float(v) if v not in (None, "", []) else None
         except (TypeError, ValueError):
             return None
 
-    def _date(k):
-        v = fields.get(k)
-        return str(v)[:10] if v else None
-
-    def _str(k, maxlen=255):
-        return (str(fields.get(k, "") or "")[:maxlen]) or None
-
     return {
-        "invoice_number":  _str("Invoice Number", 120),
-        "project":         _str("Project",         255),
-        "category":        _str("Category",        120),
-        "description":     _str("Description",     1000) or None,
-        "milestone":       _str("Milestone",       255),
-        "raised_by":       _str("Raised By",       255),
-        "payment_status":  _str("Payment Status",   60),
+        "invoice_number":  _coerce_str(fields.get("Invoice Number"), 120),
+        "project":         _coerce_str(fields.get("Project"),        255),
+        "category":        _coerce_str(fields.get("Category"),       120),
+        "description":     _coerce_str(fields.get("Description"),   1000),
+        "milestone":       _coerce_str(fields.get("Milestone"),      255),
+        "raised_by":       _coerce_str(fields.get("Raised By"),      255),
+        "payment_status":  _coerce_str(fields.get("Payment Status"),  60),
         "amount_raised":   _num("Amount Raised"),
         "amount_with_tax": _num("Amount with Tax"),
         "amount_received": _num("Amount Received"),
-        "raised_date":     _date("Raised Date"),
-        "cleared_date":    _date("Cleared Date"),
-        "currency":        _str("Currency",         20),
-        "remark":          _str("Remark",          500),
+        # _parse_date returns datetime.date (or None) — asyncpg requires this
+        # for DATE columns; passing a string raises "invalid input for $N".
+        "raised_date":     _parse_date(fields.get("Raised Date")),
+        "cleared_date":    _parse_date(fields.get("Cleared Date")),
+        "currency":        _coerce_str(fields.get("Currency"),        20),
+        "remark":          _coerce_str(fields.get("Remark"),         500),
     }
 
 

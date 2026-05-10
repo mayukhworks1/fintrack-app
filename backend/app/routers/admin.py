@@ -139,7 +139,18 @@ async def admin_sync_diagnose(_: str = Depends(require_admin)):
                         params={**_BASE_PARAMS, "take": 1},
                     )
                     if r.is_success:
-                        count = r.json().get("total", "?")
+                        body_json = r.json()
+                        # Teable paginates via offset; total may live under
+                        # different keys depending on version:
+                        #   { total: N, records: [...] }
+                        #   { count: N, records: [...] }
+                        #   { records: [...] }  (count only via separate call)
+                        count = (
+                            body_json.get("total")
+                            or body_json.get("count")
+                            or body_json.get("totalRowCount")
+                            or len(body_json.get("records", []))
+                        )
                         results[name]["token_results"][tok_name] = {
                             "status": "ok", "http": r.status_code,
                             "total_records": count,
