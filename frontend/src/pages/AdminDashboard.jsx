@@ -23,7 +23,9 @@ import {
   TrendingUp, ChevronLeft, ChevronRight, Search,
   Activity, Globe, Monitor, Smartphone, Tablet,
   CheckCircle2, XCircle, AlertCircle, History,
-  ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle
+  ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle,
+  Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
+  SlidersHorizontal, Calendar
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -294,72 +296,287 @@ function OverviewTab() {
 
 // ── Tab: Audit Log ────────────────────────────────────────────────────────────
 
+// ── Country flag emoji from ISO 2-letter code ────────────────────────────────
+function countryFlag(code) {
+  if (!code || code.length !== 2) return ''
+  const cp = code.toUpperCase()
+  return String.fromCodePoint(...[...cp].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)))
+}
+
+// ── Inline pill input ────────────────────────────────────────────────────────
+function FPill({ label, value, onChange, type = 'text', placeholder }) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{label}</span>
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder || ''}
+        className="input-field text-xs py-1 px-2" style={{ width: 130, minWidth: 90 }}
+      />
+    </label>
+  )
+}
+
+function FSel({ label, value, onChange, opts }) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{label}</span>
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="input-field text-xs py-1 px-2" style={{ width: 120 }}>
+        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  )
+}
+
+// ── Purge confirmation modal ──────────────────────────────────────────────────
+function PurgeModal({ onConfirm, onCancel, purging, result }) {
+  const [days, setDays] = useState(30)
+  const presets = [[3,'3 days'],[7,'1 week'],[30,'1 month'],[90,'3 months'],[180,'6 months'],[365,'1 year']]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="rounded-2xl p-6 shadow-2xl w-full max-w-md" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Trash2 size={18} style={{ color: '#dc2626' }} />
+          <h3 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Purge Audit Log</h3>
+        </div>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-2)' }}>
+          Delete all audit log entries older than the selected threshold.<br />
+          <span className="font-semibold" style={{ color: '#f59e0b' }}>Always keeps the 200 most-recent rows.</span>
+        </p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {presets.map(([d, l]) => (
+            <button key={d} onClick={() => setDays(d)}
+              className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
+              style={{
+                background: days === d ? '#dc2626' : 'var(--bg-input)',
+                color: days === d ? '#fff' : 'var(--text-2)',
+                border: '1px solid var(--border)',
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>Custom:</span>
+          <input type="number" min={1} max={3650} value={days}
+            onChange={e => setDays(Math.max(1, parseInt(e.target.value) || 1))}
+            className="input-field text-xs py-1 px-2" style={{ width: 80 }} />
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>days</span>
+        </div>
+        {result && (
+          <div className="rounded-lg px-3 py-2 mb-4 text-sm"
+            style={{ background: result.error ? 'rgba(220,38,38,0.1)' : 'rgba(22,163,74,0.1)', color: result.error ? '#dc2626' : '#16a34a' }}>
+            {result.error ? `Error: ${result.error}` : `✓ Deleted ${result.deleted?.toLocaleString()} rows`}
+          </div>
+        )}
+        <div className="flex gap-2 justify-end">
+          <button onClick={onCancel} className="btn-secondary text-sm px-4 py-2">Cancel</button>
+          <button onClick={() => onConfirm(days)} disabled={purging}
+            className="text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2"
+            style={{ background: purging ? '#7f1d1d' : '#dc2626', color: '#fff', opacity: purging ? 0.7 : 1 }}>
+            {purging ? <><RefreshCw size={13} className="animate-spin" /> Purging…</> : <><Trash2 size={13} /> Delete older than {days}d</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AuditLogTab() {
+  // ── Data state ─────────────────────────────────────────────────────────────
   const [data, setData]         = useState(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(null)
   const [offset, setOffset]     = useState(0)
-  const [filterRole, setRole]   = useState('')
-  const [filterMethod, setMeth] = useState('')
-  const [filterStatus, setStat] = useState('')
   const [expanded, setExp]      = useState(null)
-  const limit = 50
+
+  // ── Basic filters ──────────────────────────────────────────────────────────
+  const [limit,        setLimit]   = useState(100)
+  const [filterRole,   setRole]    = useState('')
+  const [filterMethod, setMeth]    = useState('')
+  const [filterStatus, setStat]    = useState('')
+
+  // ── Advanced filters ───────────────────────────────────────────────────────
+  const [showAdv,      setShowAdv] = useState(false)
+  const [filterIp,     setIp]      = useState('')
+  const [filterPath,   setPath]    = useState('')
+  const [filterCountry,setCountry] = useState('')
+  const [filterCity,   setCity]    = useState('')
+  const [filterIsp,    setIsp]     = useState('')
+  const [filterDevice, setDevice]  = useState('')
+  const [filterBrowser,setBrowser] = useState('')
+  const [filterOs,     setOs]      = useState('')
+  const [filterFrom,   setFrom]    = useState('')
+  const [filterTo,     setTo]      = useState('')
+  const [statusMin,    setStMin]   = useState('')
+  const [statusMax,    setStMax]   = useState('')
+
+  // ── Purge ──────────────────────────────────────────────────────────────────
+  const [showPurge,  setShowPurge]  = useState(false)
+  const [purging,    setPurging]    = useState(false)
+  const [purgeRes,   setPurgeRes]   = useState(null)
+
+  // ── Active filter count badge ──────────────────────────────────────────────
+  const advFilters = [filterIp,filterPath,filterCountry,filterCity,filterIsp,
+                      filterDevice,filterBrowser,filterOs,filterFrom,filterTo,statusMin,statusMax]
+  const advCount   = advFilters.filter(Boolean).length
+
+  const basicFilters = [filterRole, filterMethod, filterStatus]
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
       setData(await api.admin.auditLog({
         limit, offset,
-        role:   filterRole   || undefined,
-        method: filterMethod || undefined,
-        status: filterStatus || undefined,
+        role:       filterRole    || undefined,
+        method:     filterMethod  || undefined,
+        status:     filterStatus  || undefined,
+        status_min: statusMin     || undefined,
+        status_max: statusMax     || undefined,
+        ip:         filterIp      || undefined,
+        path:       filterPath    || undefined,
+        country:    filterCountry || undefined,
+        city:       filterCity    || undefined,
+        isp:        filterIsp     || undefined,
+        device:     filterDevice  || undefined,
+        browser:    filterBrowser || undefined,
+        os:         filterOs      || undefined,
+        from_ts:    filterFrom    || undefined,
+        to_ts:      filterTo      || undefined,
       }))
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, filterRole, filterMethod, filterStatus])
+  }, [offset, limit, filterRole, filterMethod, filterStatus,
+      statusMin, statusMax, filterIp, filterPath, filterCountry,
+      filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
+      filterFrom, filterTo])
 
-  useEffect(() => { setOffset(0) }, [filterRole, filterMethod, filterStatus])
+  const resetFilters = () => {
+    setRole(''); setMeth(''); setStat(''); setIp(''); setPath('')
+    setCountry(''); setCity(''); setIsp(''); setDevice(''); setBrowser('')
+    setOs(''); setFrom(''); setTo(''); setStMin(''); setStMax('')
+    setOffset(0)
+  }
+
+  useEffect(() => { setOffset(0) }, [filterRole, filterMethod, filterStatus,
+    statusMin, statusMax, filterIp, filterPath, filterCountry,
+    filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
+    filterFrom, filterTo, limit])
+
   useEffect(() => { load() }, [load])
+
+  const doPurge = async (days) => {
+    setPurging(true); setPurgeRes(null)
+    try {
+      const r = await api.admin.purgeAuditLog(days)
+      setPurgeRes(r)
+      load()  // Refresh table
+    } catch(e) { setPurgeRes({ error: e.message }) }
+    finally { setPurging(false) }
+  }
+
+  const hasAnyFilter = advCount > 0 || basicFilters.some(Boolean)
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 items-center">
-        <select value={filterRole} onChange={e => setRole(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 120 }}>
-          <option value="">All roles</option>
-          {['editor','viewer','web','all','admin'].map(r => <option key={r}>{r}</option>)}
-        </select>
-        <select value={filterMethod} onChange={e => setMeth(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 105 }}>
-          <option value="">All methods</option>
-          {['GET','POST','PATCH','DELETE'].map(m => <option key={m}>{m}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setStat(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 110 }}>
-          <option value="">All statuses</option>
-          <option value="200">2xx OK</option>
-          <option value="400">4xx Errors</option>
-          <option value="500">5xx Errors</option>
-        </select>
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
-          <RefreshCw size={11} /> Refresh
-        </button>
+      {showPurge && (
+        <PurgeModal
+          onConfirm={doPurge}
+          onCancel={() => { setShowPurge(false); setPurgeRes(null) }}
+          purging={purging}
+          result={purgeRes}
+        />
+      )}
+
+      {/* ── Basic filter bar ─────────────────────────────────────────────── */}
+      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+        <div className="flex flex-wrap gap-2 items-end">
+          <FSel label="Role" value={filterRole} onChange={setRole}
+            opts={[['','All roles'],['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
+          <FSel label="Method" value={filterMethod} onChange={setMeth}
+            opts={[['','All methods'],['GET','GET'],['POST','POST'],['PATCH','PATCH'],['DELETE','DELETE']]} />
+          <FSel label="Status" value={filterStatus} onChange={setStat}
+            opts={[['','All statuses'],['200','200 OK'],['201','201 Created'],['204','204 No Content'],
+                   ['400','400 Bad Req'],['401','401 Unauth'],['403','403 Forbidden'],
+                   ['404','404 Not Found'],['422','422 Unprocessable'],['500','500 Server Err']]} />
+          <FSel label="Limit" value={String(limit)} onChange={v => setLimit(Number(v))}
+            opts={[['50','50'],['100','100'],['200','200'],['500','500'],['1000','1000']]} />
+
+          <div className="flex gap-2 ml-auto items-end">
+            <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+              <RefreshCw size={11} /> Refresh
+            </button>
+            <button onClick={() => setShowAdv(v => !v)}
+              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
+              style={{
+                background: showAdv ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
+                color: showAdv ? '#818cf8' : 'var(--text-2)',
+                border: `1px solid ${showAdv ? '#818cf8' : 'var(--border)'}`,
+              }}>
+              <SlidersHorizontal size={12} />
+              Filters
+              {advCount > 0 && (
+                <span className="rounded-full px-1.5 py-0 text-[10px] font-bold"
+                  style={{ background: '#6366f1', color: '#fff' }}>
+                  {advCount}
+                </span>
+              )}
+              {showAdv ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+            <button onClick={() => setShowPurge(true)}
+              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium"
+              style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.25)' }}>
+              <Trash2 size={12} /> Purge
+            </button>
+            {hasAnyFilter && (
+              <button onClick={resetFilters}
+                className="text-xs px-2 py-1.5 rounded-lg flex items-center gap-1"
+                style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                <X size={11} /> Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Advanced filter panel ─────────────────────────────────────── */}
+        {showAdv && (
+          <div className="pt-2 border-t flex flex-wrap gap-3" style={{ borderColor: 'var(--border)' }}>
+            <FPill label="IP address" value={filterIp}      onChange={setIp}      placeholder="192.168…" />
+            <FPill label="Path"       value={filterPath}    onChange={setPath}    placeholder="/api/…" />
+            <FPill label="Country"    value={filterCountry} onChange={setCountry} placeholder="US · India…" />
+            <FPill label="City"       value={filterCity}    onChange={setCity}    placeholder="Mumbai…" />
+            <FPill label="ISP / Org"  value={filterIsp}     onChange={setIsp}     placeholder="Airtel…" />
+            <FSel  label="Device"     value={filterDevice}  onChange={setDevice}
+              opts={[['','Any device'],['desktop','Desktop'],['mobile','Mobile'],['tablet','Tablet']]} />
+            <FPill label="Browser"    value={filterBrowser} onChange={setBrowser} placeholder="Chrome…" />
+            <FPill label="OS"         value={filterOs}      onChange={setOs}      placeholder="Windows…" />
+            <FPill label="Status ≥"   value={statusMin}     onChange={setStMin}   type="number" placeholder="400" />
+            <FPill label="Status ≤"   value={statusMax}     onChange={setStMax}   type="number" placeholder="499" />
+            <FPill label="From"       value={filterFrom}    onChange={setFrom}    type="datetime-local" />
+            <FPill label="To"         value={filterTo}      onChange={setTo}      type="datetime-local" />
+          </div>
+        )}
+
+        {/* ── Stats bar ─────────────────────────────────────────────────── */}
         {data && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total.toLocaleString()} rows
-          </span>
+          <div className="flex gap-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            <span><b style={{ color: 'var(--text-1)' }}>{data.total.toLocaleString()}</b> matching rows</span>
+            <span>showing {Math.min(offset + 1, data.total)}–{Math.min(offset + limit, data.total)}</span>
+          </div>
         )}
       </div>
 
+      {/* ── Table ──────────────────────────────────────────────────────────── */}
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
             <table className="w-full text-xs">
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                  {['Time','Role','Method','Path','Status','ms','IP','OS / Browser','Geo','Size'].map(h => (
+                  {['Time','Role','Method','Path','Status','ms','IP · Location','OS / Browser','ISP · Org','Sizes'].map(h => (
                     <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
-                      style={{ color: 'var(--text-2)' }}>{h}</th>
+                      style={{ color: 'var(--text-2)', fontSize: 11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -374,50 +591,163 @@ function AuditLogTab() {
                         onClick={() => setExp(expanded === row.id ? null : row.id)}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
                         onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>
+
+                        {/* Time */}
+                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 10 }}>
                           {ts(row.ts)}
                         </td>
+
+                        {/* Role */}
                         <td className="px-3 py-2">{roleBadge(row.role)}</td>
+
+                        {/* Method */}
                         <td className="px-3 py-2">{methodBadge(row.method)}</td>
-                        <td className="px-3 py-2 max-w-[180px] truncate" style={{ color: 'var(--text-1)' }}
-                          title={row.path}>{row.path}</td>
+
+                        {/* Path */}
+                        <td className="px-3 py-2 max-w-[200px] truncate" style={{ color: 'var(--text-1)' }} title={row.path}>
+                          {row.query_params
+                            ? <><span>{row.path}</span><span style={{ color: 'var(--text-3)' }}>?…</span></>
+                            : row.path}
+                        </td>
+
+                        {/* Status */}
                         <td className="px-3 py-2">{statusBadge(row.status)}</td>
-                        <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>
-                          {row.duration_ms != null ? `${row.duration_ms}` : '—'}
+
+                        {/* Duration */}
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap"
+                          style={{ color: row.duration_ms > 2000 ? '#f59e0b' : row.duration_ms > 5000 ? '#dc2626' : 'var(--text-2)' }}>
+                          {row.duration_ms != null ? `${row.duration_ms}ms` : '—'}
                         </td>
-                        <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>
-                          {row.ip || '—'}
+
+                        {/* IP + Location */}
+                        <td className="px-3 py-2" style={{ minWidth: 160 }}>
+                          <div className="font-mono text-[10px]" style={{ color: 'var(--text-2)' }}>{row.ip || '—'}</div>
+                          {(row.country_code || row.city) && (
+                            <div className="flex items-center gap-1 mt-0.5" style={{ color: 'var(--text-3)', fontSize: 10 }}>
+                              <span>{countryFlag(row.country_code)}</span>
+                              <span>{[row.city, row.region, row.country_code].filter(Boolean).join(', ')}</span>
+                            </div>
+                          )}
+                          {(row.lat != null && row.lon != null) && (
+                            <a
+                              href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
+                              target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="flex items-center gap-0.5 mt-0.5"
+                              style={{ color: '#6366f1', fontSize: 10, textDecoration: 'none' }}>
+                              <MapPin size={9} />
+                              {Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)}
+                            </a>
+                          )}
                         </td>
+
+                        {/* OS / Browser / Device */}
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <span className="flex items-center gap-1" style={{ color: 'var(--text-2)' }}>
+                          <div className="flex items-center gap-1" style={{ color: 'var(--text-2)' }}>
                             {deviceIcon(row.device)}
                             <span>{row.os || '?'}</span>
-                            {row.browser && <span style={{ color: 'var(--text-3)' }}> / {row.browser}</span>}
-                          </span>
+                          </div>
+                          {row.browser && (
+                            <div style={{ color: 'var(--text-3)', fontSize: 10 }}>{row.browser}</div>
+                          )}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {row.country_code
-                            ? <span title={[row.country, row.city, row.isp].filter(Boolean).join(' · ')}>
-                                {row.country_code}{row.city ? ` · ${row.city}` : ''}
-                              </span>
-                            : '—'}
+
+                        {/* ISP / Org */}
+                        <td className="px-3 py-2" style={{ maxWidth: 180 }}>
+                          {row.isp && (
+                            <div className="flex items-center gap-1 truncate" style={{ color: 'var(--text-2)', fontSize: 10 }}>
+                              <Wifi size={9} style={{ flexShrink: 0 }} />
+                              <span className="truncate" title={row.isp}>{row.isp}</span>
+                            </div>
+                          )}
+                          {row.org && row.org !== row.isp && (
+                            <div className="truncate" style={{ color: 'var(--text-3)', fontSize: 10 }} title={row.org}>{row.org}</div>
+                          )}
+                          {row.timezone && (
+                            <div style={{ color: 'var(--text-3)', fontSize: 10 }}>🕐 {row.timezone}</div>
+                          )}
                         </td>
-                        <td className="px-3 py-2 tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)', fontSize: 11 }}>
-                          {row.body_size ? `↑${row.body_size}` : ''}{row.resp_size ? ` ↓${row.resp_size}` : ''}
+
+                        {/* Sizes */}
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)', fontSize: 10 }}>
+                          {row.body_size ? <div>↑ {row.body_size}B</div> : null}
+                          {row.resp_size ? <div>↓ {row.resp_size}B</div> : null}
                           {!row.body_size && !row.resp_size ? '—' : ''}
                         </td>
                       </tr>
+
+                      {/* ── Expanded detail row ─────────────────────────── */}
                       {expanded === row.id && (
                         <tr key={`${row.id}-exp`} style={{ background: 'var(--bg-input)' }}>
                           <td colSpan={10} className="px-4 py-3">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1.5 text-[11px]">
-                              {row.request_id && <span style={{ color: 'var(--text-3)' }}>Request ID: <span style={{ color: 'var(--text-1)', fontFamily: 'monospace' }}>{row.request_id}</span></span>}
-                              {row.token_hint && <span style={{ color: 'var(--text-3)' }}>Token: <span style={{ color: 'var(--text-1)', fontFamily: 'monospace' }}>{row.token_hint}…</span></span>}
-                              {row.isp       && <span style={{ color: 'var(--text-3)' }}>ISP: <span style={{ color: 'var(--text-1)' }}>{row.isp}</span></span>}
-                              {row.region    && <span style={{ color: 'var(--text-3)' }}>Region: <span style={{ color: 'var(--text-1)' }}>{row.region}</span></span>}
-                              {row.referer   && <span className="col-span-2 truncate" style={{ color: 'var(--text-3)' }}>Referer: <span style={{ color: 'var(--text-1)' }}>{row.referer}</span></span>}
-                              {row.query_params && <span className="col-span-2 truncate" style={{ color: 'var(--text-3)' }}>Query: <span style={{ color: 'var(--text-1)', fontFamily: 'monospace' }}>{row.query_params}</span></span>}
-                              {row.user_agent && <span className="col-span-2 truncate" style={{ color: 'var(--text-3)' }}>UA: <span style={{ color: 'var(--text-1)' }}>{row.user_agent}</span></span>}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2 text-[11px]">
+                              {row.request_id && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Request ID: <code style={{ color: 'var(--text-1)' }}>{row.request_id}</code>
+                                </span>
+                              )}
+                              {row.token_hint && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Token: <code style={{ color: 'var(--text-1)' }}>{row.token_hint}…</code>
+                                </span>
+                              )}
+                              {row.country && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Country: <b style={{ color: 'var(--text-1)' }}>{countryFlag(row.country_code)} {row.country}</b>
+                                </span>
+                              )}
+                              {row.region && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Region/State: <b style={{ color: 'var(--text-1)' }}>{row.region}</b>
+                                </span>
+                              )}
+                              {row.isp && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  ISP: <b style={{ color: 'var(--text-1)' }}>{row.isp}</b>
+                                </span>
+                              )}
+                              {row.org && row.org !== row.isp && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Org: <b style={{ color: 'var(--text-1)' }}>{row.org}</b>
+                                </span>
+                              )}
+                              {row.timezone && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Timezone: <b style={{ color: 'var(--text-1)' }}>{row.timezone}</b>
+                                </span>
+                              )}
+                              {(row.lat != null && row.lon != null) && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Coordinates:{' '}
+                                  <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
+                                    target="_blank" rel="noopener noreferrer"
+                                    style={{ color: '#6366f1' }}>
+                                    {Number(row.lat).toFixed(4)}, {Number(row.lon).toFixed(4)} ↗
+                                  </a>
+                                </span>
+                              )}
+                              {row.query_params && (
+                                <span className="col-span-2 truncate" style={{ color: 'var(--text-3)' }}>
+                                  Query: <code style={{ color: 'var(--text-1)' }}>{row.query_params}</code>
+                                </span>
+                              )}
+                              {row.referer && (
+                                <span className="col-span-2 truncate" style={{ color: 'var(--text-3)' }}>
+                                  Referer: <span style={{ color: 'var(--text-1)' }}>{row.referer}</span>
+                                </span>
+                              )}
+                              {row.user_agent && (
+                                <span className="col-span-4 truncate" style={{ color: 'var(--text-3)' }}>
+                                  User-Agent: <span style={{ color: 'var(--text-1)' }}>{row.user_agent}</span>
+                                </span>
+                              )}
+                              {(row.body_size || row.resp_size) && (
+                                <span style={{ color: 'var(--text-3)' }}>
+                                  Transfer:{' '}
+                                  {row.body_size && <span style={{ color: 'var(--text-1)' }}>↑ {row.body_size}B </span>}
+                                  {row.resp_size && <span style={{ color: 'var(--text-1)' }}>↓ {row.resp_size}B</span>}
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>

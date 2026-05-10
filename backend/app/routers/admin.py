@@ -25,6 +25,7 @@ GET /api/admin/record-history       — field-level change log
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -251,18 +252,29 @@ async def admin_stats(_: str = Depends(require_admin)):
 
 @router.get("/audit-log")
 async def admin_audit_log(
-    limit:  int           = Query(100, ge=1, le=500),
-    offset: int           = Query(0,   ge=0),
-    role:   Optional[str] = Query(None),
-    method: Optional[str] = Query(None),
-    status: Optional[int] = Query(None),
-    ip:     Optional[str] = Query(None),
-    _:      str           = Depends(require_admin),
+    limit:      int           = Query(100, ge=1, le=1000),
+    offset:     int           = Query(0,   ge=0),
+    role:       Optional[str] = Query(None),
+    method:     Optional[str] = Query(None),
+    status:     Optional[int] = Query(None),
+    status_min: Optional[int] = Query(None, description="Min HTTP status (e.g. 400)"),
+    status_max: Optional[int] = Query(None, description="Max HTTP status (e.g. 499)"),
+    ip:         Optional[str] = Query(None, description="IP prefix or exact match"),
+    path:       Optional[str] = Query(None, description="Path substring (case-insensitive)"),
+    country:    Optional[str] = Query(None, description="Country code or name substring"),
+    city:       Optional[str] = Query(None, description="City substring"),
+    isp:        Optional[str] = Query(None, description="ISP / org substring"),
+    device:     Optional[str] = Query(None, description="desktop | mobile | tablet"),
+    browser:    Optional[str] = Query(None, description="Browser substring"),
+    os_name:    Optional[str] = Query(None, alias="os", description="OS substring"),
+    from_ts:    Optional[str] = Query(None, description="ISO datetime range start"),
+    to_ts:      Optional[str] = Query(None, description="ISO datetime range end"),
+    _:          str           = Depends(require_admin),
 ):
     """
-    Paginated audit log.
-    Filters: role, method, status, ip (prefix match).
-    Default: last 100 rows, newest first.
+    Paginated audit log with rich filters.
+    All text filters are case-insensitive substring / prefix matches.
+    Status filters: exact `status` OR range `status_min`+`status_max`.
     """
     pool = get_pool()
     if not pool:
@@ -272,14 +284,38 @@ async def admin_audit_log(
     params: list     = []
     idx = 1
 
-    if role:
-        where.append(f"role = ${idx}");   params.append(role);   idx += 1
-    if method:
-        where.append(f"method = ${idx}"); params.append(method.upper()); idx += 1
-    if status:
-        where.append(f"status = ${idx}"); params.append(status); idx += 1
-    if ip:
-        where.append(f"ip LIKE ${idx}");  params.append(ip + "%"); idx += 1
+    def _add(clause, value):
+        nonlocal idx
+        where.append(clause.replace("?", f"${idx}"))
+        params.append(value)
+        idx += 1
+
+    if role:        _add("role = ?",                       role)
+    if method:      _add("method = ?",                     method.upper())
+    if status:      _add("status = ?",                     status)
+    if status_min:  _add("status >= ?",                    status_min)
+    if status_max:  _add("status <= ?",                    status_max)
+    if ip:          _add("ip LIKE ?",                      ip + "%")
+    if path:        _add("path ILIKE ?",                   f"%{path}%")
+    if country:
+        # Match either 2-letter code or full name
+        where.append(f"(country_code ILIKE ${idx} OR country ILIKE ${idx+1})")
+        params += [country, f"%{country}%"]
+        idx += 2
+    if city:        _add("city ILIKE ?",                   f"%{city}%")
+    if isp:
+        where.append(f"(isp ILIKE ${idx} OR org ILIKE ${idx+1})")
+        params += [f"%{isp}%", f"%{isp}%"]
+        idx += 2
+    if device:      _add("device = ?",                     device.lower())
+    if browser:     _add("browser ILIKE ?",                f"%{browser}%")
+    if os_name:     _add("os ILIKE ?",                     f"%{os_name}%")
+    if from_ts:
+        try:    _add("ts >= ?", datetime.fromisoformat(from_ts))
+        except ValueError: pass
+    if to_ts:
+        try:    _add("ts <= ?", datetime.fromisoformat(to_ts))
+        except ValueError: pass
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -287,8 +323,10 @@ async def admin_audit_log(
     rows  = await pool.fetch(
         f"""
         SELECT id, ts, role, token_hint, method, path, status, duration_ms,
-               request_id, ip, os, browser, device,
+               request_id, ip, user_agent, os, browser, device,
                country, country_code, region, city, isp,
+               lat, lon, timezone, org,
+               referer, body_size, query_params, resp_size,
                extra::text AS extra
         FROM audit_log {where_sql}
         ORDER BY ts DESC
@@ -300,7 +338,6 @@ async def admin_audit_log(
     records = []
     for row in rows:
         d = _row_to_dict(row)
-        # Parse extra JSON string back to dict for cleaner output
         try:
             d["extra"] = json.loads(d.get("extra") or "{}")
         except Exception:
@@ -308,6 +345,48 @@ async def admin_audit_log(
         records.append(d)
 
     return {"total": total, "limit": limit, "offset": offset, "rows": records}
+
+
+@router.delete("/audit-log/purge")
+async def admin_purge_audit_log(
+    older_than_days: int = Query(30, ge=1, le=3650, description="Delete rows older than N days"),
+    _: str = Depends(require_admin),
+):
+    """
+    Bulk-delete audit log rows older than `older_than_days` days.
+    Safeguard: always keeps at least the 200 most-recent rows regardless of age.
+    Returns count of deleted rows.
+    """
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    count = await pool.fetchval(
+        """
+        WITH ranked AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY ts DESC) AS rn FROM audit_log
+        ),
+        to_delete AS (
+            SELECT id FROM ranked
+            WHERE rn > 200
+              AND id IN (
+                  SELECT id FROM audit_log
+                  WHERE ts < NOW() - ($1 * INTERVAL '1 day')
+              )
+        ),
+        deleted AS (
+            DELETE FROM audit_log WHERE id IN (SELECT id FROM to_delete) RETURNING id
+        )
+        SELECT COUNT(*) FROM deleted
+        """,
+        older_than_days,
+    )
+
+    return {
+        "deleted": int(count or 0),
+        "older_than_days": older_than_days,
+        "message": f"Deleted {count or 0} audit log entries older than {older_than_days} days (kept ≥200 most recent rows)",
+    }
 
 
 # ── Login sessions ────────────────────────────────────────────────────────────

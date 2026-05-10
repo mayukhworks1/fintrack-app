@@ -186,6 +186,11 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 geo.get("region",       "")[:100] or None,
                 geo.get("city",         "")[:100] or None,
                 geo.get("isp",          "")[:150] or None,
+                # Extended geo — coordinates, timezone, org (v2.4)
+                geo.get("lat")  if isinstance(geo.get("lat"),  (int, float)) else None,
+                geo.get("lon")  if isinstance(geo.get("lon"),  (int, float)) else None,
+                (geo.get("timezone") or "")[:50]  or None,
+                (geo.get("org")      or "")[:200] or None,
                 (item.get("referer")      or "")[:500] or None,
                 item.get("body_size"),
                 (item.get("query_params") or "")[:500] or None,
@@ -200,6 +205,7 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 method, path, status, duration_ms, request_id,
                 ip, user_agent, os, browser, device,
                 country, country_code, region, city, isp,
+                lat, lon, timezone, org,
                 referer, body_size, query_params, resp_size,
                 extra
             ) VALUES (
@@ -208,7 +214,8 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 $8,  $9,  $10, $11, $12,
                 $13, $14, $15, $16, $17,
                 $18, $19, $20, $21,
-                $22::jsonb
+                $22, $23, $24, $25,
+                $26::jsonb
             )
             """,
             records,
@@ -307,6 +314,7 @@ async def log_request(
                 method, path, status, duration_ms, request_id,
                 ip, user_agent, os, browser, device,
                 country, country_code, region, city, isp,
+                lat, lon, timezone, org,
                 referer, body_size, query_params, resp_size,
                 extra
             ) VALUES (
@@ -315,7 +323,8 @@ async def log_request(
                 $8,  $9,  $10, $11, $12,
                 $13, $14, $15, $16, $17,
                 $18, $19, $20, $21,
-                $22::jsonb
+                $22, $23, $24, $25,
+                $26::jsonb
             )
             """,
             role,
@@ -335,6 +344,10 @@ async def log_request(
             geo.get("region",       "")[:100] or None,
             geo.get("city",         "")[:100] or None,
             geo.get("isp",          "")[:150] or None,
+            geo.get("lat") if isinstance(geo.get("lat"), (int, float)) else None,
+            geo.get("lon") if isinstance(geo.get("lon"), (int, float)) else None,
+            (geo.get("timezone") or "")[:50]  or None,
+            (geo.get("org")      or "")[:200] or None,
             (referer or "")[:500]    or None,
             body_size,
             (query_params or "")[:500] or None,

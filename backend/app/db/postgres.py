@@ -209,10 +209,23 @@ ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS body_size    INTEGER;
 ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS query_params TEXT;
 ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS resp_size    INTEGER;
 
+-- audit_log: extended geo fields (added in v2.4)
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS lat      NUMERIC(9,6);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS lon      NUMERIC(9,6);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS timezone VARCHAR(50);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS org      VARCHAR(200);
+
+-- audit_log: performance indexes for filter queries
+CREATE INDEX IF NOT EXISTS al_status_idx  ON audit_log (status,  ts DESC);
+CREATE INDEX IF NOT EXISTS al_country_idx ON audit_log (country, ts DESC);
+CREATE INDEX IF NOT EXISTS al_method_idx  ON audit_log (method,  ts DESC);
+
 -- login_sessions: device + location columns may be absent on old deployments
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device       VARCHAR(20);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS country_code VARCHAR(4);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS city         VARCHAR(100);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS region       VARCHAR(100);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS isp          VARCHAR(150);
 """
 # ---------------------------------------------------------------------------
 
