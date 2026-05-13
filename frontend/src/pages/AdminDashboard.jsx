@@ -16,7 +16,7 @@
  *   History    — field-level change log
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, ScrollText, Users, MessageSquareText,
   RefreshCw, Database, FileText, Clock, LogOut,
@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { FilterSelect, FilterMulti } from '../components/FilterSelect'
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -335,77 +336,35 @@ function FPill({ label, value, onChange, type = 'text', placeholder, width = 130
   )
 }
 
+// FSel — thin adapter so existing call sites keep working (opts is [value,label][] tuple array)
 function FSel({ label, value, onChange, opts, width = 130 }) {
+  const options = opts.map(([v, l]) => ({ value: v, label: l }))
   return (
     <FLabel label={label}>
-      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...CTRL_STYLE, width: `min(100%, ${width}px)` }}>
-        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
+      <FilterSelect
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={options[0]?.label ?? 'All'}
+        width={width}
+        clearable={options[0]?.value === ''}
+      />
     </FLabel>
   )
 }
 
-// ── Multi-select pill dropdown ────────────────────────────────────────────────
-// selected: string[]  onChange: (string[]) => void  opts: [value, label][]
+// FMulti — thin adapter (opts is [value,label][] tuple array)
 function FMulti({ label, selected, onChange, opts, placeholder = 'Any', width = 150 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const toggle = v => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
-  const clear  = e => { e.stopPropagation(); onChange([]) }
-
-  const display = selected.length === 0 ? placeholder
-    : selected.length === 1 ? (opts.find(([v]) => v === selected[0])?.[1] || selected[0])
-    : `${selected.length} selected`
-
+  const options = opts.map(([v, l]) => ({ value: v, label: l }))
   return (
     <FLabel label={label}>
-      <div ref={ref} style={{ position: 'relative', width: `min(100%, ${width}px)` }}>
-        <button type="button" onClick={() => setOpen(v => !v)}
-          style={{
-            ...CTRL_STYLE, width: '100%', textAlign: 'left', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4,
-          }}>
-          <span style={{ color: selected.length ? 'var(--text-1)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {display}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-            {selected.length > 0 && (
-              <span onClick={clear} style={{ color: 'var(--text-3)', lineHeight: 1, padding: '0 1px' }}>×</span>
-            )}
-            <ChevronDown size={10} style={{ color: 'var(--text-3)' }} />
-          </span>
-        </button>
-        {open && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, zIndex: 200, minWidth: `min(100vw - 16px, ${width}px)`,
-            background: 'var(--card-bg)', border: '1px solid var(--border)',
-            borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-            padding: '4px 0', marginTop: 4, maxHeight: 220, overflowY: 'auto',
-          }}>
-            {opts.map(([v, l]) => (
-              <label key={v} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 12px', cursor: 'pointer', fontSize: 12,
-                color: 'var(--text-1)',
-                background: selected.includes(v) ? 'rgba(99,102,241,0.08)' : 'transparent',
-              }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                onMouseLeave={e => e.currentTarget.style.background = selected.includes(v) ? 'rgba(99,102,241,0.08)' : 'transparent'}>
-                <input type="checkbox" checked={selected.includes(v)} onChange={() => toggle(v)}
-                  style={{ accentColor: '#6366f1', width: 13, height: 13 }} />
-                <span>{l}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
+      <FilterMulti
+        selected={selected}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder}
+        width={width}
+      />
     </FLabel>
   )
 }
@@ -1964,11 +1923,13 @@ function HistoryTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
-        <select value={filterSrc} onChange={e => setFs(e.target.value)}
-          className="input-field text-xs py-1 px-2" style={{ width: 150 }}>
-          <option value="">All sources</option>
-          {['projects','invoices','web_invoices'].map(s => <option key={s}>{s}</option>)}
-        </select>
+        <FilterSelect
+          value={filterSrc}
+          onChange={setFs}
+          options={['projects','invoices','web_invoices']}
+          placeholder="All sources"
+          width={150}
+        />
         <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>

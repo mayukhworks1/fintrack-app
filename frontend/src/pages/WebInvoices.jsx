@@ -18,6 +18,7 @@ import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
 import { ProjectsWorkspace } from './WebProjects'
 import { DocPreviewModal } from '../components/DocPreviewModal'
+import { FilterSelect } from '../components/FilterSelect'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -2278,42 +2279,38 @@ export default function WebInvoices() {
             {showFilters && (
               <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
                 style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div className="relative">
-                  <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                  <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 140px)', paddingRight: '1.5rem' }}>
-                    <option value="">All projects</option>
-                    {(picklists.Project || []).map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                </div>
-                <div className="relative">
-                  <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                  <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none w-full" style={{ minWidth: 'min(100%, 170px)', paddingRight: '1.5rem' }}>
-                    <option value="">All months</option>
-                    {monthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-                  </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                </div>
-                <div className="relative">
-                  <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                  <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 160px)', paddingRight: '1.5rem' }}>
-                    <option value="">All categories</option>
-                    {(picklists.Category || []).map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                </div>
-                <div className="relative">
-                  <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                  <select value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 130px)', paddingRight: '1.5rem' }}>
-                    <option value="">Anyone</option>
-                    {(picklists['Raised By'] || []).map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                </div>
+                <FilterSelect
+                  value={projectFilter}
+                  onChange={setProjectFilter}
+                  options={picklists.Project || []}
+                  placeholder="All projects"
+                  icon={User}
+                  width={150}
+                />
+                <FilterSelect
+                  value={monthFilter}
+                  onChange={setMonthFilter}
+                  options={monthOptions.map(m => ({ value: m, label: monthLabel(m) }))}
+                  placeholder="All months"
+                  icon={CalendarClock}
+                  width={150}
+                />
+                <FilterSelect
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={picklists.Category || []}
+                  placeholder="All categories"
+                  icon={Tag}
+                  width={155}
+                />
+                <FilterSelect
+                  value={raisedByFilter}
+                  onChange={setRaisedByFilter}
+                  options={picklists['Raised By'] || []}
+                  placeholder="Anyone"
+                  icon={User}
+                  width={135}
+                />
                 <button
                   onClick={() => setOverdueOnly(v => !v)}
                   className="btn-ghost"

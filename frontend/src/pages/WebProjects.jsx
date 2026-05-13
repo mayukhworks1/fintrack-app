@@ -11,8 +11,9 @@ import {
   ArrowLeft, Plus, Edit2, Trash2, X, Check, Loader2, RefreshCw,
   Search, Users, Briefcase, Moon, Sun, LogOut, AlertTriangle, Clock,
   TrendingUp, TrendingDown, IndianRupee, Calendar, Tag, FileText,
-  ChevronRight, Receipt, CheckCircle2, XCircle, AlertOctagon,
+  ChevronRight, Receipt, CheckCircle2, XCircle, AlertOctagon, Filter,
 } from 'lucide-react'
+import { FilterSelect } from '../components/FilterSelect'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -1591,18 +1592,22 @@ export function ProjectsWorkspace() {
                 </button>
               )}
             </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="rounded-xl px-3 py-2.5 text-sm outline-none"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
-              <option value="">All statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-              className="rounded-xl px-3 py-2.5 text-sm outline-none"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
-              <option value="">All priorities</option>
-              {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+            <FilterSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={STATUSES}
+              placeholder="All statuses"
+              icon={Filter}
+              width={145}
+            />
+            <FilterSelect
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+              options={PRIORITIES}
+              placeholder="All priorities"
+              icon={Tag}
+              width={145}
+            />
             <button onClick={loadProjects}
               className="w-10 rounded-xl flex items-center justify-center"
               style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>

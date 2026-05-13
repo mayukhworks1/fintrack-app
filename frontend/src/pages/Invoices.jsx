@@ -13,6 +13,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { formatInr } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { FilterSelect } from '../components/FilterSelect'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import clsx from 'clsx'
 
@@ -1566,44 +1567,40 @@ export default function Invoices() {
               ))}
             </div>
             {/* Project — server-side */}
-            <div className="relative">
-              <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
-                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 140, paddingRight: '1.5rem' }}>
-                <option value="">All projects</option>
-                {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            </div>
-            <div className="relative">
-              <CalendarDays size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
-                <option value="">All months</option>
-                {monthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            </div>
+            <FilterSelect
+              value={projectFilter}
+              onChange={setProjectFilter}
+              options={projectOptions}
+              placeholder="All projects"
+              icon={User}
+              width={150}
+            />
+            <FilterSelect
+              value={monthFilter}
+              onChange={setMonthFilter}
+              options={monthOptions.map(m => ({ value: m, label: monthLabel(m) }))}
+              placeholder="All months"
+              icon={CalendarDays}
+              width={150}
+            />
             {/* Category — client-side */}
-            <div className="relative">
-              <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 160, paddingRight: '1.5rem' }}>
-                <option value="">All categories</option>
-                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            </div>
+            <FilterSelect
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={categoryOptions}
+              placeholder="All categories"
+              icon={Tag}
+              width={155}
+            />
             {/* Raised By — client-side */}
-            <div className="relative">
-              <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <select value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}
-                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 130, paddingRight: '1.5rem' }}>
-                <option value="">Anyone</option>
-                {raisedByOptions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            </div>
+            <FilterSelect
+              value={raisedByFilter}
+              onChange={setRaisedByFilter}
+              options={raisedByOptions}
+              placeholder="Anyone"
+              icon={User}
+              width={135}
+            />
             <button
               onClick={() => setOverdueOnly(v => !v)}
               className="btn-ghost"
