@@ -1149,7 +1149,13 @@ function MobileHeader({ onHelp, onLogout }) {
   const { dark, toggle } = useTheme()
   return (
     <div className="sm:hidden flex-shrink-0 flex items-center justify-between px-3"
-      style={{ height: 48, background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)', zIndex: 10 }}>
+      style={{
+        height: 'calc(48px + env(safe-area-inset-top))',
+        paddingTop: 'env(safe-area-inset-top)',
+        background: 'var(--sidebar-bg)',
+        borderBottom: '1px solid var(--sidebar-border)',
+        zIndex: 10,
+      }}>
       <div className="flex items-center gap-2">
         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
@@ -1192,7 +1198,12 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
   ]
   return (
     <nav className="sm:hidden flex-shrink-0 flex items-stretch border-t"
-      style={{ background: 'var(--sidebar-bg)', borderColor: 'var(--sidebar-border)' }}>
+      style={{
+        background: 'var(--sidebar-bg)',
+        borderColor: 'var(--sidebar-border)',
+        /* Push content above iPhone home indicator */
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>
       {navItems.map(({ value, label, icon: Icon }) => {
         const active = workspace === value
         return (
@@ -1232,7 +1243,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
         width: open ? 220 : 56,
         background: 'var(--sidebar-bg)',
         borderRight: '1px solid var(--sidebar-border)',
-        height: '100vh',
+        height: '100dvh',
         overflow: 'hidden',
       }}>
 
@@ -1679,7 +1690,7 @@ export default function WebInvoices() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+    <div className="app-shell flex overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* ── Sidebar — desktop only ── */}
       <AppSidebar
         workspace={workspace}

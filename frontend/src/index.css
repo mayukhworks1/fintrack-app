@@ -431,6 +431,25 @@ h1 { letter-spacing: -0.03em; }
   .pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
 }
 
+/* ── Full-screen app shell — Safari-safe height ──────────────────
+   Safari iOS has two problems with height: 100vh:
+   1. 100vh is the "large" viewport (chrome hidden) — when chrome is
+      visible the element overflows behind it.
+   2. The safe-area-inset-bottom (home indicator) is zero unless
+      viewport-fit=cover is set in the <meta viewport> tag.
+   Fix: cascade three values so each browser picks the best it knows:
+     1. 100vh           — universal fallback
+     2. -webkit-fill-available — Safari <15.4 (fills visible area)
+     3. 100dvh          — Safari ≥15.4 / Chrome / Firefox
+                          (dynamic: shrinks when chrome is visible)
+   ─────────────────────────────────────────────────────────────── */
+.app-shell {
+  height: 100vh;
+  /* stylelint-disable-next-line value-no-vendor-prefix */
+  height: -webkit-fill-available;
+  height: 100dvh;
+}
+
 /* ── Mobile padding rhythm & touch optimizations ─────────────── */
 @media (max-width: 639px) {
   .card { border-radius: 12px; }
