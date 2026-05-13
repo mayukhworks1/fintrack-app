@@ -431,9 +431,39 @@ h1 { letter-spacing: -0.03em; }
   .pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
 }
 
-/* ── Mobile padding rhythm ────────────────────────────────────── */
+/* ── Mobile padding rhythm & touch optimizations ─────────────── */
 @media (max-width: 639px) {
   .card { border-radius: 12px; }
+
+  /* Ensure horizontally-scrollable containers feel smooth on iOS */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: none;
+  }
+
+  /* Minimum touch target sizes for interactive elements */
+  button, [role="button"], select, input[type="checkbox"], input[type="radio"] {
+    min-height: 36px;
+  }
+
+  /* Slightly larger text for readability */
+  .text-\[10px\] { font-size: 11px; }
+
+  /* Reduce excessive horizontal padding in dense components */
+  .px-3.py-1\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+}
+
+/* ── Scroll indicator shadow — shows when content overflows ──── */
+.scroll-fade-right {
+  background: linear-gradient(to right, transparent 85%, var(--card-bg) 100%);
+  pointer-events: none;
+}
+
+/* ── Better scrollbar on mobile browsers ─────────────────────── */
+@media (hover: none) {
+  /* Hide thin scrollbars on touch — use momentum scroll instead */
+  .overflow-x-auto::-webkit-scrollbar { display: none; }
+  .overflow-x-auto { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 }
 
 /* ── Print stylesheet — board-ready PDF ─────────────────────────── */

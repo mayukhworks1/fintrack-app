@@ -1932,7 +1932,87 @@ export function AllResourcesView() {
           <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>Click "Add Resource" above to get started</p>
         </div>
       ) : (
-        <div className="card overflow-hidden p-0">
+        <>
+        {/* Mobile cards for resources */}
+        <div className="md:hidden space-y-2">
+          {displayed.map(r => {
+            const f = r.fields || {}
+            const projLabel = Array.isArray(f['Project'])
+              ? f['Project'].map(p => p.title || p.value || '').filter(Boolean).join(', ')
+              : f['Project'] || '—'
+            const cost    = Number(f['Total Cost'] || 0)
+            const hours   = Number(f['Man Hours'] || 0)
+            const revenue = Number(f['Revenue Generated'] || 0)
+            const margin  = Number(f['Resource Margin %'] || 0)
+            const linkedProjId = Array.isArray(f['Project']) && f['Project'][0]?.id
+            return (
+              <div key={r.id} className="card p-3">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                    style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
+                    {(f['Resource Name'] || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>{f['Resource Name'] || '—'}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                      {f['Role'] || '—'}{f['Type'] ? ` · ${f['Type']}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingRec({
+                        id: r.id,
+                        initial: {
+                          resource_name:  f['Resource Name'] || '',
+                          role:           f['Role']          || '',
+                          type_:          f['Type']          || 'Employee',
+                          rate:           f['Rate (₹)']      != null ? String(f['Rate (₹)'])      : '',
+                          rate_unit:      f['Rate Unit']     || 'Per Month',
+                          units:          f['Units']         != null ? String(f['Units'])         : '',
+                          man_hours:      f['Man Hours']     != null ? String(f['Man Hours'])     : '',
+                          planned_hours:  f['Planned Hours'] != null ? String(f['Planned Hours']) : '',
+                          billing_rate:   f['Billing Rate (₹)'] != null ? String(f['Billing Rate (₹)']) : '',
+                          billable_units: f['Billable Units'] != null ? String(f['Billable Units']) : '',
+                          from_date:      f['From Date']?.split('T')[0] || '',
+                          to_date:        f['To Date']?.split('T')[0]   || '',
+                          notes:          f['Notes']         || '',
+                          project_id:     linkedProjId || '',
+                        },
+                      })
+                      setDrawer('edit')
+                    }}
+                    className="btn-ghost flex items-center gap-1 flex-shrink-0"
+                    style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
+                    <Edit2 size={11} /> Edit
+                  </button>
+                </div>
+                <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
+                  Project: <span style={{ color: 'var(--text-2)' }}>{projLabel}</span>
+                </p>
+                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <div>
+                    <p style={{ color: 'var(--text-3)' }}>Cost</p>
+                    <p className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{cost ? formatInr(cost) : '—'}</p>
+                  </div>
+                  <div>
+                    <p style={{ color: 'var(--text-3)' }}>Hours</p>
+                    <p className="font-semibold tabular-nums" style={{ color: 'var(--text-2)' }}>{hours > 0 ? `${hours}h` : '—'}</p>
+                  </div>
+                  <div>
+                    <p style={{ color: 'var(--text-3)' }}>Revenue</p>
+                    <p className="font-semibold tabular-nums" style={{ color: revenue > 0 ? '#4ade80' : 'var(--text-3)' }}>
+                      {revenue > 0 ? formatInr(revenue) : '—'}
+                    </p>
+                    {margin > 0 && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{margin.toFixed(1)}%</p>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block card overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full" style={{ minWidth: 640 }}>
               <thead>
@@ -1953,7 +2033,6 @@ export function AllResourcesView() {
                   const hours   = Number(f['Man Hours'] || 0)
                   const revenue = Number(f['Revenue Generated'] || 0)
                   const margin  = Number(f['Resource Margin %'] || 0)
-                  // Find linked project id for pre-filling edit form
                   const linkedProjId = Array.isArray(f['Project']) && f['Project'][0]?.id
                   return (
                     <tr key={r.id} className="tbl-row" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -2031,6 +2110,7 @@ export function AllResourcesView() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* Resource Drawer */}

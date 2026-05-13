@@ -317,7 +317,7 @@ const CTRL_STYLE = {
 
 function FLabel({ label, children }) {
   return (
-    <label className="flex flex-col gap-0.5" style={{ minWidth: 90 }}>
+    <label className="flex flex-col gap-0.5 flex-shrink-0">
       <span style={{ color: 'var(--text-3)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {label}
       </span>
@@ -330,7 +330,7 @@ function FPill({ label, value, onChange, type = 'text', placeholder, width = 130
   return (
     <FLabel label={label}>
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder || ''} style={{ ...CTRL_STYLE, width }} />
+        placeholder={placeholder || ''} style={{ ...CTRL_STYLE, width: `min(100%, ${width}px)` }} />
     </FLabel>
   )
 }
@@ -338,7 +338,7 @@ function FPill({ label, value, onChange, type = 'text', placeholder, width = 130
 function FSel({ label, value, onChange, opts, width = 130 }) {
   return (
     <FLabel label={label}>
-      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...CTRL_STYLE, width }}>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...CTRL_STYLE, width: `min(100%, ${width}px)` }}>
         {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </FLabel>
@@ -366,7 +366,7 @@ function FMulti({ label, selected, onChange, opts, placeholder = 'Any', width = 
 
   return (
     <FLabel label={label}>
-      <div ref={ref} style={{ position: 'relative', width }}>
+      <div ref={ref} style={{ position: 'relative', width: `min(100%, ${width}px)` }}>
         <button type="button" onClick={() => setOpen(v => !v)}
           style={{
             ...CTRL_STYLE, width: '100%', textAlign: 'left', cursor: 'pointer',
@@ -384,10 +384,10 @@ function FMulti({ label, selected, onChange, opts, placeholder = 'Any', width = 
         </button>
         {open && (
           <div style={{
-            position: 'absolute', top: '100%', left: 0, zIndex: 200, minWidth: width,
+            position: 'absolute', top: '100%', left: 0, zIndex: 200, minWidth: `min(100vw - 16px, ${width}px)`,
             background: 'var(--card-bg)', border: '1px solid var(--border)',
             borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-            padding: '4px 0', marginTop: 4,
+            padding: '4px 0', marginTop: 4, maxHeight: 220, overflowY: 'auto',
           }}>
             {opts.map(([v, l]) => (
               <label key={v} style={{
@@ -415,22 +415,24 @@ function FilterBar({ children, count, onReset, rightSlot }) {
   return (
     <div style={{
       background: 'var(--card-bg)', border: '1px solid var(--border)',
-      borderRadius: 14, padding: '12px 14px',
-    }} className="space-y-3">
+      borderRadius: 14, padding: '10px 12px',
+    }} className="space-y-2">
       <div className="flex flex-wrap gap-2 items-end">
         {children}
-        <div className="flex gap-2 ml-auto items-end flex-wrap">
+      </div>
+      <div className="flex flex-wrap gap-2 items-center justify-between">
+        <div className="flex flex-wrap gap-2 items-center">
           {rightSlot}
-          {count > 0 && (
-            <button onClick={onReset}
-              style={{
-                ...CTRL_STYLE, display: 'flex', alignItems: 'center', gap: 4,
-                color: 'var(--text-3)', cursor: 'pointer',
-              }}>
-              <X size={11} /> Clear ({count})
-            </button>
-          )}
         </div>
+        {count > 0 && (
+          <button onClick={onReset}
+            style={{
+              ...CTRL_STYLE, display: 'flex', alignItems: 'center', gap: 4,
+              color: 'var(--text-3)', cursor: 'pointer',
+            }}>
+            <X size={11} /> Clear ({count})
+          </button>
+        )}
       </div>
     </div>
   )
@@ -677,7 +679,7 @@ function AuditLogTab() {
       )}
 
       {/* ── Basic filter bar ─────────────────────────────────────────────── */}
-      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+      <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
         <div className="flex flex-wrap gap-2 items-end">
           <FMulti label="Role" selected={filterRole} onChange={setRole} width={140}
             opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
@@ -689,41 +691,41 @@ function AuditLogTab() {
                    ['404','404 Not Found'],['422','422 Unprocessable'],['500','500 Server Err']]} />
           <FSel label="Limit" value={String(limit)} onChange={v => setLimit(Number(v))}
             opts={[['50','50'],['100','100'],['200','200'],['500','500'],['1000','1000']]} />
+        </div>
 
-          <div className="flex gap-2 ml-auto items-end">
-            <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
-              <RefreshCw size={11} /> Refresh
-            </button>
-            <button onClick={() => setShowAdv(v => !v)}
-              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
-              style={{
-                background: showAdv ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
-                color: showAdv ? '#818cf8' : 'var(--text-2)',
-                border: `1px solid ${showAdv ? '#818cf8' : 'var(--border)'}`,
-              }}>
-              <SlidersHorizontal size={12} />
-              Filters
-              {advCount > 0 && (
-                <span className="rounded-full px-1.5 py-0 text-[10px] font-bold"
-                  style={{ background: '#6366f1', color: '#fff' }}>
-                  {advCount}
-                </span>
-              )}
-              {showAdv ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-            </button>
-            <button onClick={() => setShowPurge(true)}
-              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium"
-              style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.25)' }}>
-              <Trash2 size={12} /> Purge
-            </button>
-            {hasAnyFilter && (
-              <button onClick={resetFilters}
-                className="text-xs px-2 py-1.5 rounded-lg flex items-center gap-1"
-                style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                <X size={11} /> Clear
-              </button>
+        <div className="flex flex-wrap gap-2 items-center">
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+          <button onClick={() => setShowAdv(v => !v)}
+            className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
+            style={{
+              background: showAdv ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
+              color: showAdv ? '#818cf8' : 'var(--text-2)',
+              border: `1px solid ${showAdv ? '#818cf8' : 'var(--border)'}`,
+            }}>
+            <SlidersHorizontal size={12} />
+            Filters
+            {advCount > 0 && (
+              <span className="rounded-full px-1.5 py-0 text-[10px] font-bold"
+                style={{ background: '#6366f1', color: '#fff' }}>
+                {advCount}
+              </span>
             )}
-          </div>
+            {showAdv ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
+          <button onClick={() => setShowPurge(true)}
+            className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium"
+            style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.25)' }}>
+            <Trash2 size={12} /> Purge
+          </button>
+          {hasAnyFilter && (
+            <button onClick={resetFilters}
+              className="text-xs px-2 py-1.5 rounded-lg flex items-center gap-1"
+              style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+              <X size={11} /> Clear
+            </button>
+          )}
         </div>
 
         {/* ── Advanced filter panel ─────────────────────────────────────── */}
@@ -757,7 +759,71 @@ function AuditLogTab() {
       {/* ── Table ──────────────────────────────────────────────────────────── */}
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
-          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+          {/* Mobile card view */}
+          {(data?.rows || []).length === 0 ? <Empty /> : (
+            <>
+              <div className="md:hidden space-y-1.5">
+                {(data?.rows || []).map(row => (
+                  <div key={`m-${row.id}`}>
+                    <div
+                      className="rounded-xl border cursor-pointer p-3"
+                      style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}
+                      onClick={() => setExp(expanded === row.id ? null : row.id)}>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap gap-1">
+                          {roleBadge(row.role)}
+                          {methodBadge(row.method)}
+                          {statusBadge(row.status)}
+                        </div>
+                        <span className="text-[10px] tabular-nums flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+                          {ts(row.ts)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-mono truncate mb-1.5" style={{ color: 'var(--text-2)' }}
+                        title={row.path}>
+                        {row.path}{row.query_params ? '?…' : ''}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        {row.ip && <span className="font-mono">{row.ip}</span>}
+                        {(row.city || row.country_code) && (
+                          <span>{countryFlag(row.country_code)} {[row.city, row.country_code].filter(Boolean).join(', ')}</span>
+                        )}
+                        {row.duration_ms != null && <span>{row.duration_ms}ms</span>}
+                        {row.device && <span>{deviceIcon(row.device)} {row.os || ''}</span>}
+                        {row.isp && <span>{row.isp}</span>}
+                      </div>
+                    </div>
+                    {expanded === row.id && (
+                      <div className="rounded-xl p-3 text-[11px] space-y-1.5"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', marginTop: 2 }}>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                          {row.request_id && <span style={{ color: 'var(--text-3)' }}>ReqID: <code style={{ color: 'var(--text-1)' }}>{row.request_id?.slice(0, 12)}…</code></span>}
+                          {row.country && <span style={{ color: 'var(--text-3)' }}>Country: <b style={{ color: 'var(--text-1)' }}>{countryFlag(row.country_code)} {row.country}</b></span>}
+                          {row.region && <span style={{ color: 'var(--text-3)' }}>Region: <b style={{ color: 'var(--text-1)' }}>{row.region}</b></span>}
+                          {row.org && row.org !== row.isp && <span style={{ color: 'var(--text-3)' }}>Org: <b style={{ color: 'var(--text-1)' }}>{row.org}</b></span>}
+                          {row.timezone && <span style={{ color: 'var(--text-3)' }}>TZ: <b style={{ color: 'var(--text-1)' }}>{row.timezone}</b></span>}
+                          {row.lat != null && row.lon != null && (
+                            <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
+                              target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                              style={{ color: '#6366f1' }}>
+                              <MapPin size={9} className="inline mr-0.5" />{Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)} ↗
+                            </a>
+                          )}
+                          {row.browser && <span style={{ color: 'var(--text-3)' }}>Browser: <b style={{ color: 'var(--text-1)' }}>{row.browser}</b></span>}
+                          {(row.body_size || row.resp_size) && (
+                            <span style={{ color: 'var(--text-3)' }}>Size: {row.body_size ? `↑${row.body_size}B ` : ''}{row.resp_size ? `↓${row.resp_size}B` : ''}</span>
+                          )}
+                        </div>
+                        {row.query_params && <p className="truncate" style={{ color: 'var(--text-3)' }}>Query: <code style={{ color: 'var(--text-1)' }}>{row.query_params}</code></p>}
+                        {row.user_agent && <p className="truncate" style={{ color: 'var(--text-3)' }}>UA: {row.user_agent}</p>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
             <table className="w-full text-xs">
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
@@ -768,9 +834,7 @@ function AuditLogTab() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.rows || []).length === 0
-                  ? <tr><td colSpan={10}><Empty /></td></tr>
-                  : (data?.rows || []).map(row => (
+                {(data?.rows || []).map(row => (
                     <>
                       <tr key={row.id}
                         className="border-b transition-colors cursor-pointer"
@@ -944,6 +1008,8 @@ function AuditLogTab() {
               </tbody>
             </table>
           </div>
+            </>
+          )}
           <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
       )}
@@ -1062,53 +1128,80 @@ function SessionsTab() {
           {(data?.rows || []).length === 0
             ? <Empty label={activeOnly ? 'No active sessions — log in again to create one' : 'No sessions recorded yet'} />
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Role','Status','IP','Device / OS','Browser','Geo','Logged In','Last Seen','Requests'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
-                          style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.rows || []).map(row => (
-                      <tr key={row.id} className="border-b transition-colors"
-                        style={{
-                          borderColor: 'var(--border)',
-                          opacity: row.session_status === 'logged_out' || row.session_status === 'expired' ? 0.6 : 1,
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2">{roleBadge(row.role)}</td>
-                        <td className="px-3 py-2"><SessionStatusChip status={row.session_status} /></td>
-                        <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>
-                          {row.ip || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          <span className="flex items-center gap-1">{deviceIcon(row.device)}{row.os || '—'}</span>
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {row.browser || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {[row.country, row.city].filter(Boolean).join(', ') || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)' }}>
-                          {ts(row.created_at)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {(data?.rows || []).map(row => (
+                    <div key={`m-${row.id}`} className="card p-3"
+                      style={{ opacity: row.session_status === 'logged_out' || row.session_status === 'expired' ? 0.6 : 1 }}>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap gap-1">
+                          {roleBadge(row.role)}
+                          <SessionStatusChip status={row.session_status} />
+                        </div>
+                        <span className="text-[10px] tabular-nums flex-shrink-0" style={{ color: 'var(--text-3)' }}>
                           {relTime(row.last_seen_at)}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-                          {fmt(row.request_count)}
-                        </td>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                        <span style={{ color: 'var(--text-3)' }}>IP: <span className="font-mono" style={{ color: 'var(--text-2)' }}>{row.ip || '—'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>Device: <span className="flex items-center gap-0.5 inline-flex" style={{ color: 'var(--text-2)' }}>{deviceIcon(row.device)} {row.os || '—'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>Location: <span style={{ color: 'var(--text-2)' }}>{[countryFlag(row.country_code), row.city, row.country].filter(Boolean).join(' ') || '—'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>Requests: <b style={{ color: 'var(--text-1)' }}>{fmt(row.request_count)}</b></span>
+                        <span className="col-span-2" style={{ color: 'var(--text-3)' }}>Signed in: <span style={{ color: 'var(--text-2)' }}>{ts(row.created_at)}</span></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                        {['Role','Status','IP','Device / OS','Browser','Geo','Logged In','Last Seen','Requests'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
+                            style={{ color: 'var(--text-2)' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(data?.rows || []).map(row => (
+                        <tr key={row.id} className="border-b transition-colors"
+                          style={{
+                            borderColor: 'var(--border)',
+                            opacity: row.session_status === 'logged_out' || row.session_status === 'expired' ? 0.6 : 1,
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+                          <td className="px-3 py-2">{roleBadge(row.role)}</td>
+                          <td className="px-3 py-2"><SessionStatusChip status={row.session_status} /></td>
+                          <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>
+                            {row.ip || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            <span className="flex items-center gap-1">{deviceIcon(row.device)}{row.os || '—'}</span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {row.browser || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {[row.country, row.city].filter(Boolean).join(', ') || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)' }}>
+                            {ts(row.created_at)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {relTime(row.last_seen_at)}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
+                            {fmt(row.request_count)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
@@ -1162,7 +1255,7 @@ function ChatsTab() {
         {msgsLoading ? <Skeleton rows={4} /> : msgs?.error ? <Err msg="Failed to load messages" /> : (
           <div className="space-y-2">
             {(msgs?.messages || []).map(m => (
-              <div key={m.id} className={`rounded-xl p-3 ${m.role === 'user' ? 'ml-8' : 'mr-8'}`}
+              <div key={m.id} className={`rounded-xl p-3 ${m.role === 'user' ? 'ml-4 sm:ml-8' : 'mr-4 sm:mr-8'}`}
                 style={{ background: m.role === 'user' ? 'var(--bg-input)' : 'rgba(37,99,235,0.06)',
                   border: `1px solid ${m.role === 'user' ? 'var(--border)' : 'rgba(37,99,235,0.15)'}` }}>
                 <div className="flex items-center justify-between mb-1">
@@ -1206,42 +1299,69 @@ function ChatsTab() {
           {(list?.rows || []).length === 0
             ? <Empty label="No AI chat sessions yet" />
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Role','Msgs','IP','OS / Browser','Country','Started','Last'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold" style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(list?.rows || []).map(row => (
-                      <tr key={row.id} className="border-b cursor-pointer transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        onClick={() => openSession(row.id)}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2">{roleBadge(row.role)}</td>
-                        <td className="px-3 py-2 tabular-nums text-center font-semibold" style={{ color: 'var(--text-1)' }}>{row.msg_count}</td>
-                        <td className="px-3 py-2 font-mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>{row.ip || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {row.os || '?'}{row.browser ? ` / ${row.browser}` : ''}
-                        </td>
-                        <td className="px-3 py-2" style={{ color: 'var(--text-2)' }}>
-                          {[row.country, row.city].filter(Boolean).join(', ') || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)' }}>
-                          {ts(row.started_at)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {relTime(row.last_at)}
-                        </td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {(list?.rows || []).map(row => (
+                    <div key={`m-${row.id}`} className="card p-3 cursor-pointer"
+                      onClick={() => openSession(row.id)}>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="flex flex-wrap gap-1 items-center">
+                          {roleBadge(row.role)}
+                          <span className="text-xs font-bold tabular-nums px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}>
+                            {row.msg_count} msg{row.msg_count !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-3)' }}>{relTime(row.last_at)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                        <span style={{ color: 'var(--text-3)' }}>IP: <span className="font-mono" style={{ color: 'var(--text-2)' }}>{row.ip || '—'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>OS: <span style={{ color: 'var(--text-2)' }}>{row.os || '?'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>Location: <span style={{ color: 'var(--text-2)' }}>{[countryFlag(row.country_code), row.city, row.country].filter(Boolean).join(' ') || '—'}</span></span>
+                        <span style={{ color: 'var(--text-3)' }}>Started: <span style={{ color: 'var(--text-2)' }}>{ts(row.started_at)}</span></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                        {['Role','Msgs','IP','OS / Browser','Country','Started','Last'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold" style={{ color: 'var(--text-2)' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(list?.rows || []).map(row => (
+                        <tr key={row.id} className="border-b cursor-pointer transition-colors"
+                          style={{ borderColor: 'var(--border)' }}
+                          onClick={() => openSession(row.id)}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+                          <td className="px-3 py-2">{roleBadge(row.role)}</td>
+                          <td className="px-3 py-2 tabular-nums text-center font-semibold" style={{ color: 'var(--text-1)' }}>{row.msg_count}</td>
+                          <td className="px-3 py-2 font-mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>{row.ip || '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {row.os || '?'}{row.browser ? ` / ${row.browser}` : ''}
+                          </td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-2)' }}>
+                            {[row.country, row.city].filter(Boolean).join(', ') || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)' }}>
+                            {ts(row.started_at)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {relTime(row.last_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           <Pager total={list?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
@@ -1404,44 +1524,71 @@ function SyncLogTab() {
           {(data?.rows || []).length === 0
             ? <Empty label="No sync runs yet — check TEABLE_API_TOKEN is set" />
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Time','Source','Total','Created','Updated','Unchanged','ms','Status'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold" style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.rows || []).map(row => (
-                      <tr key={row.id} className="border-b transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2 tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
-                          {ts(row.synced_at)}
-                        </td>
-                        <td className="px-3 py-2">
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {(data?.rows || []).map(row => (
+                    <div key={`m-${row.id}`} className="card p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
                           <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right">{fmt(row.total)}</td>
-                        <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>{fmt(row.created)}</td>
-                        <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>{fmt(row.updated)}</td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)}</td>
-                        <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>
-                          {row.duration_ms != null ? row.duration_ms : '—'}
-                        </td>
-                        <td className="px-3 py-2">
                           {row.error
-                            ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>✕ {row.error}</span>
+                            ? <span className="text-[11px] text-red-500">✕ Error</span>
                             : <span className="text-[11px]" style={{ color: '#16a34a' }}>✓ OK</span>}
-                        </td>
+                        </div>
+                        <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{ts(row.synced_at)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                        <span style={{ color: 'var(--text-3)' }}>Total: <b style={{ color: 'var(--text-1)' }}>{fmt(row.total)}</b></span>
+                        <span style={{ color: 'var(--text-3)' }}>Duration: <b style={{ color: 'var(--text-1)' }}>{row.duration_ms != null ? `${row.duration_ms}ms` : '—'}</b></span>
+                        <span style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>+{fmt(row.created)} new</span>
+                        <span style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>~{fmt(row.updated)} updated</span>
+                        <span style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)} unchanged</span>
+                      </div>
+                      {row.error && <p className="text-[11px] text-red-500 mt-1.5 line-clamp-2">{row.error}</p>}
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                        {['Time','Source','Total','Created','Updated','Unchanged','ms','Status'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold" style={{ color: 'var(--text-2)' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(data?.rows || []).map(row => (
+                        <tr key={row.id} className="border-b transition-colors"
+                          style={{ borderColor: 'var(--border)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+                          <td className="px-3 py-2 tabular-nums whitespace-nowrap" style={{ color: 'var(--text-3)' }}>
+                            {ts(row.synced_at)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right">{fmt(row.total)}</td>
+                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>{fmt(row.created)}</td>
+                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>{fmt(row.updated)}</td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)}</td>
+                          <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>
+                            {row.duration_ms != null ? row.duration_ms : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.error
+                              ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>✕ {row.error}</span>
+                              : <span className="text-[11px]" style={{ color: '#16a34a' }}>✓ OK</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
@@ -1498,40 +1645,81 @@ function ProjectsMirrorTab() {
           {(data?.rows || []).length === 0
             ? <Empty label="No projects synced yet" />
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Synced','Name','Client','Status','Billed','Profit','Profit %','Modified'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.rows || []).map((row, i) => (
-                      <tr key={row.teable_id || i} className="border-b transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>{ts(row.synced_at)}</td>
-                        <td className="px-3 py-2 max-w-[160px] truncate font-medium" style={{ color: 'var(--text-1)' }} title={row.project_name}>{row.project_name || '—'}</td>
-                        <td className="px-3 py-2 max-w-[120px] truncate" style={{ color: 'var(--text-2)' }} title={row.client}>{row.client || '—'}</td>
-                        <td className="px-3 py-2">{row.status ? <Badge>{row.status}</Badge> : '—'}</td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-                          {row.amount_billed != null ? Number(row.amount_billed).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: row.actual_profit > 0 ? '#16a34a' : row.actual_profit < 0 ? '#dc2626' : 'var(--text-2)' }}>
-                          {row.actual_profit != null ? Number(row.actual_profit).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-                          {row.profit_pct != null ? `${Number(row.profit_pct).toFixed(1)}%` : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)', fontSize: 11 }}>{ts(row.modified_time)}</td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {(data?.rows || []).map((row, i) => (
+                    <div key={row.teable_id || i} className="card p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>{row.project_name || '—'}</p>
+                          <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{row.client || '—'}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {row.status && <Badge>{row.status}</Badge>}
+                          <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{ts(row.synced_at)}</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>Billed</p>
+                          <p className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                            {row.amount_billed != null ? `₹${Number(row.amount_billed).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>Profit</p>
+                          <p className="font-semibold tabular-nums"
+                            style={{ color: row.actual_profit > 0 ? '#16a34a' : row.actual_profit < 0 ? '#dc2626' : 'var(--text-2)' }}>
+                            {row.actual_profit != null ? `₹${Number(row.actual_profit).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>Margin</p>
+                          <p className="font-semibold tabular-nums" style={{ color: 'var(--text-2)' }}>
+                            {row.profit_pct != null ? `${Number(row.profit_pct).toFixed(1)}%` : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                        {['Synced','Name','Client','Status','Billed','Profit','Profit %','Modified'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(data?.rows || []).map((row, i) => (
+                        <tr key={row.teable_id || i} className="border-b transition-colors"
+                          style={{ borderColor: 'var(--border)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+                          <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>{ts(row.synced_at)}</td>
+                          <td className="px-3 py-2 max-w-[160px] truncate font-medium" style={{ color: 'var(--text-1)' }} title={row.project_name}>{row.project_name || '—'}</td>
+                          <td className="px-3 py-2 max-w-[120px] truncate" style={{ color: 'var(--text-2)' }} title={row.client}>{row.client || '—'}</td>
+                          <td className="px-3 py-2">{row.status ? <Badge>{row.status}</Badge> : '—'}</td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
+                            {row.amount_billed != null ? Number(row.amount_billed).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: row.actual_profit > 0 ? '#16a34a' : row.actual_profit < 0 ? '#dc2626' : 'var(--text-2)' }}>
+                            {row.actual_profit != null ? Number(row.actual_profit).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
+                            {row.profit_pct != null ? `${Number(row.profit_pct).toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)', fontSize: 11 }}>{ts(row.modified_time)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
@@ -1643,61 +1831,105 @@ function InvoicesTab() {
           {(data?.rows || []).length === 0
             ? <Empty label="No invoices found — sync may not have run yet" />
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['Src','Invoice #','Project','Category','Status','Raised','w/ Tax','Received','Date'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.rows || []).map((row, i) => (
-                      <tr key={`${row._src}-${row.teable_id || i}`} className="border-b transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2">
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {(data?.rows || []).map((row, i) => (
+                    <div key={`m-${row._src}-${row.teable_id || i}`} className="card p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap gap-1 items-center">
                           <Badge color={row._src === 'web' ? 'teal' : 'blue'}>{row._src}</Badge>
-                        </td>
-                        <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-1)', fontSize: 11 }}>
-                          {row.invoice_number || '—'}
-                        </td>
-                        <td className="px-3 py-2 max-w-[140px] truncate" style={{ color: 'var(--text-2)' }} title={row.project}>
-                          {row.project || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          {row.category || '—'}
-                        </td>
-                        <td className="px-3 py-2">
-                          {row.payment_status
-                            ? <Badge color={
-                                /paid/i.test(row.payment_status) ? 'green'
-                                : /partial/i.test(row.payment_status) ? 'amber'
-                                : /over/i.test(row.payment_status) ? 'red'
-                                : 'default'
-                              }>{row.payment_status}</Badge>
-                            : '—'}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-                          {row.amount_raised != null ? Number(row.amount_raised).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
-                          {row.amount_with_tax != null ? Number(row.amount_with_tax).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-right"
-                          style={{ color: row.amount_received > 0 ? '#16a34a' : 'var(--text-3)' }}>
-                          {row.amount_received != null ? Number(row.amount_received).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>
-                          {row.raised_date || '—'}
-                        </td>
+                          <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{row.invoice_number || '—'}</span>
+                          {row.payment_status && (
+                            <Badge color={/paid/i.test(row.payment_status) ? 'green' : /partial/i.test(row.payment_status) ? 'amber' : /over/i.test(row.payment_status) ? 'red' : 'default'}>
+                              {row.payment_status}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-[10px] flex-shrink-0 tabular-nums" style={{ color: 'var(--text-3)' }}>{row.raised_date || '—'}</span>
+                      </div>
+                      <p className="text-xs mb-2 truncate" style={{ color: 'var(--text-2)' }}>{row.project || '—'}{row.category ? ` · ${row.category}` : ''}</p>
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>Raised</p>
+                          <p className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                            {row.amount_raised != null ? `₹${Number(row.amount_raised).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>w/ Tax</p>
+                          <p className="font-semibold tabular-nums" style={{ color: 'var(--text-2)' }}>
+                            {row.amount_with_tax != null ? `₹${Number(row.amount_with_tax).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ color: 'var(--text-3)' }}>Received</p>
+                          <p className="font-semibold tabular-nums"
+                            style={{ color: row.amount_received > 0 ? '#16a34a' : 'var(--text-3)' }}>
+                            {row.amount_received != null ? `₹${Number(row.amount_received).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                        {['Src','Invoice #','Project','Category','Status','Raised','w/ Tax','Received','Date'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(data?.rows || []).map((row, i) => (
+                        <tr key={`${row._src}-${row.teable_id || i}`} className="border-b transition-colors"
+                          style={{ borderColor: 'var(--border)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+                          <td className="px-3 py-2">
+                            <Badge color={row._src === 'web' ? 'teal' : 'blue'}>{row._src}</Badge>
+                          </td>
+                          <td className="px-3 py-2 font-mono" style={{ color: 'var(--text-1)', fontSize: 11 }}>
+                            {row.invoice_number || '—'}
+                          </td>
+                          <td className="px-3 py-2 max-w-[140px] truncate" style={{ color: 'var(--text-2)' }} title={row.project}>
+                            {row.project || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {row.category || '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.payment_status
+                              ? <Badge color={
+                                  /paid/i.test(row.payment_status) ? 'green'
+                                  : /partial/i.test(row.payment_status) ? 'amber'
+                                  : /over/i.test(row.payment_status) ? 'red'
+                                  : 'default'
+                                }>{row.payment_status}</Badge>
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
+                            {row.amount_raised != null ? Number(row.amount_raised).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
+                            {row.amount_with_tax != null ? Number(row.amount_with_tax).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-right"
+                            style={{ color: row.amount_received > 0 ? '#16a34a' : 'var(--text-3)' }}>
+                            {row.amount_received != null ? Number(row.amount_received).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>
+                            {row.raised_date || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
         </>
@@ -1856,7 +2088,7 @@ export default function AdminDashboard({ embedded = false }) {
   /* ── Embedded inside Layout ── */
   if (embedded) {
     return (
-      <div className="p-4 space-y-4 max-w-[1400px] mx-auto w-full">
+      <div className="p-2 sm:p-4 space-y-4 max-w-[1400px] mx-auto w-full">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'rgba(220,38,38,0.10)' }}>
@@ -1903,7 +2135,7 @@ export default function AdminDashboard({ embedded = false }) {
 
       {tabBar}
 
-      <main className="flex-1 p-4 max-w-[1400px] mx-auto w-full">
+      <main className="flex-1 p-2 sm:p-4 max-w-[1400px] mx-auto w-full">
         {content}
       </main>
     </div>

@@ -1813,7 +1813,7 @@ export default function WebInvoices() {
                 <div className="relative">
                   <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={retainerMonth} onChange={e => setRetainerMonth(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                    className="input pl-7 py-1.5 text-xs appearance-none w-full" style={{ minWidth: 'min(100%, 170px)', paddingRight: '1.5rem' }}>
                     {retainerMonthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -2211,7 +2211,7 @@ export default function WebInvoices() {
                 <div className="relative">
                   <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+                    className="input pl-7 py-1.5 text-xs appearance-none w-full" style={{ minWidth: 'min(100%, 170px)', paddingRight: '1.5rem' }}>
                     <option value="">All months</option>
                     {monthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
                   </select>
