@@ -1144,6 +1144,74 @@ function HelpModal({ open, onClose }) {
   )
 }
 
+/* ── Mobile-only top header bar ── */
+function MobileHeader({ onHelp, onLogout }) {
+  const { dark, toggle } = useTheme()
+  return (
+    <div className="sm:hidden flex-shrink-0 flex items-center justify-between px-3"
+      style={{ height: 48, background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)', zIndex: 10 }}>
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
+          <Globe size={12} className="text-white" />
+        </div>
+        <div>
+          <p className="font-bold text-sm leading-tight tracking-tight" style={{ color: 'var(--text-1)' }}>TheWorks</p>
+          <p className="text-[9px] leading-none" style={{ color: 'var(--text-3)' }}>Web Tracker</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-0.5">
+        <button onClick={onHelp} title="Help & Guide"
+          className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          <HelpCircle size={16} />
+        </button>
+        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'}
+          className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          {dark
+            ? <Sun size={16} style={{ color: '#facc15' }} />
+            : <Moon size={16} style={{ color: '#818cf8' }} />}
+        </button>
+        <button onClick={onLogout} title="Sign out"
+          className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+          style={{ color: 'var(--text-3)' }}>
+          <LogOut size={15} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Mobile-only bottom navigation bar ── */
+function MobileBottomNav({ workspace, setWorkspace, isAll }) {
+  const navItems = [
+    { value: 'invoices',  label: 'Invoices',  icon: FileText },
+    { value: 'retainers', label: 'Retainers', icon: RotateCcw },
+    ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
+  ]
+  return (
+    <nav className="sm:hidden flex-shrink-0 flex items-stretch border-t"
+      style={{ background: 'var(--sidebar-bg)', borderColor: 'var(--sidebar-border)' }}>
+      {navItems.map(({ value, label, icon: Icon }) => {
+        const active = workspace === value
+        return (
+          <button key={value} onClick={() => setWorkspace(value)}
+            className="relative flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-colors"
+            style={{ color: active ? 'var(--accent)' : 'var(--text-3)', minHeight: 52 }}>
+            {active && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
+                style={{ background: 'var(--accent)' }} />
+            )}
+            <Icon size={18} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
+            <span className="text-[10px] font-medium leading-none">{label}</span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 /* ── Collapsible app sidebar ── */
 function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) {
   const { logout } = useAuth()
@@ -1159,7 +1227,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
 
   return (
     <aside
-      className="flex flex-col flex-shrink-0 transition-all duration-200 z-20"
+      className="hidden sm:flex flex-col flex-shrink-0 transition-all duration-200 z-20"
       style={{
         width: open ? 220 : 56,
         background: 'var(--sidebar-bg)',
@@ -1248,7 +1316,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
 /* ── Main page ── */
 export default function WebInvoices() {
   const toast = useToast()
-  const { isAll } = useAuth()
+  const { isAll, logout } = useAuth()
   const [sidebarOpen,    setSidebarOpen]    = useState(true)
   const [helpOpen,       setHelpOpen]       = useState(false)
   const [workspace,      setWorkspace]      = useState('invoices')
@@ -1612,7 +1680,7 @@ export default function WebInvoices() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar — desktop only ── */}
       <AppSidebar
         workspace={workspace}
         setWorkspace={setWorkspace}
@@ -1623,9 +1691,11 @@ export default function WebInvoices() {
       />
 
       {/* ── Content area ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      {/* Mobile top header — hidden sm+ */}
+      <MobileHeader onHelp={() => setHelpOpen(true)} onLogout={logout} />
       <main className="flex-1 overflow-y-auto">
-        <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
+        <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 animate-fade-in">
 
           {/* ── Invoices header ── */}
           {workspace === 'invoices' && (
@@ -1770,16 +1840,16 @@ export default function WebInvoices() {
                   </div>
                   <div className="space-y-1.5">
                     {overdue.map((inv, i) => (
-                      <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
+                      <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg flex-wrap"
                         style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.10)' }}>
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
                           <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
                           {inv.currency && inv.currency !== 'RS' && (
-                            <span className="text-[10px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>{inv.currency}</span>
+                            <span className="text-[10px] font-bold px-1 py-0.5 rounded shrink-0" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>{inv.currency}</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>
                             {fmtCurrency(inv.amount, inv.currency || 'RS')}
                           </span>
@@ -1955,7 +2025,7 @@ export default function WebInvoices() {
                             const f = rec?.fields || {}
                             const key = `${item.key}-${group.project}`
                             return (
-                              <div key={key} className="rounded-xl p-3 flex items-center justify-between gap-3"
+                              <div key={key} className="rounded-xl p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
                                 style={{
                                   background: item.active ? 'var(--accent-dim)' : 'var(--bg-base)',
                                   border: `1px solid ${item.active ? 'var(--accent-soft)' : 'var(--card-border)'}`,
@@ -1965,13 +2035,13 @@ export default function WebInvoices() {
                                     <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.fullLabel}</p>
                                     <MonthStatusPill status={item.status} active={item.active} />
                                   </div>
-                                  <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
                                     {rec
                                       ? `${f['Invoice Number'] || 'Invoice number pending'} · ${fmt(f['Amount Raised'])} · ${f['Remark'] || 'No remark'}`
                                       : 'No record created for this month yet'}
                                   </p>
                                 </div>
-                                <div className="flex gap-2 flex-shrink-0">
+                                <div className="flex gap-2 flex-wrap flex-shrink-0">
                                   {rec ? (
                                     <button onClick={() => openView(rec)}
                                       className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
@@ -2013,10 +2083,10 @@ export default function WebInvoices() {
                       )}
 
                       {missing && (
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
                           <button onClick={() => openInvoiceRequestForm(group, retainerMonth)}
                             className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                            Open invoice request form
+                            <ExternalLink size={12} />Open invoice request form
                           </button>
                           <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
                             className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
@@ -2135,26 +2205,24 @@ export default function WebInvoices() {
 
           {/* Filter bar + invoice table — only on invoices / retainers tabs */}
           {(workspace === 'invoices' || workspace === 'retainers') && <div className="card space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div>
-                  <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                    {records.length} result{records.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-                {/* Billing type filter pills */}
-                <div className="inline-flex items-center p-0.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  {[['all','All'],['project','Projects'],['retainer','Retainers']].map(([v, l]) => (
-                    <button key={v} onClick={() => setBillingFilter(v)}
-                      className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                      style={billingFilter === v
-                        ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                        : { color: 'var(--text-3)' }}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  {records.length} result{records.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              {/* Billing type filter pills */}
+              <div className="inline-flex items-center p-0.5 rounded-lg flex-shrink-0" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                {[['all','All'],['project','Projects'],['retainer','Retainers']].map(([v, l]) => (
+                  <button key={v} onClick={() => setBillingFilter(v)}
+                    className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                    style={billingFilter === v
+                      ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                      : { color: 'var(--text-3)' }}>
+                    {l}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2202,7 +2270,7 @@ export default function WebInvoices() {
                 <div className="relative">
                   <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 140, paddingRight: '1.5rem' }}>
+                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 140px)', paddingRight: '1.5rem' }}>
                     <option value="">All projects</option>
                     {(picklists.Project || []).map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
@@ -2220,7 +2288,7 @@ export default function WebInvoices() {
                 <div className="relative">
                   <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 160, paddingRight: '1.5rem' }}>
+                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 160px)', paddingRight: '1.5rem' }}>
                     <option value="">All categories</option>
                     {(picklists.Category || []).map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -2229,7 +2297,7 @@ export default function WebInvoices() {
                 <div className="relative">
                   <User size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
                   <select value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}
-                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 130, paddingRight: '1.5rem' }}>
+                    className="input pl-7 py-1.5 text-xs appearance-none" style={{ minWidth: 'min(100%, 130px)', paddingRight: '1.5rem' }}>
                     <option value="">Anyone</option>
                     {(picklists['Raised By'] || []).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
@@ -2294,12 +2362,24 @@ export default function WebInvoices() {
           )}
 
           {/* Mobile card list */}
-          <div className="md:hidden space-y-2.5">
+          <div className="md:hidden space-y-2">
             {loading && !listData
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="card animate-pulse">
-                    <div className="skeleton h-3 w-2/5 mb-3 rounded" />
-                    <div className="skeleton h-5 w-3/5 rounded" />
+                  <div key={i} className="card animate-pulse p-3.5">
+                    <div className="flex justify-between mb-2.5">
+                      <div className="skeleton h-3 w-2/5 rounded" />
+                      <div className="skeleton h-5 w-14 rounded-full" />
+                    </div>
+                    <div className="skeleton h-3 w-3/5 mb-3 rounded" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="skeleton h-8 rounded" />
+                      <div className="skeleton h-8 rounded" />
+                      <div className="skeleton h-8 rounded" />
+                    </div>
+                    <div className="flex justify-between mt-2.5">
+                      <div className="skeleton h-3 w-1/4 rounded" />
+                      <div className="skeleton h-3 w-1/5 rounded" />
+                    </div>
                   </div>
                 ))
               : records.length === 0
@@ -2313,38 +2393,95 @@ export default function WebInvoices() {
                   </div>
                 : records.map(r => {
                     const f = r.fields || {}
+                    const cur = f['Currency'] || 'RS'
+                    const raised = Number(f['Amount Raised'] || 0)
+                    const received = Number(f['Amount Received'] || 0)
                     const outstanding = Number(f['Outstanding Amount'] || 0)
                     const refs = parseAttachments(f['Reference'])
                     const pdfs = parseAttachments(f['Invoice PDF'])
                     const allFiles = [...refs, ...pdfs]
+                    const aging = effectiveAging(f)
                     return (
-                      <button key={r.id} onClick={() => openView(r)} className="card-hover w-full text-left animate-slide-up" style={{ padding: '0.875rem 1rem' }}>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-mono text-[12px] font-bold truncate" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</p>
-                            <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
-                              {f['Project'] || '—'}{f['Category'] ? ` · ${f['Category']}` : ''}
-                            </p>
+                      <button key={r.id} onClick={() => openView(r)}
+                        className="card-hover w-full text-left"
+                        style={{ padding: '0.875rem 1rem' }}>
+
+                        {/* Row 1: Invoice # + currency badge + status */}
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono text-[13px] font-bold truncate" style={{ color: 'var(--text-1)' }}>
+                              {f['Invoice Number'] || <span style={{ color: 'var(--text-3)' }}>No number</span>}
+                            </span>
+                            {cur !== 'RS' && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                                style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                                {cur}
+                              </span>
+                            )}
                           </div>
                           <StatusPill status={f['Payment Status']} />
                         </div>
-                        <div className="flex items-end justify-between gap-3 mb-2">
+
+                        {/* Row 2: Project · Category */}
+                        <p className="text-[11px] truncate mb-2.5" style={{ color: 'var(--text-3)' }}>
+                          <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>{f['Project'] || '—'}</span>
+                          {f['Category'] ? <span> · {f['Category']}</span> : null}
+                          {f['Milestone'] ? <span> · {f['Milestone']}</span> : null}
+                        </p>
+
+                        {/* Row 3: Amounts — always show Raised; show Received if > 0; Outstanding in warning */}
+                        <div className="grid gap-2 mb-2.5"
+                          style={{ gridTemplateColumns: received > 0 && outstanding > 0 ? 'repeat(3,1fr)' : received > 0 || outstanding > 0 ? 'repeat(2,1fr)' : '1fr' }}>
                           <div>
-                            <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Amount</p>
-                            <p className="font-bold tabular-nums text-base" style={{ color: 'var(--text-1)' }}>{fmt(f['Amount Raised'])}</p>
+                            <p className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--text-3)' }}>Raised</p>
+                            <p className="text-sm font-bold tabular-nums leading-tight" style={{ color: 'var(--text-1)' }}>
+                              {fmtCurrency(raised, cur)}
+                            </p>
                           </div>
+                          {received > 0 && (
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--text-3)' }}>Received</p>
+                              <p className="text-sm font-semibold tabular-nums leading-tight" style={{ color: 'var(--fin-positive)' }}>
+                                {fmtCurrency(received, cur)}
+                              </p>
+                            </div>
+                          )}
                           {outstanding > 0 && (
-                            <div className="text-right">
-                              <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Outstanding</p>
-                              <p className="font-bold tabular-nums text-sm" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</p>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--text-3)' }}>Outstanding</p>
+                              <p className="text-sm font-semibold tabular-nums leading-tight" style={{ color: 'var(--fin-warning)' }}>
+                                {fmtCurrency(outstanding, cur)}
+                              </p>
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-3)' }}>
-                          <span className="tabular-nums">{fmtDate(f['Raised Date'])}</span>
-                          <div className="flex items-center gap-2">
-                            {allFiles.length > 0 && <span className="flex items-center gap-0.5"><FileText size={10} />{allFiles.length}</span>}
-                            <AgingBadge days={f['Agening (Days)']} />
+
+                        {/* Row 4: Meta bar — date, raised by, followup, files, aging */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                              {fmtDate(f['Raised Date'])}
+                            </span>
+                            {f['Raised By'] && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
+                                <User size={8} />{f['Raised By']}
+                              </span>
+                            )}
+                            {f['Next followup'] && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] flex-shrink-0"
+                                style={{ color: 'var(--fin-warning)' }}>
+                                <CalendarClock size={9} />{fmtDate(f['Next followup'])}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {allFiles.length > 0 && (
+                              <span className="flex items-center gap-0.5 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                                <FileText size={10} />{allFiles.length}
+                              </span>
+                            )}
+                            {aging > 0 && <AgingBadge days={aging} status={f['Payment Status']} />}
                           </div>
                         </div>
                       </button>
@@ -2463,6 +2600,8 @@ export default function WebInvoices() {
 
         </div>
       </main>
+      {/* Mobile bottom nav — hidden sm+ */}
+      <MobileBottomNav workspace={workspace} setWorkspace={setWorkspace} isAll={isAll} />
 
       {/* Drawers */}
       {drawer?.mode === 'view' && createPortal(
