@@ -30,6 +30,7 @@ import {
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { FilterSelect, FilterMulti } from '../components/FilterSelect'
+import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -560,6 +561,9 @@ function AuditLogTab() {
   const [statusMin,    setStMin]   = useState('')
   const [statusMax,    setStMax]   = useState('')
 
+  // ── Client-side advanced filter builder ───────────────────────────────────
+  const [filterConditions, setFilterConditions] = useState([])
+
   // ── Purge ──────────────────────────────────────────────────────────────────
   const [showPurge,  setShowPurge]  = useState(false)
   const [purging,    setPurging]    = useState(false)
@@ -706,6 +710,30 @@ function AuditLogTab() {
           </div>
         )}
 
+        {/* ── Client-side condition filter builder ─────────────────────── */}
+        <div className="pt-1">
+          <FilterBuilder
+            fields={[
+              { key: 'role',    label: 'Role',    type: 'text' },
+              { key: 'method',  label: 'Method',  type: 'text' },
+              { key: 'path',    label: 'Path',    type: 'text' },
+              { key: 'ip',      label: 'IP',      type: 'text' },
+              { key: 'country', label: 'Country', type: 'text' },
+              { key: 'city',    label: 'City',    type: 'text' },
+              { key: 'isp',     label: 'ISP',     type: 'text' },
+              { key: 'browser', label: 'Browser', type: 'text' },
+              { key: 'os',      label: 'OS',      type: 'text' },
+              { key: 'device',  label: 'Device',  type: 'text' },
+              { key: 'status',  label: 'Status',  type: 'number' },
+            ]}
+            records={data?.rows || []}
+            getFieldValue={r => r}
+            conditions={filterConditions}
+            onChange={setFilterConditions}
+            label="Add condition filter"
+          />
+        </div>
+
         {/* ── Stats bar ─────────────────────────────────────────────────── */}
         {data && (
           <div className="flex gap-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -719,10 +747,13 @@ function AuditLogTab() {
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {/* Mobile card view */}
-          {(data?.rows || []).length === 0 ? <Empty /> : (
+          {(() => {
+            const filteredRows = applyConditions(data?.rows || [], filterConditions, r => r)
+            return filteredRows
+          })().length === 0 ? <Empty /> : (
             <>
               <div className="md:hidden space-y-1.5">
-                {(data?.rows || []).map(row => (
+                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
                   <div key={`m-${row.id}`}>
                     <div
                       className="rounded-xl border cursor-pointer p-3"
@@ -793,7 +824,7 @@ function AuditLogTab() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.rows || []).map(row => (
+                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
                     <>
                       <tr key={row.id}
                         className="border-b transition-colors cursor-pointer"
@@ -1906,6 +1937,7 @@ function HistoryTab() {
   const [offset, setOffset]   = useState(0)
   const [expanded, setExp]    = useState(null)
   const [filterSrc, setFs]    = useState('')
+  const [filterConditions, setFilterConditions] = useState([])
   const limit = 50
 
   const load = useCallback(async () => {
@@ -1939,13 +1971,26 @@ function HistoryTab() {
           </span>
         )}
       </div>
+      {/* Advanced filter builder */}
+      <FilterBuilder
+        fields={[
+          { key: 'change_type',  label: 'Change Type',   type: 'text' },
+          { key: 'source_table', label: 'Source Table',  type: 'text' },
+          { key: 'teable_id',    label: 'Record ID',     type: 'text' },
+        ]}
+        records={data?.rows || []}
+        getFieldValue={r => r}
+        conditions={filterConditions}
+        onChange={setFilterConditions}
+        label="Add condition filter"
+      />
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
-          {(data?.rows || []).length === 0
+          {applyConditions(data?.rows || [], filterConditions, r => r).length === 0
             ? <Empty label="No change history yet" />
             : (
               <div className="space-y-1">
-                {(data?.rows || []).map(row => (
+                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
                   <div key={row.id} className="rounded-xl border overflow-hidden"
                     style={{ borderColor: 'var(--border)' }}>
                     <button

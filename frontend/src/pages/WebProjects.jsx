@@ -14,6 +14,7 @@ import {
   ChevronRight, Receipt, CheckCircle2, XCircle, AlertOctagon, Filter,
 } from 'lucide-react'
 import { FilterSelect } from '../components/FilterSelect'
+import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -26,6 +27,21 @@ import clsx from 'clsx'
 // ⚠️  These must exactly match the Teable single-select options
 const STATUSES       = ['Planning', 'In Progress', 'On Hold', 'Blocked', 'Completed', 'Cancelled']
 const PRIORITIES     = ['Low', 'Medium', 'High', 'Critical']
+
+/* ── Field definitions for advanced filter builder ────────────────────────── */
+const PROJECT_FIELDS = [
+  { key: 'Project Name',  label: 'Project Name', type: 'text' },
+  { key: 'Client',        label: 'Client',        type: 'text' },
+  { key: 'Status',        label: 'Status',        type: 'text' },
+  { key: 'Priority',      label: 'Priority',      type: 'text' },
+  { key: 'Project Lead',  label: 'Project Lead',  type: 'text' },
+  { key: 'Tags',          label: 'Tags',          type: 'text' },
+  { key: 'Description',   label: 'Description',   type: 'text' },
+  { key: 'Client Charge', label: 'Client Charge', type: 'number' },
+  { key: 'Actual Profit', label: 'Actual Profit', type: 'number' },
+  { key: 'Est. Start Date',   label: 'Start Date',   type: 'date' },
+  { key: 'Est. End Date',     label: 'End Date',     type: 'date' },
+]
 const RATE_UNITS     = ['Per Hour', 'Per Day', 'Per Month', 'Fixed (Total)']
 const RESOURCE_TYPES = ['Employee', 'Freelancer', 'Contractor', 'Tool/Software', 'Cloud Infra']
 // Client and lead options are fetched live from the invoices picklist API — not hardcoded here
@@ -1362,9 +1378,10 @@ export function ProjectsWorkspace() {
   const [allSystemResources, setAllSystemResources] = useState([])
 
   // Filters
-  const [search,         setSearch]         = useState('')
-  const [statusFilter,   setStatusFilter]   = useState('')
-  const [priorityFilter, setPriorityFilter] = useState('')
+  const [search,           setSearch]           = useState('')
+  const [statusFilter,     setStatusFilter]     = useState('')
+  const [priorityFilter,   setPriorityFilter]   = useState('')
+  const [filterConditions, setFilterConditions] = useState([])
   const searchRef = useRef(null)
 
   // ── Load projects ──────────────────────────────────────────────────────
@@ -1446,7 +1463,7 @@ export function ProjectsWorkspace() {
   // ── Filtered list ──────────────────────────────────────────────────────
   const displayed = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return projects.filter(p => {
+    const base = projects.filter(p => {
       const f = p.fields || {}
       if (statusFilter   && f['Status']   !== statusFilter)   return false
       if (priorityFilter && f['Priority'] !== priorityFilter) return false
@@ -1457,7 +1474,8 @@ export function ProjectsWorkspace() {
       }
       return true
     })
-  }, [projects, search, statusFilter, priorityFilter])
+    return applyConditions(base, filterConditions, p => p.fields ?? {})
+  }, [projects, search, statusFilter, priorityFilter, filterConditions])
 
   // ── CRUD ───────────────────────────────────────────────────────────────
   const handleSaveProject = async (payload) => {
@@ -1579,45 +1597,56 @@ export function ProjectsWorkspace() {
           )}
 
           {/* Search + filters + New button */}
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <input ref={searchRef}
-                className="w-full rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
-                placeholder="Search projects… (⌘K)" value={search} onChange={e => setSearch(e.target.value)} />
-              {search && (
-                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center" style={{ color: 'var(--text-3)' }}>
-                  <X size={12} />
-                </button>
-              )}
+          <div className="space-y-2">
+            <div className="flex gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+                <input ref={searchRef}
+                  className="w-full rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none"
+                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                  placeholder="Search projects… (⌘K)" value={search} onChange={e => setSearch(e.target.value)} />
+                {search && (
+                  <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center" style={{ color: 'var(--text-3)' }}>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <FilterSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={STATUSES}
+                placeholder="All statuses"
+                icon={Filter}
+                width={145}
+              />
+              <FilterSelect
+                value={priorityFilter}
+                onChange={setPriorityFilter}
+                options={PRIORITIES}
+                placeholder="All priorities"
+                icon={Tag}
+                width={145}
+              />
+              <button onClick={loadProjects}
+                className="w-10 rounded-xl flex items-center justify-center"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+              </button>
+              <button onClick={() => setDrawer('new-project')}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+                <Plus size={15} /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
+              </button>
             </div>
-            <FilterSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={STATUSES}
-              placeholder="All statuses"
-              icon={Filter}
-              width={145}
+            {/* Advanced filter builder */}
+            <FilterBuilder
+              fields={PROJECT_FIELDS}
+              records={projects}
+              getFieldValue={p => p.fields ?? {}}
+              conditions={filterConditions}
+              onChange={setFilterConditions}
+              label="Add filter"
             />
-            <FilterSelect
-              value={priorityFilter}
-              onChange={setPriorityFilter}
-              options={PRIORITIES}
-              placeholder="All priorities"
-              icon={Tag}
-              width={145}
-            />
-            <button onClick={loadProjects}
-              className="w-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
-              <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
-            </button>
-            <button onClick={() => setDrawer('new-project')}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold"
-              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-              <Plus size={15} /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
-            </button>
           </div>
 
           {/* Error */}
@@ -1651,8 +1680,8 @@ export function ProjectsWorkspace() {
                 {search || statusFilter || priorityFilter ? 'No projects match' : 'No projects yet'}
               </p>
               <div className="flex gap-2 mt-4">
-                {(search || statusFilter || priorityFilter) && (
-                  <button onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter('') }}
+                {(search || statusFilter || priorityFilter || filterConditions.length > 0) && (
+                  <button onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter(''); setFilterConditions([]) }}
                     className="px-4 py-2 rounded-xl text-sm"
                     style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
                     Clear filters

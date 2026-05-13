@@ -19,6 +19,7 @@ import { useToast } from '../context/ToastContext'
 import { ProjectsWorkspace } from './WebProjects'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
+import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import clsx from 'clsx'
 
 /* ── Constants ── */
@@ -82,6 +83,24 @@ const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
 const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
+
+/* ── Field definitions for advanced filter builder ────────────────────────── */
+const INVOICE_FIELDS = [
+  { key: 'Project',          label: 'Project',         type: 'text' },
+  { key: 'Category',         label: 'Category',        type: 'text' },
+  { key: 'Milestone',        label: 'Milestone',       type: 'text' },
+  { key: 'Raised By',        label: 'Raised By',       type: 'text' },
+  { key: 'Payment Status',   label: 'Status',          type: 'text' },
+  { key: 'Invoice Number',   label: 'Invoice #',       type: 'text' },
+  { key: 'Description',      label: 'Description',     type: 'text' },
+  { key: 'Remark',           label: 'Remark',          type: 'text' },
+  { key: 'Amount Raised',    label: 'Amount Raised',   type: 'number' },
+  { key: 'Amount with Tax',  label: 'Amount w/ Tax',   type: 'number' },
+  { key: 'Amount Received',  label: 'Amount Received', type: 'number' },
+  { key: 'Raised Date',      label: 'Raised Date',     type: 'date' },
+  { key: 'Next followup',    label: 'Next Follow-up',  type: 'date' },
+  { key: 'Cleared Date',     label: 'Cleared Date',    type: 'date' },
+]
 
 function getRetainerCategoryOption(options = []) {
   return options.find(isRetainerCategory) || 'Development- Retainer'
@@ -1345,6 +1364,7 @@ export default function WebInvoices() {
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
   const [showFilters,    setShowFilters]    = useState(true)
+  const [filterConditions, setFilterConditions] = useState([])
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer,         setDrawer]         = useState(null)
@@ -1436,7 +1456,7 @@ export default function WebInvoices() {
     return Math.floor((Date.now() - raised.getTime()) / 86_400_000)
   }
 
-  const records = allRecords.filter(r => {
+  const baseRecords = allRecords.filter(r => {
     const f = r.fields || {}
     const retainer = isRetainerCategory(f['Category'])
     if (billingFilter === 'retainer' && !retainer) return false
@@ -1470,10 +1490,12 @@ export default function WebInvoices() {
     }
     return true
   })
+  const records = applyConditions(baseRecords, filterConditions, r => r.fields ?? {})
 
   const s        = summary
   const overdue  = s?.overdue_invoices || []
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search
+  const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
       // Sort by total invoice count (universal — not RS-only raised)
@@ -2269,6 +2291,7 @@ export default function WebInvoices() {
                   setHasDocsOnly(false)
                   setFollowupDueOnly(false)
                   setSearch('')
+                  setFilterConditions([])
                 }}
                   className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
                   <X size={11} />Clear
@@ -2347,6 +2370,22 @@ export default function WebInvoices() {
                   }}>
                   Has docs
                 </button>
+                {/* Divider */}
+                <div className="w-full" style={{ borderTop: '1px solid var(--card-border)', margin: '0.25rem 0' }} />
+                {/* Advanced filter builder */}
+                <div className="w-full">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>
+                    Advanced filters
+                  </p>
+                  <FilterBuilder
+                    fields={INVOICE_FIELDS}
+                    records={allRecords}
+                    getFieldValue={r => r.fields ?? {}}
+                    conditions={filterConditions}
+                    onChange={setFilterConditions}
+                    label="Add condition"
+                  />
+                </div>
               </div>
             )}
           </div>}
