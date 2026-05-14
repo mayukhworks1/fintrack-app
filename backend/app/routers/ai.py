@@ -385,13 +385,212 @@ async def ai_analyze(body: AnalyzeRequest, _role: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Report cache config ──────────────────────────────────────────────────────
+# Reports are expensive (~20-40s LLM call) and the underlying data only changes
+# on sync. Cache aggressively in Valkey so reloads / multi-user views are instant.
+_REPORT_CACHE_KEY = "report:executive"
+_REPORT_TTL       = 600      # 10 min — refreshed sooner if cache_bust("report:") fires on sync
+
+
+async def _build_report_payload_pg(pool) -> dict:
+    """
+    Build the report data payload (projects + invoices summary + recent records)
+    from the PostgreSQL mirror tables. Mirrors the chat context fast-path.
+    """
+    proj_rows, inv_rows = await asyncio.gather(
+        pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 300"),
+        pool.fetch("SELECT fields FROM invoices_mirror ORDER BY raised_date DESC NULLS LAST LIMIT 200"),
+    )
+    proj_fields = [dict(r["fields"]) for r in proj_rows]
+    inv_fields  = [dict(r["fields"]) for r in inv_rows]
+
+    def _safe_float(v):
+        try: return float(v) if v not in (None, "") else 0.0
+        except (TypeError, ValueError): return 0.0
+
+    # ── Project summary
+    total_billed = sum(_safe_float(f.get("Amount Billed So far")) for f in proj_fields)
+    total_profit = sum(_safe_float(f.get("Actual Profit")) for f in proj_fields)
+    avg_profit   = (sum(_safe_float(f.get("Profit percentage")) for f in proj_fields)
+                    / len(proj_fields)) if proj_fields else 0.0
+    by_status: dict = {}
+    by_client: dict = {}
+    by_health: dict = {}
+    for f in proj_fields:
+        by_status[f.get("Project Status", "Unknown")] = by_status.get(f.get("Project Status", "Unknown"), 0) + 1
+        by_client[f.get("Client", "Unknown")]         = by_client.get(f.get("Client", "Unknown"), 0) + 1
+        by_health[f.get("Health", "Unknown")]         = by_health.get(f.get("Health", "Unknown"), 0) + 1
+
+    project_summary = {
+        "total_projects":  len(proj_fields),
+        "total_billed":    total_billed,
+        "total_profit":    total_profit,
+        "avg_profit_pct":  avg_profit,
+        "by_status":       by_status,
+        "by_client":       by_client,
+        "by_health":       by_health,
+    }
+
+    # ── Invoice summary
+    total_raised   = sum(_safe_float(f.get("Amount Raised"))   for f in inv_fields)
+    total_with_tax = sum(_safe_float(f.get("Amount with Tax")) for f in inv_fields)
+    total_received = sum(_safe_float(f.get("Amount Received")) for f in inv_fields)
+    outstanding    = total_with_tax - total_received
+    coll_rate      = (total_received / total_with_tax * 100) if total_with_tax > 0 else 0.0
+    inv_by_status: dict = {}
+    for f in inv_fields:
+        s = f.get("Payment Status", "Unknown")
+        inv_by_status[s] = inv_by_status.get(s, 0) + 1
+
+    invoice_summary = {
+        "total_invoices":    len(inv_fields),
+        "total_raised":      total_raised,
+        "total_with_tax":    total_with_tax,
+        "total_received":    total_received,
+        "total_outstanding": outstanding,
+        "collection_rate":   coll_rate,
+        "by_status":         inv_by_status,
+    } if inv_fields else None
+
+    return {
+        "project_summary": project_summary,
+        "project_records": [{"fields": f} for f in proj_fields],
+        "invoice_summary": invoice_summary,
+        "invoice_records": [{"fields": f} for f in inv_fields],
+    }
+
+
+async def _build_report_payload_teable() -> dict:
+    """Fallback when PG is unavailable — slower live Teable path."""
+    teable  = TeableService()
+    inv_svc = InvoiceService()
+    (summary, records), (inv_summary, inv_records) = await asyncio.gather(
+        asyncio.gather(teable.get_summary(), teable.get_all_records()),
+        asyncio.gather(inv_svc.get_summary(), inv_svc.get_all_invoices()),
+    )
+    return {
+        "project_summary": summary,
+        "project_records": records,
+        "invoice_summary": inv_summary,
+        "invoice_records": inv_records,
+    }
+
+
 @router.get("/report")
-async def ai_report(_role: str = Depends(require_auth)):
-    """Generate an executive report for the full portfolio."""
+async def ai_report(
+    request: Request,
+    force: bool = False,
+    _role: str = Depends(require_auth),
+):
+    """
+    Generate an executive report for the full portfolio.
+
+    Performance & caching strategy
+    ──────────────────────────────
+      • Result cached in Valkey for 10 min under key "report:executive"
+      • Concurrent identical calls are coalesced via `cache.get_or_set` so a
+        burst of "Generate" clicks fires only ONE OpenRouter call
+      • Data sourced from PostgreSQL mirror (~10 ms) instead of Teable
+        (~500-2000 ms) when available — same path as /chat
+      • Query param ?force=true skips the cache for explicit "Regenerate"
+
+    Response
+    ────────
+      {
+        "report":     "<text>",
+        "model":      "<short name>",
+        "from_cache": bool,
+        "cached_at":  ISO timestamp,
+        "duration_ms": int        // only present on fresh generation
+      }
+    """
+    from ..utils.cache import cache
+    from datetime import datetime, timezone
+    import logging
+
+    logger = logging.getLogger("fintrack.ai.report")
+
     try:
-        teable = TeableService()
-        summary, records = await teable.get_summary(), await teable.get_all_records()
-        result = await generate_report(summary, records)
-        return {"report": result["content"], "model": result["model_short"]}
+        pool = get_pool()
+
+        # ── Force regenerate: bypass cache by busting it first ────────────
+        if force:
+            cache.bust(_REPORT_CACHE_KEY)
+            logger.info("Report cache busted by force=true")
+
+        # ── Wrap the expensive path in cache.get_or_set ───────────────────
+        # This coalesces concurrent calls (multiple users hitting "Generate"
+        # at the same time get ONE LLM call shared between them).
+        async def _generate():
+            t0 = time.time()
+            if pool:
+                payload = await _build_report_payload_pg(pool)
+            else:
+                payload = await _build_report_payload_teable()
+
+            # Empty portfolio guard — don't waste an LLM call on no data
+            if not payload["project_records"] and not payload.get("invoice_records"):
+                return {
+                    "report":      "No portfolio data available yet. Add projects or invoices, then regenerate.",
+                    "model":       "n/a",
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": int((time.time() - t0) * 1000),
+                    "empty":       True,
+                }
+
+            result = await generate_report(
+                payload["project_summary"],
+                payload["project_records"],
+                invoice_summary=payload.get("invoice_summary"),
+                invoice_records=payload.get("invoice_records"),
+            )
+            return {
+                "report":       result["content"],
+                "model":        result["model_short"],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms":  int((time.time() - t0) * 1000),
+            }
+
+        # Detect cache hit by checking the in-process store BEFORE invoking
+        # get_or_set (which would silently populate).
+        from_cache = cache.get(_REPORT_CACHE_KEY) is not None
+        if not from_cache:
+            # Could still be a Valkey hit — check there
+            try:
+                from ..db import valkey as vk
+                if vk.get_client():
+                    remote = await vk.cache_get(_REPORT_CACHE_KEY)
+                    from_cache = remote is not None
+            except Exception:
+                pass
+
+        cached_result = await cache.get_or_set(
+            key=_REPORT_CACHE_KEY,
+            ttl=_REPORT_TTL,
+            loader=_generate,
+        )
+
+        response = {
+            "report":       cached_result.get("report", ""),
+            "model":        cached_result.get("model", ""),
+            "from_cache":   from_cache,
+            "cached_at":    cached_result.get("generated_at", ""),
+        }
+        if not from_cache:
+            response["duration_ms"] = cached_result.get("duration_ms", 0)
+        if cached_result.get("empty"):
+            response["empty"] = True
+
+        return response
+
     except Exception as e:
+        logger.exception("Report generation failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/report/invalidate")
+async def ai_report_invalidate(_role: str = Depends(require_auth)):
+    """Bust the report cache. Useful after a manual Teable resync."""
+    from ..utils.cache import cache
+    n = cache.bust(_REPORT_CACHE_KEY)
+    return {"ok": True, "purged": n}

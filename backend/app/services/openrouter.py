@@ -786,8 +786,18 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     return clean
 
 
-async def generate_report(summary: dict, records: list[dict]) -> dict:
-    """Full executive report for the portfolio."""
+async def generate_report(
+    summary: dict,
+    records: list[dict],
+    invoice_summary: dict | None = None,
+    invoice_records: list[dict] | None = None,
+) -> dict:
+    """
+    Full executive report for the portfolio.
+
+    Includes both project and invoice context when available, producing a
+    richer report covering revenue, collection rate, and project margins.
+    """
     project_lines = []
     for r in records:
         f = r.get("fields", {})
@@ -801,8 +811,40 @@ async def generate_report(summary: dict, records: list[dict]) -> dict:
             f"Health={f.get('Health', 'N/A')}"
         )
 
+    # ── Invoice section (optional but recommended) ─────────────────────────
+    invoice_block = ""
+    if invoice_summary:
+        invoice_block = (
+            "\nINVOICE BILLING SUMMARY:\n"
+            f"  Total Invoices: {invoice_summary.get('total_invoices', 0)}\n"
+            f"  Total Raised: ₹{invoice_summary.get('total_raised', 0):,.0f}\n"
+            f"  Total with Tax: ₹{invoice_summary.get('total_with_tax', 0):,.0f}\n"
+            f"  Total Received: ₹{invoice_summary.get('total_received', 0):,.0f}\n"
+            f"  Outstanding: ₹{invoice_summary.get('total_outstanding', 0):,.0f}\n"
+            f"  Collection Rate: {invoice_summary.get('collection_rate', 0):.1f}%\n"
+            f"  By Status: {invoice_summary.get('by_status', {})}\n"
+        )
+
+    invoice_lines_block = ""
+    if invoice_records:
+        recent_invoices = []
+        for r in invoice_records[:25]:
+            f = r.get("fields", {})
+            raised = float(f.get('Amount Raised') or 0)
+            received = float(f.get('Amount Received') or 0)
+            recent_invoices.append(
+                f"  • [{f.get('Invoice Number','?')}] {f.get('Project','?')}: "
+                f"Status={f.get('Payment Status','?')}, "
+                f"Raised=₹{raised:,.0f}, Received=₹{received:,.0f}, "
+                f"Aging={f.get('Agening (Days)','0')}d"
+            )
+        if recent_invoices:
+            invoice_lines_block = "\nRECENT INVOICES:\n" + "\n".join(recent_invoices) + "\n"
+
     prompt = (
-        "Write a professional executive report for the FinTrack portfolio.\n\n"
+        "Write a professional executive board-ready report for the FinTrack portfolio.\n"
+        "Output MUST be in plain text (no markdown headers, no asterisks). Use the\n"
+        "exact section labels shown below.\n\n"
         f"PORTFOLIO SUMMARY:\n"
         f"  Total Projects: {summary['total_projects']}\n"
         f"  Total Billed: ₹{summary['total_billed']:,.0f}\n"
@@ -810,12 +852,25 @@ async def generate_report(summary: dict, records: list[dict]) -> dict:
         f"  Avg Profit %: {summary['avg_profit_pct']:.1f}%\n"
         f"  By Status: {summary['by_status']}\n"
         f"  By Client: {summary['by_client']}\n"
-        f"  By Health: {summary['by_health']}\n\n"
-        f"PROJECTS:\n" + "\n".join(project_lines) + "\n\n"
-        "Use these section labels (each on its own line, plain text):\n"
-        "Portfolio Overview:\nFinancial Performance:\nClient Breakdown:\nProject Health:\n"
-        "Recommendations:\nAction Items:\n\n"
-        "Be specific with numbers, executive-level tone, no preamble."
+        f"  By Health: {summary['by_health']}\n"
+        f"{invoice_block}"
+        f"\nPROJECTS:\n" + "\n".join(project_lines) + "\n"
+        f"{invoice_lines_block}\n"
+        "Section labels (each on its own line, EXACTLY as written):\n"
+        "Portfolio Overview:\n"
+        "Financial Performance:\n"
+        "Cash Flow & Collections:\n"
+        "Client Breakdown:\n"
+        "Project Health:\n"
+        "Risks & Concerns:\n"
+        "Recommendations:\n"
+        "Action Items:\n\n"
+        "Rules:\n"
+        " - Use specific numbers (₹ figures, %, counts) — never vague language.\n"
+        " - Executive-level tone — concise, decisive, no fluff or preamble.\n"
+        " - Each section: 2-5 short bullet points or a tight paragraph.\n"
+        " - 'Cash Flow & Collections' should only appear if invoice data exists; if it doesn't, omit that section entirely.\n"
+        " - End with concrete, prioritized Action Items the leader can do this week."
     )
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

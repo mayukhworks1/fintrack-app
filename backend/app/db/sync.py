@@ -635,10 +635,14 @@ async def _write_sync_log(
     # always sees fresh mirror data without making live Teable API calls.
     if error is None:
         try:
-            from .valkey import get_client as _vk
+            from .valkey import get_client as _vk, cache_bust as _cache_bust
             vk = _vk()
             if vk:
+                # Bust chat context (single key) and report cache (prefix) so
+                # the next request sees fresh mirror data without waiting for
+                # the TTL to expire.
                 await vk.delete(_CHAT_CONTEXT_CACHE_KEY)
+                await _cache_bust("report:")
         except Exception:
             pass  # Valkey unavailable — context will expire naturally
 
