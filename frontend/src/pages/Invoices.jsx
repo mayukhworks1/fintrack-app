@@ -266,11 +266,11 @@ function AttachCard({ a, onPreview }) {
 
 /* ── KPI card — horizontal layout with colored icon tile ──────────────────── */
 const KPI_TILE_PALETTE = [
-  { bg: '#fef3c7', fg: '#d97706' },  // amber
-  { bg: '#dbeafe', fg: '#2563eb' },  // blue
-  { bg: '#dcfce7', fg: '#16a34a' },  // green
-  { bg: '#fce7f3', fg: '#db2777' },  // pink
-  { bg: '#ede9fe', fg: '#7c3aed' },  // violet
+  { bg: 'var(--kpi-1-bg)', fg: 'var(--kpi-1-fg)' },
+  { bg: 'var(--kpi-2-bg)', fg: 'var(--kpi-2-fg)' },
+  { bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
+  { bg: 'var(--kpi-4-bg)', fg: 'var(--kpi-4-fg)' },
+  { bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
 ]
 function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   const palette = KPI_TILE_PALETTE[tone % KPI_TILE_PALETTE.length]
@@ -282,9 +282,9 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   return (
     <div className="card flex items-center gap-3 animate-scale-in">
       {Icon && (
-        <div className="rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
-          <Icon size={18} aria-hidden="true" />
+        <div className="flex items-center justify-center flex-shrink-0"
+          style={{ width: 38, height: 38, borderRadius: 8, background: palette.bg, color: palette.fg }}>
+          <Icon size={17} aria-hidden="true" />
         </div>
       )}
       <div className="min-w-0 flex-1">

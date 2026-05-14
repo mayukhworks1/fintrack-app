@@ -7,7 +7,7 @@ import {
   AlertOctagon, User, Tag, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
-  ChevronLeft, ChevronRight, Briefcase, RotateCcw,
+  ChevronLeft, ChevronRight, Briefcase, Repeat2,
   Users, HelpCircle, Mail, BookOpen, X as XIcon
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -149,11 +149,11 @@ function MonthStatusPill({ status, active }) {
 }
 
 const KPI_PALETTE = [
-  { bg: '#fef3c7', fg: '#d97706' },
-  { bg: '#dbeafe', fg: '#2563eb' },
-  { bg: '#dcfce7', fg: '#16a34a' },
-  { bg: '#fce7f3', fg: '#db2777' },
-  { bg: '#ede9fe', fg: '#7c3aed' },
+  { bg: 'var(--kpi-1-bg)', fg: 'var(--kpi-1-fg)' },
+  { bg: 'var(--kpi-2-bg)', fg: 'var(--kpi-2-fg)' },
+  { bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
+  { bg: 'var(--kpi-4-bg)', fg: 'var(--kpi-4-fg)' },
+  { bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
 ]
 
 /* ── Helpers ── */
@@ -289,9 +289,9 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   return (
     <div className="card flex items-center gap-3 animate-scale-in hover:shadow-md transition-shadow">
       {Icon && (
-        <div className="rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
-          <Icon size={18} aria-hidden="true" />
+        <div className="flex items-center justify-center flex-shrink-0"
+          style={{ width: 38, height: 38, borderRadius: 8, background: palette.bg, color: palette.fg }}>
+          <Icon size={17} aria-hidden="true" />
         </div>
       )}
       <div className="min-w-0 flex-1">
@@ -1054,7 +1054,7 @@ function HelpModal({ open, onClose }) {
           {/* Retainers */}
           <section>
             <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
-              <RotateCcw size={14} style={{ color: 'var(--accent)' }} /> Retainers
+              <Repeat2 size={14} style={{ color: 'var(--accent)' }} /> Retainers
             </h3>
             <div className="space-y-2">
               {[
@@ -1213,7 +1213,7 @@ function MobileHeader({ onHelp, onLogout }) {
 function MobileBottomNav({ workspace, setWorkspace, isAll }) {
   const navItems = [
     { value: 'invoices',  label: 'Invoices',  icon: FileText },
-    { value: 'retainers', label: 'Retainers', icon: RotateCcw },
+    { value: 'retainers', label: 'Retainers', icon: Repeat2 },
     ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
   ]
   return (
@@ -1250,7 +1250,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
 
   const navItems = [
     { value: 'invoices',   label: 'Invoices',   icon: FileText },
-    { value: 'retainers',  label: 'Retainers',  icon: RotateCcw },
+    { value: 'retainers',  label: 'Retainers',  icon: Repeat2 },
     ...(isAll ? [
       { value: 'projects',  label: 'Projects',  icon: Briefcase },
     ] : []),
@@ -1271,9 +1271,9 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
       <div className="flex items-center justify-between pl-3 pr-2 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--sidebar-border)', minHeight: 52 }}>
         <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
-            <Globe size={13} className="text-white" />
+          <div className="flex items-center justify-center flex-shrink-0"
+            style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #2f72f5 0%, #1d4ed8 100%)', boxShadow: '0 2px 6px rgba(37,99,235,0.35)' }}>
+            <Globe size={12} className="text-white" />
           </div>
           {open && (
             <div className="min-w-0">
@@ -1296,19 +1296,9 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
           return (
             <button key={value} onClick={() => setWorkspace(value)}
               title={!open ? label : undefined}
-              className="w-full flex items-center gap-2.5 px-2 py-2.5 rounded-lg transition-all text-left"
-              style={{
-                background: active ? 'var(--accent-dim)' : 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text-2)',
-                fontWeight: active ? 600 : 400,
-              }}>
-              <Icon size={16} className="flex-shrink-0"
-                style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
-              {open && <span className="text-sm truncate">{label}</span>}
-              {open && active && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ background: 'var(--accent)' }} />
-              )}
+              className={`nav-item ${active ? 'active' : ''}`}>
+              <Icon size={15} className="flex-shrink-0" style={{ flexShrink: 0 }} />
+              {open && <span className="truncate">{label}</span>}
             </button>
           )
         })}
@@ -1318,25 +1308,19 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
       <div className="px-2 pb-3 flex-shrink-0 space-y-0.5"
         style={{ borderTop: '1px solid var(--sidebar-border)', paddingTop: '0.5rem' }}>
         {onHelp && (
-          <button onClick={onHelp} title="Help & Guide"
-            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
-            style={{ color: 'var(--text-3)' }}>
-            <HelpCircle size={15} />
+          <button onClick={onHelp} title="Help & Guide" className="nav-item">
+            <HelpCircle size={14} style={{ flexShrink: 0 }} />
             {open && <span className="text-xs">Help & Guide</span>}
           </button>
         )}
-        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'}
-          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
-          style={{ color: 'var(--text-3)' }}>
+        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'} className="nav-item">
           {dark
-            ? <Sun size={15} style={{ color: '#facc15' }} />
-            : <Moon size={15} style={{ color: '#818cf8' }} />}
+            ? <Sun size={14} style={{ color: '#fbbf24', flexShrink: 0 }} />
+            : <Moon size={14} style={{ color: '#818cf8', flexShrink: 0 }} />}
           {open && <span className="text-xs">{dark ? 'Light mode' : 'Dark mode'}</span>}
         </button>
-        <button onClick={logout} title="Sign out"
-          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors"
-          style={{ color: 'var(--text-3)' }}>
-          <LogOut size={14} />
+        <button onClick={logout} title="Sign out" className="nav-item">
+          <LogOut size={13} style={{ flexShrink: 0 }} />
           {open && <span className="text-xs">Sign out</span>}
         </button>
       </div>
