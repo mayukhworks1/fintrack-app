@@ -20,6 +20,7 @@ from ..config import settings
 
 logger = logging.getLogger("fintrack.db.postgres")
 _pool: asyncpg.Pool | None = None
+_init_error: str | None = None   # last init failure reason (exposed via /health)
 
 # ---------------------------------------------------------------------------
 SCHEMA = """
@@ -300,8 +301,9 @@ ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS isp          VARCHAR(150);
 
 
 async def init_pool() -> None:
-    global _pool
+    global _pool, _init_error
     if not settings.postgres_url:
+        _init_error = "POSTGRES_URL env var not set"
         logger.warning("POSTGRES_URL not set — PostgreSQL features disabled")
         return
     try:
@@ -314,9 +316,11 @@ async def init_pool() -> None:
         )
         async with _pool.acquire() as conn:
             await conn.execute(SCHEMA)
+        _init_error = None
         logger.info("PostgreSQL connected and schema ready")
     except Exception as exc:
-        logger.error("PostgreSQL init failed: %s", exc)
+        _init_error = f"{type(exc).__name__}: {exc}"
+        logger.error("PostgreSQL init failed: %s", exc, exc_info=True)
         _pool = None
 
 
@@ -329,3 +333,8 @@ async def close_pool() -> None:
 
 def get_pool() -> asyncpg.Pool | None:
     return _pool
+
+
+def get_init_error() -> str | None:
+    """Return the last pool initialisation error (for diagnostics)."""
+    return _init_error

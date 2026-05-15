@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -16,8 +16,10 @@ from .routers import admin
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
+from .db.postgres import get_init_error
 from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
+from .routers.deps import require_auth
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -32,6 +34,17 @@ async def lifespan(app: FastAPI):
     logger.info("FinTrack API starting (version=%s)", app.version)
 
     await postgres.init_pool()
+    # Retry once after 5 s — Aiven / cold-start connections occasionally
+    # time out on the first attempt but succeed immediately on the second.
+    if postgres.get_pool() is None and settings.postgres_url:
+        logger.warning("PG init failed on first attempt — retrying in 5 s …")
+        await asyncio.sleep(5)
+        await postgres.init_pool()
+        if postgres.get_pool() is None:
+            logger.error("PG init failed on retry too — admin features unavailable. Error: %s", postgres.get_init_error())
+        else:
+            logger.info("PG connected on retry")
+
     if settings.valkey_url:
         await vk.init_client(settings.valkey_url)
 
@@ -177,17 +190,40 @@ async def liveness():
 async def health():
     pg_ok = postgres.get_pool() is not None
     vk_ok = vk.get_client() is not None
+    pg_err = get_init_error()
     return {
         "status":        "healthy",
         "version":       app.version,
         "teable_configured": bool(settings.teable_api_token),
         "ai_configured":     bool(settings.openrouter_api_key),
         "postgres":      "connected" if pg_ok else "unavailable",
+        "postgres_error": pg_err,
         "valkey":        "connected" if vk_ok else "unavailable",
         "sync_running":  _sync_task is not None and not _sync_task.done(),
         "cache":         cache.stats(),
         "timestamp":     time.time(),
     }
+
+
+@app.post("/api/admin/pg-reconnect", tags=["health"])
+async def pg_reconnect(_: str = Depends(require_auth)):
+    """Force a PostgreSQL reconnection attempt (useful after transient failures)."""
+    if postgres.get_pool() is not None:
+        return {"status": "already_connected"}
+    await postgres.init_pool()
+    pool = postgres.get_pool()
+    if pool:
+        # Start sync task if it isn't running
+        global _sync_task
+        if (_sync_task is None or _sync_task.done()) and (settings.teable_api_token or settings.teable_web_api_token):
+            from .db.sync import sync_loop
+            _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
+            logger.info("Background sync task restarted after PG reconnect")
+        return {"status": "connected"}
+    return JSONResponse(
+        status_code=503,
+        content={"status": "failed", "error": get_init_error()},
+    )
 
 
 # ── Unified error envelope ───────────────────────────────────────────────────
