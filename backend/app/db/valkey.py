@@ -150,6 +150,52 @@ async def geo_set(ip: str, data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Record-mutation attribution (actor context handoff)
+# ---------------------------------------------------------------------------
+#
+# When a user mutates a record via the API, the request handler captures the
+# actor context (role, IP, geo, OS, browser, etc.) and stores it briefly in
+# Valkey under  attrib:{teable_id}.  The background Teable→PG sync loop then
+# pops that attribution when it discovers the corresponding change and writes
+# a fully-attributed row to record_history.
+#
+# TTL is short (default 120 s) because if the sync hasn't run within 2 min the
+# attribution is stale and we'd rather record "sync" than misattribute.
+
+_ATTRIB_TTL = 120  # seconds
+
+
+async def attribution_set(teable_id: str, actor: dict, ttl: int = _ATTRIB_TTL) -> None:
+    """Store actor context for the next sync of this record. Silently no-ops if Valkey is down."""
+    if not _client or not teable_id:
+        return
+    try:
+        await _client.set(f"attrib:{teable_id}", _encode(actor), ex=ttl)
+    except Exception as exc:
+        logger.debug("attribution_set(%s) error: %s", teable_id, exc)
+
+
+async def attribution_pop(teable_id: str) -> dict | None:
+    """
+    Atomically GET-then-DEL the actor attribution for a record.
+    Returns the decoded actor dict, or None if not present / Valkey down.
+    """
+    if not _client or not teable_id:
+        return None
+    try:
+        key = f"attrib:{teable_id}"
+        pipe = _client.pipeline()
+        pipe.get(key)
+        pipe.delete(key)
+        results = await pipe.execute()
+        raw = results[0]
+        return _decode(raw) if raw else None
+    except Exception as exc:
+        logger.debug("attribution_pop(%s) error: %s", teable_id, exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Sliding-window rate limiter  (Sorted Set approach)
 # ---------------------------------------------------------------------------
 

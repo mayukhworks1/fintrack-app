@@ -804,6 +804,7 @@ async def admin_record_history(
     source_table: Optional[str] = Query(None),
     teable_id:    Optional[str] = Query(None),
     change_type:  Optional[str] = Query(None),
+    actor_role:   Optional[str] = Query(None),
     _:            str           = Depends(require_admin),
 ):
     """Field-level change history for mirrored records."""
@@ -821,6 +822,8 @@ async def admin_record_history(
         where.append(f"teable_id = ${idx}");    params.append(teable_id);    idx += 1
     if change_type:
         where.append(f"change_type = ${idx}");  params.append(change_type);  idx += 1
+    if actor_role:
+        where.append(f"actor_role = ${idx}");   params.append(actor_role);   idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -830,7 +833,11 @@ async def admin_record_history(
         SELECT id, recorded_at, source_table, teable_id, change_type,
                changed_fields,
                old_fields::text AS old_fields,
-               new_fields::text AS new_fields
+               new_fields::text AS new_fields,
+               change_source, actor_role, actor_ip, actor_country, actor_city,
+               actor_region, actor_isp, actor_lat, actor_lon, actor_os,
+               actor_browser, actor_device, actor_user_agent, actor_session_id,
+               actor_path, actor_method
         FROM record_history {where_sql}
         ORDER BY recorded_at DESC
         LIMIT ${idx} OFFSET ${idx+1}

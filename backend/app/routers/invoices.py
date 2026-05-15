@@ -3,11 +3,12 @@ Invoice Tracking router — /api/invoices
 GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional
 from pydantic import BaseModel
 from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
+from ..db.attribution import record_user_attribution
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
@@ -100,11 +101,18 @@ async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
 
 
 @router.post("", status_code=201)
-async def create_invoice(body: InvoiceFields, _role: str = Depends(require_editor)):
+async def create_invoice(body: InvoiceFields, request: Request, role: str = Depends(require_editor)):
     try:
         fields = body.to_teable_fields()
         _validate_paid_invoice(fields)
-        return await InvoiceService().create_invoice(fields)
+        result = await InvoiceService().create_invoice(fields)
+        new_id = result.get("id") if isinstance(result, dict) else None
+        if new_id:
+            try:
+                await record_user_attribution(request, role, new_id)
+            except Exception:
+                pass
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -113,11 +121,16 @@ async def create_invoice(body: InvoiceFields, _role: str = Depends(require_edito
 
 @router.patch("/{record_id}")
 async def update_invoice(
-    record_id: str, body: InvoiceFields, _role: str = Depends(require_editor)
+    record_id: str, body: InvoiceFields, request: Request,
+    role: str = Depends(require_editor),
 ):
     try:
         fields = body.to_teable_fields()
         _validate_paid_invoice(fields)
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         return await InvoiceService().update_invoice(record_id, fields)
     except HTTPException:
         raise
@@ -126,8 +139,12 @@ async def update_invoice(
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_invoice(record_id: str, _role: str = Depends(require_editor)):
+async def delete_invoice(record_id: str, request: Request, role: str = Depends(require_editor)):
     try:
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         await InvoiceService().delete_invoice(record_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

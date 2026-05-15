@@ -2,10 +2,11 @@
 Web Project Tracker router — /api/web-projects + /api/web-resources
 All routes require the "all" role. Other tokens get 403.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 from pydantic import BaseModel
 from ..services.web_project import WebProjectService, WebResourceService
+from ..db.attribution import record_user_attribution
 from .deps import require_all, require_web_access
 
 # ── Routers ───────────────────────────────────────────────────────────────────
@@ -166,11 +167,18 @@ async def get_web_project(project_id: str, _role: str = Depends(require_all)):
 
 
 @projects_router.post("", status_code=201)
-async def create_web_project(body: ProjectFields, _role: str = Depends(require_all)):
+async def create_web_project(body: ProjectFields, request: Request, role: str = Depends(require_all)):
     if not body.project_name:
         raise HTTPException(status_code=400, detail="Project Name is required")
     try:
-        return await WebProjectService().create_project(body.to_teable_fields())
+        result = await WebProjectService().create_project(body.to_teable_fields())
+        new_id = result.get("id") if isinstance(result, dict) else None
+        if new_id:
+            try:
+                await record_user_attribution(request, role, new_id)
+            except Exception:
+                pass
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -179,17 +187,26 @@ async def create_web_project(body: ProjectFields, _role: str = Depends(require_a
 
 @projects_router.patch("/{project_id}")
 async def update_web_project(
-    project_id: str, body: ProjectFields, _role: str = Depends(require_all)
+    project_id: str, body: ProjectFields, request: Request,
+    role: str = Depends(require_all),
 ):
     try:
+        try:
+            await record_user_attribution(request, role, project_id)
+        except Exception:
+            pass
         return await WebProjectService().update_project(project_id, body.to_teable_fields())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @projects_router.delete("/{project_id}", status_code=204)
-async def delete_web_project(project_id: str, _role: str = Depends(require_all)):
+async def delete_web_project(project_id: str, request: Request, role: str = Depends(require_all)):
     try:
+        try:
+            await record_user_attribution(request, role, project_id)
+        except Exception:
+            pass
         await WebProjectService().delete_project(project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -222,11 +239,18 @@ async def get_web_resource(resource_id: str, _role: str = Depends(require_all)):
 
 
 @resources_router.post("", status_code=201)
-async def create_web_resource(body: ResourceFields, _role: str = Depends(require_all)):
+async def create_web_resource(body: ResourceFields, request: Request, role: str = Depends(require_all)):
     if not body.resource_name:
         raise HTTPException(status_code=400, detail="Resource Name is required")
     try:
-        return await WebResourceService().create_resource(body.to_teable_fields())
+        result = await WebResourceService().create_resource(body.to_teable_fields())
+        new_id = result.get("id") if isinstance(result, dict) else None
+        if new_id:
+            try:
+                await record_user_attribution(request, role, new_id)
+            except Exception:
+                pass
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -235,35 +259,52 @@ async def create_web_resource(body: ResourceFields, _role: str = Depends(require
 
 @resources_router.patch("/{resource_id}")
 async def update_web_resource(
-    resource_id: str, body: ResourceFields, _role: str = Depends(require_all)
+    resource_id: str, body: ResourceFields, request: Request,
+    role: str = Depends(require_all),
 ):
     try:
+        try:
+            await record_user_attribution(request, role, resource_id)
+        except Exception:
+            pass
         return await WebResourceService().update_resource(resource_id, body.to_teable_fields())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @resources_router.delete("/{resource_id}", status_code=204)
-async def delete_web_resource(resource_id: str, _role: str = Depends(require_all)):
+async def delete_web_resource(resource_id: str, request: Request, role: str = Depends(require_all)):
     try:
+        try:
+            await record_user_attribution(request, role, resource_id)
+        except Exception:
+            pass
         await WebResourceService().delete_resource(resource_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @resources_router.post("/{resource_id}/assign/{project_id}", status_code=200)
-async def assign_resource(resource_id: str, project_id: str, _role: str = Depends(require_all)):
+async def assign_resource(resource_id: str, project_id: str, request: Request, role: str = Depends(require_all)):
     """Add a project link to a resource (supports multi-project resources)."""
     try:
+        try:
+            await record_user_attribution(request, role, resource_id)
+        except Exception:
+            pass
         return await WebResourceService().assign_resource_to_project(resource_id, project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @resources_router.delete("/{resource_id}/assign/{project_id}", status_code=204)
-async def unassign_resource(resource_id: str, project_id: str, _role: str = Depends(require_all)):
+async def unassign_resource(resource_id: str, project_id: str, request: Request, role: str = Depends(require_all)):
     """Remove a project link from a resource."""
     try:
+        try:
+            await record_user_attribution(request, role, resource_id)
+        except Exception:
+            pass
         await WebResourceService().unassign_resource_from_project(resource_id, project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,7 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..services.teable import TeableService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
+from ..db.attribution import record_user_attribution
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -61,30 +62,46 @@ async def get_project(record_id: str, _role: str = Depends(require_auth)):
 
 
 @router.post("", status_code=201)
-async def create_project(body: ProjectCreate, _role: str = Depends(require_editor)):
+async def create_project(body: ProjectCreate, request: Request, role: str = Depends(require_editor)):
     teable = get_teable()
     fields = body.to_teable_fields()
-    return await teable.create_record(fields)
+    result = await teable.create_record(fields)
+    new_id = result.get("id") if isinstance(result, dict) else None
+    if new_id:
+        try:
+            await record_user_attribution(request, role, new_id)
+        except Exception:
+            pass
+    return result
 
 
 @router.patch("/{record_id}")
 async def update_project(
-    record_id: str, body: ProjectUpdate, _role: str = Depends(require_editor)
+    record_id: str, body: ProjectUpdate, request: Request,
+    role: str = Depends(require_editor),
 ):
     teable = get_teable()
     fields = body.to_teable_fields()
     if not fields:
         raise HTTPException(status_code=400, detail="No fields provided to update.")
     try:
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         return await teable.update_record(record_id, fields)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_project(record_id: str, _role: str = Depends(require_editor)):
+async def delete_project(record_id: str, request: Request, role: str = Depends(require_editor)):
     teable = get_teable()
     try:
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         await teable.delete_record(record_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))

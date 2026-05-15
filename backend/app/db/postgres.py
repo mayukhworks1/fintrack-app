@@ -148,18 +148,61 @@ CREATE INDEX IF NOT EXISTS im_project_idx ON invoices_mirror (project);
 CREATE INDEX IF NOT EXISTS im_date_idx    ON invoices_mirror (raised_date DESC);
 
 -- ── Record change history ───────────────────────────────────────────────────
+-- Field-level audit trail for every create/update/delete on mirrored records.
+-- The `actor_*` columns capture WHO made the change, enriched from the user's
+-- HTTP request at mutation time and shuttled to the sync loop via a short-lived
+-- Valkey attribution entry (see db/valkey.attribution_set / attribution_pop).
 CREATE TABLE IF NOT EXISTS record_history (
-    id             BIGSERIAL    PRIMARY KEY,
-    recorded_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    source_table   VARCHAR(20)  NOT NULL,
-    teable_id      VARCHAR(60)  NOT NULL,
-    change_type    VARCHAR(10)  NOT NULL,
-    old_fields     JSONB,
-    new_fields     JSONB,
-    changed_fields TEXT[]
+    id               BIGSERIAL    PRIMARY KEY,
+    recorded_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    source_table     VARCHAR(20)  NOT NULL,
+    teable_id        VARCHAR(60)  NOT NULL,
+    change_type      VARCHAR(10)  NOT NULL,
+    old_fields       JSONB,
+    new_fields       JSONB,
+    changed_fields   TEXT[],
+
+    -- Actor attribution (populated when change originated from a user request)
+    change_source    VARCHAR(10)  DEFAULT 'sync',  -- 'user' | 'sync' | 'system'
+    actor_role       VARCHAR(20),
+    actor_ip         VARCHAR(45),
+    actor_country    VARCHAR(80),
+    actor_city       VARCHAR(100),
+    actor_region     VARCHAR(100),
+    actor_isp        VARCHAR(150),
+    actor_lat        DOUBLE PRECISION,
+    actor_lon        DOUBLE PRECISION,
+    actor_os         VARCHAR(100),
+    actor_browser    VARCHAR(100),
+    actor_device     VARCHAR(20),
+    actor_user_agent TEXT,
+    actor_session_id UUID,
+    actor_path       VARCHAR(200),    -- API path that triggered the change
+    actor_method     VARCHAR(10)
 );
-CREATE INDEX IF NOT EXISTS rh_id_idx ON record_history (source_table, teable_id, recorded_at DESC);
-CREATE INDEX IF NOT EXISTS rh_ts_idx ON record_history (recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_id_idx     ON record_history (source_table, teable_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_ts_idx     ON record_history (recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_actor_idx  ON record_history (actor_role, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_source_idx ON record_history (change_source, recorded_at DESC);
+
+-- Migration: backfill the actor columns on existing tables that pre-date this schema.
+-- ADD COLUMN IF NOT EXISTS is a no-op when the column already exists.
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS change_source    VARCHAR(10) DEFAULT 'sync';
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_role       VARCHAR(20);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_ip         VARCHAR(45);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_country    VARCHAR(80);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_city       VARCHAR(100);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_region     VARCHAR(100);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_isp        VARCHAR(150);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_lat        DOUBLE PRECISION;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_lon        DOUBLE PRECISION;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_os         VARCHAR(100);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_browser    VARCHAR(100);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_device     VARCHAR(20);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_user_agent TEXT;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_session_id UUID;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_path       VARCHAR(200);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_method     VARCHAR(10);
 
 -- ── Sync run log ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sync_log (

@@ -5,10 +5,11 @@ Routes accept 'web' OR 'all' role (require_web_access).
 'all'  — invoice tracker + project tracker (All@2026)
 """
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional, List, Any
 from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
+from ..db.attribution import record_user_attribution
 from ..config import settings
 from .deps import require_web_access
 
@@ -192,11 +193,18 @@ async def get_web_invoice(record_id: str, _role: str = Depends(require_web_acces
 
 
 @router.post("", status_code=201)
-async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(require_web_access)):
+async def create_web_invoice(body: WebInvoiceFields, request: Request, role: str = Depends(require_web_access)):
     try:
         fields = body.to_teable_fields()
         _validate_paid_invoice(fields)
-        return await WebInvoiceService().create_invoice(fields)
+        result = await WebInvoiceService().create_invoice(fields)
+        new_id = result.get("id") if isinstance(result, dict) else None
+        if new_id:
+            try:
+                await record_user_attribution(request, role, new_id)
+            except Exception:
+                pass
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -205,11 +213,16 @@ async def create_web_invoice(body: WebInvoiceFields, _role: str = Depends(requir
 
 @router.patch("/{record_id}")
 async def update_web_invoice(
-    record_id: str, body: WebInvoiceFields, _role: str = Depends(require_web_access)
+    record_id: str, body: WebInvoiceFields, request: Request,
+    role: str = Depends(require_web_access),
 ):
     try:
         fields = body.to_teable_fields()
         _validate_paid_invoice(fields)
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         return await WebInvoiceService().update_invoice(record_id, fields)
     except HTTPException:
         raise
@@ -218,8 +231,12 @@ async def update_web_invoice(
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_web_invoice(record_id: str, _role: str = Depends(require_web_access)):
+async def delete_web_invoice(record_id: str, request: Request, role: str = Depends(require_web_access)):
     try:
+        try:
+            await record_user_attribution(request, role, record_id)
+        except Exception:
+            pass
         await WebInvoiceService().delete_invoice(record_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

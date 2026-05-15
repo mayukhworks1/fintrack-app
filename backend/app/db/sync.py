@@ -202,9 +202,12 @@ async def upsert_record(
             teable_id,
         )
 
+        # ── Actor attribution (popped from Valkey if a user mutation triggered this) ──
+        from . import attribution as attrib
+        actor = await attrib.pop_attribution(teable_id)
+
         if existing_row is None:
             # ── INSERT ──
-            # Build column list; use ::jsonb cast for the fields column
             cols  = ["teable_id", "fields"] + list(typed.keys())
             vals  = [teable_id, json.dumps(fields, default=str)] + list(typed.values())
             phs   = []
@@ -214,17 +217,11 @@ async def upsert_record(
                 f"INSERT INTO {mirror_table} ({', '.join(cols)}) VALUES ({', '.join(phs)})",
                 *vals,
             )
-            # new_fields JSONB → must use ::jsonb cast
-            await conn.execute(
-                """
-                INSERT INTO record_history
-                    (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-                VALUES ($1, $2, 'create', NULL, $3::jsonb, $4)
-                """,
-                source, teable_id,
-                json.dumps(fields, default=str),
-                list(fields.keys()),
-            )
+            await _insert_history(conn, source, teable_id, "create",
+                                  old_json=None,
+                                  new_json=json.dumps(fields, default=str),
+                                  changed=list(fields.keys()),
+                                  actor=actor)
             return "created"
 
         old_fields = json.loads(existing_row["fields"])
@@ -236,36 +233,73 @@ async def upsert_record(
         set_parts: list[str] = ["synced_at = NOW()"]
         set_vals:  list      = []
         idx = 1
-
-        # fields JSONB column — explicit ::jsonb cast
         set_parts.append(f"fields = ${idx}::jsonb")
         set_vals.append(json.dumps(fields, default=str))
         idx += 1
-
-        # typed columns (plain scalar values)
         for k, v in typed.items():
             set_parts.append(f"{k} = ${idx}")
             set_vals.append(v)
             idx += 1
-
         set_vals.append(teable_id)
         await conn.execute(
             f"UPDATE {mirror_table} SET {', '.join(set_parts)} WHERE teable_id = ${idx}",
             *set_vals,
         )
-        # old_fields and new_fields are JSONB — must use ::jsonb cast
-        await conn.execute(
-            """
-            INSERT INTO record_history
-                (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-            VALUES ($1, $2, 'update', $3::jsonb, $4::jsonb, $5)
-            """,
-            source, teable_id,
-            json.dumps(old_fields, default=str),
-            json.dumps(fields, default=str),
-            diff,
-        )
+        await _insert_history(conn, source, teable_id, "update",
+                              old_json=json.dumps(old_fields, default=str),
+                              new_json=json.dumps(fields, default=str),
+                              changed=diff,
+                              actor=actor)
         return "updated"
+
+
+async def _insert_history(
+    conn,
+    source: str,
+    teable_id: str,
+    change_type: str,
+    old_json: str | None,
+    new_json: str | None,
+    changed: list[str],
+    actor: dict,
+) -> None:
+    """
+    Insert one fully-attributed row into record_history.
+    `actor` must have all keys from attribution.empty_actor() so the bind
+    list is uniform regardless of whether attribution was found.
+    """
+    await conn.execute(
+        """
+        INSERT INTO record_history (
+            source_table, teable_id, change_type,
+            old_fields, new_fields, changed_fields,
+            change_source, actor_role, actor_ip,
+            actor_country, actor_city, actor_region, actor_isp,
+            actor_lat, actor_lon,
+            actor_os, actor_browser, actor_device,
+            actor_user_agent, actor_session_id,
+            actor_path, actor_method
+        )
+        VALUES (
+            $1, $2, $3,
+            $4::jsonb, $5::jsonb, $6,
+            $7, $8, $9,
+            $10, $11, $12, $13,
+            $14, $15,
+            $16, $17, $18,
+            $19, $20,
+            $21, $22
+        )
+        """,
+        source, teable_id, change_type,
+        old_json, new_json, changed,
+        actor["change_source"], actor["actor_role"], actor["actor_ip"],
+        actor["actor_country"], actor["actor_city"], actor["actor_region"], actor["actor_isp"],
+        actor["actor_lat"], actor["actor_lon"],
+        actor["actor_os"], actor["actor_browser"], actor["actor_device"],
+        actor["actor_user_agent"], actor["actor_session_id"],
+        actor["actor_path"], actor["actor_method"],
+    )
 
 
 async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> None:
@@ -274,6 +308,8 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
     synced_at so we know when it was last seen.  We keep the row so that
     history queries still work.
     """
+    from . import attribution as attrib
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             f"SELECT fields::text AS fields FROM {mirror_table} WHERE teable_id = $1",
@@ -281,14 +317,12 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
         )
         if not row:
             return
-        await conn.execute(
-            """
-            INSERT INTO record_history
-                (source_table, teable_id, change_type, old_fields, new_fields, changed_fields)
-            VALUES ($1, $2, 'delete', $3::jsonb, NULL, '{}')
-            """,
-            source, teable_id, row["fields"],
-        )
+        actor = await attrib.pop_attribution(teable_id)
+        await _insert_history(conn, source, teable_id, "delete",
+                              old_json=row["fields"],
+                              new_json=None,
+                              changed=[],
+                              actor=actor)
         # Tag the mirror row so it's visibly "deleted" without losing history
         await conn.execute(
             f"UPDATE {mirror_table} SET synced_at = NOW() WHERE teable_id = $1",
