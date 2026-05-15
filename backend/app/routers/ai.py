@@ -104,9 +104,20 @@ async def _build_context_pg(pool) -> str:
         pool.fetch("SELECT fields FROM invoices_mirror  ORDER BY raised_date DESC NULLS LAST LIMIT 100"),
     )
 
-    # asyncpg returns JSONB as dict directly
-    proj_fields = [dict(r["fields"]) for r in proj_rows]
-    inv_fields  = [dict(r["fields"]) for r in inv_rows]
+    # asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
+    def _to_dict(v) -> dict:
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                return {}
+        return {}
+
+    proj_fields = [_to_dict(r["fields"]) for r in proj_rows]
+    inv_fields  = [_to_dict(r["fields"]) for r in inv_rows]
 
     # ── 3. Compute project summary ───────────────────────────────────────
     def _safe_float(v):
@@ -401,8 +412,19 @@ async def _build_report_payload_pg(pool) -> dict:
         pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 300"),
         pool.fetch("SELECT fields FROM invoices_mirror ORDER BY raised_date DESC NULLS LAST LIMIT 200"),
     )
-    proj_fields = [dict(r["fields"]) for r in proj_rows]
-    inv_fields  = [dict(r["fields"]) for r in inv_rows]
+    def _to_dict(v) -> dict:
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                return {}
+        return {}
+
+    proj_fields = [_to_dict(r["fields"]) for r in proj_rows]
+    inv_fields  = [_to_dict(r["fields"]) for r in inv_rows]
 
     def _safe_float(v):
         try: return float(v) if v not in (None, "") else 0.0
@@ -584,7 +606,9 @@ async def ai_report(
         return response
 
     except Exception as e:
-        logger.exception("Report generation failed")
+        logger.exception("Report generation failed: %s", e, exc_info=True)
+        # Bust the cache so a stale/broken entry doesn't block the next attempt
+        cache.bust(_REPORT_CACHE_KEY)
         raise HTTPException(status_code=500, detail=str(e))
 
 
