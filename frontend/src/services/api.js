@@ -1,6 +1,13 @@
+import { getDeviceHintHeader } from '../utils/deviceInfo'
+
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 const TIMEOUT_MS = 20_000
 const AI_TIMEOUT_MS = 90_000  // AI endpoints can take longer
+
+// ── Eagerly resolve the device hint once at module load so it's ready
+// on the first request. After this the value is cached for the session.
+let _deviceHint = ''
+getDeviceHintHeader().then(h => { _deviceHint = h }).catch(() => {})
 
 // ── Auth token helpers ───────────────────────────────────────────────────
 // Token is an opaque HMAC-signed string from the backend. We send it via
@@ -69,8 +76,13 @@ async function _doRequest(path, options = {}, retries = 2) {
   try {
     const token = getAuthToken()
     const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+    // Lazy-resolve the device hint if it wasn't ready at module load.
+    if (!_deviceHint) {
+      try { _deviceHint = await getDeviceHintHeader() } catch {}
+    }
+    const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...authHeader, ...rest.headers },
+      headers: { 'Content-Type': 'application/json', ...authHeader, ...hintHeader, ...rest.headers },
       signal: controller.signal,
       ...rest,
     })

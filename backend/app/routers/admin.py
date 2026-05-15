@@ -837,7 +837,11 @@ async def admin_record_history(
                change_source, actor_role, actor_ip, actor_country, actor_city,
                actor_region, actor_isp, actor_lat, actor_lon, actor_os,
                actor_browser, actor_device, actor_user_agent, actor_session_id,
-               actor_path, actor_method
+               actor_path, actor_method,
+               actor_device_label, actor_device_model, actor_platform_version,
+               actor_arch, actor_cpu_cores, actor_memory_gb,
+               actor_gpu, actor_screen, actor_timezone,
+               actor_language, actor_network
         FROM record_history {where_sql}
         ORDER BY recorded_at DESC
         LIMIT ${idx} OFFSET ${idx+1}

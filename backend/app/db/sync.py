@@ -278,7 +278,11 @@ async def _insert_history(
             actor_lat, actor_lon,
             actor_os, actor_browser, actor_device,
             actor_user_agent, actor_session_id,
-            actor_path, actor_method
+            actor_path, actor_method,
+            actor_device_label, actor_device_model, actor_platform_version,
+            actor_arch, actor_cpu_cores, actor_memory_gb,
+            actor_gpu, actor_screen, actor_timezone,
+            actor_language, actor_network
         )
         VALUES (
             $1, $2, $3,
@@ -288,7 +292,11 @@ async def _insert_history(
             $14, $15,
             $16, $17, $18,
             $19, $20,
-            $21, $22
+            $21, $22,
+            $23, $24, $25,
+            $26, $27, $28,
+            $29, $30, $31,
+            $32, $33
         )
         """,
         source, teable_id, change_type,
@@ -299,6 +307,10 @@ async def _insert_history(
         actor["actor_os"], actor["actor_browser"], actor["actor_device"],
         actor["actor_user_agent"], actor["actor_session_id"],
         actor["actor_path"], actor["actor_method"],
+        actor.get("actor_device_label"), actor.get("actor_device_model"), actor.get("actor_platform_version"),
+        actor.get("actor_arch"), actor.get("actor_cpu_cores"), actor.get("actor_memory_gb"),
+        actor.get("actor_gpu"), actor.get("actor_screen"), actor.get("actor_timezone"),
+        actor.get("actor_language"), actor.get("actor_network"),
     )
 
 

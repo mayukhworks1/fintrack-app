@@ -39,7 +39,7 @@ from typing import Optional
 from fastapi import Request
 
 from . import valkey as vk
-from .audit import parse_ua
+from .audit import parse_ua, parse_client_hint, build_device_label
 from .geo import lookup as geo_lookup
 
 logger = logging.getLogger("fintrack.db.attribution")
@@ -57,22 +57,34 @@ def _get_client_ip(request: Request) -> str:
 def empty_actor() -> dict:
     """The 'no actor data' row — every key present so SQL bind is uniform."""
     return {
-        "change_source":    "sync",
-        "actor_role":       None,
-        "actor_ip":         None,
-        "actor_country":    None,
-        "actor_city":       None,
-        "actor_region":     None,
-        "actor_isp":        None,
-        "actor_lat":        None,
-        "actor_lon":        None,
-        "actor_os":         None,
-        "actor_browser":    None,
-        "actor_device":     None,
-        "actor_user_agent": None,
-        "actor_session_id": None,
-        "actor_path":       None,
-        "actor_method":     None,
+        "change_source":           "sync",
+        "actor_role":              None,
+        "actor_ip":                None,
+        "actor_country":           None,
+        "actor_city":              None,
+        "actor_region":            None,
+        "actor_isp":               None,
+        "actor_lat":               None,
+        "actor_lon":               None,
+        "actor_os":                None,
+        "actor_browser":           None,
+        "actor_device":            None,
+        "actor_user_agent":        None,
+        "actor_session_id":        None,
+        "actor_path":              None,
+        "actor_method":            None,
+        # ── Rich device fields (from X-Client-Hint header) ─────────────────
+        "actor_device_label":      None,
+        "actor_device_model":      None,
+        "actor_platform_version":  None,
+        "actor_arch":              None,
+        "actor_cpu_cores":         None,
+        "actor_memory_gb":         None,
+        "actor_gpu":               None,
+        "actor_screen":            None,
+        "actor_timezone":          None,
+        "actor_language":          None,
+        "actor_network":           None,
     }
 
 
@@ -88,37 +100,64 @@ async def build_actor_context(
     ua = request.headers.get("user-agent", "") or ""
     ip = _get_client_ip(request)
     os_str, browser, device = parse_ua(ua)
+
+    # ── Decode the X-Client-Hint header (rich device fingerprint from JS) ──
+    hint = parse_client_hint(request.headers.get("x-client-hint", ""))
+    ch   = hint.get("ch") or {}
+
     geo: dict = {}
     try:
         geo = await geo_lookup(ip) or {}
     except Exception as exc:
         logger.debug("geo_lookup(%s) failed: %s", ip, exc)
 
-    # Session id may be set by future per-user session tracking; for now we
-    # try a few likely header / state locations and fall back to None.
     session_id = (
         getattr(request.state, "session_id", None)
         or request.headers.get("x-session-id")
         or None
     )
 
+    # ── Build the friendly device label (e.g. "MacBook · macOS 14.5 (arm64) · 8 cores · M2 Pro · Chrome 131") ──
+    device_label = build_device_label(os_str, browser, device, hint)
+
+    def _trunc(v, n: int):
+        if v is None:
+            return None
+        s = str(v).strip()
+        return (s[:n] or None) if s else None
+
     return {
-        "change_source":    "user",
-        "actor_role":       (role or "")[:20] or None,
-        "actor_ip":         (ip or "")[:45] or None,
-        "actor_country":    (geo.get("country") or "")[:80] or None,
-        "actor_city":       (geo.get("city") or "")[:100] or None,
-        "actor_region":     (geo.get("region") or "")[:100] or None,
-        "actor_isp":        (geo.get("isp") or geo.get("org") or "")[:150] or None,
-        "actor_lat":        geo.get("lat"),
-        "actor_lon":        geo.get("lon"),
-        "actor_os":         os_str[:100] or None,
-        "actor_browser":    browser[:100] or None,
-        "actor_device":     (device or "")[:20] or None,
-        "actor_user_agent": ua[:1000] or None,
-        "actor_session_id": session_id,
-        "actor_path":       request.url.path[:200] if request.url else None,
-        "actor_method":     (request.method or "")[:10] or None,
+        "change_source":           "user",
+        "actor_role":              (role or "")[:20] or None,
+        "actor_ip":                (ip or "")[:45] or None,
+        "actor_country":           (geo.get("country") or "")[:80] or None,
+        "actor_city":              (geo.get("city") or "")[:100] or None,
+        "actor_region":            (geo.get("region") or "")[:100] or None,
+        "actor_isp":               (geo.get("isp") or geo.get("org") or "")[:150] or None,
+        "actor_lat":               geo.get("lat"),
+        "actor_lon":               geo.get("lon"),
+        "actor_os":                _trunc(os_str, 100),
+        "actor_browser":           _trunc(browser, 100),
+        "actor_device":            _trunc(device, 20),
+        "actor_user_agent":        _trunc(ua, 1000),
+        "actor_session_id":        session_id,
+        "actor_path":              _trunc(request.url.path if request.url else "", 200),
+        "actor_method":            _trunc(request.method, 10),
+        # ── Rich device fields ──
+        "actor_device_label":      _trunc(device_label, 255),
+        "actor_device_model":      _trunc(ch.get("model"), 120),
+        "actor_platform_version":  _trunc(ch.get("platformVersion"), 40),
+        "actor_arch":              _trunc(
+            f"{ch.get('arch','')}{ch.get('bitness','')}" if ch.get("arch") else hint.get("platform"),
+            40,
+        ),
+        "actor_cpu_cores":         hint.get("cores") if isinstance(hint.get("cores"), int) else None,
+        "actor_memory_gb":         hint.get("memoryGb") if isinstance(hint.get("memoryGb"), (int, float)) else None,
+        "actor_gpu":               _trunc(hint.get("gpu"), 200),
+        "actor_screen":            _trunc(hint.get("screen"), 40),
+        "actor_timezone":          _trunc(hint.get("timezone"), 60),
+        "actor_language":          _trunc(hint.get("language") or hint.get("locale"), 20),
+        "actor_network":           _trunc(hint.get("network"), 20),
     }
 
 

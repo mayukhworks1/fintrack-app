@@ -76,6 +76,119 @@ _MOBILE_UA = re.compile(r"Mobile|Android|iPhone|iPad", re.I)
 _TABLET_UA = re.compile(r"iPad|Tablet", re.I)
 
 
+def parse_client_hint(header_value: str) -> dict:
+    """
+    Decode the base64-encoded JSON device hint sent by the frontend.
+    Returns a dict with extra device signals collected from JavaScript
+    (UA Client Hints, GPU via WebGL, screen, timezone, RAM, cores, etc.).
+    Returns an empty dict on any decode failure — never raises.
+    """
+    if not header_value:
+        return {}
+    try:
+        import base64
+        # Add padding if missing (some encoders strip it)
+        padding = "=" * (-len(header_value) % 4)
+        raw = base64.b64decode(header_value + padding, validate=False)
+        return json.loads(raw.decode("utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def build_device_label(
+    os_str: str,
+    browser: str,
+    device: str,
+    hint: dict | None = None,
+) -> str:
+    """
+    Build a human-readable device label by combining UA-parsed OS/browser
+    with the rich client hint payload.
+
+    Examples:
+      "iPhone 15 Pro · iOS 17.5 · Safari · Asia/Kolkata"
+      "MacBook · macOS 14.5 (arm64) · 8 cores · Apple M2 Pro · Chrome 131"
+      "Windows 11 PC · 16 cores · 32GB · GeForce RTX 3080 · Chrome 131"
+      "Android · Chrome 131 · 1080×2400 (Mobile)"   ← when no hint available
+    """
+    hint = hint or {}
+    ch = hint.get("ch") or {}
+
+    parts: list[str] = []
+
+    # ── Primary device descriptor ──
+    model = ch.get("model")
+    if model:
+        parts.append(str(model))                                # "iPhone 15 Pro"
+    elif device == "mobile":
+        parts.append("Mobile")
+    elif device == "tablet":
+        parts.append("Tablet")
+    else:
+        # Desktop — try to give it a friendly tag
+        if "macOS" in os_str or "Mac" in (hint.get("platform") or ""):
+            parts.append("Mac")
+        elif "Windows" in os_str:
+            parts.append("Windows PC")
+        elif "ChromeOS" in os_str:
+            parts.append("Chromebook")
+        elif "Linux" in os_str:
+            parts.append("Linux PC")
+        else:
+            parts.append("Desktop")
+
+    # ── OS + version ──
+    os_part = os_str
+    plat_ver = ch.get("platformVersion")
+    if plat_ver and plat_ver not in os_str:
+        # macOS Client Hints reports as "14.5.0" — collapse trailing .0
+        plat_ver = str(plat_ver).rstrip(".0") if str(plat_ver).endswith(".0") else plat_ver
+        os_part = f"{os_str} {plat_ver}".strip()
+
+    # Architecture + bitness in parens, e.g. "(arm64)" or "(x64)"
+    arch    = ch.get("arch")
+    bitness = ch.get("bitness")
+    arch_part = ""
+    if arch:
+        arch_part = arch
+        if bitness and bitness not in arch:
+            arch_part = f"{arch}{bitness}"
+        os_part = f"{os_part} ({arch_part})" if arch_part else os_part
+
+    if os_part and os_part != parts[0]:
+        parts.append(os_part)
+
+    # ── Hardware specs (desktop only — too noisy for mobile) ──
+    if device == "desktop":
+        cores = hint.get("cores")
+        if cores:
+            parts.append(f"{cores} cores")
+        mem = hint.get("memoryGb")
+        if mem:
+            parts.append(f"{mem}GB")
+        gpu = hint.get("gpu")
+        if gpu:
+            # Strip noisy prefixes
+            gpu_clean = (gpu
+                         .replace("Direct3D11 vs_5_0 ps_5_0", "")
+                         .replace("OpenGL ES", "")
+                         .strip())
+            if len(gpu_clean) > 60:
+                gpu_clean = gpu_clean[:57] + "…"
+            parts.append(gpu_clean)
+
+    # ── Browser ──
+    if browser and browser != "Unknown":
+        parts.append(browser)
+
+    # ── Timezone (concise tail) ──
+    tz = hint.get("timezone")
+    if tz:
+        parts.append(tz)
+
+    return " · ".join(p for p in parts if p)
+
+
 def parse_ua(ua: str) -> tuple[str, str, str]:
     """Return (os, browser, device). Never raises, never returns None."""
     if not ua:

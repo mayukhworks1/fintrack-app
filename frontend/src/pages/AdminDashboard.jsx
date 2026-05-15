@@ -1983,12 +1983,21 @@ function HistoryTab() {
       {/* Advanced filter builder */}
       <FilterBuilder
         fields={[
-          { key: 'change_type',   label: 'Change Type',   type: 'text' },
-          { key: 'source_table',  label: 'Source Table',  type: 'text' },
-          { key: 'teable_id',     label: 'Record ID',     type: 'text' },
-          { key: 'actor_role',    label: 'Actor Role',    type: 'text' },
-          { key: 'actor_country', label: 'Country',       type: 'text' },
-          { key: 'actor_ip',      label: 'IP',            type: 'text' },
+          { key: 'change_type',          label: 'Change Type',     type: 'text' },
+          { key: 'source_table',         label: 'Source Table',    type: 'text' },
+          { key: 'teable_id',            label: 'Record ID',       type: 'text' },
+          { key: 'change_source',        label: 'Origin',          type: 'text' },
+          { key: 'actor_role',           label: 'Actor Role',      type: 'text' },
+          { key: 'actor_country',        label: 'Country',         type: 'text' },
+          { key: 'actor_city',           label: 'City',            type: 'text' },
+          { key: 'actor_ip',             label: 'IP',              type: 'text' },
+          { key: 'actor_device_label',   label: 'Device Label',    type: 'text' },
+          { key: 'actor_device_model',   label: 'Device Model',    type: 'text' },
+          { key: 'actor_os',             label: 'OS',              type: 'text' },
+          { key: 'actor_browser',        label: 'Browser',         type: 'text' },
+          { key: 'actor_device',         label: 'Form Factor',     type: 'text' },
+          { key: 'actor_gpu',            label: 'GPU',             type: 'text' },
+          { key: 'actor_timezone',       label: 'Timezone',        type: 'text' },
         ]}
         records={data?.rows || []}
         getFieldValue={r => r}
@@ -2017,8 +2026,14 @@ function HistoryTab() {
                       <Badge color={sourceColor[row.source_table] || 'default'}>{row.source_table}</Badge>
                       {row.actor_role && (
                         <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded"
-                          style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-                          {row.actor_role} · {row.actor_city || row.actor_country || row.actor_ip || 'system'}
+                          style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}
+                          title={row.actor_device_label || ''}>
+                          {row.actor_role} · {row.actor_device_model || row.actor_city || row.actor_country || row.actor_ip || 'system'}
+                        </span>
+                      )}
+                      {row.actor_device_label && (
+                        <span className="text-[10px] hidden md:inline-block truncate max-w-[280px]" style={{ color: 'var(--text-3)' }}>
+                          {row.actor_device_label}
                         </span>
                       )}
                       <span className="text-xs font-mono flex-1 truncate" style={{ color: 'var(--text-2)' }}>
@@ -2036,35 +2051,77 @@ function HistoryTab() {
                     {expanded === row.id && (
                       <div className="px-3 pb-3 pt-2 space-y-2" style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-input)' }}>
                         {(row.actor_role || row.change_source === 'sync') && (
-                          <div className="rounded-lg p-3 space-y-2"
+                          <div className="rounded-lg p-3 space-y-3"
                             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
-                              Actor · {row.change_source === 'user' ? 'User mutation' : row.change_source === 'sync' ? 'Background sync' : (row.change_source || 'unknown')}
-                            </p>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1.5 text-[11px]">
-                              {row.actor_role && <DetailKV k="Role" v={row.actor_role} />}
-                              {row.actor_ip && <DetailKV k="IP" v={row.actor_ip} mono />}
-                              {(row.actor_country || row.actor_city) && (
-                                <DetailKV k="Location" v={[row.actor_city, row.actor_region, row.actor_country].filter(Boolean).join(', ')} />
-                              )}
-                              {row.actor_isp && <DetailKV k="ISP" v={row.actor_isp} />}
-                              {row.actor_os && <DetailKV k="OS" v={row.actor_os} />}
-                              {row.actor_browser && <DetailKV k="Browser" v={row.actor_browser} />}
-                              {row.actor_device && <DetailKV k="Device" v={row.actor_device} />}
-                              {row.actor_method && row.actor_path && <DetailKV k="API" v={`${row.actor_method} ${row.actor_path}`} mono />}
-                              {row.actor_session_id && <DetailKV k="Session" v={row.actor_session_id.slice(0, 8) + '…'} mono />}
-                              {(row.actor_lat != null && row.actor_lon != null) && (
-                                <DetailKV k="Coords" v={
-                                  <a href={`https://www.google.com/maps?q=${row.actor_lat},${row.actor_lon}`}
-                                     target="_blank" rel="noopener noreferrer"
-                                     style={{ color: 'var(--accent)' }}>
-                                    {Number(row.actor_lat).toFixed(3)}, {Number(row.actor_lon).toFixed(3)}
-                                  </a>
-                                } />
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                                Actor · {row.change_source === 'user' ? 'User mutation' : row.change_source === 'sync' ? 'Background sync' : (row.change_source || 'unknown')}
+                              </p>
+                              {row.actor_device_label && (
+                                <span className="text-[11px] font-medium px-2 py-0.5 rounded"
+                                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                                  {row.actor_device_label}
+                                </span>
                               )}
                             </div>
+
+                            {/* ── WHO ── */}
+                            <div>
+                              <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Identity</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1.5 text-[11px]">
+                                {row.actor_role && <DetailKV k="Role" v={row.actor_role} />}
+                                {row.actor_method && row.actor_path && <DetailKV k="API" v={`${row.actor_method} ${row.actor_path}`} mono />}
+                                {row.actor_session_id && <DetailKV k="Session" v={String(row.actor_session_id).slice(0, 8) + '…'} mono />}
+                              </div>
+                            </div>
+
+                            {/* ── WHERE ── */}
+                            {(row.actor_ip || row.actor_country || row.actor_city || row.actor_isp) && (
+                              <div>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Network · Location</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1.5 text-[11px]">
+                                  {row.actor_ip && <DetailKV k="IP" v={row.actor_ip} mono />}
+                                  {(row.actor_country || row.actor_city) && (
+                                    <DetailKV k="Location" v={[row.actor_city, row.actor_region, row.actor_country].filter(Boolean).join(', ')} />
+                                  )}
+                                  {row.actor_isp && <DetailKV k="ISP" v={row.actor_isp} />}
+                                  {row.actor_network && <DetailKV k="Connection" v={row.actor_network} />}
+                                  {row.actor_timezone && <DetailKV k="Timezone" v={row.actor_timezone} />}
+                                  {row.actor_language && <DetailKV k="Language" v={row.actor_language} />}
+                                  {(row.actor_lat != null && row.actor_lon != null) && (
+                                    <DetailKV k="Coords" v={
+                                      <a href={`https://www.google.com/maps?q=${row.actor_lat},${row.actor_lon}`}
+                                         target="_blank" rel="noopener noreferrer"
+                                         style={{ color: 'var(--accent)' }}>
+                                        {Number(row.actor_lat).toFixed(3)}, {Number(row.actor_lon).toFixed(3)} ↗
+                                      </a>
+                                    } />
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── DEVICE ── */}
+                            {(row.actor_os || row.actor_browser || row.actor_device || row.actor_device_model || row.actor_gpu) && (
+                              <div>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Device</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1.5 text-[11px]">
+                                  {row.actor_device_model && <DetailKV k="Model" v={row.actor_device_model} />}
+                                  {row.actor_os && <DetailKV k="OS" v={`${row.actor_os}${row.actor_platform_version ? ' ' + row.actor_platform_version : ''}`} />}
+                                  {row.actor_arch && <DetailKV k="Architecture" v={row.actor_arch} mono />}
+                                  {row.actor_device && <DetailKV k="Form factor" v={row.actor_device} />}
+                                  {row.actor_browser && <DetailKV k="Browser" v={row.actor_browser} />}
+                                  {row.actor_cpu_cores != null && <DetailKV k="CPU cores" v={String(row.actor_cpu_cores)} />}
+                                  {row.actor_memory_gb != null && <DetailKV k="Memory" v={`${row.actor_memory_gb} GB`} />}
+                                  {row.actor_gpu && <DetailKV k="GPU" v={row.actor_gpu} />}
+                                  {row.actor_screen && <DetailKV k="Screen" v={row.actor_screen} mono />}
+                                </div>
+                              </div>
+                            )}
+
                             {row.actor_user_agent && (
-                              <p className="text-[10px] font-mono truncate pt-1.5" style={{ color: 'var(--text-3)', borderTop: '1px solid var(--card-border)' }}>
+                              <p className="text-[10px] font-mono truncate pt-1.5" style={{ color: 'var(--text-3)', borderTop: '1px solid var(--card-border)' }}
+                                title={row.actor_user_agent}>
                                 UA: {row.actor_user_agent}
                               </p>
                             )}

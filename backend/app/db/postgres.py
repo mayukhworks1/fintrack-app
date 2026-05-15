@@ -178,7 +178,20 @@ CREATE TABLE IF NOT EXISTS record_history (
     actor_user_agent TEXT,
     actor_session_id UUID,
     actor_path       VARCHAR(200),    -- API path that triggered the change
-    actor_method     VARCHAR(10)
+    actor_method     VARCHAR(10),
+
+    -- Rich device fingerprint (from JS-collected X-Client-Hint header)
+    actor_device_label     VARCHAR(255),    -- Human-readable e.g. "MacBook · macOS 14.5 · Chrome 131"
+    actor_device_model     VARCHAR(120),    -- e.g. "iPhone 15 Pro", "Pixel 8" (UA Client Hints)
+    actor_platform_version VARCHAR(40),     -- e.g. "14.5.1"
+    actor_arch             VARCHAR(40),     -- e.g. "arm64", "x86_64"
+    actor_cpu_cores        SMALLINT,        -- navigator.hardwareConcurrency
+    actor_memory_gb        SMALLINT,        -- navigator.deviceMemory (Chromium only)
+    actor_gpu              VARCHAR(200),    -- WebGL UNMASKED_RENDERER_WEBGL
+    actor_screen           VARCHAR(40),     -- "1920x1080@2x"
+    actor_timezone         VARCHAR(60),     -- IANA tz, e.g. "Asia/Kolkata"
+    actor_language         VARCHAR(20),     -- "en-IN"
+    actor_network          VARCHAR(20)      -- "4g", "wifi", etc.
 );
 CREATE INDEX IF NOT EXISTS rh_id_idx     ON record_history (source_table, teable_id, recorded_at DESC);
 CREATE INDEX IF NOT EXISTS rh_ts_idx     ON record_history (recorded_at DESC);
@@ -203,6 +216,17 @@ ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_user_agent TEXT;
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_session_id UUID;
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_path       VARCHAR(200);
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_method     VARCHAR(10);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_device_label     VARCHAR(255);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_device_model     VARCHAR(120);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_platform_version VARCHAR(40);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_arch             VARCHAR(40);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_cpu_cores        SMALLINT;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_memory_gb        SMALLINT;
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_gpu              VARCHAR(200);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_screen           VARCHAR(40);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_timezone         VARCHAR(60);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_language         VARCHAR(20);
+ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_network          VARCHAR(20);
 
 -- ── Sync run log ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sync_log (
