@@ -21,6 +21,8 @@ All three paths call the same upsert_record() function so behaviour
 is identical regardless of which path triggers the update.
 """
 
+from __future__ import annotations
+
 import asyncio
 import datetime
 import json

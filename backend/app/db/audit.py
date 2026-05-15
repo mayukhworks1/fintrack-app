@@ -29,6 +29,8 @@ a $N::jsonb SQL cast.  A raw Python dict raises DataError which asyncpg
 swallows silently — the row is never inserted.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging

@@ -16,6 +16,8 @@ Usage:
     async def create_something(role: str = Depends(require_editor)):
         ...
 """
+from __future__ import annotations
+
 from fastapi import Depends, Header, HTTPException, Request
 from .auth import verify_token
 

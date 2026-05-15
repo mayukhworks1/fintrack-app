@@ -15,6 +15,8 @@ On every successful login a row is inserted into login_sessions (async,
 fire-and-forget) with IP, user-agent, OS, browser, geo, and expiry.
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import hashlib

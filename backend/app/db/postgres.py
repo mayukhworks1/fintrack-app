@@ -12,6 +12,8 @@ Tables created on first startup:
   sync_log         — sync run metadata
 """
 
+from __future__ import annotations
+
 import logging
 import asyncpg
 from ..config import settings
