@@ -196,10 +196,10 @@ CREATE TABLE IF NOT EXISTS record_history (
     actor_language         VARCHAR(20),     -- "en-IN"
     actor_network          VARCHAR(20)      -- "4g", "wifi", etc.
 );
-CREATE INDEX IF NOT EXISTS rh_id_idx     ON record_history (source_table, teable_id, recorded_at DESC);
-CREATE INDEX IF NOT EXISTS rh_ts_idx     ON record_history (recorded_at DESC);
-CREATE INDEX IF NOT EXISTS rh_actor_idx  ON record_history (actor_role, recorded_at DESC);
-CREATE INDEX IF NOT EXISTS rh_source_idx ON record_history (change_source, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_id_idx ON record_history (source_table, teable_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_ts_idx ON record_history (recorded_at DESC);
+-- NOTE: rh_actor_idx and rh_source_idx are created AFTER the ALTER TABLE block below
+-- because actor_role / change_source may not exist yet on older deployments.
 
 -- Migration: backfill the actor columns on existing tables that pre-date this schema.
 -- ADD COLUMN IF NOT EXISTS is a no-op when the column already exists.
@@ -230,6 +230,10 @@ ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_screen           VARCH
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_timezone         VARCHAR(60);
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_language         VARCHAR(20);
 ALTER TABLE record_history ADD COLUMN IF NOT EXISTS actor_network          VARCHAR(20);
+
+-- These indexes reference columns added above — must come AFTER the ALTER TABLE block.
+CREATE INDEX IF NOT EXISTS rh_actor_idx  ON record_history (actor_role,     recorded_at DESC);
+CREATE INDEX IF NOT EXISTS rh_source_idx ON record_history (change_source,  recorded_at DESC);
 
 -- ── Sync run log ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sync_log (
