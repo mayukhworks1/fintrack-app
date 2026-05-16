@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # Format: rediss://user:pass@host:port
     valkey_url: Optional[str] = None
 
+    # ── Hugging Face Space (for log streaming) ──────────────────────────────
+    # Set HF_TOKEN in HF Space secrets (a read-scoped HF token).
+    hf_token:    Optional[str] = None
+    hf_space_id: str = "Mayukhj24/fintrack-api"
+
     class Config:
         env_file = ".env"
 

@@ -296,6 +296,7 @@ export const api = {
     recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),
+    getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),
   },
   health: () => request('/health', {}, 0),
   auth: {

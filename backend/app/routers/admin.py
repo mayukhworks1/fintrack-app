@@ -28,9 +28,11 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from ..config import settings
 from ..db.postgres import get_pool
 from .deps import require_admin
 
@@ -860,3 +862,70 @@ async def admin_record_history(
         records.append(d)
 
     return {"total": total, "limit": limit, "offset": offset, "rows": records}
+
+# ── HF Space log streaming ────────────────────────────────────────────────────
+
+@router.get("/logs/{log_type}")
+async def get_hf_logs(
+    log_type: str,
+    limit: int = 300,
+    _: str = Depends(require_admin),
+):
+    """
+    Fetch recent lines from the HF Space log stream (run or build).
+    Connects to the SSE endpoint, collects up to `limit` lines or 8 s,
+    then closes and returns the collected lines as a JSON array.
+    """
+    if log_type not in ("run", "build"):
+        raise HTTPException(status_code=400, detail="log_type must be 'run' or 'build'")
+    if not settings.hf_token:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "HF_TOKEN not configured — set it in HF Space secrets"},
+        )
+
+    url = f"https://huggingface.co/api/spaces/{settings.hf_space_id}/logs/{log_type}"
+    collected: list[dict] = []
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+        ) as client:
+            async with client.stream(
+                "GET", url,
+                headers={"Authorization": f"Bearer {settings.hf_token}"},
+            ) as resp:
+                if resp.status_code == 401:
+                    return JSONResponse(status_code=401, content={"error": "HF_TOKEN is invalid or expired"})
+                if resp.status_code == 404:
+                    return JSONResponse(status_code=404, content={"error": "HF Space not found — check hf_space_id"})
+                resp.raise_for_status()
+
+                async for raw_line in resp.aiter_lines():
+                    if not raw_line.startswith("data:"):
+                        continue
+                    payload = raw_line[5:].strip()
+                    if not payload or payload == "[DONE]":
+                        continue
+                    try:
+                        entry = json.loads(payload)
+                        # Normalise: always have timestamp + data keys
+                        collected.append({
+                            "ts":   entry.get("timestamp", ""),
+                            "text": entry.get("data", payload),
+                        })
+                    except Exception:
+                        collected.append({"ts": "", "text": payload})
+
+                    if len(collected) >= limit:
+                        break
+
+    except httpx.ReadTimeout:
+        pass   # return what we collected within the timeout
+    except httpx.ConnectTimeout:
+        return JSONResponse(status_code=504, content={"error": "Timed out connecting to HF API"})
+    except Exception as exc:
+        logger.warning("HF log fetch failed (%s): %s", log_type, exc)
+        return JSONResponse(status_code=502, content={"error": str(exc)})
+
+    return {"log_type": log_type, "count": len(collected), "lines": collected}
