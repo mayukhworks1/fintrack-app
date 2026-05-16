@@ -458,35 +458,22 @@ async def _fetch_all_with_token_fallback(table_id: str, primary_token: str) -> t
 
 async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE) -> list[dict]:
     """
-    Fetch the `take` most-recently-modified records.
+    Fetch the `take` most-recently-modified records (unordered).
 
-    Strategy:
-    1. Try orderBy=[{__lastModifiedTime,desc}] (Teable system field, correct name).
-    2. If HTTP 400 (field rejected), retry WITHOUT orderBy — incremental just
-       becomes unordered; the 5-min full sync keeps data consistent regardless.
-    3. On 401/403, try all configured tokens (same fallback as _fetch_all).
+    Teable's system-field orderBy requires a numeric fieldId which we don't
+    have at runtime — the `fieldName` form is rejected with HTTP 400 on all
+    current Teable deployments.  We skip the orderBy entirely: the 5-min full
+    sync guarantees consistency regardless of record order.
+
+    On 401/403, all configured tokens are tried in sequence.
     """
-    url      = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
-    # Use the Teable system-field name for modification time (__lastModifiedTime)
-    order_by = json.dumps([{"fieldName": "__lastModifiedTime", "order": "desc"}])
+    url = f"{settings.teable_base_url.rstrip('/')}/api/table/{table_id}/record"
 
     async def _attempt(tok: str) -> list[dict]:
         headers = {"Authorization": f"Bearer {tok}"}
         try:
             async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
-                try:
-                    return await _fetch_page(http, url, headers, {
-                        "take": take, "skip": 0, "orderBy": order_by,
-                    })
-                except RuntimeError as exc:
-                    if "HTTP 400" in str(exc):
-                        logger.warning(
-                            "table %s: orderBy rejected (HTTP 400) — "
-                            "falling back to unordered. Detail: %s",
-                            table_id, str(exc)[:200],
-                        )
-                        return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
-                    raise
+                return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
         except RuntimeError:
             raise
         except Exception as exc:
