@@ -32,6 +32,7 @@ from ..services.openrouter import (
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 from .deps import require_auth
 from ..db.postgres import get_pool
+from ..db.valkey import rate_check
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -309,6 +310,14 @@ async def _save_messages(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def _client_ip(request: Request) -> str:
+    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        v = request.headers.get(h, "")
+        if v:
+            return v.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/chat")
 async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(require_auth)):
     """
@@ -322,7 +331,19 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
     Chat history source (priority order):
       1. Server-side   — last 12 messages from chat_messages (if session_id given)
       2. Client-sent   — body.history (backward-compat / no PG)
+
+    Rate limit: 30 messages / minute per IP.
     """
+    # ── Rate limiting (30 req/min per IP) ────────────────────────────────────
+    ip = _client_ip(request)
+    allowed, remaining = await rate_check(ip, limit=30, window_sec=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests — AI chat is limited to 30 messages/min. Try again shortly.",
+            headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
+        )
+
     try:
         pool       = get_pool()
         session_id = body.session_id
@@ -531,6 +552,17 @@ async def ai_report(
     import logging
 
     logger = logging.getLogger("fintrack.ai.report")
+
+    # ── Rate limiting (10 force-regenerations / min per IP) ──────────────────
+    # Only count against the rate limit when bypassing cache (force=True or cold)
+    ip = _client_ip(request)
+    allowed, _ = await rate_check(ip, limit=10, window_sec=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many report requests — limited to 10/min. Try again shortly.",
+            headers={"Retry-After": "60"},
+        )
 
     try:
         pool = get_pool()

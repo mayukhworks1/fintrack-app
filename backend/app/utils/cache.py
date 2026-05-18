@@ -70,6 +70,13 @@ class TTLCache:
         if not prefix:
             n = len(self._store)
             self._store.clear()
+            # Also bust Valkey
+            vk = self._vk()
+            if vk:
+                try:
+                    asyncio.get_running_loop().create_task(vk.cache_bust(prefix))
+                except RuntimeError:
+                    pass
             return n
         keys = [k for k in self._store if k.startswith(prefix)]
         for k in keys:
@@ -78,9 +85,7 @@ class TTLCache:
         vk = self._vk()
         if vk:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(vk.cache_bust(prefix))
+                asyncio.get_running_loop().create_task(vk.cache_bust(prefix))
             except RuntimeError:
                 pass
         return len(keys)
@@ -116,7 +121,10 @@ class TTLCache:
         # Coalesce: piggy-back on an in-flight request for the same key
         existing = self._inflight.get(key)
         if existing is not None:
-            return await existing
+            try:
+                return await asyncio.wait_for(asyncio.shield(existing), timeout=60.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass   # Fall through and run our own loader
 
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
@@ -131,10 +139,11 @@ class TTLCache:
                     self._hits += 1
                     return remote
 
-            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
             self._inflight[key] = fut
             try:
-                result = await loader()
+                # 60-second hard timeout — prevents a hung loader blocking indefinitely
+                result = await asyncio.wait_for(loader(), timeout=60.0)
                 self.set(key, result, ttl)
                 if vk:
                     await vk.cache_set(key, result, int(ttl))

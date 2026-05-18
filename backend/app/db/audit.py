@@ -535,15 +535,13 @@ async def touch_session(token_hint: str) -> None:
     if not token_hint:
         return
 
-    # Rate-limit via Valkey — skip DB write if we just did one < 5 min ago
+    # Rate-limit via Valkey — skip DB write if we just did one < 5 min ago.
+    # set_nx returns False if the key already existed → we already touched recently.
     try:
-        from .valkey import get_client as _vk
-        vk = _vk()
-        if vk:
-            key = f"session_touch:{token_hint}"
-            if await vk.exists(key):
-                return
-            await vk.set(key, "1", ex=300)
+        from .valkey import set_nx
+        key = f"session_touch:{token_hint}"
+        if not await set_nx(key, "1", ttl=300):
+            return   # rate-limit hit — skip DB write
     except Exception:
         pass   # Valkey unavailable — still proceed to DB update
 

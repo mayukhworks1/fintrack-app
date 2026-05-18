@@ -36,8 +36,15 @@ except ImportError:
 
 _client: "aioredis.Redis | None" = None  # type: ignore[name-defined]
 
-_GEO_TTL  = 24 * 3600   # 24 h for IP geo cache
-_KEY_SEP  = ":"
+_GEO_TTL    = 24 * 3600   # 24 h for IP geo cache
+_KEY_SEP    = ":"
+
+# Key prefixes — all Valkey keys follow  prefix:discriminator  convention
+KEY_GEO        = "geo"          # geo:{ip}
+KEY_ATTRIB     = "attrib"       # attrib:{teable_id}
+KEY_RATELIMIT  = "ratelimit"    # ratelimit:{ip}
+KEY_SESSION    = "session_touch"# session_touch:{token_hint}
+KEY_CACHE      = "cache"        # cache:{name}  (generic app cache)
 
 
 # ---------------------------------------------------------------------------
@@ -117,22 +124,58 @@ async def cache_set(key: str, value, ttl: int) -> None:
 
 async def cache_bust(prefix: str) -> int:
     """
-    Delete all keys starting with `prefix:*`.
+    Delete all keys starting with `prefix*`.
+    Uses SCAN + pipelined DELETE to avoid blocking; safe on large keyspaces.
     Returns the number of keys deleted.
-    Uses SCAN to avoid blocking; safe on large keyspaces.
     """
     if not _client:
         return 0
     try:
         pattern = f"{prefix}*" if not prefix.endswith("*") else prefix
-        deleted = 0
-        async for key in _client.scan_iter(pattern, count=100):
-            await _client.delete(key)
-            deleted += 1
-        return deleted
+        keys: list = []
+        async for key in _client.scan_iter(pattern, count=200):
+            keys.append(key)
+        if not keys:
+            return 0
+        # Delete in one pipeline round-trip instead of N individual calls
+        pipe = _client.pipeline()
+        for k in keys:
+            pipe.delete(k)
+        await pipe.execute()
+        return len(keys)
     except Exception as exc:
         logger.debug("cache_bust(%s) error: %s", prefix, exc)
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Generic helpers — set_nx, exists, get_or_none with explicit TTL
+# ---------------------------------------------------------------------------
+
+async def set_nx(key: str, value: str, ttl: int) -> bool:
+    """
+    SET key value EX ttl NX — set only if key does not already exist.
+    Returns True if the key was set, False if it already existed.
+    Always returns True (allow) when Valkey is unavailable.
+    """
+    if not _client:
+        return True
+    try:
+        result = await _client.set(key, value.encode(), ex=ttl, nx=True)
+        return result is not None   # None means key already existed
+    except Exception as exc:
+        logger.debug("set_nx(%s) error: %s", key, exc)
+        return True   # fail open
+
+
+async def key_exists(key: str) -> bool:
+    """Return True if key exists, False otherwise (including when Valkey is down)."""
+    if not _client:
+        return False
+    try:
+        return bool(await _client.exists(key))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +207,7 @@ async def geo_set(ip: str, data: dict) -> None:
 # TTL is short (default 120 s) because if the sync hasn't run within 2 min the
 # attribution is stale and we'd rather record "sync" than misattribute.
 
-_ATTRIB_TTL = 120  # seconds
+_ATTRIB_TTL = 360  # seconds — must outlive the full-sync interval (300 s) with margin
 
 
 async def attribution_set(teable_id: str, actor: dict, ttl: int = _ATTRIB_TTL) -> None:
