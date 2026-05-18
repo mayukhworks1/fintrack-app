@@ -142,8 +142,8 @@ class TTLCache:
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
             self._inflight[key] = fut
             try:
-                # 60-second hard timeout — prevents a hung loader blocking indefinitely
-                result = await asyncio.wait_for(loader(), timeout=60.0)
+                # 180-second hard timeout — reports with 4096 tokens + model fallbacks need >60s
+                result = await asyncio.wait_for(loader(), timeout=180.0)
                 self.set(key, result, ttl)
                 if vk:
                     await vk.cache_set(key, result, int(ttl))

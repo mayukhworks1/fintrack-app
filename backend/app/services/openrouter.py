@@ -282,7 +282,7 @@ def _client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),
+            timeout=httpx.Timeout(180.0, connect=10.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
     return _http_client
@@ -786,6 +786,22 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     return clean
 
 
+_REPORT_SYSTEM_PROMPT = """You are FinTrackAI, a senior financial analyst writing an executive board report.
+
+You will receive structured portfolio data and must produce a complete, honest, detailed report.
+
+RULES — non-negotiable:
+- Use every data point given. Do not omit, vague-ify, or approximate any number.
+- Name specific projects, clients, and invoices — never use "a project" or "some clients".
+- Use ₹ with Indian grouping (₹2,47,200). Shorthand only if space is tight.
+- Structure using section headers like "Portfolio Overview:" on their own line, followed by bullet points.
+- Bullet points start with "- " on a new line.
+- Be direct and decisive. No filler, no preamble, no "Based on the data...".
+- If collection rate < 80%, call it critical explicitly.
+- Negative-margin projects must be named and flagged as losses.
+"""
+
+
 async def generate_report(
     summary: dict,
     records: list[dict],
@@ -795,85 +811,177 @@ async def generate_report(
     """
     Full executive report for the portfolio.
 
-    Includes both project and invoice context when available, producing a
-    richer report covering revenue, collection rate, and project margins.
+    Produces a detailed, honest report covering every material data point:
+    project P&L, per-client breakdown, at-risk projects, invoice aging,
+    collection health, and concrete action items.
     """
-    project_lines = []
-    for r in records:
+
+    def _sf(v) -> float:
+        try:
+            return float(v) if v not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    # ── 1. Project lines — capped to keep prompt within context limits ─────
+    # Sort: at-risk first (negative profit %), then by billed amount descending.
+    # We include full stats for all of them but cap total lines at 60 to avoid
+    # 500 context-overflow errors from OpenRouter on large portfolios.
+    def _sort_key(r):
         f = r.get("fields", {})
-        billed = float(f.get('Amount Billed So far') or 0)
-        profit = float(f.get('Profit percentage') or 0)
+        pct = _sf(f.get("Profit percentage"))
+        billed = _sf(f.get("Amount Billed So far"))
+        return (0 if pct < 0 else 1, -billed)
+
+    sorted_records = sorted(records, key=_sort_key)
+    capped = sorted_records[:60]
+    omitted = len(records) - len(capped)
+
+    project_lines = []
+    for r in capped:
+        f = r.get("fields", {})
+        billed     = _sf(f.get("Amount Billed So far"))
+        profit_abs = _sf(f.get("Actual Profit"))
+        profit_pct = _sf(f.get("Profit percentage"))
+        inp_cost   = _sf(f.get("Input Cost"))
+        overhead   = _sf(f.get("Overhead Cost"))
+        target     = "YES" if f.get("Target Achieved ") else "no"
         project_lines.append(
-            f"  • {f.get('Client')} / {f.get('Project Name')}: "
-            f"Status={f.get('Project Status')}, "
-            f"Billed=₹{billed:,.0f}, "
-            f"Profit={profit:.1f}%, "
-            f"Health={f.get('Health', 'N/A')}"
+            f"- {f.get('Client','?')} / {f.get('Project Name','?')}: "
+            f"Status={f.get('Project Status','?')}, Health={f.get('Health','N/A')}, "
+            f"Billed=₹{billed:,.0f}, Profit=₹{profit_abs:,.0f} ({profit_pct:.1f}%), "
+            f"InputCost=₹{inp_cost:,.0f}, Overhead=₹{overhead:,.0f}, TargetAchieved={target}"
+        )
+    if omitted > 0:
+        project_lines.append(
+            f"  [+ {omitted} more projects not shown — their totals ARE included in the summary above]"
         )
 
-    # ── Invoice section (optional but recommended) ─────────────────────────
-    invoice_block = ""
+    # ── 2. At-risk callout ─────────────────────────────────────────────────
+    at_risk = summary.get("at_risk", [])
+    at_risk_block = ""
+    if at_risk:
+        lines = [
+            f"- {p['name']}: Profit={p['pct']}%, Health={p['health']}, "
+            f"Status={p['status']}, Billed=₹{p.get('billed', 0):,.0f}"
+            for p in at_risk
+        ]
+        at_risk_block = "\nAT-RISK PROJECTS (" + str(len(at_risk)) + " flagged):\n" + "\n".join(lines) + "\n"
+    else:
+        at_risk_block = "\nAT-RISK PROJECTS: None — all projects are within healthy margins.\n"
+
+    # ── 3. Per-client P&L ─────────────────────────────────────────────────
+    client_billed = summary.get("client_billed", {})
+    client_profit = summary.get("client_profit", {})
+    client_lines  = []
+    for cl in sorted(client_billed.keys(), key=lambda c: -client_billed[c]):
+        b   = client_billed.get(cl, 0.0)
+        p   = client_profit.get(cl, 0.0)
+        pct = (p / b * 100) if b > 0 else 0.0
+        client_lines.append(f"- {cl}: Billed=₹{b:,.0f}, Profit=₹{p:,.0f} ({pct:.1f}%)")
+
+    # ── 4. Invoice blocks ──────────────────────────────────────────────────
+    invoice_block    = ""
+    pending_block    = ""
+    bp_block         = ""
+
     if invoice_summary:
+        bsa    = invoice_summary.get("by_status_amounts", {})
+        active = invoice_summary.get("active_invoices", invoice_summary.get("total_invoices", 0))
+        coll   = invoice_summary.get("collection_rate", 0)
+        coll_flag = " [CRITICAL — BELOW 80%]" if coll < 80 else ""
+
         invoice_block = (
-            "\nINVOICE BILLING SUMMARY:\n"
-            f"  Total Invoices: {invoice_summary.get('total_invoices', 0)}\n"
-            f"  Total Raised: ₹{invoice_summary.get('total_raised', 0):,.0f}\n"
-            f"  Total with Tax: ₹{invoice_summary.get('total_with_tax', 0):,.0f}\n"
-            f"  Total Received: ₹{invoice_summary.get('total_received', 0):,.0f}\n"
-            f"  Outstanding: ₹{invoice_summary.get('total_outstanding', 0):,.0f}\n"
-            f"  Collection Rate: {invoice_summary.get('collection_rate', 0):.1f}%\n"
-            f"  By Status: {invoice_summary.get('by_status', {})}\n"
+            "\nINVOICE SUMMARY:\n"
+            f"- Total: {invoice_summary.get('total_invoices', 0)} invoices "
+            f"(Active: {active}, Cancelled: {invoice_summary.get('by_status', {}).get('Cancelled', 0)})\n"
+            f"- Raised (pre-GST): ₹{invoice_summary.get('total_raised', 0):,.0f}\n"
+            f"- With Tax (18% GST): ₹{invoice_summary.get('total_with_tax', 0):,.0f}\n"
+            f"- Collected: ₹{invoice_summary.get('total_received', 0):,.0f}\n"
+            f"- Outstanding: ₹{invoice_summary.get('total_outstanding', 0):,.0f}\n"
+            f"- Collection Rate: {coll:.1f}%{coll_flag}\n"
+            f"- By status (₹): { {k: f'₹{v:,.0f}' for k, v in bsa.items()} }\n"
         )
 
-    invoice_lines_block = ""
-    if invoice_records:
-        recent_invoices = []
-        for r in invoice_records[:25]:
-            f = r.get("fields", {})
-            raised = float(f.get('Amount Raised') or 0)
-            received = float(f.get('Amount Received') or 0)
-            recent_invoices.append(
-                f"  • [{f.get('Invoice Number','?')}] {f.get('Project','?')}: "
-                f"Status={f.get('Payment Status','?')}, "
-                f"Raised=₹{raised:,.0f}, Received=₹{received:,.0f}, "
-                f"Aging={f.get('Agening (Days)','0')}d"
+        pending = invoice_summary.get("pending_invoices", [])
+        if pending:
+            lines = []
+            for inv in pending:
+                fdate = str(inv.get("raised_date", "") or "")[:10] or "?"
+                lines.append(
+                    f"- [{inv.get('invoice_no','?')}] {inv.get('project','?')}: "
+                    f"₹{_sf(inv.get('amount')):,.0f}, Raised={fdate}, "
+                    f"Aging={int(inv.get('aging', 0))}d, "
+                    f"Followup={inv.get('followup') or 'NOT SET'}"
+                )
+            pending_block = (
+                f"\nPENDING INVOICES — {len(pending)} total (sorted oldest first):\n"
+                + "\n".join(lines) + "\n"
             )
-        if recent_invoices:
-            invoice_lines_block = "\nRECENT INVOICES:\n" + "\n".join(recent_invoices) + "\n"
+
+        bp = invoice_summary.get("by_project", {})
+        if bp:
+            lines = [
+                f"- {proj}: Raised=₹{pd.get('raised',0):,.0f}, "
+                f"Received=₹{pd.get('received',0):,.0f}, "
+                f"Outstanding=₹{pd.get('outstanding',0):,.0f} "
+                f"({pd.get('count',0)} invoices)"
+                for proj, pd in sorted(bp.items(), key=lambda x: -x[1].get("outstanding", 0))
+            ]
+            bp_block = "\nINVOICE BREAKDOWN BY PROJECT:\n" + "\n".join(lines) + "\n"
+
+    # ── 5. Assemble prompt ─────────────────────────────────────────────────
+    best  = summary.get("best_project")  or {}
+    worst = summary.get("worst_project") or {}
+    today = __import__("datetime").date.today().isoformat()
 
     prompt = (
-        "Write a professional executive board-ready report for the FinTrack portfolio.\n"
-        "Output MUST be in plain text (no markdown headers, no asterisks). Use the\n"
-        "exact section labels shown below.\n\n"
+        f"Write a complete executive board report dated {today}.\n"
+        f"Use ALL numbers below exactly as given. No approximation.\n\n"
+
         f"PORTFOLIO SUMMARY:\n"
-        f"  Total Projects: {summary['total_projects']}\n"
-        f"  Total Billed: ₹{summary['total_billed']:,.0f}\n"
-        f"  Total Profit: ₹{summary['total_profit']:,.0f}\n"
-        f"  Avg Profit %: {summary['avg_profit_pct']:.1f}%\n"
-        f"  By Status: {summary['by_status']}\n"
-        f"  By Client: {summary['by_client']}\n"
-        f"  By Health: {summary['by_health']}\n"
-        f"{invoice_block}"
-        f"\nPROJECTS:\n" + "\n".join(project_lines) + "\n"
-        f"{invoice_lines_block}\n"
-        "Section labels (each on its own line, EXACTLY as written):\n"
+        f"- Projects: {summary['total_projects']} total, "
+        f"{summary.get('target_achieved_count', 0)} hit target\n"
+        f"- Revenue Billed: ₹{summary['total_billed']:,.0f}\n"
+        f"- Actual Profit: ₹{summary['total_profit']:,.0f} "
+        f"(avg margin {summary['avg_profit_pct']:.1f}%)\n"
+        f"- Input Cost: ₹{summary.get('total_input_cost', 0):,.0f} | "
+        f"Overhead: ₹{summary.get('total_overhead', 0):,.0f} | "
+        f"Total Cost Base: ₹{summary.get('total_cost', 0):,.0f}\n"
+        f"- Best margin: {best.get('name','N/A')} at {best.get('pct','N/A')}%\n"
+        f"- Worst margin: {worst.get('name','N/A')} at {worst.get('pct','N/A')}%\n"
+        f"- By status: {summary['by_status']}\n"
+        f"- By health: {summary['by_health']}\n\n"
+
+        f"PER-CLIENT P&L:\n"
+        + ("\n".join(client_lines) if client_lines else "- (no client data)") + "\n"
+
+        + at_risk_block
+        + invoice_block
+        + pending_block
+        + bp_block
+
+        + f"\nPROJECT DETAIL (top {len(capped)} by priority):\n"
+        + "\n".join(project_lines) + "\n\n"
+
+        "Now write the full report using these sections in order:\n\n"
         "Portfolio Overview:\n"
         "Financial Performance:\n"
-        "Cash Flow & Collections:\n"
-        "Client Breakdown:\n"
-        "Project Health:\n"
+        "Per-Client Breakdown:\n"
+        + ("Cash Flow & Collections:\n" if invoice_summary else "")
+        + "Project Health Analysis:\n"
         "Risks & Concerns:\n"
         "Recommendations:\n"
-        "Action Items:\n\n"
-        "Rules:\n"
-        " - Use specific numbers (₹ figures, %, counts) — never vague language.\n"
-        " - Executive-level tone — concise, decisive, no fluff or preamble.\n"
-        " - Each section: 2-5 short bullet points or a tight paragraph.\n"
-        " - 'Cash Flow & Collections' should only appear if invoice data exists; if it doesn't, omit that section entirely.\n"
-        " - End with concrete, prioritized Action Items the leader can do this week."
+        "Action Items This Week:\n\n"
+        "Each section: write the section label exactly as shown above (e.g. 'Portfolio Overview:') "
+        "on its own line, then bullet points starting with '- '. "
+        "Name every at-risk project and every pending invoice explicitly. "
+        "No filler sentences. No preamble before the first section."
     )
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
+        {"role": "system", "content": _REPORT_SYSTEM_PROMPT},
+        {"role": "user",   "content": prompt},
     ]
-    return await _try_chat(messages, max_tokens=2048, temperature=0.5)
+    # extract=False: bypass ===ANSWER=== protocol — report is long-form prose,
+    # not a Q&A answer, and the main SYSTEM_PROMPT's "no markdown" rule must not apply.
+    return await _try_chat(messages, max_tokens=4096, temperature=0.4, extract=False)

@@ -19,6 +19,7 @@ Optimization architecture
 import asyncio
 import json
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -426,14 +427,16 @@ _REPORT_TTL       = 600      # 10 min — refreshed sooner if cache_bust("report
 
 async def _build_report_payload_pg(pool) -> dict:
     """
-    Build the report data payload (projects + invoices summary + recent records)
-    from the PostgreSQL mirror tables. Mirrors the chat context fast-path.
+    Build the full report data payload from the PostgreSQL mirror tables.
+    Computes the same rich fields as teable.get_summary() + invoice.get_summary()
+    so the PG fast-path produces an identical-quality report to the Teable path.
     """
     proj_rows, inv_rows = await asyncio.gather(
         pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 300"),
-        pool.fetch("SELECT fields FROM invoices_mirror ORDER BY raised_date DESC NULLS LAST LIMIT 200"),
+        pool.fetch("SELECT fields FROM invoices_mirror ORDER BY raised_date DESC NULLS LAST LIMIT 500"),
     )
-    def _to_dict(v) -> dict:
+
+    def _to_dict(v) -> dict:  # noqa: E306
         if isinstance(v, dict):
             return v
         if isinstance(v, str):
@@ -444,56 +447,192 @@ async def _build_report_payload_pg(pool) -> dict:
                 return {}
         return {}
 
+    def _safe_float(v) -> float:
+        try:
+            return float(v) if v not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
     proj_fields = [_to_dict(r["fields"]) for r in proj_rows]
     inv_fields  = [_to_dict(r["fields"]) for r in inv_rows]
 
-    def _safe_float(v):
-        try: return float(v) if v not in (None, "") else 0.0
-        except (TypeError, ValueError): return 0.0
+    # ── Rich project summary (mirrors teable.get_summary) ────────────────────
+    total_billed       = 0.0
+    total_profit       = 0.0
+    total_input_cost   = 0.0
+    total_overhead     = 0.0
+    target_achieved    = 0
+    profit_pcts: list  = []
+    by_status: dict    = {}
+    by_client: dict    = {}
+    by_health: dict    = {}
+    client_billed: dict = {}
+    client_profit: dict = {}
+    best_rec  = {"name": None, "pct": None}
+    worst_rec = {"name": None, "pct": None}
 
-    # ── Project summary
-    total_billed = sum(_safe_float(f.get("Amount Billed So far")) for f in proj_fields)
-    total_profit = sum(_safe_float(f.get("Actual Profit")) for f in proj_fields)
-    avg_profit   = (sum(_safe_float(f.get("Profit percentage")) for f in proj_fields)
-                    / len(proj_fields)) if proj_fields else 0.0
-    by_status: dict = {}
-    by_client: dict = {}
-    by_health: dict = {}
     for f in proj_fields:
-        by_status[f.get("Project Status", "Unknown")] = by_status.get(f.get("Project Status", "Unknown"), 0) + 1
-        by_client[f.get("Client", "Unknown")]         = by_client.get(f.get("Client", "Unknown"), 0) + 1
-        by_health[f.get("Health", "Unknown")]         = by_health.get(f.get("Health", "Unknown"), 0) + 1
+        billed     = _safe_float(f.get("Amount Billed So far"))
+        profit     = _safe_float(f.get("Actual Profit"))
+        inp_cost   = _safe_float(f.get("Input Cost"))
+        overhead   = _safe_float(f.get("Overhead Cost"))
+
+        total_billed     += billed
+        total_profit     += profit
+        total_input_cost += inp_cost
+        total_overhead   += overhead
+
+        pct_raw = f.get("Profit percentage")
+        if pct_raw is not None and pct_raw != "":
+            try:
+                pct_f = float(pct_raw)
+                profit_pcts.append(pct_f)
+                label = f"{f.get('Client', '?')} / {f.get('Project Name', '?')}"
+                if best_rec["pct"] is None or pct_f > best_rec["pct"]:
+                    best_rec = {"name": label, "pct": round(pct_f, 2)}
+                if worst_rec["pct"] is None or pct_f < worst_rec["pct"]:
+                    worst_rec = {"name": label, "pct": round(pct_f, 2)}
+            except (TypeError, ValueError):
+                pass
+
+        st = f.get("Project Status") or "Unknown"
+        cl = f.get("Client") or "Unknown"
+        h  = f.get("Health") or "Unknown"
+        by_status[st] = by_status.get(st, 0) + 1
+        by_client[cl] = by_client.get(cl, 0) + 1
+        by_health[h]  = by_health.get(h, 0) + 1
+        client_billed[cl] = client_billed.get(cl, 0.0) + billed
+        client_profit[cl] = client_profit.get(cl, 0.0) + profit
+
+        if f.get("Target Achieved "):
+            target_achieved += 1
+
+    avg_profit_pct = sum(profit_pcts) / len(profit_pcts) if profit_pcts else 0.0
+
+    at_risk = []
+    for f in proj_fields:
+        pct_v  = _safe_float(f.get("Profit percentage"))
+        health = f.get("Health") or ""
+        if pct_v < 0 or "🔴" in health:
+            at_risk.append({
+                "name":   f"{f.get('Client', '?')} / {f.get('Project Name', '?')}",
+                "pct":    round(pct_v, 2),
+                "health": health,
+                "status": f.get("Project Status", ""),
+                "billed": round(_safe_float(f.get("Amount Billed So far")), 2),
+            })
 
     project_summary = {
-        "total_projects":  len(proj_fields),
-        "total_billed":    total_billed,
-        "total_profit":    total_profit,
-        "avg_profit_pct":  avg_profit,
-        "by_status":       by_status,
-        "by_client":       by_client,
-        "by_health":       by_health,
+        "total_projects":        len(proj_fields),
+        "total_billed":          round(total_billed, 2),
+        "total_profit":          round(total_profit, 2),
+        "total_input_cost":      round(total_input_cost, 2),
+        "total_overhead":        round(total_overhead, 2),
+        "total_cost":            round(total_input_cost + total_overhead, 2),
+        "avg_profit_pct":        round(avg_profit_pct, 2),
+        "target_achieved_count": target_achieved,
+        "by_status":             by_status,
+        "by_client":             by_client,
+        "by_health":             by_health,
+        "client_billed":         {k: round(v, 2) for k, v in client_billed.items()},
+        "client_profit":         {k: round(v, 2) for k, v in client_profit.items()},
+        "best_project":          best_rec,
+        "worst_project":         worst_rec,
+        "at_risk":               at_risk,
     }
 
-    # ── Invoice summary
-    total_raised   = sum(_safe_float(f.get("Amount Raised"))   for f in inv_fields)
-    total_with_tax = sum(_safe_float(f.get("Amount with Tax")) for f in inv_fields)
-    total_received = sum(_safe_float(f.get("Amount Received")) for f in inv_fields)
-    outstanding    = total_with_tax - total_received
-    coll_rate      = (total_received / total_with_tax * 100) if total_with_tax > 0 else 0.0
-    inv_by_status: dict = {}
-    for f in inv_fields:
-        s = f.get("Payment Status", "Unknown")
-        inv_by_status[s] = inv_by_status.get(s, 0) + 1
+    # ── Rich invoice summary (mirrors invoice.get_summary) ───────────────────
+    invoice_summary = None
+    if inv_fields:
+        inv_total_raised      = 0.0
+        inv_total_with_tax    = 0.0
+        inv_total_received    = 0.0
+        inv_total_outstanding = 0.0
+        inv_by_status: dict        = {}
+        inv_by_status_amounts: dict = {}
+        inv_by_project: dict       = {}
+        pending_invoices: list     = []
+        overdue_invoices: list     = []
 
-    invoice_summary = {
-        "total_invoices":    len(inv_fields),
-        "total_raised":      total_raised,
-        "total_with_tax":    total_with_tax,
-        "total_received":    total_received,
-        "total_outstanding": outstanding,
-        "collection_rate":   coll_rate,
-        "by_status":         inv_by_status,
-    } if inv_fields else None
+        for f in inv_fields:
+            raised      = _safe_float(f.get("Amount Raised"))
+            with_tax    = _safe_float(f.get("Amount with Tax"))
+            received    = _safe_float(f.get("Amount Received"))
+            status      = f.get("Payment Status", "Unknown")
+            project     = f.get("Project") or "Unknown"
+            cancelled   = (status == "Cancelled")
+
+            # Compute aging: use stored field or fall back to Raised Date
+            aging = _safe_float(f.get("Agening (Days)"))
+            if not aging and f.get("Raised Date"):
+                try:
+                    rd = datetime.fromisoformat(
+                        str(f["Raised Date"]).replace("Z", "+00:00")
+                    )
+                    aging = float((datetime.now(timezone.utc) - rd).days)
+                except Exception:
+                    pass
+
+            if not cancelled:
+                inv_total_raised     += raised
+                inv_total_with_tax   += with_tax
+                if status == "Paid":
+                    inv_total_received    += raised
+                else:
+                    inv_total_outstanding += raised
+
+            inv_by_status[status] = inv_by_status.get(status, 0) + 1
+            if not cancelled:
+                inv_by_status_amounts[status] = round(
+                    inv_by_status_amounts.get(status, 0.0) + raised, 2
+                )
+
+            if project not in inv_by_project:
+                inv_by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
+            if not cancelled:
+                inv_by_project[project]["raised"] += raised
+                if status == "Paid":
+                    inv_by_project[project]["received"]    += raised
+                else:
+                    inv_by_project[project]["outstanding"] += raised
+            inv_by_project[project]["count"] += 1
+
+            if status == "Pending":
+                entry = {
+                    "invoice_no":  f.get("Invoice Number", ""),
+                    "project":     project,
+                    "amount":      with_tax,
+                    "raised_date": f.get("Raised Date"),
+                    "followup":    f.get("Next followup"),
+                    "aging":       aging,
+                }
+                pending_invoices.append(entry)
+                overdue_invoices.append(entry)
+
+        pending_invoices.sort(key=lambda x: x["aging"], reverse=True)
+        overdue_invoices.sort(key=lambda x: x["aging"], reverse=True)
+
+        collection_rate = (
+            round(inv_total_received / inv_total_raised * 100, 2)
+            if inv_total_raised > 0 else 0.0
+        )
+
+        invoice_summary = {
+            "total_invoices":    len(inv_fields),
+            "active_invoices":   len(inv_fields) - inv_by_status.get("Cancelled", 0),
+            "total_raised":      round(inv_total_raised, 2),
+            "total_with_tax":    round(inv_total_with_tax, 2),
+            "total_received":    round(inv_total_received, 2),
+            "total_outstanding": round(inv_total_outstanding, 2),
+            "collection_rate":   collection_rate,
+            "by_status":         inv_by_status,
+            "by_status_amounts": inv_by_status_amounts,
+            "by_project":        {k: {sk: round(sv, 2) if isinstance(sv, float) else sv
+                                      for sk, sv in v.items()}
+                                  for k, v in inv_by_project.items()},
+            "pending_invoices":  pending_invoices[:10],
+            "overdue_invoices":  overdue_invoices[:5],
+        }
 
     return {
         "project_summary": project_summary,
