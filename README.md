@@ -25,7 +25,7 @@ Browser  ──→  Cloudflare Pages (React/Vite)
                   ▼
            HF Space — FastAPI (Python 3.11)
            ├── Auth (HMAC tokens, 5 roles)
-           ├── Routers (projects, invoices, ai, status, admin, webhooks)
+           ├── Routers (projects, invoices, ai, status, shared_views, admin, webhooks)
            ├── Services (Teable live API writes; PG mirrors for reads)
            ├── TOON encoder  ──→  Structured tokens for AI context
            ├── Async audit queue  ──→  PostgreSQL audit_log
@@ -68,14 +68,32 @@ Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`, `sta
 - **Invoices** — Invoice tracker, AI PDF parser, aging analysis
 - **Analytics** — Cash flow charts, DSO, concentration risk
 - **AI Assistant** — Chat with full portfolio context (PG-backed, <10ms context build)
-- **Report** — AI executive board report (TOON-enhanced, 4096 token, cached 10min)
-- **Status Board** — Live project status updates per client/project (new)
+- **Report** — Two-mode AI report: Board Pack (full financials) and Status Briefing (delivery only)
+- **Status Board** — Live project status board with Card / List / Board-kanban views
 
 ### Status Board (`/status`)
-- Cards grouped by client, collapsible detail view
-- Editor: create/edit/delete inline via modal
-- Data synced to PG mirror via 3-tier sync + webhook
-- Changes bust `chat:context` + `report:executive` caches immediately
+- Three view modes: **Card** (grid by client) · **List** (compact table) · **Board** (Kanban by Status)
+- Status colour coding: Completed=green · In progress=blue · On Hold=amber · Input Pending=orange · Not started=grey
+- Status filter + client filter + full-text search
+- Multi-select with floating action bar → AI Update narrative + Share with manager
+- Editor: create/edit/delete with modal; Status is a 5-option single-select field
+- Data synced to PG mirror via 3-tier sync + webhook; changes bust AI caches immediately
+
+### Shared Manager Views (`/view/:token`)
+- Generate public URLs for selected projects — no login required for viewer
+- Full access tracking: IP, geo, OS, browser, device (stored in `shared_view_accesses`)
+- Controls: title, expiry presets (Never / 1h / 24h / 3d / 7d / 30d), enable/disable, delete
+- Manage Links modal: real-time toggle (optimistic UI), access log per link
+- All error states (disabled / expired / not-found) show "Access Restricted — contact admin"
+
+### AI Reports (`/report`)
+
+| Mode | Contents | Cache |
+|------|----------|-------|
+| **Board Pack** | Full executive report: P&L, per-client breakdown, invoice health, status updates, at-risk flags, recommendations | 10 min Valkey cache |
+| **Status Briefing** | Delivery-only briefing: projects grouped by Status, blockers flagged, Key Actions | Always fresh (no cache) |
+
+Both use the `===ANSWER===` / `===END===` delimited-answer protocol to prevent reasoning model leakage.
 
 ### TOON — Token Oriented Object Notation
 All entities serialised as structured tokens: `[TYPE|key:value|key:value|...]`
@@ -113,9 +131,11 @@ Token: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL.
 | `projects_mirror` | Full Teable projects replica (JSONB + typed columns) |
 | `invoices_mirror` | Main invoices replica |
 | `web_invoices_mirror` | Web invoices replica |
-| `status_mirror` | Current Status table replica |
+| `status_mirror` | Current Status replica — includes `status VARCHAR(100)` for the Status single-select field |
 | `record_history` | Field-level change log with full actor attribution |
 | `sync_log` | Sync run metadata per table |
+| `shared_views` | Manager share links (token, title, record_ids, expiry, is_active, access_count) |
+| `shared_view_accesses` | Per-access tracking: IP, geo, OS, browser, device, user-agent |
 
 Schema is bootstrapped idempotently: `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
 
@@ -149,7 +169,7 @@ All writes (projects, invoices, status) also write to `record_history` via the a
 | `ratelimit:{ip}` | 60 s | Sliding-window rate limiter |
 | `session_touch:{token_hint}` | 5 min | Rate-limit session heartbeat DB writes |
 | `chat:context` | 5 min | Formatted AI context (busted on sync + status write) |
-| `report:executive` | 10 min | AI report cache (busted on sync + status write) |
+| `report:executive` | 10 min | AI board-pack cache (busted on sync + status write) |
 | `attrib:{teable_id}` | 2 min | Actor attribution bridge (HTTP → sync loop) |
 | `status:list:*` | 1 min | Status records cache |
 
@@ -164,12 +184,20 @@ Request → Valkey "chat:context" HIT → 1ms
 ```
 Context includes projects, invoices, TOON tokens, and live status updates.
 
-### Report (cached 10min)
-- Data from PG mirrors (not Teable) + status records
+### Board Pack report (cached 10min)
+- Data from PG mirrors + status records
 - TOON-encoded structured context for precise AI parsing
-- "Current Project Status:" section from status_mirror
-- 4096 max tokens, 180s timeout (handles 12+ model fallbacks)
-- Coalesced via `cache.get_or_set` — concurrent "Generate" clicks = 1 LLM call
+- Sections: Portfolio Overview, Financial Performance, Per-Client Breakdown, Cash Flow & Collections, Current Project Status, Risks & Concerns, Recommendations, Action Items
+- 4096 max tokens, 180s timeout
+
+### Status Briefing (always fresh)
+- Status records only — no financial data
+- Projects grouped by Status category (In progress → Input Pending → On Hold → Not started → Completed)
+- Ends with Key Actions (3 bullets)
+- Lighter prompt, 2000 max tokens
+
+### Reasoning model protection
+Both report endpoints use `===ANSWER===` / `===END===` markers to contain output. `_clean_report_output()` extracts between markers; falls back to heuristic section-header stripper if a model ignores the protocol.
 
 ---
 
@@ -196,7 +224,7 @@ Accessible at `/admin` (editor role) or standalone (admin role):
 | Sync Log | Per-table history + trigger button |
 | Projects | projects_mirror browser |
 | Invoices | All/Main/Web toggle |
-| Status | status_mirror browser (new) |
+| Status | status_mirror browser |
 | History | Field-level change log with actor attribution |
 
 ---
@@ -240,7 +268,7 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 | `APP_VIEW_PASSWORD` | Viewer role |
 | `APP_WEB_PASSWORD` | Web role |
 | `APP_ALL_PASSWORD` | All role |
-| `APP_ADMIN_PASSWORD` | Admin role (default: `Master@2026`) |
+| `APP_ADMIN_PASSWORD` | Admin role (stored in HF Secrets only — never in source code) |
 | `APP_SECRET` | HMAC signing key |
 | `POSTGRES_URL` | Aiven PostgreSQL DSN |
 | `VALKEY_URL` | Aiven Valkey DSN |
