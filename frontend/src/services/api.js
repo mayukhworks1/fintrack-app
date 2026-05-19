@@ -204,6 +204,10 @@ export const api = {
       request('/api/ai/status-briefing', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
     reportInvalidate: () =>
       request('/api/ai/report/invalidate', { method: 'POST' }),
+    reportHistory: (limit = 20) =>
+      request(`/api/ai/report/history?limit=${limit}`),
+    reportHistoryDetail: (id) =>
+      request(`/api/ai/report/history/${encodeURIComponent(id)}`),
   },
   invoices: {
     list:    (params = {}) => {

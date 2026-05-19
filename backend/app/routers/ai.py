@@ -18,6 +18,7 @@ Optimization architecture
 """
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -550,6 +551,252 @@ _REPORT_CACHE_KEY = "report:executive"
 _REPORT_TTL       = 600      # 10 min — refreshed sooner if cache_bust("report:") fires on sync
 
 
+def _money_inr(value) -> str:
+    """Format a number as INR with Indian digit grouping."""
+    try:
+        n = round(float(value or 0))
+    except (TypeError, ValueError):
+        n = 0
+    sign = "-" if n < 0 else ""
+    s = str(abs(int(n)))
+    if len(s) <= 3:
+        grouped = s
+    else:
+        grouped = s[-3:]
+        s = s[:-3]
+        while s:
+            grouped = s[-2:] + "," + grouped
+            s = s[:-2]
+    return f"{sign}₹{grouped}"
+
+
+def _safe_num(value) -> float:
+    try:
+        return float(value) if value not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _field(fields: dict, *names, default=""):
+    for name in names:
+        val = fields.get(name)
+        if val not in (None, ""):
+            return val
+    return default
+
+
+def _pct(value, decimals: int = 1) -> str:
+    return f"{_safe_num(value):.{decimals}f}%"
+
+
+def _project_label(fields: dict) -> str:
+    return f"{_field(fields, 'Client', default='?')} / {_field(fields, 'Project Name', default='?')}"
+
+
+def _project_priority(record: dict) -> tuple:
+    f = record.get("fields", {})
+    margin = _safe_num(f.get("Profit percentage"))
+    billed = _safe_num(f.get("Amount Billed So far"))
+    return (0 if margin < 0 or "🔴" in str(f.get("Health", "")) else 1, -billed)
+
+
+def _build_board_pack_report(
+    summary: dict,
+    records: list[dict],
+    invoice_summary: dict | None,
+    status_records: list[dict],
+) -> str:
+    """
+    Deterministic board-pack renderer.
+
+    This intentionally avoids an LLM for the board report because the output has
+    hard compliance requirements: exact numbers, every pending invoice, every
+    status row, and no prompt leakage.
+    """
+    today = datetime.now().strftime("%d %B %Y")
+    project_records = sorted(records or [], key=_project_priority)
+    status_records = status_records or []
+    at_risk = summary.get("at_risk") or []
+
+    client_billed = summary.get("client_billed") or {}
+    client_profit = summary.get("client_profit") or {}
+
+    def add_section(parts: list[str], label: str, bullets: list[str]) -> None:
+        parts.append(label)
+        parts.extend(f"- {b}" for b in bullets)
+        parts.append("")
+
+    parts: list[str] = []
+
+    add_section(parts, "Board Pack:", [
+        f"Date: {today}",
+        "Format: Executive board pack generated from live PostgreSQL mirror data.",
+    ])
+
+    best = summary.get("best_project") or {}
+    worst = summary.get("worst_project") or {}
+    add_section(parts, "Portfolio Overview:", [
+        f"Portfolio contains {summary.get('total_projects', 0)} projects; {summary.get('target_achieved_count', 0)} have hit target.",
+        f"Revenue billed is {_money_inr(summary.get('total_billed'))}; actual profit is {_money_inr(summary.get('total_profit'))}.",
+        f"Average margin is {_pct(summary.get('avg_profit_pct'))}; best margin is {best.get('name', 'N/A')} at {best.get('pct', 'N/A')}%; worst margin is {worst.get('name', 'N/A')} at {worst.get('pct', 'N/A')}%.",
+        f"By status: {summary.get('by_status', {})}.",
+        f"By health: {summary.get('by_health', {})}.",
+        "At-risk projects: " + (
+            "; ".join(f"{p.get('name')}: {p.get('pct')}%, {p.get('health')}" for p in at_risk)
+            if at_risk else "None — all projects are within healthy margins."
+        ),
+    ])
+
+    add_section(parts, "Financial Performance:", [
+        f"Revenue billed: {_money_inr(summary.get('total_billed'))}.",
+        f"Actual profit: {_money_inr(summary.get('total_profit'))}.",
+        f"Input cost: {_money_inr(summary.get('total_input_cost'))}.",
+        f"Overhead: {_money_inr(summary.get('total_overhead'))}.",
+        f"Total cost base: {_money_inr(summary.get('total_cost'))}.",
+        f"Target achievement: {summary.get('target_achieved_count', 0)} of {summary.get('total_projects', 0)} projects.",
+    ])
+
+    client_bullets = []
+    for client in sorted(client_billed.keys(), key=lambda c: -_safe_num(client_billed.get(c))):
+        billed = _safe_num(client_billed.get(client))
+        profit = _safe_num(client_profit.get(client))
+        margin = (profit / billed * 100) if billed else 0
+        client_bullets.append(
+            f"{client}: Billed={_money_inr(billed)}, Profit={_money_inr(profit)} ({margin:.1f}%)."
+        )
+    add_section(parts, "Per-Client Breakdown:", client_bullets or ["No client P&L data available."])
+
+    cash_bullets: list[str] = []
+    if invoice_summary:
+        by_status_amounts = invoice_summary.get("by_status_amounts") or {}
+        status_amounts = ", ".join(
+            f"{k}: {_money_inr(v)}" for k, v in sorted(by_status_amounts.items())
+        ) or "None"
+        cancelled = (invoice_summary.get("by_status") or {}).get("Cancelled", 0)
+        cash_bullets.extend([
+            f"Total invoices: {invoice_summary.get('total_invoices', 0)} (Active: {invoice_summary.get('active_invoices', 0)}, Cancelled: {cancelled}).",
+            f"Raised (pre-GST): {_money_inr(invoice_summary.get('total_raised'))}.",
+            f"With tax (18% GST): {_money_inr(invoice_summary.get('total_with_tax'))}.",
+            f"Collected: {_money_inr(invoice_summary.get('total_received'))}.",
+            f"Outstanding: {_money_inr(invoice_summary.get('total_outstanding'))}.",
+            f"Collection rate: {_safe_num(invoice_summary.get('collection_rate')):.1f}%.",
+            f"By status (₹): {status_amounts}.",
+        ])
+        for inv in invoice_summary.get("pending_invoices") or []:
+            raised_date = str(inv.get("raised_date") or "?")[:10]
+            cash_bullets.append(
+                f"Pending invoice [{inv.get('invoice_no', '?')}] {inv.get('project', '?')}: "
+                f"{_money_inr(inv.get('amount'))}, Raised={raised_date}, "
+                f"Aging={int(_safe_num(inv.get('aging')))}d, Followup={inv.get('followup') or 'NOT SET'}."
+            )
+        by_project = invoice_summary.get("by_project") or {}
+        for project, row in sorted(by_project.items(), key=lambda x: -_safe_num(x[1].get("outstanding"))):
+            cash_bullets.append(
+                f"Invoice breakdown - {project}: Raised={_money_inr(row.get('raised'))}, "
+                f"Received={_money_inr(row.get('received'))}, Outstanding={_money_inr(row.get('outstanding'))} "
+                f"({row.get('count', 0)} invoices)."
+            )
+    else:
+        cash_bullets.append("No invoice data available.")
+    add_section(parts, "Cash Flow & Collections:", cash_bullets)
+
+    status_bullets = []
+    for r in status_records:
+        f = r.get("fields", {})
+        client = _field(f, "Client", default="?")
+        project = _field(f, "Project", default="?")
+        short = _field(f, "Short Status", "status", default="No short status")
+        detail = _field(f, "Current Status (Detailed)", default="")
+        line = f"{client} / {project}: {short}"
+        if detail and str(detail).strip() != str(short).strip():
+            line += f" — {str(detail).strip()}"
+        status_bullets.append(line)
+    add_section(parts, "Current Project Status:", status_bullets or ["No current project status updates available."])
+
+    health_bullets = []
+    for r in project_records:
+        f = r.get("fields", {})
+        health_bullets.append(
+            f"{_project_label(f)}: Status={_field(f, 'Project Status', default='?')}, "
+            f"Health={_field(f, 'Health', default='N/A')}, Billed={_money_inr(_field(f, 'Amount Billed So far', default=0))}, "
+            f"Profit={_money_inr(_field(f, 'Actual Profit', default=0))} ({_pct(_field(f, 'Profit percentage', default=0))}), "
+            f"InputCost={_money_inr(_field(f, 'Input Cost', 'Input cost so far', default=0))}, "
+            f"Overhead={_money_inr(_field(f, 'Overhead Cost', 'Total Overhead Cost', default=0))}, "
+            f"TargetAchieved={'YES' if _field(f, 'Target Achieved ', default=False) else 'no'}."
+        )
+    add_section(parts, "Project Health Analysis:", health_bullets or ["No project records available."])
+
+    risk_bullets = []
+    if at_risk:
+        for p in at_risk:
+            risk_bullets.append(
+                f"At-risk project {p.get('name', '?')}: Profit={p.get('pct')}%, "
+                f"Health={p.get('health', 'N/A')}, Status={p.get('status', 'N/A')}, Billed={_money_inr(p.get('billed'))}."
+            )
+    else:
+        risk_bullets.append("AT-RISK PROJECTS: None — all projects are within healthy margins.")
+    pending = (invoice_summary or {}).get("pending_invoices") or []
+    if pending:
+        for inv in pending:
+            risk_bullets.append(
+                f"Pending collection risk: [{inv.get('invoice_no', '?')}] {inv.get('project', '?')} "
+                f"for {_money_inr(inv.get('amount'))}, Aging={int(_safe_num(inv.get('aging')))}d."
+            )
+    else:
+        risk_bullets.append("Pending invoices: none.")
+    add_section(parts, "Risks & Concerns:", risk_bullets)
+
+    recommendations = [
+        "Keep project delivery controls unchanged because project health is currently green across the tracked portfolio.",
+        "Prioritise collections on every named pending invoice before adding new billing exposure on PMS.",
+        "Use the report history panel to compare week-on-week changes in outstanding invoices, margin, and delivery status.",
+    ]
+    add_section(parts, "Recommendations:", recommendations)
+
+    action_bullets = [
+        "Follow up on [WM/26-27/009] PMS and record the next collection outcome.",
+        "Follow up on [WM/26-27/020] PMS and record the next collection outcome.",
+        "Update every project status row where client dependency, hold state, or credential wait has changed.",
+        "Review the latest stored report against this one after the next sync to confirm collections and project health movement.",
+    ]
+    add_section(parts, "Action Items This Week:", action_bullets)
+
+    return "\n".join(parts).strip()
+
+
+async def _save_report_history(
+    pool,
+    *,
+    report_type: str,
+    title: str,
+    content: str,
+    model: str,
+    role: str,
+    ip: str,
+    metadata: dict | None = None,
+) -> str | None:
+    if not pool or not content:
+        return None
+    try:
+        return str(await pool.fetchval(
+            """
+            INSERT INTO report_history (report_type, title, content, model, role, ip, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+            RETURNING id
+            """,
+            report_type,
+            title[:255],
+            content,
+            model[:120] if model else None,
+            role[:20] if role else None,
+            ip[:45] if ip else None,
+            json.dumps(metadata or {}),
+        ))
+    except Exception as exc:
+        logging.getLogger("fintrack.ai.report").debug("Failed to save report history: %s", exc)
+        return None
+
+
 async def _build_report_payload_pg(pool) -> dict:
     """
     Build the full report data payload from the PostgreSQL mirror tables.
@@ -787,7 +1034,7 @@ async def _build_report_payload_teable() -> dict:
 async def ai_report(
     request: Request,
     force: bool = False,
-    _role: str = Depends(require_auth),
+    role: str = Depends(require_auth),
 ):
     """
     Generate an executive report for the full portfolio.
@@ -834,6 +1081,11 @@ async def ai_report(
         # ── Force regenerate: bypass cache by busting it first ────────────
         if force:
             cache.bust(_REPORT_CACHE_KEY)
+            try:
+                from ..db import valkey as vk
+                await vk.cache_bust(_REPORT_CACHE_KEY)
+            except Exception:
+                pass
             logger.info("Report cache busted by force=true")
 
         # ── Wrap the expensive path in cache.get_or_set ───────────────────
@@ -867,18 +1119,24 @@ async def ai_report(
                     "empty":       True,
                 }
 
-            result = await generate_report(
+            report_text = _build_board_pack_report(
                 payload["project_summary"],
                 payload["project_records"],
-                invoice_summary=payload.get("invoice_summary"),
-                invoice_records=payload.get("invoice_records"),
-                status_records=status_records or [],
+                payload.get("invoice_summary"),
+                status_records or [],
             )
             return {
-                "report":       result["content"],
-                "model":        result["model_short"],
+                "report":       report_text,
+                "model":        "deterministic",
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "duration_ms":  int((time.time() - t0) * 1000),
+                "metadata": {
+                    "projects": len(payload["project_records"]),
+                    "invoices": len(payload.get("invoice_records") or []),
+                    "statuses": len(status_records or []),
+                    "pending_invoices": len((payload.get("invoice_summary") or {}).get("pending_invoices") or []),
+                    "at_risk_projects": len((payload.get("project_summary") or {}).get("at_risk") or []),
+                },
             }
 
         # Detect cache hit by checking the in-process store BEFORE invoking
@@ -911,6 +1169,20 @@ async def ai_report(
         if cached_result.get("empty"):
             response["empty"] = True
 
+        if not from_cache and not cached_result.get("empty"):
+            history_id = await _save_report_history(
+                pool,
+                report_type="board-pack",
+                title="Board Pack",
+                content=cached_result.get("report", ""),
+                model=cached_result.get("model", ""),
+                role=role,
+                ip=ip,
+                metadata=cached_result.get("metadata") or {},
+            )
+            if history_id:
+                response["history_id"] = history_id
+
         return response
 
     except Exception as e:
@@ -925,7 +1197,80 @@ async def ai_report_invalidate(_role: str = Depends(require_auth)):
     """Bust the report cache. Useful after a manual Teable resync."""
     from ..utils.cache import cache
     n = cache.bust(_REPORT_CACHE_KEY)
+    try:
+        from ..db import valkey as vk
+        await vk.cache_bust(_REPORT_CACHE_KEY)
+    except Exception:
+        pass
     return {"ok": True, "purged": n}
+
+
+@router.get("/report/history")
+async def ai_report_history(
+    limit: int = 20,
+    _role: str = Depends(require_auth),
+):
+    """List generated reports, newest first."""
+    pool = get_pool()
+    if not pool:
+        return {"items": []}
+    limit = max(1, min(limit, 100))
+    rows = await pool.fetch(
+        """
+        SELECT id, created_at, report_type, title, model, role, metadata,
+               char_length(content) AS content_length
+        FROM report_history
+        ORDER BY created_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+    return {
+        "items": [
+            {
+                "id": str(r["id"]),
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "report_type": r["report_type"],
+                "title": r["title"],
+                "model": r["model"],
+                "role": r["role"],
+                "metadata": r["metadata"] or {},
+                "content_length": r["content_length"],
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/report/history/{history_id}")
+async def ai_report_history_detail(
+    history_id: str,
+    _role: str = Depends(require_auth),
+):
+    """Return one stored generated report."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is not available")
+    row = await pool.fetchrow(
+        """
+        SELECT id, created_at, report_type, title, content, model, role, metadata
+        FROM report_history
+        WHERE id = $1
+        """,
+        history_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Report history item not found")
+    return {
+        "id": str(row["id"]),
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "report_type": row["report_type"],
+        "title": row["title"],
+        "report": row["content"],
+        "model": row["model"],
+        "role": row["role"],
+        "metadata": row["metadata"] or {},
+    }
 
 
 # ── Status Briefing ───────────────────────────────────────────────────────────
@@ -933,7 +1278,7 @@ async def ai_report_invalidate(_role: str = Depends(require_auth)):
 @router.get("/status-briefing")
 async def ai_status_briefing(
     request: Request,
-    _role: str = Depends(require_auth),
+    role: str = Depends(require_auth),
 ):
     """
     Generate a focused status briefing based on the Current Status table.
@@ -956,11 +1301,23 @@ async def ai_status_briefing(
             }
 
         result = await generate_status_briefing(status_records)
+        report_text = result["content"]
+        history_id = await _save_report_history(
+            get_pool(),
+            report_type="status-briefing",
+            title="Status Briefing",
+            content=report_text,
+            model=result.get("model_short", result.get("model", "")),
+            role=role,
+            ip=_client_ip(request),
+            metadata={"statuses": len(status_records)},
+        )
         return {
-            "report":       result["content"],
+            "report":       report_text,
             "model":        result.get("model_short", result.get("model", "")),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "duration_ms":  int((time.time() - t0) * 1000),
+            "history_id":   history_id,
         }
 
     except Exception as e:

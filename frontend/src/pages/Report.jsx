@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check,
   Square, Printer, TrendingUp, Zap, Clock, Activity, BarChart2,
+  History, Eye,
 } from 'lucide-react'
 import { api } from '../services/api'
 
@@ -127,9 +128,26 @@ export default function Report() {
   const [cachedAt,   setCachedAt]  = useState('')
   const [duration,   setDuration]  = useState(0)
   const [isEmpty,    setIsEmpty]   = useState(false)
+  const [history,    setHistory]   = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [activeHistoryId, setActiveHistoryId] = useState('')
   const abortRef = useRef(null)
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const resp = await api.ai.reportHistory(20)
+      setHistory(resp.items || [])
+    } catch {
+      setHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   // Clear report when switching modes
   const switchMode = (mode) => {
@@ -141,6 +159,7 @@ export default function Report() {
     setFromCache(false)
     setCachedAt('')
     setIsEmpty(false)
+    setActiveHistoryId('')
   }
 
   const generate = async ({ force = false } = {}) => {
@@ -170,6 +189,8 @@ export default function Report() {
       setModel(resp.model || '')
       setDuration(resp.duration_ms || 0)
       setIsEmpty(!!resp.empty)
+      setActiveHistoryId(resp.history_id || '')
+      if (resp.history_id) loadHistory()
     } catch (e) {
       if (e.name === 'AbortError') setError('Report generation cancelled.')
       else setError('Failed to generate report: ' + e.message)
@@ -208,6 +229,26 @@ export default function Report() {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {}
+  }
+
+  const openHistory = async (id) => {
+    setLoading(true)
+    setError('')
+    try {
+      const resp = await api.ai.reportHistoryDetail(id)
+      setReport(resp.report || '')
+      setModel(resp.model || '')
+      setFromCache(false)
+      setCachedAt(resp.created_at || '')
+      setDuration(0)
+      setIsEmpty(false)
+      setActiveHistoryId(id)
+      setReportMode(resp.report_type === 'status-briefing' ? 'status-briefing' : 'board-pack')
+    } catch (e) {
+      setError('Failed to open report history: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   /* ── Format cached_at as a relative time ── */
@@ -292,6 +333,56 @@ export default function Report() {
             </button>
           )
         })}
+      </div>
+
+      {/* ── Report history ───────────────────────────────────────────── */}
+      <div className="card print-hide">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <History size={15} style={{ color: 'var(--accent)' }} />
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Report History</h2>
+          </div>
+          <button onClick={loadHistory} className="btn-ghost px-2 py-1 text-xs" disabled={historyLoading}>
+            <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            {historyLoading ? 'Loading saved reports…' : 'No saved reports yet. Fresh generated reports will appear here.'}
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {history.map(item => {
+              const active = activeHistoryId === item.id
+              const meta = item.metadata || {}
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => openHistory(item.id)}
+                  className="text-left rounded-lg p-3 transition-colors"
+                  style={{
+                    border: active ? '1px solid var(--accent)' : '1px solid var(--card-border)',
+                    background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Eye size={13} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+                      {item.title || item.report_type}
+                    </span>
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    {new Date(item.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                  <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                    {item.report_type} · {item.model || 'n/a'}
+                    {meta.pending_invoices != null ? ` · ${meta.pending_invoices} pending` : ''}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Cache + freshness indicators (board-pack only) ──────────── */}
