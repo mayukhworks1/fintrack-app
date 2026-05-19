@@ -94,38 +94,44 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
   const st      = detectStatusType(short, detail)
   const clrHex  = clientColor(client)
   const hasDetail = detail.trim() && detail.trim() !== short.trim()
+  const accentDot = st.dot === 'var(--text-3)' ? '#6366f1' : st.dot
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer group"
+      className="relative rounded-2xl overflow-hidden transition-all duration-200 group"
       style={{
-        background: selected ? hexToRgba(st.dot === 'var(--text-3)' ? '#6366f1' : st.dot, 0.06) : 'var(--card-bg)',
-        border: selected ? `1.5px solid ${st.dot === 'var(--text-3)' ? '#6366f1' : st.dot}` : '1px solid var(--border)',
-        boxShadow: selected ? `0 0 0 2px ${hexToRgba(st.dot === 'var(--text-3)' ? '#6366f1' : st.dot, 0.15)}` : '0 1px 4px rgba(15,23,42,0.05)',
+        background: selected ? hexToRgba(accentDot, 0.07) : 'var(--card-bg)',
+        border: selected ? `1.5px solid ${accentDot}` : '1px solid var(--border)',
+        boxShadow: selected
+          ? `0 0 0 3px ${hexToRgba(accentDot, 0.18)}, 0 2px 8px rgba(15,23,42,0.08)`
+          : '0 1px 4px rgba(15,23,42,0.05)',
       }}
-      onClick={() => onSelect(record.id)}
     >
-      {/* Status type indicator bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" style={{ background: st.dot }} />
+      {/* Coloured left indicator bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: st.dot }} />
 
-      {/* Checkbox */}
-      <div
-        className="absolute top-3 left-3 w-5 h-5 rounded-md flex items-center justify-center transition-all"
-        style={{
-          background:  selected ? (st.dot === 'var(--text-3)' ? '#6366f1' : st.dot) : 'var(--bg-input)',
-          border: `1.5px solid ${selected ? 'transparent' : 'var(--border)'}`,
-          opacity: selected ? 1 : 0,
-        }}
-        onClick={e => { e.stopPropagation(); onSelect(record.id) }}
-      >
-        {selected && <Check size={11} color="#fff" strokeWidth={3} />}
-      </div>
+      <div className="pl-4 pr-3 pt-3 pb-3">
+        {/* ── Top row: checkbox · badges · actions ── */}
+        <div className="flex items-start gap-2.5 mb-2.5">
 
-      {/* Body */}
-      <div className="pl-5 pr-3 pt-3 pb-3">
-        {/* Top row: badges + actions */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex flex-wrap gap-1.5 min-w-0">
+          {/* Always-visible checkbox — large touch target */}
+          <button
+            onClick={() => onSelect(record.id)}
+            className="flex-shrink-0 mt-0.5 rounded-md transition-all focus:outline-none focus-visible:ring-2"
+            style={{
+              width: 20, height: 20,
+              background: selected ? accentDot : 'transparent',
+              border: `2px solid ${selected ? accentDot : 'var(--border)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            aria-label={selected ? 'Deselect' : 'Select'}
+            title={selected ? 'Deselect' : 'Select this project'}
+          >
+            {selected && <Check size={11} color="#fff" strokeWidth={3} />}
+          </button>
+
+          {/* Badges */}
+          <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
               style={{ background: hexToRgba(clrHex, 0.12), color: clrHex, border: `1px solid ${hexToRgba(clrHex, 0.3)}` }}>
               {client}
@@ -135,57 +141,67 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
               {project}
             </span>
           </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+
+          {/* Actions — always visible on mobile, hover on desktop */}
+          <div className="flex items-center gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             {hasDetail && (
-              <button onClick={e => { e.stopPropagation(); onToggle() }} className="btn-icon p-1" style={{ color: 'var(--text-3)' }}>
-                {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              <button onClick={onToggle} className="btn-icon p-1.5" title={expanded ? 'Collapse' : 'Expand'}
+                style={{ color: 'var(--text-3)' }}>
+                {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
             )}
             {isEditor && !deleting && (
               <>
-                <button onClick={e => { e.stopPropagation(); onEdit() }} className="btn-icon p-1" title="Edit" style={{ color: 'var(--text-3)' }}>
-                  <Pencil size={12} />
+                <button onClick={onEdit} className="btn-icon p-1.5" title="Edit"
+                  style={{ color: 'var(--text-3)' }}>
+                  <Pencil size={13} />
                 </button>
-                <button onClick={e => { e.stopPropagation(); onDelete() }} className="btn-icon p-1" title="Delete"
-                  style={{ color: 'rgba(239,68,68,0.6)' }}
+                <button onClick={onDelete} className="btn-icon p-1.5" title="Delete"
+                  style={{ color: 'rgba(239,68,68,0.55)' }}
                   onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.6)'}>
-                  <Trash2 size={12} />
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.55)'}>
+                  <Trash2 size={13} />
                 </button>
               </>
             )}
-            {deleting && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)' }} />}
+            {deleting && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--text-3)' }} />}
           </div>
         </div>
 
-        {/* Short status */}
+        {/* ── Short status ── */}
         {short && (
-          <p className="text-sm font-semibold leading-snug mb-1" style={{ color: 'var(--text-1)' }}>
+          <p className="text-sm font-semibold leading-snug mb-2" style={{ color: 'var(--text-1)' }}>
             {short}
           </p>
         )}
 
-        {/* Status type pill */}
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+        {/* ── Status type pill ── */}
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide"
           style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
-          <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: st.dot }} />
+          <span className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style={{ background: st.dot }} />
           {st.type}
         </span>
 
-        {/* Detail */}
+        {/* ── Detail — collapsible ── */}
         {hasDetail && (
-          <div className={`mt-2 transition-all ${expanded ? '' : 'max-h-10 overflow-hidden'}`}>
-            <p className="text-[12px] leading-relaxed whitespace-pre-wrap"
-              style={{ color: expanded ? 'var(--text-2)' : 'var(--text-3)', lineClamp: expanded ? undefined : 2 }}>
-              {detail}
-            </p>
-            {!expanded && (
-              <div className="text-[10px] font-medium mt-0.5 cursor-pointer"
-                style={{ color: 'var(--accent)' }}
-                onClick={e => { e.stopPropagation(); onToggle() }}>
-                Show more ↓
-              </div>
+          <div className="mt-2.5">
+            {expanded ? (
+              <p className="text-[12px] leading-relaxed whitespace-pre-wrap"
+                style={{ color: 'var(--text-2)', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
+                {detail}
+              </p>
+            ) : (
+              <p className="text-[12px] leading-snug"
+                style={{ color: 'var(--text-3)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {detail}
+              </p>
             )}
+            <button
+              onClick={onToggle}
+              className="mt-1 text-[11px] font-semibold flex items-center gap-0.5"
+              style={{ color: 'var(--accent)' }}>
+              {expanded ? <><ChevronUp size={10} /> Show less</> : <><ChevronDown size={10} /> Show more</>}
+            </button>
           </div>
         )}
       </div>

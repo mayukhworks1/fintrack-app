@@ -790,13 +790,17 @@ _REPORT_SYSTEM_PROMPT = """You are FinTrackAI, a senior financial analyst writin
 
 You will receive structured portfolio data and must produce a complete, honest, detailed report.
 
-RULES — non-negotiable:
+CRITICAL FORMATTING RULES — non-negotiable:
+- Output ONLY the formatted report. No reasoning, no planning, no working notes, no preamble.
+- Start your output IMMEDIATELY with ===ANSWER=== on its own line.
+- End your output with ===END=== on its own line.
+- Between those markers: the complete report and nothing else.
 - Use every data point given. Do not omit, vague-ify, or approximate any number.
 - Name specific projects, clients, and invoices — never use "a project" or "some clients".
 - Use ₹ with Indian grouping (₹2,47,200). Shorthand only if space is tight.
 - Structure using section headers like "Portfolio Overview:" on their own line, followed by bullet points.
 - Bullet points start with "- " on a new line.
-- Be direct and decisive. No filler, no preamble, no "Based on the data...".
+- Be direct and decisive. No filler, no "Based on the data...", no thinking out loud.
 - If collection rate < 80%, call it critical explicitly.
 - Negative-margin projects must be named and flagged as losses.
 """
@@ -1016,13 +1020,65 @@ async def generate_report(
         "No filler sentences. No preamble before the first section."
     )
 
+    # Remind the user turn to use the markers (belt-and-suspenders for models
+    # that ignore system-prompt-only instructions when generating long text).
+    prompt += (
+        "\n\nIMPORTANT: Output ONLY the report. "
+        "Wrap it in ===ANSWER=== ... ===END=== markers. "
+        "Do NOT include any reasoning, planning, or working notes."
+    )
+
     messages = [
         {"role": "system", "content": _REPORT_SYSTEM_PROMPT},
         {"role": "user",   "content": prompt},
     ]
-    # extract=False: bypass ===ANSWER=== protocol — report is long-form prose,
-    # not a Q&A answer, and the main SYSTEM_PROMPT's "no markdown" rule must not apply.
-    return await _try_chat(messages, max_tokens=4096, temperature=0.4, extract=False)
+    result = await _try_chat(messages, max_tokens=4096, temperature=0.4, extract=False)
+    raw = result.get("content", "")
+    result["content"] = _clean_report_output(raw)
+    return result
+
+
+def _clean_report_output(text: str) -> str:
+    """
+    Post-process the raw report output:
+    1. Extract between ===ANSWER=== / ===END=== markers (handles reasoning model leakage).
+    2. Fall back to heuristic preamble stripper if markers absent.
+    """
+    if not text:
+        return text
+
+    # ── 1. Try ANSWER markers ────────────────────────────────────────────────
+    if ANSWER_OPEN in text:
+        start = text.index(ANSWER_OPEN) + len(ANSWER_OPEN)
+        end   = text.index(ANSWER_CLOSE, start) if ANSWER_CLOSE in text[start:] else len(text)
+        cleaned = text[start:end].strip()
+        if len(cleaned) > 200:            # sanity: must have real content
+            return cleaned
+
+    # ── 2. Heuristic: find first real section header ─────────────────────────
+    # Reasoning models leak chain-of-thought before the first real header.
+    # We find the first line that looks like a report section and discard all
+    # lines above it.
+    lines = text.split("\n")
+    _SECTION_STARTERS = (
+        "# ", "## ", "### ",
+        "**portfolio", "**executive", "**board", "**invoice",
+        "**project", "**at-risk", "**summary", "**financial",
+        "portfolio overview", "executive report", "executive summary",
+        "board report", "invoice summary", "project detail",
+        "at-risk projects", "financial summary",
+    )
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if not stripped:
+            continue
+        if any(stripped.startswith(s) for s in _SECTION_STARTERS):
+            # Only strip if reasoning is actually present (at least 3 lines before)
+            if i >= 3:
+                return "\n".join(lines[i:]).strip()
+            break
+
+    return text.strip()
 
 
 _AI_UPDATE_SYSTEM = (
