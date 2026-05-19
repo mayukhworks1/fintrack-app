@@ -204,11 +204,12 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
   }, {})
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="flex gap-2 min-w-max">
       {/* Total */}
       <button
         onClick={() => onFilterStatus('')}
-        className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left"
+        className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
         style={{
           background: !filterStatus ? 'var(--accent)' : 'var(--card-bg)',
           border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--border)',
@@ -228,7 +229,7 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
           <button
             key={s}
             onClick={() => onFilterStatus(active ? '' : s)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
             style={{
               background: active ? sc.bg : 'var(--card-bg)',
               border: active ? `1.5px solid ${sc.border}` : '1px solid var(--border)',
@@ -245,6 +246,7 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
           </button>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -2067,163 +2069,175 @@ export default function StatusBoard() {
       <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 pb-28">
 
         {/* ── Page header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
-              <Activity size={18} style={{ color: 'var(--accent)' }} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold leading-tight" style={{ color: 'var(--text-1)' }}>Status Board</h1>
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                {loading
-                  ? 'Loading status data…'
-                  : error
-                    ? 'Status sync unavailable'
-                    : `${records.length} projects · ${allClients.length} clients`}
-                {hasSelection ? <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>· {selectedIds.size} selected</span> : null}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* View mode toggle */}
-            <div className="flex items-center rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-              {[
-                { id: 'card',  Icon: LayoutGrid, label: 'Card' },
-                { id: 'list',  Icon: List,        label: 'List' },
-                { id: 'board', Icon: Columns,     label: 'Board' },
-              ].map(({ id, Icon, label }) => (
-                <button key={id} onClick={() => setViewType(id)} title={`${label} view`}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold transition-all"
-                  style={{ color: viewType === id ? 'var(--accent)' : 'var(--text-3)', background: viewType === id ? 'var(--card-bg)' : 'transparent' }}>
-                  <Icon size={13} />
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Column selector (list view) */}
-            {viewType === 'list' && (
-              <div className="relative">
-                <button onClick={() => { setShowCols(s => !s); setShowViews(false); setShowSettings(false) }}
-                  className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                  <SlidersHorizontal size={12} /> Columns ({listColumns.length})
-                </button>
-                {showCols && <ColumnSelector columns={listColumns} onChange={setListColumns} onClose={() => setShowCols(false)} />}
+        <div className="rounded-[26px] border p-4 sm:p-5 space-y-4" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(247,249,252,0.96))', borderColor: 'var(--border)', boxShadow: '0 18px 40px rgba(15,23,42,0.06)' }}>
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-[18px] flex items-center justify-center flex-shrink-0"
+                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+                <Activity size={19} style={{ color: 'var(--accent)' }} />
               </div>
-            )}
-
-            {/* Saved views */}
-            <div className="relative">
-              <button onClick={() => { setShowViews(s => !s); setShowCols(false); setShowSettings(false) }}
-                className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                <Bookmark size={12} /> Views
-              </button>
-              {showViews && <SavedViewsMenu currentConfig={currentConfig} onLoad={loadSavedView} onClose={() => setShowViews(false)} />}
+              <div className="min-w-0">
+                <h1 className="text-[28px] sm:text-[30px] font-bold leading-[0.95] tracking-[-0.03em]" style={{ color: 'var(--text-1)' }}>
+                  Status Board
+                </h1>
+                <p className="text-sm mt-2 leading-6" style={{ color: 'var(--text-3)' }}>
+                  {loading
+                    ? 'Loading status data…'
+                    : error
+                      ? 'Status sync unavailable'
+                      : `${records.length} projects · ${allClients.length} clients`}
+                  {hasSelection ? <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>· {selectedIds.size} selected</span> : null}
+                </p>
+              </div>
             </div>
 
-            <div className="relative">
-              <button onClick={() => { setShowSettings(s => !s); setShowViews(false); setShowCols(false) }}
-                className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                <SlidersHorizontal size={12} /> Customize
-              </button>
-              {showSettings && (
-                <AppearancePanel
-                  themeId={themeId}
-                  density={density}
-                  showDashboard={showDashboard}
-                  showClientAccents={showClientAccents}
-                  statusOptions={statusOptions}
-                  canManageStatuses={isEditor}
-                  onThemeChange={setThemeId}
-                  onDensityChange={setDensity}
-                  onToggleDashboard={() => setShowDashboard(v => !v)}
-                  onToggleClientAccents={() => setShowClientAccents(v => !v)}
-                  onAddStatusOption={isEditor ? addStatusOption : null}
-                  onClose={() => setShowSettings(false)}
-                />
-              )}
-            </div>
-
-            {viewType === 'board' && (
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group by</span>
-                <select
-                  className="input-field text-xs py-1.5 min-w-[120px]"
-                  value={boardGroupBy}
-                  onChange={e => setBoardGroupBy(e.target.value)}
-                >
-                  {BOARD_GROUP_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                <div className="flex items-center rounded-2xl overflow-hidden shrink-0" style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
+                  {[
+                    { id: 'card',  Icon: LayoutGrid, label: 'Card' },
+                    { id: 'list',  Icon: List,        label: 'List' },
+                    { id: 'board', Icon: Columns,     label: 'Board' },
+                  ].map(({ id, Icon, label }) => (
+                    <button key={id} onClick={() => setViewType(id)} title={`${label} view`}
+                      className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2 text-xs font-semibold transition-all min-h-[40px]"
+                      style={{ color: viewType === id ? 'var(--accent)' : 'var(--text-3)', background: viewType === id ? 'var(--accent-dim)' : 'transparent' }}>
+                      <Icon size={13} />
+                      <span>{label}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
+
+                {viewType === 'list' && (
+                  <div className="relative">
+                    <button onClick={() => { setShowCols(s => !s); setShowViews(false); setShowSettings(false) }}
+                      className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2 min-h-[40px]">
+                      <SlidersHorizontal size={12} /> Columns ({listColumns.length})
+                    </button>
+                    {showCols && <ColumnSelector columns={listColumns} onChange={setListColumns} onClose={() => setShowCols(false)} />}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <button onClick={() => { setShowViews(s => !s); setShowCols(false); setShowSettings(false) }}
+                    className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2 min-h-[40px]">
+                    <Bookmark size={12} /> Views
+                  </button>
+                  {showViews && <SavedViewsMenu currentConfig={currentConfig} onLoad={loadSavedView} onClose={() => setShowViews(false)} />}
+                </div>
+
+                <div className="relative">
+                  <button onClick={() => { setShowSettings(s => !s); setShowViews(false); setShowCols(false) }}
+                    className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2 min-h-[40px]">
+                    <SlidersHorizontal size={12} /> Customize
+                  </button>
+                  {showSettings && (
+                    <AppearancePanel
+                      themeId={themeId}
+                      density={density}
+                      showDashboard={showDashboard}
+                      showClientAccents={showClientAccents}
+                      statusOptions={statusOptions}
+                      canManageStatuses={isEditor}
+                      onThemeChange={setThemeId}
+                      onDensityChange={setDensity}
+                      onToggleDashboard={() => setShowDashboard(v => !v)}
+                      onToggleClientAccents={() => setShowClientAccents(v => !v)}
+                      onAddStatusOption={isEditor ? addStatusOption : null}
+                      onClose={() => setShowSettings(false)}
+                    />
+                  )}
+                </div>
               </div>
-            )}
 
-            {viewType === 'card' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group by</span>
-                  <select
-                    className="input-field text-xs py-1.5 min-w-[110px]"
-                    value={cardGroupBy}
-                    onChange={e => setCardGroupBy(e.target.value)}
-                  >
-                    {CARD_GROUP_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+              {(viewType === 'board' || viewType === 'card') && (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 w-full xl:w-auto">
+                  {viewType === 'board' && (
+                    <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group by</span>
+                      <select
+                        className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
+                        value={boardGroupBy}
+                        onChange={e => setBoardGroupBy(e.target.value)}
+                        style={{ color: 'var(--text-1)' }}
+                      >
+                        {BOARD_GROUP_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {viewType === 'card' && (
+                    <>
+                      <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group</span>
+                        <select
+                          className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
+                          value={cardGroupBy}
+                          onChange={e => setCardGroupBy(e.target.value)}
+                          style={{ color: 'var(--text-1)' }}
+                        >
+                          {CARD_GROUP_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[210px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Order</span>
+                        <select
+                          className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
+                          value={cardGroupSort}
+                          onChange={e => setCardGroupSort(e.target.value)}
+                          style={{ color: 'var(--text-1)' }}
+                        >
+                          {CARD_GROUP_SORT_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[190px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Cards</span>
+                        <select
+                          className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
+                          value={cardRecordSort}
+                          onChange={e => setCardRecordSort(e.target.value)}
+                          style={{ color: 'var(--text-1)' }}
+                        >
+                          {CARD_RECORD_SORT_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group order</span>
-                  <select
-                    className="input-field text-xs py-1.5 min-w-[160px]"
-                    value={cardGroupSort}
-                    onChange={e => setCardGroupSort(e.target.value)}
-                  >
-                    {CARD_GROUP_SORT_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Cards</span>
-                  <select
-                    className="input-field text-xs py-1.5 min-w-[150px]"
-                    value={cardRecordSort}
-                    onChange={e => setCardRecordSort(e.target.value)}
-                  >
-                    {CARD_RECORD_SORT_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                <button onClick={shareViewUrl}
+                  className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2 min-h-[40px]"
+                  title="Generate a public share link for the current view">
+                  <Share2 size={12} />
+                  <span>Share View</span>
+                </button>
+
+                {isEditor && (
+                  <button onClick={() => setManageModal(true)} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2 min-h-[40px]">
+                    <Link2 size={12} /> <span>Links</span>
+                  </button>
+                )}
+
+                <button onClick={load} disabled={loading} className="btn-ghost px-3 py-2 min-h-[40px]" title="Refresh">
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                </button>
+                {isEditor && (
+                  <button onClick={() => setModal('new')} className="btn-primary flex items-center gap-2 text-sm px-4 py-2 min-h-[40px]">
+                    <Plus size={13} /> <span>Add Status</span>
+                  </button>
+                )}
               </div>
-            )}
-
-            {/* Share view — creates a real public link via PG */}
-            <button onClick={shareViewUrl}
-              className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5"
-              title="Generate a public share link for the current view">
-              <Share2 size={12} />
-              <span className="hidden sm:inline">Share View</span>
-            </button>
-
-            {isEditor && (
-              <button onClick={() => setManageModal(true)} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                <Link2 size={12} /> <span className="hidden sm:inline">Links</span>
-              </button>
-            )}
-
-            <button onClick={load} disabled={loading} className="btn-icon p-2" title="Refresh" style={{ color: 'var(--text-3)' }}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
-            {isEditor && (
-              <button onClick={() => setModal('new')} className="btn-primary flex items-center gap-2 text-sm px-3 py-1.5">
-                <Plus size={13} /> <span className="hidden sm:inline">Add Status</span><span className="sm:hidden">Add</span>
-              </button>
-            )}
+            </div>
           </div>
         </div>
 
