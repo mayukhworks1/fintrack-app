@@ -157,20 +157,61 @@ export default function SharedView() {
     )
   }
 
-  // Error
+  // Error — map known backend messages to user-friendly copy
   if (error) {
+    const isDisabled = /disabled/i.test(error)
+    const isExpiredLink = /expired/i.test(error)
+    const isNotFound = /not found/i.test(error)
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#f8fafc' }}>
-        <div className="w-full max-w-sm text-center">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ border: '1px solid rgba(239,68,68,0.2)' }}>
-            <AlertCircle size={28} className="text-red-500" />
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm" style={{ border: '1px solid #e5e7eb' }}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 ${isDisabled ? 'bg-amber-50' : 'bg-red-50'}`}
+              style={{ border: `1px solid ${isDisabled ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
+              <AlertCircle size={28} className={isDisabled ? 'text-amber-500' : 'text-red-500'} />
+            </div>
+
+            {isDisabled && (
+              <>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Link Disabled</h1>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  This status update link has been disabled by the owner.
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Please contact the person who shared this link to request an updated one.
+                </p>
+              </>
+            )}
+
+            {isExpiredLink && (
+              <>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Link Expired</h1>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  This status update link has passed its expiry date.
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Please contact the person who shared this link to request a fresh one.
+                </p>
+              </>
+            )}
+
+            {isNotFound && (
+              <>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Link Not Found</h1>
+                <p className="text-sm text-gray-600">
+                  This link doesn't exist or may have been deleted.
+                </p>
+              </>
+            )}
+
+            {!isDisabled && !isExpiredLink && !isNotFound && (
+              <>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Unavailable</h1>
+                <p className="text-sm text-gray-500">{error}</p>
+              </>
+            )}
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Link Unavailable</h1>
-          <p className="text-sm text-gray-500">{error}</p>
-          <p className="text-xs text-gray-400 mt-3">
-            This link may have expired or been disabled. Contact the sender for an updated link.
-          </p>
         </div>
       </div>
     )
@@ -210,10 +251,10 @@ export default function SharedView() {
                 </p>
               </div>
             </div>
-            {/* Master@2026 branding */}
+            {/* App branding */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
               <Shield size={11} />
-              Master@2026
+              FinTrack
             </div>
           </div>
         </div>
@@ -272,7 +313,7 @@ export default function SharedView() {
       <footer className="py-8 text-center" style={{ borderTop: '1px solid #e5e7eb' }}>
         <div className="flex items-center justify-center gap-1.5 text-xs text-gray-400 mb-1">
           <Shield size={11} />
-          <span>Shared via Master@2026 · FinTrack</span>
+          <span>FinTrack · Project Status</span>
         </div>
         {createdAt && (
           <p className="text-[11px] text-gray-300">Generated {fmtDateTime(createdAt)}</p>

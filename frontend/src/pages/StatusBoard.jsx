@@ -99,7 +99,7 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
     <div
       className="relative rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer group"
       style={{
-        background: selected ? hexToRgba(st.dot === 'var(--text-3)' ? '#6366f1' : st.dot, 0.06) : 'var(--bg-card)',
+        background: selected ? hexToRgba(st.dot === 'var(--text-3)' ? '#6366f1' : st.dot, 0.06) : 'var(--card-bg)',
         border: selected ? `1.5px solid ${st.dot === 'var(--text-3)' ? '#6366f1' : st.dot}` : '1px solid var(--border)',
         boxShadow: selected ? `0 0 0 2px ${hexToRgba(st.dot === 'var(--text-3)' ? '#6366f1' : st.dot, 0.15)}` : '0 1px 4px rgba(15,23,42,0.05)',
       }}
@@ -221,10 +221,10 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', maxHeight: '90vh', overflow: 'auto' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '90vh', overflow: 'auto' }}>
 
         <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0"
-          style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
+          style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
             {isEdit ? 'Edit Status' : '+ New Status Update'}
           </h2>
@@ -336,7 +336,7 @@ function AIUpdateModal({ selectedRecords, onClose, onShare }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
@@ -513,7 +513,7 @@ function ShareModal({ selectedRecords, onClose }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3"
@@ -637,7 +637,7 @@ function ShareModal({ selectedRecords, onClose }) {
                 </p>
                 <button onClick={copyUrl}
                   className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
-                  style={{ background: copied ? 'rgba(16,185,129,0.12)' : 'var(--bg-card)', color: copied ? '#10b981' : 'var(--accent)', border: '1px solid var(--border)' }}>
+                  style={{ background: copied ? 'rgba(16,185,129,0.12)' : 'var(--card-bg)', color: copied ? '#10b981' : 'var(--accent)', border: '1px solid var(--border)' }}>
                   {copied ? <CheckCheck size={11} /> : <Copy size={11} />}
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
@@ -726,7 +726,7 @@ function ManageSharesModal({ onClose }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
 
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)' }}>
@@ -763,7 +763,7 @@ function ManageSharesModal({ onClose }) {
               <div key={v.token}>
                 <div className="rounded-xl p-3 transition-all"
                   style={{
-                    background: (expired || inactive) ? 'var(--bg-input)' : 'var(--bg-card)',
+                    background: (expired || inactive) ? 'var(--bg-input)' : 'var(--card-bg)',
                     border: '1px solid var(--border)',
                     opacity: (expired || inactive) ? 0.7 : 1,
                   }}>
@@ -1167,7 +1167,7 @@ export default function StatusBoard() {
           style={{ width: 'calc(100% - 2rem)', maxWidth: '560px' }}>
           <div className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl shadow-xl"
             style={{
-              background: 'var(--bg-card)',
+              background: 'var(--card-bg)',
               border: '1px solid var(--border)',
               boxShadow: '0 8px 32px rgba(15,23,42,0.2), 0 0 0 1px rgba(255,255,255,0.05)',
             }}>
