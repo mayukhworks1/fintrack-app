@@ -204,7 +204,7 @@ async def update_public_view_record(
         fields["Current Status (Detailed)"] = body.current_status_detailed
 
     try:
-        return await SharedViewService().update_public_record(token, record_id, fields)
+        return await SharedViewService().update_public_record(token, record_id, fields, request=request)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:

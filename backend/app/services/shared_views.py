@@ -22,6 +22,8 @@ logger = logging.getLogger("fintrack.shared_views")
 _MAX_RECORD_IDS = 50
 _ALLOWED_ACCESS_MODES = {"read", "edit"}
 _ALLOWED_VIEW_TYPES = {"card", "list", "board"}
+_ALLOWED_THEMES = {"cobalt", "emerald", "amber", "rose", "slate"}
+_ALLOWED_DENSITIES = {"comfortable", "compact"}
 _COLUMN_ALIASES = {
     "Client": "Client",
     "Project": "Project",
@@ -59,6 +61,10 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     filter_client = view_config.get("filterClient")
     filter_status = view_config.get("filterStatus")
     search = view_config.get("search")
+    theme = view_config.get("theme")
+    density = view_config.get("density")
+    show_dashboard = view_config.get("showDashboard")
+    show_client_accents = view_config.get("showClientAccents")
 
     clean: dict[str, Any] = {}
 
@@ -84,6 +90,18 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(search, str) and search.strip():
         clean["search"] = search.strip()[:255]
+
+    if isinstance(theme, str) and theme in _ALLOWED_THEMES:
+        clean["theme"] = theme
+
+    if isinstance(density, str) and density in _ALLOWED_DENSITIES:
+        clean["density"] = density
+
+    if isinstance(show_dashboard, bool):
+        clean["showDashboard"] = show_dashboard
+
+    if isinstance(show_client_accents, bool):
+        clean["showClientAccents"] = show_client_accents
 
     return clean or None
 
@@ -324,7 +342,7 @@ class SharedViewService:
             "view_config": vc,
         }
 
-    async def update_public_record(self, token: str, record_id: str, fields: dict) -> dict[str, Any]:
+    async def update_public_record(self, token: str, record_id: str, fields: dict, request=None) -> dict[str, Any]:
         view = await self.get_public_view(token)
         if (view.get("access_mode") or "read") != "edit":
             raise PermissionError("This link is view-only")
@@ -344,10 +362,35 @@ class SharedViewService:
         if not cleaned:
             raise ValueError("No editable fields provided")
 
+        # Public edit links must be fully traceable just like authenticated
+        # writes. We use a dedicated pseudo-role so record_history can show
+        # that the change came from a shared edit link.
         from ..services.status import StatusService
-        updated = await StatusService().update_record(record_id, cleaned)
+        updated = await StatusService().update_record(
+            record_id,
+            cleaned,
+            request=request,
+            role="shared_edit",
+        )
 
-        # Public updates should still invalidate shared-view reads quickly.
+        # Do not wait for the background sync loop to make PostgreSQL catch up.
+        # Mirror the updated record immediately so shared/public reads and admin
+        # audit views reflect the change right away.
+        try:
+            pool = get_pool()
+            if pool and isinstance(updated, dict) and updated.get("fields"):
+                from ..db.sync import upsert_record, _extract_status
+                await upsert_record(
+                    pool=pool,
+                    source="status",
+                    mirror_table="status_mirror",
+                    teable_id=record_id,
+                    fields=updated.get("fields") or {},
+                    extractor=_extract_status,
+                )
+        except Exception as exc:
+            logger.debug("shared view immediate status_mirror upsert failed for %s: %s", record_id, exc)
+
         return updated
 
     # ── Internal ──────────────────────────────────────────────────────────────

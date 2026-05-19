@@ -104,6 +104,7 @@ async def build_actor_context(
     # ── Decode the X-Client-Hint header (rich device fingerprint from JS) ──
     hint = parse_client_hint(request.headers.get("x-client-hint", ""))
     ch   = hint.get("ch") or {}
+    browser_geo = hint.get("browserGeo") or {}
 
     geo: dict = {}
     try:
@@ -134,8 +135,8 @@ async def build_actor_context(
         "actor_city":              (geo.get("city") or "")[:100] or None,
         "actor_region":            (geo.get("region") or "")[:100] or None,
         "actor_isp":               (geo.get("isp") or geo.get("org") or "")[:150] or None,
-        "actor_lat":               geo.get("lat"),
-        "actor_lon":               geo.get("lon"),
+        "actor_lat":               browser_geo.get("lat") if isinstance(browser_geo.get("lat"), (int, float)) else geo.get("lat"),
+        "actor_lon":               browser_geo.get("lon") if isinstance(browser_geo.get("lon"), (int, float)) else geo.get("lon"),
         "actor_os":                _trunc(os_str, 100),
         "actor_browser":           _trunc(browser, 100),
         "actor_device":            _trunc(device, 20),

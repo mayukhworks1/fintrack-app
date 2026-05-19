@@ -30,6 +30,48 @@ import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
+const THEME_PRESETS = {
+  cobalt: {
+    id: 'cobalt',
+    label: 'Cobalt',
+    accent: '#2563eb',
+    accentDim: 'rgba(37,99,235,0.12)',
+    accentSoft: 'rgba(37,99,235,0.24)',
+    accentGradient: 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+  },
+  emerald: {
+    id: 'emerald',
+    label: 'Emerald',
+    accent: '#059669',
+    accentDim: 'rgba(5,150,105,0.12)',
+    accentSoft: 'rgba(5,150,105,0.24)',
+    accentGradient: 'linear-gradient(135deg,#059669,#047857)',
+  },
+  amber: {
+    id: 'amber',
+    label: 'Amber',
+    accent: '#d97706',
+    accentDim: 'rgba(217,119,6,0.12)',
+    accentSoft: 'rgba(217,119,6,0.24)',
+    accentGradient: 'linear-gradient(135deg,#f59e0b,#d97706)',
+  },
+  rose: {
+    id: 'rose',
+    label: 'Rose',
+    accent: '#e11d48',
+    accentDim: 'rgba(225,29,72,0.12)',
+    accentSoft: 'rgba(225,29,72,0.24)',
+    accentGradient: 'linear-gradient(135deg,#f43f5e,#e11d48)',
+  },
+  slate: {
+    id: 'slate',
+    label: 'Slate',
+    accent: '#475569',
+    accentDim: 'rgba(71,85,105,0.12)',
+    accentSoft: 'rgba(71,85,105,0.24)',
+    accentGradient: 'linear-gradient(135deg,#64748b,#475569)',
+  },
+}
 const STATUS_CONFIG = {
   'Completed':     { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', dot: '#10b981', light: '#dcfce7' },
   'In progress':   { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.35)', dot: '#3b82f6', light: '#dbeafe' },
@@ -85,6 +127,7 @@ function fmtShortDate(iso) {
   try { return new Date(iso).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) } catch { return iso }
 }
 function isExpired(iso) { return iso ? new Date(iso) < new Date() : false }
+function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
 
 // ── View config helpers ───────────────────────────────────────────────────────
 function encodeViewConfig(cfg) {
@@ -181,100 +224,103 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   if (!record) return null
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)' }}
-        onClick={onClose} />
-      {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col shadow-2xl"
-        style={{ width: 'min(420px, 100vw)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
-          style={{ borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ background: clrHex }} />
-            <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Project Detail</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {isEditor && (
-              <>
-                <button onClick={onEdit} className="btn-icon p-2" title="Edit" style={{ color: 'var(--text-3)' }}>
-                  <Pencil size={14} />
-                </button>
-                <button onClick={onDelete} className="btn-icon p-2" title="Delete"
-                  style={{ color: 'rgba(239,68,68,0.6)' }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.6)'}>
-                  <Trash size={14} />
-                </button>
-              </>
-            )}
-            <button onClick={onClose} className="btn-icon p-2" style={{ color: 'var(--text-3)' }}>
-              <X size={16} />
-            </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
+      onClick={onClose}>
+      <div
+        className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-[28px] shadow-2xl"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-6 py-5"
+          style={{ background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.14)}, rgba(255,255,255,0.98))`, borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
+                style={{ background: hexToRgba(clrHex, 0.12), border: `1px solid ${hexToRgba(clrHex, 0.24)}`, color: clrHex }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: clrHex }} />
+                {client || 'Unknown client'}
+              </div>
+              <h2 className="text-2xl font-bold leading-tight" style={{ color: 'var(--text-1)' }}>{project || 'Untitled project'}</h2>
+              {modified && (
+                <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                  <Clock size={12} />
+                  Last updated {fmtDate(modified)}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {isEditor && (
+                <>
+                  <button onClick={onEdit} className="btn-icon p-2" title="Edit" style={{ color: 'var(--text-3)' }}>
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={onDelete} className="btn-icon p-2" title="Delete"
+                    style={{ color: 'rgba(239,68,68,0.7)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.7)'}>
+                    <Trash size={15} />
+                  </button>
+                </>
+              )}
+              <button onClick={onClose} className="btn-icon p-2" style={{ color: 'var(--text-3)' }}>
+                <X size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
-          {/* Client + Project */}
-          <div className="rounded-2xl p-4" style={{ background: hexToRgba(clrHex, 0.07), border: `1px solid ${hexToRgba(clrHex, 0.2)}` }}>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: hexToRgba(clrHex, 0.8) }}>Client</p>
-            <p className="text-base font-bold" style={{ color: clrHex }}>{client || '—'}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-1 mt-3" style={{ color: 'var(--text-3)' }}>Project</p>
-            <p className="text-lg font-bold leading-snug" style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
-          </div>
-
-          {/* Status */}
+        <div className="overflow-y-auto p-6 space-y-5">
           {status && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Status</p>
+            <div className="rounded-2xl p-4" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: sc.color }}>Current Status</p>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold"
-                style={{ background: sc.bg, color: sc.color, border: `1.5px solid ${sc.border}` }}>
+                style={{ background: '#ffffff', color: sc.color, border: `1px solid ${sc.border}` }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: sc.dot }} />
                 {status}
               </span>
             </div>
           )}
 
-          {/* Short Status */}
-          {short && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
-              <p className="text-sm font-semibold leading-relaxed" style={{ color: 'var(--text-1)' }}>{short}</p>
-            </div>
-          )}
+          <div className="grid grid-cols-1 lg:grid-cols-[0.9fr,1.1fr] gap-5">
+            <div className="space-y-5">
+              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
+                <p className="text-sm font-semibold leading-relaxed" style={{ color: 'var(--text-1)' }}>{short || 'No headline added yet.'}</p>
+              </div>
 
-          {/* Detailed Status */}
-          {detail && detail.trim() !== short.trim() && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Full Detail</p>
-              <div className="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                {detail}
+              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Portfolio Context</p>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Client</p>
+                    <p style={{ color: 'var(--text-1)' }}>{client || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Project</p>
+                    <p style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Modified */}
-          {modified && (
-            <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-              <Clock size={10} />
-              Last updated {fmtDate(modified)}
-            </p>
-          )}
+            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Detailed Update</p>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
+                {detail?.trim() || short?.trim() || 'No detailed update added yet.'}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Card — Card view
 // ─────────────────────────────────────────────────────────────────────────────
-function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, onSelect, expanded, onToggle, deleting }) {
+function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, onSelect, expanded, onToggle, deleting, compact = false, showClientAccents = true }) {
   const f       = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -297,9 +343,9 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
       }}
     >
       {/* Client colour bar */}
-      <div className="h-[3px]" style={{ background: clrHex }} />
+      {showClientAccents && <div className="h-[3px]" style={{ background: clrHex }} />}
 
-      <div className="p-4">
+      <div className={compact ? 'p-3' : 'p-4'}>
         {/* Top row */}
         <div className="flex items-start gap-2 mb-3">
           {/* Checkbox */}
@@ -322,7 +368,11 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
           <div className="flex-1 min-w-0">
             {/* Client chip */}
             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5"
-              style={{ background: hexToRgba(clrHex, 0.12), color: clrHex, border: `1px solid ${hexToRgba(clrHex, 0.25)}` }}>
+              style={{
+                background: showClientAccents ? hexToRgba(clrHex, 0.12) : 'var(--bg-input)',
+                color: showClientAccents ? clrHex : 'var(--text-2)',
+                border: `1px solid ${showClientAccents ? hexToRgba(clrHex, 0.25) : 'var(--border)'}`,
+              }}>
               {client}
             </span>
             {/* Project name */}
@@ -404,7 +454,7 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
 // ─────────────────────────────────────────────────────────────────────────────
 // List View Row
 // ─────────────────────────────────────────────────────────────────────────────
-function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting }) {
+function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true }) {
   const f = record.fields || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
@@ -417,11 +467,11 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
   const sel      = selected
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2.5 transition-colors group"
+    <div className={`flex items-center gap-2 px-3 transition-colors group ${compact ? 'py-2' : 'py-2.5'}`}
       style={{
         background: sel ? hexToRgba(clrHex, 0.05) : (idx % 2 === 0 ? 'var(--card-bg)' : 'var(--bg-input)'),
         borderBottom: '1px solid var(--border)',
-        borderLeft: sel ? `3px solid ${clrHex}` : '3px solid transparent',
+        borderLeft: showClientAccents && sel ? `3px solid ${clrHex}` : '3px solid transparent',
       }}>
 
       {/* Checkbox */}
@@ -435,7 +485,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
 
       {/* Dynamic columns */}
       {columns.includes('Client') && (
-        <span className="text-[11px] font-bold truncate" style={{ color: clrHex, minWidth: 80, maxWidth: 100 }}>
+        <span className="text-[11px] font-bold truncate" style={{ color: showClientAccents ? clrHex : 'var(--text-2)', minWidth: 80, maxWidth: 100 }}>
           {client}
         </span>
       )}
@@ -499,7 +549,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
 // ─────────────────────────────────────────────────────────────────────────────
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
-function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging }) {
+function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -519,7 +569,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
     >
       <div className="flex items-start justify-between gap-1 mb-1.5">
         <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-bold" style={{ color: clrHex }}>{client}</span>
+          <span className="text-[10px] font-bold" style={{ color: showClientAccents ? clrHex : 'var(--text-2)' }}>{client}</span>
           <p className="text-xs font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>{project}</p>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -557,7 +607,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
         </div>
       </div>
       {short && (
-        <p className="text-[11px] leading-snug" style={{ color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p className={`leading-snug ${compact ? 'text-[10px]' : 'text-[11px]'}`} style={{ color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {short}
         </p>
       )}
@@ -571,7 +621,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
   )
 }
 
-function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId }) {
+function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true }) {
   const [dragOver, setDragOver] = useState(false)
   const sc = statusStyle(statusKey)
 
@@ -583,7 +633,7 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
 
   return (
     <div
-      className="flex flex-col min-w-[200px] flex-1 rounded-2xl transition-all"
+      className="flex flex-col min-w-[240px] sm:min-w-[260px] flex-1 rounded-2xl transition-all"
       style={{
         background: dragOver ? sc.bg : 'var(--bg-input)',
         border: dragOver ? `2px dashed ${sc.border}` : '1px solid var(--border)',
@@ -628,6 +678,8 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             isDragging={draggedId === r.id}
+            compact={compact}
+            showClientAccents={showClientAccents}
           />
         ))}
       </div>
@@ -1043,9 +1095,14 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                 </p>
               </div>
               {isViewShare && (
-                <p className="text-[11px]" style={{ color: selectedRecords.length > MAX_SHARED_VIEW_RECORDS ? '#ef4444' : 'var(--text-3)' }}>
-                  Public shares support up to {MAX_SHARED_VIEW_RECORDS} records per link.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-[11px]" style={{ color: selectedRecords.length > MAX_SHARED_VIEW_RECORDS ? '#ef4444' : 'var(--text-3)' }}>
+                    Public shares support up to {MAX_SHARED_VIEW_RECORDS} records per link.
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    Current layout, theme, density, and dashboard preferences will travel with this link.
+                  </p>
+                </div>
               )}
               <div className="flex items-center justify-end gap-2">
                 <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
@@ -1348,6 +1405,172 @@ function ColumnSelector({ columns, onChange, onClose }) {
   )
 }
 
+function AppearancePanel({
+  themeId,
+  density,
+  showDashboard,
+  showClientAccents,
+  statusOptions,
+  canManageStatuses,
+  onThemeChange,
+  onDensityChange,
+  onToggleDashboard,
+  onToggleClientAccents,
+  onAddStatusOption,
+  onClose,
+}) {
+  const [newStatus, setNewStatus] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  async function handleAddStatus() {
+    const trimmed = newStatus.trim()
+    if (!trimmed || !onAddStatusOption) return
+    setAdding(true)
+    try {
+      await onAddStatusOption(trimmed)
+      setNewStatus('')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="absolute right-0 top-full mt-1 z-30 w-[min(92vw,26rem)] rounded-2xl shadow-xl overflow-hidden"
+      style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between px-4 py-3"
+        style={{ borderBottom: '1px solid var(--border)' }}>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Customize Board</p>
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Appearance, density, and status options</p>
+        </div>
+        <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="p-4 space-y-4">
+        <div>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Accent theme</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {Object.values(THEME_PRESETS).map(theme => (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => onThemeChange(theme.id)}
+                className="rounded-xl px-3 py-2 text-left transition-all"
+                style={{
+                  background: themeId === theme.id ? theme.accentDim : 'var(--bg-input)',
+                  border: `1px solid ${themeId === theme.id ? theme.accentSoft : 'var(--border)'}`,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: theme.accent }} />
+                  <span className="text-xs font-semibold" style={{ color: themeId === theme.id ? theme.accent : 'var(--text-2)' }}>{theme.label}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Density</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'comfortable', label: 'Comfortable', hint: 'More whitespace and larger cards.' },
+              { id: 'compact', label: 'Compact', hint: 'Denser cards and tighter list rows.' },
+            ].map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => onDensityChange(opt.id)}
+                className="rounded-xl px-3 py-2 text-left transition-all"
+                style={{
+                  background: density === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  border: `1px solid ${density === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
+                }}
+              >
+                <p className="text-xs font-semibold" style={{ color: density === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {[
+            {
+              key: 'dashboard',
+              label: 'Show status dashboard',
+              hint: 'Keep the top status strip visible for quick filtering.',
+              active: showDashboard,
+              toggle: onToggleDashboard,
+            },
+            {
+              key: 'accents',
+              label: 'Highlight client accents',
+              hint: 'Show stronger client color bars and chips across cards.',
+              active: showClientAccents,
+              toggle: onToggleClientAccents,
+            },
+          ].map(item => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={item.toggle}
+              className="w-full flex items-start justify-between gap-3 rounded-xl px-3 py-3"
+              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+            >
+              <div className="text-left">
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{item.label}</p>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{item.hint}</p>
+              </div>
+              <span className="flex-shrink-0" style={{ color: item.active ? 'var(--accent)' : 'var(--text-3)' }}>
+                {item.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Status options</p>
+            <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{statusOptions.length} total</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {statusOptions.map(opt => {
+              const sc = statusStyle(opt)
+              return (
+                <span key={opt} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium"
+                  style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                  {opt}
+                </span>
+              )
+            })}
+          </div>
+          {canManageStatuses && (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                className="input-field flex-1 text-sm"
+                placeholder="Add a new status option"
+                value={newStatus}
+                onChange={e => setNewStatus(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddStatus() } }}
+              />
+              <button onClick={handleAddStatus} disabled={adding || !newStatus.trim()}
+                className="btn-primary text-sm px-3 py-2 flex items-center justify-center gap-1.5">
+                {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                Add status
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1362,13 +1585,28 @@ export default function StatusBoard() {
   const [error,       setError]       = useState(null)
 
   // ── View config (persisted in URL) ────────────────────────────────────────
-  const initConfig = getViewConfigFromUrl() || { type: 'card', filterClient: '', filterStatus: '', search: '', columns: DEFAULT_COLUMNS, advancedConditions: [] }
+  const initConfig = getViewConfigFromUrl() || {
+    type: 'card',
+    filterClient: '',
+    filterStatus: '',
+    search: '',
+    columns: DEFAULT_COLUMNS,
+    advancedConditions: [],
+    theme: 'cobalt',
+    density: 'comfortable',
+    showDashboard: true,
+    showClientAccents: true,
+  }
   const [viewType,      setViewType]      = useState(initConfig.type || 'card')
   const [filterClient,  setFilterClient]  = useState(initConfig.filterClient || '')
   const [filterStatus,  setFilterStatus]  = useState(initConfig.filterStatus || '')
   const [search,        setSearch]        = useState(initConfig.search || '')
   const [listColumns,   setListColumns]   = useState(initConfig.columns || DEFAULT_COLUMNS)
   const [advancedConditions, setAdvancedConditions] = useState(initConfig.advancedConditions || [])
+  const [themeId,       setThemeId]       = useState(initConfig.theme || 'cobalt')
+  const [density,       setDensity]       = useState(initConfig.density || 'comfortable')
+  const [showDashboard, setShowDashboard] = useState(initConfig.showDashboard !== false)
+  const [showClientAccents, setShowClientAccents] = useState(initConfig.showClientAccents !== false)
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [expandedIds,   setExpandedIds]   = useState(new Set())
@@ -1383,25 +1621,44 @@ export default function StatusBoard() {
   const [manageModal,   setManageModal]   = useState(false)
   const [showViews,     setShowViews]     = useState(false)
   const [showCols,      setShowCols]      = useState(false)
+  const [showSettings,  setShowSettings]  = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [copiedView,    setCopiedView]    = useState(false)
   const [shareViewModal, setShareViewModal] = useState(false)
   const [draggedId, setDraggedId] = useState('')
+  const [pendingStatusById, setPendingStatusById] = useState({})
 
   const statusOptions = useMemo(() => {
     const dynamic = statusPicklists?.Status?.options || []
     const merged = [...new Set([...dynamic, ...STATUS_OPTIONS])]
     return merged.length ? merged : STATUS_OPTIONS
   }, [statusPicklists])
+  const recordsForView = useMemo(
+    () => records.map(r => {
+      const pendingStatus = pendingStatusById[r.id]
+      return pendingStatus ? { ...r, fields: { ...r.fields, Status: pendingStatus } } : r
+    }),
+    [records, pendingStatusById]
+  )
 
   // ── Persist view config to URL on any change ──────────────────────────────
   useEffect(() => {
-    const cfg = { type: viewType, filterClient, filterStatus, search, columns: listColumns, advancedConditions }
+    const cfg = {
+      type: viewType,
+      filterClient,
+      filterStatus,
+      search,
+      columns: listColumns,
+      advancedConditions,
+      theme: themeId,
+      density,
+      showDashboard,
+      showClientAccents,
+    }
     const encoded = encodeViewConfig(cfg)
     const url = new URL(window.location.href)
     url.searchParams.set('v', encoded)
     window.history.replaceState({}, '', url.toString())
-  }, [viewType, filterClient, filterStatus, search, listColumns, advancedConditions])
+  }, [viewType, filterClient, filterStatus, search, listColumns, advancedConditions, themeId, density, showDashboard, showClientAccents])
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -1412,6 +1669,7 @@ export default function StatusBoard() {
         api.status.picklists.get().catch(() => ({})),
       ])
       setRecords(res.records || [])
+      setPendingStatusById({})
       setStatusPicklists(picklists || {})
     }
     catch (e) { setError(e.message || 'Failed to load') }
@@ -1420,7 +1678,7 @@ export default function StatusBoard() {
   useEffect(() => { load() }, [load])
 
   // ── Derived / filtered data ───────────────────────────────────────────────
-  const baseFiltered = records.filter(r => {
+  const baseFiltered = recordsForView.filter(r => {
     const f = r.fields || {}
     if (filterClient && f['Client'] !== filterClient) return false
     if (filterStatus && (f['Status'] || 'Not started') !== filterStatus) return false
@@ -1441,9 +1699,16 @@ export default function StatusBoard() {
     acc[cl].push(r)
     return acc
   }, {})
-  const allClients = [...new Set(records.map(r => r.fields?.['Client']).filter(Boolean))].sort()
-  const selectedRecords = records.filter(r => selectedIds.has(r.id))
+  const allClients = [...new Set(recordsForView.map(r => r.fields?.['Client']).filter(Boolean))].sort()
+  const selectedRecords = recordsForView.filter(r => selectedIds.has(r.id))
   const hasSelection = selectedIds.size > 0
+  const theme = resolveTheme(themeId)
+  const compact = density === 'compact'
+  const boardVars = useMemo(() => ({
+    '--accent': theme.accent,
+    '--accent-dim': theme.accentDim,
+    '--accent-soft': theme.accentSoft,
+  }), [theme])
 
   function toggleSelect(id) {
     setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -1468,8 +1733,12 @@ export default function StatusBoard() {
     if (cfg.filterClient !== undefined) setFilterClient(cfg.filterClient)
     if (cfg.filterStatus !== undefined) setFilterStatus(cfg.filterStatus)
     if (cfg.search !== undefined)       setSearch(cfg.search)
-    if (cfg.columns)      setListColumns(cfg.columns)
-    if (cfg.advancedConditions) setAdvancedConditions(cfg.advancedConditions)
+    if (cfg.columns !== undefined)      setListColumns(cfg.columns)
+    if (cfg.advancedConditions !== undefined) setAdvancedConditions(cfg.advancedConditions)
+    if (cfg.theme)        setThemeId(cfg.theme)
+    if (cfg.density)      setDensity(cfg.density)
+    if (cfg.showDashboard !== undefined) setShowDashboard(cfg.showDashboard !== false)
+    if (cfg.showClientAccents !== undefined) setShowClientAccents(cfg.showClientAccents !== false)
     clearSelection()
   }
 
@@ -1505,28 +1774,46 @@ export default function StatusBoard() {
     const id = e.dataTransfer.getData('text/plain')
     setDraggedId('')
     if (!id) return
-    const record = records.find(r => r.id === id)
+    const record = recordsForView.find(r => r.id === id)
     const fromStatus = record?.fields?.['Status'] || 'Not started'
     if (fromStatus === toStatus) return
 
-    // Optimistic update
-    setRecords(rs => rs.map(r => r.id === id ? { ...r, fields: { ...r.fields, Status: toStatus } } : r))
+    setPendingStatusById(prev => ({ ...prev, [id]: toStatus }))
     setUpdatingIds(s => { const n = new Set(s); n.add(id); return n })
 
     try {
-      await api.status.update(id, { status: toStatus })
+      const updated = await api.status.update(id, { status: toStatus })
+      setRecords(rs => rs.map(r => {
+        if (r.id !== id) return r
+        if (updated && updated.fields) return { ...r, ...updated, fields: updated.fields }
+        return { ...r, fields: { ...r.fields, Status: toStatus } }
+      }))
       showToast(`Moved to ${toStatus}`, 'success')
     } catch (err) {
-      // Revert
-      setRecords(rs => rs.map(r => r.id === id ? { ...r, fields: { ...r.fields, Status: fromStatus } } : r))
       showToast(err.message || 'Failed to update status', 'error')
     } finally {
+      setPendingStatusById(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
       setUpdatingIds(s => { const n = new Set(s); n.delete(id); return n })
     }
   }
 
   // ── Current view config (for saved views) ────────────────────────────────
-  const currentConfig = { type: viewType, filterClient, filterStatus, search, columns: listColumns, advancedConditions }
+  const currentConfig = {
+    type: viewType,
+    filterClient,
+    filterStatus,
+    search,
+    columns: listColumns,
+    advancedConditions,
+    theme: themeId,
+    density,
+    showDashboard,
+    showClientAccents,
+  }
 
   async function addStatusOption(option) {
     const trimmed = option.trim()
@@ -1542,21 +1829,25 @@ export default function StatusBoard() {
   }
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen" style={boardVars}>
       <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 pb-28">
 
         {/* ── Page header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(37,99,235,0.10)', border: '1px solid rgba(37,99,235,0.20)' }}>
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
               <Activity size={18} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
               <h1 className="text-xl font-bold leading-tight" style={{ color: 'var(--text-1)' }}>Status Board</h1>
               <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                {records.length} projects · {allClients.length} clients
-                {hasSelection && <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>· {selectedIds.size} selected</span>}
+                {loading
+                  ? 'Loading status data…'
+                  : error
+                    ? 'Status sync unavailable'
+                    : `${records.length} projects · ${allClients.length} clients`}
+                {hasSelection ? <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>· {selectedIds.size} selected</span> : null}
               </p>
             </div>
           </div>
@@ -1581,7 +1872,7 @@ export default function StatusBoard() {
             {/* Column selector (list view) */}
             {viewType === 'list' && (
               <div className="relative">
-                <button onClick={() => { setShowCols(s => !s); setShowViews(false) }}
+                <button onClick={() => { setShowCols(s => !s); setShowViews(false); setShowSettings(false) }}
                   className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <SlidersHorizontal size={12} /> Columns
                 </button>
@@ -1591,11 +1882,34 @@ export default function StatusBoard() {
 
             {/* Saved views */}
             <div className="relative">
-              <button onClick={() => { setShowViews(s => !s); setShowCols(false) }}
+              <button onClick={() => { setShowViews(s => !s); setShowCols(false); setShowSettings(false) }}
                 className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
                 <Bookmark size={12} /> Views
               </button>
               {showViews && <SavedViewsMenu currentConfig={currentConfig} onLoad={loadSavedView} onClose={() => setShowViews(false)} />}
+            </div>
+
+            <div className="relative">
+              <button onClick={() => { setShowSettings(s => !s); setShowViews(false); setShowCols(false) }}
+                className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
+                <SlidersHorizontal size={12} /> Customize
+              </button>
+              {showSettings && (
+                <AppearancePanel
+                  themeId={themeId}
+                  density={density}
+                  showDashboard={showDashboard}
+                  showClientAccents={showClientAccents}
+                  statusOptions={statusOptions}
+                  canManageStatuses={isEditor}
+                  onThemeChange={setThemeId}
+                  onDensityChange={setDensity}
+                  onToggleDashboard={() => setShowDashboard(v => !v)}
+                  onToggleClientAccents={() => setShowClientAccents(v => !v)}
+                  onAddStatusOption={isEditor ? addStatusOption : null}
+                  onClose={() => setShowSettings(false)}
+                />
+              )}
             </div>
 
             {/* Share view — creates a real public link via PG */}
@@ -1624,7 +1938,7 @@ export default function StatusBoard() {
         </div>
 
         {/* ── Status Dashboard ── */}
-        {!loading && records.length > 0 && (
+        {!loading && records.length > 0 && showDashboard && (
           <StatusDashboard records={records} statusOptions={statusOptions} filterStatus={filterStatus} onFilterStatus={setFilterStatus} />
         )}
 
@@ -1795,7 +2109,7 @@ export default function StatusBoard() {
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 ${compact ? 'gap-2' : 'gap-3'}`}>
                     {recs.map(r => (
                       <StatusCard
                         key={r.id}
@@ -1809,6 +2123,8 @@ export default function StatusBoard() {
                         expanded={expandedIds.has(r.id)}
                         onToggle={() => toggleExpand(r.id)}
                         deleting={deletingId === r.id}
+                        compact={compact}
+                        showClientAccents={showClientAccents}
                       />
                     ))}
                   </div>
@@ -1846,6 +2162,8 @@ export default function StatusBoard() {
                 onSelect={toggleSelect}
                 columns={listColumns}
                 deleting={deletingId === r.id}
+                compact={compact}
+                showClientAccents={showClientAccents}
               />
             ))}
             {/* Summary row */}
@@ -1868,7 +2186,7 @@ export default function StatusBoard() {
               </p>
             )}
             <div className="overflow-x-auto -mx-4 px-4 pb-4">
-              <div className="flex gap-3" style={{ minWidth: `${STATUS_OPTIONS.length * 220}px` }}>
+              <div className="flex gap-3" style={{ minWidth: `${statusOptions.length * 240}px` }}>
                 {statusOptions.map(statusKey => {
                   const recs = filtered.filter(r => (r.fields?.['Status'] || 'Not started') === statusKey)
                   return (
@@ -1886,6 +2204,8 @@ export default function StatusBoard() {
                       onDragStart={setDraggedId}
                       onDragEnd={() => setDraggedId('')}
                       draggedId={draggedId}
+                      compact={compact}
+                      showClientAccents={showClientAccents}
                     />
                   )
                 })}
@@ -1941,8 +2261,8 @@ export default function StatusBoard() {
       )}
 
       {/* ── Close dropdowns on outside click ── */}
-      {(showViews || showCols) && (
-        <div className="fixed inset-0 z-20" onClick={() => { setShowViews(false); setShowCols(false) }} />
+      {(showViews || showCols || showSettings) && (
+        <div className="fixed inset-0 z-20" onClick={() => { setShowViews(false); setShowCols(false); setShowSettings(false) }} />
       )}
 
       {/* ── Modals ── */}

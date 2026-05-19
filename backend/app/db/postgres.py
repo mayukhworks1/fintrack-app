@@ -76,6 +76,14 @@ CREATE TABLE IF NOT EXISTS login_sessions (
     country       VARCHAR(80),
     country_code  VARCHAR(4),
     city          VARCHAR(100),
+    region        VARCHAR(100),
+    isp           VARCHAR(150),
+    lat           DOUBLE PRECISION,
+    lon           DOUBLE PRECISION,
+    timezone      VARCHAR(60),
+    device_label  VARCHAR(255),
+    device_model  VARCHAR(120),
+    platform_version VARCHAR(40),
 
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     request_count INTEGER      NOT NULL DEFAULT 1
@@ -360,6 +368,12 @@ ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS country_code VARCHAR(4);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS city         VARCHAR(100);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS region       VARCHAR(100);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS isp          VARCHAR(150);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS lat          DOUBLE PRECISION;
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS lon          DOUBLE PRECISION;
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS timezone     VARCHAR(60);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
+ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
 """
 # ---------------------------------------------------------------------------
 

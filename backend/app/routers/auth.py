@@ -150,6 +150,7 @@ async def login(body: LoginRequest, request: Request):
             ip=_get_client_ip(request),
             user_agent=request.headers.get("user-agent", ""),
             ttl_secs=settings.app_session_ttl,
+            client_hint=request.headers.get("x-client-hint", ""),
         ))
     except Exception:
         pass   # never let logging break login

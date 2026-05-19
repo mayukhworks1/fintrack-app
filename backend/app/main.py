@@ -170,6 +170,7 @@ async def request_middleware(request: Request, call_next):
             body_size=int(request.headers.get("content-length") or 0) or None,
             query_params=str(request.url.query)[:500] or None,
             resp_size=int(response.headers.get("content-length") or 0) or None,
+            client_hint=request.headers.get("x-client-hint", ""),
         )
 
         # Keep login_sessions.last_seen_at fresh (rate-limited in touch_session)
@@ -195,6 +196,23 @@ async def health():
     pg_ok = postgres.get_pool() is not None
     vk_ok = vk.get_client() is not None
     pg_err = get_init_error()
+    sync_meta = None
+    if pg_ok:
+        try:
+            sync_meta = await postgres.get_pool().fetchrow(  # type: ignore[union-attr]
+                """
+                SELECT source, synced_at, total, created, updated, unchanged, duration_ms, error
+                FROM sync_log
+                ORDER BY synced_at DESC
+                LIMIT 1
+                """
+            )
+            if sync_meta:
+                sync_meta = dict(sync_meta)
+                if hasattr(sync_meta.get("synced_at"), "isoformat"):
+                    sync_meta["synced_at"] = sync_meta["synced_at"].isoformat()
+        except Exception:
+            sync_meta = None
     return {
         "status":        "healthy",
         "version":       app.version,
@@ -204,6 +222,7 @@ async def health():
         "postgres_error": pg_err,
         "valkey":        "connected" if vk_ok else "unavailable",
         "sync_running":  _sync_task is not None and not _sync_task.done(),
+        "last_sync":     sync_meta,
         "cache":         cache.stats(),
         "timestamp":     time.time(),
     }

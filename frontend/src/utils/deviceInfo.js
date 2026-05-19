@@ -28,6 +28,7 @@
 
 let _cached = null
 let _cachedPromise = null
+let _geoPromise = null
 
 function _safeGetGPU() {
   try {
@@ -92,6 +93,35 @@ async function _collect() {
   // ── GPU ──
   const gpu = _safeGetGPU()
 
+  // ── Browser geolocation (only if already granted, or if the browser
+  // exposes it without prompting). Never block the request path for long. ──
+  let browserGeo = null
+  try {
+    if (navigator.geolocation) {
+      let shouldTry = true
+      if (navigator.permissions?.query) {
+        try {
+          const perm = await navigator.permissions.query({ name: 'geolocation' })
+          shouldTry = perm.state === 'granted'
+        } catch {}
+      }
+      if (shouldTry) {
+        _geoPromise ||= new Promise(resolve => {
+          navigator.geolocation.getCurrentPosition(
+            pos => resolve({
+              lat: Number(pos.coords.latitude?.toFixed?.(6) ?? pos.coords.latitude),
+              lon: Number(pos.coords.longitude?.toFixed?.(6) ?? pos.coords.longitude),
+              accuracyM: typeof pos.coords.accuracy === 'number' ? Math.round(pos.coords.accuracy) : null,
+            }),
+            () => resolve(null),
+            { enableHighAccuracy: false, timeout: 1800, maximumAge: 5 * 60 * 1000 }
+          )
+        })
+        browserGeo = await _geoPromise
+      }
+    }
+  } catch {}
+
   return {
     // UA Client Hints (or null if unsupported)
     ch,
@@ -111,6 +141,7 @@ async function _collect() {
     gpu,
     network,
     downlinkMbps: downlink,
+    browserGeo,
   }
 }
 

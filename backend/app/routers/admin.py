@@ -469,7 +469,8 @@ async def admin_sessions(
 
     base_query = f"""
         SELECT id, token_hint, role, created_at, last_seen_at, expires_at,
-               ip, os, browser, device, country, country_code, city,
+               ip, os, browser, device, country, country_code, city, region, isp,
+               lat, lon, timezone, device_label, device_model, platform_version,
                is_active, request_count,
                CASE
                  WHEN NOT is_active OR expires_at <= NOW()

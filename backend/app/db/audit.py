@@ -268,7 +268,26 @@ async def _enrich_one(item: dict) -> dict:
     ip  = item.get("ip", "") or ""
     os_str, browser, device = parse_ua(ua)
     geo = await geo_lookup(ip)
-    return {**item, "os_str": os_str, "browser": browser, "device": device, "geo": geo}
+    hint = parse_client_hint(item.get("client_hint", "") or "")
+    device_label = build_device_label(os_str, browser, device, hint)
+    browser_geo = hint.get("browserGeo") or {}
+    extra = dict(item.get("extra") or {})
+    extra.update({
+      "device_label": device_label or None,
+      "device_model": ((hint.get("ch") or {}).get("model") or None),
+      "platform_version": ((hint.get("ch") or {}).get("platformVersion") or None),
+      "timezone": hint.get("timezone") or None,
+      "language": hint.get("language") or hint.get("locale") or None,
+      "network": hint.get("network") or None,
+      "screen": hint.get("screen") or None,
+      "viewport": hint.get("viewport") or None,
+      "gpu": hint.get("gpu") or None,
+      "cores": hint.get("cores") if isinstance(hint.get("cores"), int) else None,
+      "memory_gb": hint.get("memoryGb") if isinstance(hint.get("memoryGb"), (int, float)) else None,
+      "browser_geo": browser_geo if browser_geo else None,
+      "geo_source": "browser" if browser_geo else "ip",
+    })
+    return {**item, "os_str": os_str, "browser": browser, "device": device, "geo": geo, "hint": hint, "extra": extra}
 
 
 async def _batch_insert_audit(pool, items: list[dict]) -> None:
@@ -301,9 +320,14 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 geo.get("region",       "")[:100] or None,
                 geo.get("city",         "")[:100] or None,
                 geo.get("isp",          "")[:150] or None,
-                # Extended geo — coordinates, timezone, org (v2.4)
-                geo.get("lat")  if isinstance(geo.get("lat"),  (int, float)) else None,
-                geo.get("lon")  if isinstance(geo.get("lon"),  (int, float)) else None,
+                # Extended geo — prefer browser geolocation when the user has
+                # granted it, otherwise fall back to IP-derived geo.
+                (item.get("extra", {}).get("browser_geo", {}) or {}).get("lat")
+                  if isinstance((item.get("extra", {}).get("browser_geo", {}) or {}).get("lat"), (int, float))
+                  else (geo.get("lat") if isinstance(geo.get("lat"),  (int, float)) else None),
+                (item.get("extra", {}).get("browser_geo", {}) or {}).get("lon")
+                  if isinstance((item.get("extra", {}).get("browser_geo", {}) or {}).get("lon"), (int, float))
+                  else (geo.get("lon") if isinstance(geo.get("lon"),  (int, float)) else None),
                 (geo.get("timezone") or "")[:50]  or None,
                 (geo.get("org")      or "")[:200] or None,
                 (item.get("referer")      or "")[:500] or None,
@@ -482,6 +506,7 @@ async def log_login(
     ip:         str,
     user_agent: str,
     ttl_secs:   int,
+    client_hint: str = "",
 ) -> None:
     """
     Record a new login in login_sessions.
@@ -494,6 +519,10 @@ async def log_login(
     try:
         os_str, browser, device = parse_ua(user_agent or "")
         geo = await geo_lookup(ip or "")
+        hint = parse_client_hint(client_hint or "")
+        ch = hint.get("ch") or {}
+        device_label = build_device_label(os_str, browser, device, hint)
+        browser_geo = hint.get("browserGeo") or {}
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_secs)
 
         await pool.execute(
@@ -501,11 +530,13 @@ async def log_login(
             INSERT INTO login_sessions (
                 token_hint, role, expires_at,
                 ip, user_agent, os, browser, device,
-                country, country_code, city
+                country, country_code, city, region, isp, lat, lon, timezone,
+                device_label, device_model, platform_version
             ) VALUES (
                 $1, $2, $3,
                 $4, $5, $6, $7, $8,
-                $9, $10, $11
+                $9, $10, $11, $12, $13, $14, $15, $16,
+                $17, $18, $19
             )
             """,
             token_hint[:20],
@@ -519,6 +550,14 @@ async def log_login(
             geo.get("country", "")[:80]     or None,
             geo.get("country_code", "")[:4] or None,
             geo.get("city", "")[:100]       or None,
+            geo.get("region", "")[:100]     or None,
+            (geo.get("isp") or geo.get("org") or "")[:150] or None,
+            browser_geo.get("lat") if isinstance(browser_geo.get("lat"), (int, float)) else (geo.get("lat") if isinstance(geo.get("lat"), (int, float)) else None),
+            browser_geo.get("lon") if isinstance(browser_geo.get("lon"), (int, float)) else (geo.get("lon") if isinstance(geo.get("lon"), (int, float)) else None),
+            (hint.get("timezone") or geo.get("timezone") or "")[:60] or None,
+            (device_label or "")[:255] or None,
+            (ch.get("model") or "")[:120] or None,
+            (ch.get("platformVersion") or "")[:40] or None,
         )
     except Exception as exc:
         logger.warning("audit.log_login failed: %s", exc)

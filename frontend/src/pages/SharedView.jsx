@@ -14,6 +14,15 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 
+const THEME_PRESETS = {
+  cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
+  emerald: { accent: '#059669', accentDim: 'rgba(5,150,105,0.12)', accentSoft: 'rgba(5,150,105,0.24)' },
+  amber: { accent: '#d97706', accentDim: 'rgba(217,119,6,0.12)', accentSoft: 'rgba(217,119,6,0.24)' },
+  rose: { accent: '#e11d48', accentDim: 'rgba(225,29,72,0.12)', accentSoft: 'rgba(225,29,72,0.24)' },
+  slate: { accent: '#475569', accentDim: 'rgba(71,85,105,0.12)', accentSoft: 'rgba(71,85,105,0.24)' },
+}
+function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
+
 function fmtDate(iso) {
   if (!iso) return ''
   try {
@@ -99,6 +108,52 @@ function SnapshotSummary({ viewConfig, accessMode }) {
           {chip}
         </span>
       ))}
+    </div>
+  )
+}
+
+function PublicStatusDashboard({ records, statusOptions, filterStatus, onFilterStatus, accent }) {
+  const total = records.length
+  const counts = statusOptions.reduce((acc, s) => {
+    acc[s] = records.filter(r => (r.fields?.['Status'] || 'Not started') === s).length
+    return acc
+  }, {})
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button
+        onClick={() => onFilterStatus('')}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left"
+        style={{
+          background: !filterStatus ? accent.accent : '#ffffff',
+          border: !filterStatus ? `1px solid ${accent.accent}` : '1px solid #e5e7eb',
+          color: !filterStatus ? '#ffffff' : '#475569',
+        }}
+      >
+        <span className="text-lg font-bold leading-none">{total}</span>
+        <span className="text-xs font-semibold">All Projects</span>
+      </button>
+      {statusOptions.map(s => {
+        const st = statusStyle(s)
+        const active = filterStatus === s
+        return (
+          <button
+            key={s}
+            onClick={() => onFilterStatus(active ? '' : s)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left"
+            style={{
+              background: active ? st.bg : '#ffffff',
+              border: active ? `1px solid ${st.border}` : '1px solid #e5e7eb',
+            }}
+          >
+            <span className="text-lg font-bold leading-none" style={{ color: st.text }}>{counts[s] || 0}</span>
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
+              <span className="text-xs font-semibold" style={{ color: active ? st.text : '#64748b' }}>{s}</span>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -196,7 +251,7 @@ function PublicEditModal({ record, statusOptions, saving, onClose, onSave }) {
   )
 }
 
-function PublicStatusCard({ record, canEdit, onEdit }) {
+function PublicStatusCard({ record, canEdit, onEdit, compact = false, showClientAccents = true }) {
   const [expanded, setExpanded] = useState(false)
   const f = record.fields || {}
   const client = f['Client'] || ''
@@ -210,8 +265,8 @@ function PublicStatusCard({ record, canEdit, onEdit }) {
   return (
     <div className="rounded-2xl overflow-hidden"
       style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-      <div className="h-1" style={{ background: clr }} />
-      <div className="p-5">
+      {showClientAccents && <div className="h-1" style={{ background: clr }} />}
+      <div className={compact ? 'p-4' : 'p-5'}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="text-base font-bold text-gray-900 leading-snug">{project}</h3>
           <div className="flex items-center gap-2">
@@ -239,7 +294,7 @@ function PublicStatusCard({ record, canEdit, onEdit }) {
   )
 }
 
-function CardView({ records, canEdit, onEdit }) {
+function CardView({ records, canEdit, onEdit, compact = false, showClientAccents = true }) {
   const grouped = records.reduce((acc, r) => {
     const cl = r.fields?.['Client'] || 'Unknown'
     if (!acc[cl]) acc[cl] = []
@@ -255,14 +310,18 @@ function CardView({ records, canEdit, onEdit }) {
           <section key={client}>
             <div className="flex items-center gap-3 mb-4">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold"
-                style={{ background: hexRgba(clrHex, 0.1), border: `1.5px solid ${hexRgba(clrHex, 0.3)}`, color: clrHex }}>
+                style={{
+                  background: showClientAccents ? hexRgba(clrHex, 0.1) : '#ffffff',
+                  border: `1.5px solid ${showClientAccents ? hexRgba(clrHex, 0.3) : '#e5e7eb'}`,
+                  color: showClientAccents ? clrHex : '#334155',
+                }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: clrHex }} />
                 {client}
               </span>
               <span className="text-sm text-gray-400">{recs.length} project{recs.length !== 1 ? 's' : ''}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {recs.map(r => <PublicStatusCard key={r.id} record={r} canEdit={canEdit} onEdit={onEdit} />)}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${compact ? 'gap-3' : 'gap-4'}`}>
+              {recs.map(r => <PublicStatusCard key={r.id} record={r} canEdit={canEdit} onEdit={onEdit} compact={compact} showClientAccents={showClientAccents} />)}
             </div>
           </section>
         )
@@ -271,7 +330,7 @@ function CardView({ records, canEdit, onEdit }) {
   )
 }
 
-function ListView({ records, columns, canEdit, onEdit }) {
+function ListView({ records, columns, canEdit, onEdit, showClientAccents = true }) {
   const cols = (columns || DEFAULT_COLS)
     .map(c => COLUMN_ALIASES[c] || c)
     .filter(c => ALL_COLS.includes(c))
@@ -299,7 +358,7 @@ function ListView({ records, columns, canEdit, onEdit }) {
                   <td key={col} className="px-4 py-3 align-top">
                     {col === 'Client' && (
                       <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: hexRgba(clr, 0.1), color: clr }}>
+                        style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f8fafc', color: showClientAccents ? clr : '#475569' }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: clr }} />
                         {f['Client'] || '—'}
                       </span>
@@ -327,7 +386,7 @@ function ListView({ records, columns, canEdit, onEdit }) {
   )
 }
 
-function BoardView({ records, statusOptions, canEdit, onEdit, onDropStatus }) {
+function BoardView({ records, statusOptions, canEdit, onEdit, onDropStatus, compact = false, showClientAccents = true }) {
   const [draggedId, setDraggedId] = useState('')
   const byStatus = statusOptions.reduce((acc, s) => ({ ...acc, [s]: [] }), {})
   records.forEach(r => {
@@ -344,7 +403,7 @@ function BoardView({ records, statusOptions, canEdit, onEdit, onDropStatus }) {
         return (
           <div
             key={status}
-            className="flex-shrink-0 w-72 rounded-2xl overflow-hidden"
+            className="flex-shrink-0 w-[250px] sm:w-72 rounded-2xl overflow-hidden"
             style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
             onDragOver={e => { if (canEdit) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
             onDrop={e => {
@@ -374,9 +433,9 @@ function BoardView({ records, statusOptions, canEdit, onEdit, onDropStatus }) {
                     style={{ background: draggedId === r.id ? '#eef2ff' : '#f8fafc', border: '1px solid #e5e7eb' }}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-xs font-semibold mb-1" style={{ color: clr }}>{f['Client'] || ''}</div>
+                        <div className="text-xs font-semibold mb-1" style={{ color: showClientAccents ? clr : '#64748b' }}>{f['Client'] || ''}</div>
                         <div className="text-sm font-bold text-gray-900 mb-1 leading-tight">{f['Project'] || 'Unknown Project'}</div>
-                        {f['Short Status'] && <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{f['Short Status']}</p>}
+                        {f['Short Status'] && <p className={`${compact ? 'text-[11px]' : 'text-xs'} text-gray-500 leading-relaxed line-clamp-2`}>{f['Short Status']}</p>}
                       </div>
                       <div className="flex items-center gap-1">
                         {canEdit && (
@@ -426,6 +485,7 @@ export default function SharedView() {
   const [viewType, setViewType] = useState('card')
   const [editRecord, setEditRecord] = useState(null)
   const [savingRecordId, setSavingRecordId] = useState('')
+  const [pendingStatusById, setPendingStatusById] = useState({})
 
   const load = async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true)
@@ -435,6 +495,7 @@ export default function SharedView() {
       const res = await api.sharedViews.publicGet(token)
       setData(res)
       setRecords(res.records || [])
+      setPendingStatusById({})
       const vc = res.view_config || {}
       setViewType(vc.type || 'card')
       if (!search && vc.search) setSearch(vc.search)
@@ -454,6 +515,22 @@ export default function SharedView() {
 
   const canEdit = (data?.access_mode || 'read') === 'edit'
   const vc = data?.view_config || {}
+  const theme = resolveTheme(vc.theme)
+  const compact = vc.density === 'compact'
+  const showDashboard = vc.showDashboard !== false
+  const showClientAccents = vc.showClientAccents !== false
+  const accentStyle = {
+    '--share-accent': theme.accent,
+    '--share-accent-dim': theme.accentDim,
+    '--share-accent-soft': theme.accentSoft,
+  }
+  const recordsForView = useMemo(
+    () => records.map(r => {
+      const pendingStatus = pendingStatusById[r.id]
+      return pendingStatus ? { ...r, fields: { ...r.fields, Status: pendingStatus } } : r
+    }),
+    [records, pendingStatusById]
+  )
   const listColumns = useMemo(() => {
     const raw = vc.columns || DEFAULT_COLS
     return raw.map(c => COLUMN_ALIASES[c] || c).filter(c => ALL_COLS.includes(c))
@@ -464,13 +541,13 @@ export default function SharedView() {
     [records]
   )
   const statusOptions = useMemo(() => {
-    const dynamic = [...new Set(records.map(r => r.fields?.['Status']).filter(Boolean))]
+    const dynamic = [...new Set(recordsForView.map(r => r.fields?.['Status']).filter(Boolean))]
     const ordered = [...DEFAULT_BOARD_ORDER.filter(s => dynamic.includes(s)), ...dynamic.filter(s => !DEFAULT_BOARD_ORDER.includes(s))]
     return ordered.length ? ordered : DEFAULT_BOARD_ORDER
-  }, [records])
+  }, [recordsForView])
 
   const filtered = useMemo(() => {
-    return records.filter(r => {
+    return recordsForView.filter(r => {
       const f = r.fields || {}
       if (filterClient && f['Client'] !== filterClient) return false
       if (filterStatus && (f['Status'] || 'Not started') !== filterStatus) return false
@@ -481,7 +558,7 @@ export default function SharedView() {
       }
       return true
     })
-  }, [records, filterClient, filterStatus, search])
+  }, [recordsForView, filterClient, filterStatus, search])
 
   async function saveRecordChanges(record, patch) {
     setSavingRecordId(record.id)
@@ -510,16 +587,23 @@ export default function SharedView() {
 
   async function moveRecordToStatus(recordId, status) {
     const record = records.find(r => r.id === recordId)
+    const liveRecord = recordsForView.find(r => r.id === recordId) || record
     if (!record) return
-    const fromStatus = record.fields?.['Status'] || 'Not started'
+    const fromStatus = liveRecord?.fields?.['Status'] || 'Not started'
     if (fromStatus === status) return
 
-    setRecords(rs => rs.map(r => r.id === recordId ? { ...r, fields: { ...r.fields, Status: status } } : r))
+    setPendingStatusById(prev => ({ ...prev, [recordId]: status }))
     try {
       await api.sharedViews.publicUpdate(token, recordId, { status })
+      setRecords(rs => rs.map(r => r.id === recordId ? { ...r, fields: { ...r.fields, Status: status } } : r))
     } catch (e) {
-      setRecords(rs => rs.map(r => r.id === recordId ? { ...r, fields: { ...r.fields, Status: fromStatus } } : r))
       setSaveError(e.message || 'Failed to move status')
+    } finally {
+      setPendingStatusById(prev => {
+        const next = { ...prev }
+        delete next[recordId]
+        return next
+      })
     }
   }
 
@@ -561,19 +645,19 @@ export default function SharedView() {
   const expired = isExpired(expiresAt)
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc' }}>
+    <div className="min-h-screen" style={{ background: '#f8fafc', ...accentStyle }}>
       <header style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb' }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(37,99,235,0.1)', border: '1px solid rgba(37,99,235,0.2)' }}>
-                <Activity size={18} style={{ color: '#3b82f6' }} />
+                style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
+                <Activity size={18} style={{ color: theme.accent }} />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {records.length} project update{records.length !== 1 ? 's' : ''}
+                  {filtered.length} shown of {records.length} project update{records.length !== 1 ? 's' : ''} · {allClients.length} clients
                   {createdAt && ` · ${fmtDate(createdAt)}`}
                 </p>
               </div>
@@ -585,6 +669,16 @@ export default function SharedView() {
           </div>
 
           <SnapshotSummary viewConfig={vc} accessMode={data?.access_mode || 'read'} />
+
+          {showDashboard && records.length > 0 && (
+            <PublicStatusDashboard
+              records={records}
+              statusOptions={statusOptions}
+              filterStatus={filterStatus}
+              onFilterStatus={setFilterStatus}
+              accent={theme}
+            />
+          )}
 
           <div className="flex flex-col lg:flex-row gap-2">
             <div className="relative flex-1">
@@ -625,8 +719,8 @@ export default function SharedView() {
                 <button
                   key={id}
                   onClick={() => setViewType(id)}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
-                  style={{ background: viewType === id ? '#ffffff' : 'transparent', color: viewType === id ? '#2563eb' : '#64748b' }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
+                  style={{ background: viewType === id ? '#ffffff' : 'transparent', color: viewType === id ? theme.accent : '#64748b' }}
                 >
                   <Icon size={12} />
                   <span className="hidden sm:inline">{label}</span>
@@ -665,9 +759,9 @@ export default function SharedView() {
           </div>
         ) : (
           <>
-            {viewType === 'card' && <CardView records={filtered} canEdit={canEdit} onEdit={setEditRecord} />}
-            {viewType === 'list' && <ListView records={filtered} columns={listColumns} canEdit={canEdit} onEdit={setEditRecord} />}
-            {viewType === 'board' && <BoardView records={filtered} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDropStatus={moveRecordToStatus} />}
+            {viewType === 'card' && <CardView records={filtered} canEdit={canEdit} onEdit={setEditRecord} compact={compact} showClientAccents={showClientAccents} />}
+            {viewType === 'list' && <ListView records={filtered} columns={listColumns} canEdit={canEdit} onEdit={setEditRecord} showClientAccents={showClientAccents} />}
+            {viewType === 'board' && <BoardView records={filtered} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} />}
           </>
         )}
       </main>
