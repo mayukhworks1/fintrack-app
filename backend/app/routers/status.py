@@ -137,6 +137,10 @@ class AIUpdateRequest(BaseModel):
     extra_context: Optional[str] = None
 
 
+class AddOptionRequest(BaseModel):
+    option: str
+
+
 @router.post("/ai-update")
 async def generate_ai_status_update(
     request: Request,
@@ -176,6 +180,31 @@ async def generate_ai_status_update(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI update failed: {e}")
+
+
+@router.get("/picklists")
+async def get_status_picklists(_auth=Depends(require_auth)):
+    try:
+        return await StatusService().get_picklists()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/picklists/{field_name}")
+async def add_status_picklist_option(
+    field_name: str,
+    body: AddOptionRequest,
+    _role: str = Depends(require_editor),
+):
+    try:
+        option = body.option.strip()
+        if not option:
+            raise ValueError("Option is required")
+        return await StatusService().add_picklist_option(field_name, option)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── DELETE ─────────────────────────────────────────────────────────────────

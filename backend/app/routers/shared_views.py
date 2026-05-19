@@ -26,6 +26,7 @@ class SharedViewCreate(BaseModel):
     title: Optional[str] = None
     record_ids: list[str]
     expires_hours: Optional[int] = None   # None = never expires
+    access_mode: Optional[str] = "read"   # read | edit
     view_config: Optional[dict] = None    # view type, columns etc — stored in PG, sent to public viewer
 
 
@@ -33,6 +34,13 @@ class SharedViewUpdate(BaseModel):
     title: Optional[str] = None
     is_active: Optional[bool] = None
     expires_hours: Optional[int] = None   # -1 = remove expiry
+    access_mode: Optional[str] = None
+
+
+class PublicSharedViewUpdate(BaseModel):
+    status: Optional[str] = None
+    short_status: Optional[str] = None
+    current_status_detailed: Optional[str] = None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -75,6 +83,7 @@ async def create_shared_view(
             role=role,
             ip=_ip(request),
             expires_at=_expiry(body.expires_hours),
+            access_mode=body.access_mode or "read",
             view_config=body.view_config,
         )
         return view
@@ -120,11 +129,16 @@ async def update_shared_view(
             data["expires_at"] = None
         else:
             data["expires_at"] = _expiry(body.expires_hours)
+    if body.access_mode is not None:
+        data["access_mode"] = body.access_mode
 
-    view = await svc.update(token, data)
-    if not view:
-        raise HTTPException(status_code=404, detail="Shared view not found")
-    return view
+    try:
+        view = await svc.update(token, data)
+        if not view:
+            raise HTTPException(status_code=404, detail="Shared view not found")
+        return view
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/api/shared-views/{token}", status_code=204)
@@ -161,6 +175,40 @@ async def get_public_view(token: str, request: Request):
         return await svc.get_public_data(token, request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/api/public/view/{token}/records/{record_id}")
+async def update_public_view_record(
+    token: str,
+    record_id: str,
+    request: Request,
+    body: PublicSharedViewUpdate,
+):
+    from ..db.valkey import rate_check
+
+    ip = _ip(request)
+    allowed, _ = await rate_check(f"public-share:{token}:{ip}", limit=30, window_sec=60)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many updates from this link. Try again shortly.")
+
+    fields = {}
+    if body.status is not None:
+        fields["Status"] = body.status
+    if body.short_status is not None:
+        fields["Short Status"] = body.short_status
+    if body.current_status_detailed is not None:
+        fields["Current Status (Detailed)"] = body.current_status_detailed
+
+    try:
+        return await SharedViewService().update_public_record(token, record_id, fields)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

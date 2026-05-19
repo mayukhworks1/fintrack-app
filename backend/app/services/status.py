@@ -64,6 +64,12 @@ class StatusService:
     def _record_url(self) -> str:
         return f"{self.base_url}/api/table/{self.table_id}/record"
 
+    @property
+    def _field_url(self) -> str:
+        return f"{self.base_url}/api/table/{self.table_id}/field"
+
+    PICKLIST_FIELDS = ["Status"]
+
     # ── PG mirror read (fast path) ──────────────────────────────────────────
 
     async def list_all_from_pg(
@@ -187,6 +193,78 @@ class StatusService:
             r.raise_for_status()
             return r.json()
 
+    async def get_picklists(self) -> dict[str, Any]:
+        async def _load():
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.get(self._field_url, headers=self._headers)
+                res.raise_for_status()
+                fields = res.json()
+
+            result = {}
+            for field in fields:
+                name = field.get("name", "")
+                if name in self.PICKLIST_FIELDS and field.get("type") == "singleSelect":
+                    choices = field.get("options", {}).get("choices", [])
+                    result[name] = {
+                        "field_id": field.get("id"),
+                        "options": [c["name"] for c in choices],
+                        "_choices": choices,
+                        "_field": field,
+                    }
+            return result
+
+        return await cache.get_or_set("status:picklists", ttl=_TTL_STATUS, loader=_load)
+
+    def _field_convert_payload(self, field: dict, updated_choices: list[dict]) -> dict:
+        payload = {
+            "type": field["type"],
+            "name": field["name"],
+            "options": {
+                **(field.get("options") or {}),
+                "choices": updated_choices,
+            },
+        }
+        for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
+            if key in field:
+                payload[key] = field.get(key)
+        for key in ("unique", "notNull", "isLookup", "isConditionalLookup"):
+            if key in field:
+                payload[key] = bool(field.get(key))
+        return payload
+
+    async def add_picklist_option(self, field_name: str, new_option: str) -> dict[str, Any]:
+        picklists = await self.get_picklists()
+        if field_name not in picklists:
+            raise ValueError(f"Unknown picklist field: {field_name}")
+
+        meta = picklists[field_name]
+        field_id = meta["field_id"]
+        field = meta["_field"]
+        existing = meta["_choices"]
+
+        if new_option in [c["name"] for c in existing]:
+            return {"options": [c["name"] for c in existing]}
+
+        updated_choices = existing + [{"name": new_option}]
+        url = f"{self._field_url}/{field_id}/convert"
+        body = self._field_convert_payload(field, updated_choices)
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.put(url, json=body, headers=self._headers)
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise ValueError(
+                        "This Teable token can edit status records but cannot change dropdown schema. "
+                        "Adding new status options requires a token with field/schema edit permission."
+                    ) from e
+                raise
+
+        cache.bust(prefix="status:picklists")
+        updated = await self.get_picklists()
+        return {"options": updated.get(field_name, {}).get("options", [])}
+
     # ── Write operations ────────────────────────────────────────────────────
 
     async def create_record(
@@ -225,6 +303,7 @@ class StatusService:
 
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
+        cache.bust(prefix="status:picklists")
         return new_record
 
     async def update_record(

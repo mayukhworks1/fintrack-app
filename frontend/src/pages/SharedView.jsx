@@ -1,21 +1,19 @@
 /**
- * SharedView — public manager view page
+ * SharedView — public status workspace
  *
  * Route: /view/:token  (no auth required)
- * Fetches status records via GET /api/public/view/:token
- * Renders in the view type stored in view_config (card / list / board)
- * Falls back to card view if view_config is absent.
+ * Fetches records via GET /api/public/view/:token
+ * Supports read-only and edit-capable links depending on access_mode.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  Activity, AlertCircle, Loader2, Clock,
-  Shield, ChevronDown, ChevronUp,
+  Activity, AlertCircle, Clock, Columns, Eye, GripVertical,
+  LayoutGrid, List, Loader2, Pencil, RefreshCw, Search, Shield, X,
 } from 'lucide-react'
 import { api } from '../services/api'
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
   if (!iso) return ''
   try {
@@ -39,7 +37,6 @@ function isExpired(iso) {
   return new Date(iso) < new Date()
 }
 
-// ── Client colour palette ──────────────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316']
 const _cmap = {}
 function clientColor(name) {
@@ -47,19 +44,27 @@ function clientColor(name) {
   return _cmap[name]
 }
 function hexRgba(hex, a) {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
   return `rgba(${r},${g},${b},${a})`
 }
 
-// ── Status colours ─────────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  'Completed':      { bg: 'rgba(16,185,129,0.12)',  border: 'rgba(16,185,129,0.35)',  dot: '#10b981', text: '#059669' },
-  'In progress':    { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  dot: '#3b82f6', text: '#2563eb' },
-  'On Hold':        { bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)',  dot: '#f59e0b', text: '#d97706' },
-  'Input Pending':  { bg: 'rgba(249,115,22,0.12)',  border: 'rgba(249,115,22,0.35)',  dot: '#f97316', text: '#ea580c' },
-  'Not started':    { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)',  dot: '#94a3b8', text: '#64748b' },
+  'Completed':     { bg: 'rgba(16,185,129,0.12)',  border: 'rgba(16,185,129,0.35)',  dot: '#10b981', text: '#059669' },
+  'In progress':   { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  dot: '#3b82f6', text: '#2563eb' },
+  'On Hold':       { bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)',  dot: '#f59e0b', text: '#d97706' },
+  'Input Pending': { bg: 'rgba(249,115,22,0.12)',  border: 'rgba(249,115,22,0.35)',  dot: '#f97316', text: '#ea580c' },
+  'Not started':   { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.30)', dot: '#94a3b8', text: '#64748b' },
 }
-const BOARD_ORDER = ['In progress','Input Pending','On Hold','Not started','Completed']
+const DEFAULT_BOARD_ORDER = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
+const DEFAULT_COLS = ['Client', 'Project', 'Status', 'Short Status']
+const ALL_COLS = ['Client', 'Project', 'Status', 'Short Status', 'Current Status (Detailed)', 'Last Modified']
+const COLUMN_ALIASES = {
+  'Detailed Status': 'Current Status (Detailed)',
+  'Current Status (Detailed)': 'Current Status (Detailed)',
+  'Last Modified': 'Last Modified',
+}
 
 function statusStyle(s) {
   return STATUS_CFG[s] || { bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', dot: '#94a3b8', text: '#64748b' }
@@ -77,16 +82,129 @@ function StatusBadge({ status }) {
   )
 }
 
-// ── Card (default view) ────────────────────────────────────────────────────────
-function PublicStatusCard({ record }) {
+function SnapshotSummary({ viewConfig, accessMode }) {
+  const chips = [
+    viewConfig?.filterClient ? `Shared client: ${viewConfig.filterClient}` : null,
+    viewConfig?.filterStatus ? `Shared status: ${viewConfig.filterStatus}` : null,
+    viewConfig?.search ? `Shared search: "${viewConfig.search}"` : null,
+    accessMode === 'edit' ? 'Link permission: can edit' : 'Link permission: read only',
+  ].filter(Boolean)
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {chips.map(chip => (
+        <span key={chip}
+          className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
+          style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#475569' }}>
+          {chip}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function PublicEditModal({ record, statusOptions, saving, onClose, onSave }) {
+  const fields = record?.fields || {}
+  const [form, setForm] = useState({
+    status: fields['Status'] || '',
+    short_status: fields['Short Status'] || '',
+    current_status_detailed: fields['Current Status (Detailed)'] || '',
+  })
+
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  if (!record) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
+        style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh', overflow: 'auto' }}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0 z-10"
+          style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Update Status</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{fields['Client']} · {fields['Project']}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600"><X size={16} /></button>
+        </div>
+
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            onSave(form)
+          }}
+          className="px-5 py-4 space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-semibold mb-2 text-gray-700">Status</label>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+              {statusOptions.map(opt => {
+                const sc = statusStyle(opt)
+                const active = form.status === opt
+                return (
+                  <button key={opt} type="button" onClick={() => setForm(f => ({ ...f, status: active ? '' : opt }))}
+                    className="py-2 px-1 rounded-xl text-[11px] font-semibold text-center transition-all leading-tight"
+                    style={{
+                      background: active ? sc.bg : '#f8fafc',
+                      color: active ? sc.color : '#64748b',
+                      border: `1.5px solid ${active ? sc.border : '#e5e7eb'}`,
+                    }}>
+                    {opt}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-gray-700">Headline</label>
+            <input
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: '#e5e7eb' }}
+              value={form.short_status}
+              onChange={e => setForm(f => ({ ...f, short_status: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-gray-700">Detail</label>
+            <textarea
+              rows={5}
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none resize-none"
+              style={{ borderColor: '#e5e7eb' }}
+              value={form.current_status_detailed}
+              onChange={e => setForm(f => ({ ...f, current_status_detailed: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e5e7eb', color: '#475569' }}>Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function PublicStatusCard({ record, canEdit, onEdit }) {
   const [expanded, setExpanded] = useState(false)
-  const f       = record.fields || {}
-  const client  = f['Client']  || ''
+  const f = record.fields || {}
+  const client = f['Client'] || ''
   const project = f['Project'] || 'Unknown Project'
-  const short   = f['Short Status'] || ''
-  const detail  = f['Current Status (Detailed)'] || ''
-  const status  = f['Status'] || ''
-  const clr     = clientColor(client)
+  const short = f['Short Status'] || ''
+  const detail = f['Current Status (Detailed)'] || ''
+  const status = f['Status'] || ''
+  const clr = clientColor(client)
   const hasDetail = detail.trim() && detail.trim() !== short.trim()
 
   return (
@@ -96,19 +214,23 @@ function PublicStatusCard({ record }) {
       <div className="p-5">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="text-base font-bold text-gray-900 leading-snug">{project}</h3>
-          {status && <StatusBadge status={status} />}
+          <div className="flex items-center gap-2">
+            {status && <StatusBadge status={status} />}
+            {canEdit && (
+              <button onClick={() => onEdit(record)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit">
+                <Pencil size={12} />
+              </button>
+            )}
+          </div>
         </div>
         {short && <p className="text-sm font-semibold text-gray-800 leading-snug mb-3">{short}</p>}
         {hasDetail && (
           <>
             {expanded
               ? <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{detail}</p>
-              : <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{detail}</p>
-            }
-            <button onClick={() => setExpanded(x => !x)}
-              className="mt-2 flex items-center gap-1 text-xs font-semibold"
-              style={{ color: clr }}>
-              {expanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show more</>}
+              : <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{detail}</p>}
+            <button onClick={() => setExpanded(x => !x)} className="mt-2 flex items-center gap-1 text-xs font-semibold" style={{ color: clr }}>
+              {expanded ? <><X size={12} /> Show less</> : <><Eye size={12} /> Show more</>}
             </button>
           </>
         )}
@@ -117,8 +239,7 @@ function PublicStatusCard({ record }) {
   )
 }
 
-// ── Card view (grouped by client) ─────────────────────────────────────────────
-function CardView({ records }) {
+function CardView({ records, canEdit, onEdit }) {
   const grouped = records.reduce((acc, r) => {
     const cl = r.fields?.['Client'] || 'Unknown'
     if (!acc[cl]) acc[cl] = []
@@ -134,14 +255,14 @@ function CardView({ records }) {
           <section key={client}>
             <div className="flex items-center gap-3 mb-4">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold"
-                style={{ background: hexRgba(clrHex, 0.1), border: `1.5px solid ${hexRgba(clrHex,0.3)}`, color: clrHex }}>
+                style={{ background: hexRgba(clrHex, 0.1), border: `1.5px solid ${hexRgba(clrHex, 0.3)}`, color: clrHex }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: clrHex }} />
                 {client}
               </span>
               <span className="text-sm text-gray-400">{recs.length} project{recs.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {recs.map(r => <PublicStatusCard key={r.id} record={r} />)}
+              {recs.map(r => <PublicStatusCard key={r.id} record={r} canEdit={canEdit} onEdit={onEdit} />)}
             </div>
           </section>
         )
@@ -150,19 +271,11 @@ function CardView({ records }) {
   )
 }
 
-// ── List view (table) ──────────────────────────────────────────────────────────
-const ALL_COLS = ['Client','Project','Status','Short Status','Current Status (Detailed)','Last Modified']
-const DEFAULT_COLS = ['Client','Project','Status','Short Status']
-const COLUMN_ALIASES = {
-  'Detailed Status': 'Current Status (Detailed)',
-  'Current Status (Detailed)': 'Current Status (Detailed)',
-  'Last Modified': 'Last Modified',
-}
-
-function ListView({ records, columns }) {
+function ListView({ records, columns, canEdit, onEdit }) {
   const cols = (columns || DEFAULT_COLS)
     .map(c => COLUMN_ALIASES[c] || c)
     .filter(c => ALL_COLS.includes(c))
+
   return (
     <div className="overflow-x-auto rounded-2xl" style={{ border: '1px solid #e5e7eb' }}>
       <table className="w-full text-sm border-collapse">
@@ -173,6 +286,7 @@ function ListView({ records, columns }) {
                 {col}
               </th>
             ))}
+            {canEdit && <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap text-right">Edit</th>}
           </tr>
         </thead>
         <tbody>
@@ -180,8 +294,7 @@ function ListView({ records, columns }) {
             const f = r.fields || {}
             const clr = clientColor(f['Client'] || '')
             return (
-              <tr key={r.id}
-                style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+              <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                 {cols.map(col => (
                   <td key={col} className="px-4 py-3 align-top">
                     {col === 'Client' && (
@@ -191,25 +304,20 @@ function ListView({ records, columns }) {
                         {f['Client'] || '—'}
                       </span>
                     )}
-                    {col === 'Project' && (
-                      <span className="font-semibold text-gray-900">{f['Project'] || '—'}</span>
-                    )}
+                    {col === 'Project' && <span className="font-semibold text-gray-900">{f['Project'] || '—'}</span>}
                     {col === 'Status' && <StatusBadge status={f['Status']} />}
-                    {col === 'Short Status' && (
-                      <span className="text-gray-700">{f['Short Status'] || '—'}</span>
-                    )}
-                    {col === 'Current Status (Detailed)' && (
-                      <span className="text-gray-500 text-xs leading-relaxed line-clamp-2">
-                        {f['Current Status (Detailed)'] || '—'}
-                      </span>
-                    )}
-                    {col === 'Last Modified' && (
-                      <span className="text-gray-500 text-xs whitespace-nowrap">
-                        {fmtDateTime(f['lastModifiedTime'] || r.createdTime || '') || '—'}
-                      </span>
-                    )}
+                    {col === 'Short Status' && <span className="text-gray-700">{f['Short Status'] || '—'}</span>}
+                    {col === 'Current Status (Detailed)' && <span className="text-gray-500 text-xs leading-relaxed line-clamp-2">{f['Current Status (Detailed)'] || '—'}</span>}
+                    {col === 'Last Modified' && <span className="text-gray-500 text-xs whitespace-nowrap">{fmtDateTime(f['lastModifiedTime'] || r.createdTime || '') || '—'}</span>}
                   </td>
                 ))}
+                {canEdit && (
+                  <td className="px-4 py-3 align-top text-right">
+                    <button onClick={() => onEdit(r)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit">
+                      <Pencil size={12} />
+                    </button>
+                  </td>
+                )}
               </tr>
             )
           })}
@@ -219,9 +327,9 @@ function ListView({ records, columns }) {
   )
 }
 
-// ── Board view (grouped by Status) ────────────────────────────────────────────
-function BoardView({ records }) {
-  const byStatus = BOARD_ORDER.reduce((acc, s) => { acc[s] = []; return acc }, {})
+function BoardView({ records, statusOptions, canEdit, onEdit, onDropStatus }) {
+  const [draggedId, setDraggedId] = useState('')
+  const byStatus = statusOptions.reduce((acc, s) => ({ ...acc, [s]: [] }), {})
   records.forEach(r => {
     const s = r.fields?.['Status'] || 'Not started'
     if (!byStatus[s]) byStatus[s] = []
@@ -230,46 +338,69 @@ function BoardView({ records }) {
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-2" style={{ minHeight: 200 }}>
-      {BOARD_ORDER.map(status => {
+      {statusOptions.map(status => {
         const recs = byStatus[status] || []
         const st = statusStyle(status)
         return (
-          <div key={status} className="flex-shrink-0 w-72 rounded-2xl overflow-hidden"
-            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}>
-            {/* Column header */}
-            <div className="px-4 py-3 flex items-center justify-between"
-              style={{ background: st.bg, borderBottom: `1px solid ${st.border}` }}>
+          <div
+            key={status}
+            className="flex-shrink-0 w-72 rounded-2xl overflow-hidden"
+            style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
+            onDragOver={e => { if (canEdit) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
+            onDrop={e => {
+              if (!canEdit) return
+              e.preventDefault()
+              const id = e.dataTransfer.getData('text/plain')
+              setDraggedId('')
+              if (id) onDropStatus(id, status)
+            }}
+          >
+            <div className="px-4 py-3 flex items-center justify-between" style={{ background: st.bg, borderBottom: `1px solid ${st.border}` }}>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full" style={{ background: st.dot }} />
                 <span className="text-sm font-bold" style={{ color: st.text }}>{status}</span>
               </div>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                style={{ background: st.border, color: st.text }}>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: st.border, color: st.text }}>
                 {recs.length}
               </span>
             </div>
-            {/* Cards */}
-            <div className="p-3 space-y-3" style={{ minHeight: 80 }}>
-              {recs.length === 0 && (
-                <p className="text-xs text-center py-4 text-gray-400">No projects</p>
-              )}
+            <div className="p-3 space-y-3" style={{ minHeight: 100 }}>
+              {recs.length === 0 && <p className="text-xs text-center py-4 text-gray-400">{canEdit ? 'Drop here' : 'No projects'}</p>}
               {recs.map(r => {
                 const f = r.fields || {}
                 const clr = clientColor(f['Client'] || '')
                 return (
-                  <div key={r.id} className="rounded-xl p-3"
-                    style={{ background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                    <div className="text-xs font-semibold mb-1" style={{ color: clr }}>
-                      {f['Client'] || ''}
+                  <div key={r.id} className="rounded-xl p-3" draggable={false}
+                    style={{ background: draggedId === r.id ? '#eef2ff' : '#f8fafc', border: '1px solid #e5e7eb' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold mb-1" style={{ color: clr }}>{f['Client'] || ''}</div>
+                        <div className="text-sm font-bold text-gray-900 mb-1 leading-tight">{f['Project'] || 'Unknown Project'}</div>
+                        {f['Short Status'] && <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{f['Short Status']}</p>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {canEdit && (
+                          <div
+                            draggable
+                            onDragStart={e => {
+                              e.dataTransfer.setData('text/plain', r.id)
+                              e.dataTransfer.effectAllowed = 'move'
+                              setDraggedId(r.id)
+                            }}
+                            onDragEnd={() => setDraggedId('')}
+                            className="p-1 rounded-lg text-gray-400 cursor-grab"
+                            title="Drag to move"
+                          >
+                            <GripVertical size={12} />
+                          </div>
+                        )}
+                        {canEdit && (
+                          <button onClick={() => onEdit(r)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit">
+                            <Pencil size={12} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-sm font-bold text-gray-900 mb-1 leading-tight">
-                      {f['Project'] || 'Unknown Project'}
-                    </div>
-                    {f['Short Status'] && (
-                      <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
-                        {f['Short Status']}
-                      </p>
-                    )}
                   </div>
                 )
               })}
@@ -281,46 +412,117 @@ function BoardView({ records }) {
   )
 }
 
-function FilterSummary({ viewConfig }) {
-  const chips = [
-    viewConfig?.filterClient ? `Client: ${viewConfig.filterClient}` : null,
-    viewConfig?.filterStatus ? `Status: ${viewConfig.filterStatus}` : null,
-    viewConfig?.search ? `Search: "${viewConfig.search}"` : null,
-  ].filter(Boolean)
-
-  if (!chips.length) return null
-
-  return (
-    <div className="flex flex-wrap gap-2 mb-5">
-      {chips.map(chip => (
-        <span
-          key={chip}
-          className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
-          style={{ background: '#ffffff', border: '1px solid #e5e7eb', color: '#475569' }}
-        >
-          {chip}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function SharedView() {
   const { token } = useParams()
-  const [data,    setData]    = useState(null)
+  const [data, setData] = useState(null)
+  const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState(null)
+  const [saveError, setSaveError] = useState('')
+  const [search, setSearch] = useState('')
+  const [filterClient, setFilterClient] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [viewType, setViewType] = useState('card')
+  const [editRecord, setEditRecord] = useState(null)
+  const [savingRecordId, setSavingRecordId] = useState('')
+
+  const load = async ({ silent = false } = {}) => {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    setError(null)
+    try {
+      const res = await api.sharedViews.publicGet(token)
+      setData(res)
+      setRecords(res.records || [])
+      const vc = res.view_config || {}
+      setViewType(vc.type || 'card')
+      if (!search && vc.search) setSearch(vc.search)
+      if (!filterClient && vc.filterClient) setFilterClient(vc.filterClient)
+      if (!filterStatus && vc.filterStatus) setFilterStatus(vc.filterStatus)
+    } catch (e) {
+      setError(e.message || 'This link is unavailable')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
-    if (!token) return
-    setLoading(true)
-    api.sharedViews.publicGet(token)
-      .then(res => { setData(res); setLoading(false) })
-      .catch(e  => { setError(e.message || 'This link is unavailable'); setLoading(false) })
+    if (token) load()
   }, [token])
 
-  // Loading
+  const canEdit = (data?.access_mode || 'read') === 'edit'
+  const vc = data?.view_config || {}
+  const listColumns = useMemo(() => {
+    const raw = vc.columns || DEFAULT_COLS
+    return raw.map(c => COLUMN_ALIASES[c] || c).filter(c => ALL_COLS.includes(c))
+  }, [vc.columns])
+
+  const allClients = useMemo(
+    () => [...new Set(records.map(r => r.fields?.['Client']).filter(Boolean))].sort(),
+    [records]
+  )
+  const statusOptions = useMemo(() => {
+    const dynamic = [...new Set(records.map(r => r.fields?.['Status']).filter(Boolean))]
+    const ordered = [...DEFAULT_BOARD_ORDER.filter(s => dynamic.includes(s)), ...dynamic.filter(s => !DEFAULT_BOARD_ORDER.includes(s))]
+    return ordered.length ? ordered : DEFAULT_BOARD_ORDER
+  }, [records])
+
+  const filtered = useMemo(() => {
+    return records.filter(r => {
+      const f = r.fields || {}
+      if (filterClient && f['Client'] !== filterClient) return false
+      if (filterStatus && (f['Status'] || 'Not started') !== filterStatus) return false
+      if (search) {
+        const q = search.toLowerCase()
+        const hay = [f['Client'], f['Project'], f['Short Status'], f['Current Status (Detailed)'], f['Status']].join(' ').toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [records, filterClient, filterStatus, search])
+
+  async function saveRecordChanges(record, patch) {
+    setSavingRecordId(record.id)
+    setSaveError('')
+    try {
+      await api.sharedViews.publicUpdate(token, record.id, patch)
+      setRecords(rs => rs.map(r => {
+        if (r.id !== record.id) return r
+        return {
+          ...r,
+          fields: {
+            ...r.fields,
+            ...(patch.status !== undefined ? { Status: patch.status } : {}),
+            ...(patch.short_status !== undefined ? { 'Short Status': patch.short_status } : {}),
+            ...(patch.current_status_detailed !== undefined ? { 'Current Status (Detailed)': patch.current_status_detailed } : {}),
+          },
+        }
+      }))
+      setEditRecord(null)
+    } catch (e) {
+      setSaveError(e.message || 'Failed to update')
+    } finally {
+      setSavingRecordId('')
+    }
+  }
+
+  async function moveRecordToStatus(recordId, status) {
+    const record = records.find(r => r.id === recordId)
+    if (!record) return
+    const fromStatus = record.fields?.['Status'] || 'Not started'
+    if (fromStatus === status) return
+
+    setRecords(rs => rs.map(r => r.id === recordId ? { ...r, fields: { ...r.fields, Status: status } } : r))
+    try {
+      await api.sharedViews.publicUpdate(token, recordId, { status })
+    } catch (e) {
+      setRecords(rs => rs.map(r => r.id === recordId ? { ...r, fields: { ...r.fields, Status: fromStatus } } : r))
+      setSaveError(e.message || 'Failed to move status')
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
@@ -332,11 +534,9 @@ export default function SharedView() {
     )
   }
 
-  // Error — differentiated messages
   if (error) {
-    const isDisabled   = /disabled/i.test(error)
+    const isDisabled = /disabled/i.test(error)
     const isExpiredLink = /expired/i.test(error)
-
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#f8fafc' }}>
         <div className="w-full max-w-sm">
@@ -345,18 +545,9 @@ export default function SharedView() {
               style={{ border: `1px solid ${isDisabled ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
               <AlertCircle size={28} className={isDisabled ? 'text-amber-500' : 'text-red-500'} />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2">
-              {isExpiredLink ? 'Link Expired' : 'Access Restricted'}
-            </h1>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">{isExpiredLink ? 'Link Expired' : 'Access Restricted'}</h1>
             <p className="text-sm text-gray-600 leading-relaxed">
-              {isDisabled
-                ? 'This link has been disabled by the admin.'
-                : isExpiredLink
-                  ? 'This link has passed its expiry date.'
-                  : 'This page is not accessible.'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              Please contact the admin who shared this link.
+              {isDisabled ? 'This link has been disabled by the admin.' : isExpiredLink ? 'This link has passed its expiry date.' : 'This page is not accessible.'}
             </p>
           </div>
         </div>
@@ -364,24 +555,15 @@ export default function SharedView() {
     )
   }
 
-  if (!data) return null
-
-  const title      = data.title || 'Project Status Update'
-  const expiresAt  = data.expires_at
-  const createdAt  = data.created_at
-  const expired    = isExpired(expiresAt)
-  const vc         = data.view_config || {}
-  const viewType   = vc.type || 'card'
-  const columns    = vc.columns || DEFAULT_COLS
-  const records    = data.records || []
-
-  const viewLabel = viewType === 'list' ? 'List View' : viewType === 'board' ? 'Board View' : 'Card View'
+  const title = data?.title || 'Project Status Update'
+  const expiresAt = data?.expires_at
+  const createdAt = data?.created_at
+  const expired = isExpired(expiresAt)
 
   return (
     <div className="min-h-screen" style={{ background: '#f8fafc' }}>
-      {/* ── Header ── */}
       <header style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb' }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -391,10 +573,8 @@ export default function SharedView() {
               <div>
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {data.total} project update{data.total !== 1 ? 's' : ''}
+                  {records.length} project update{records.length !== 1 ? 's' : ''}
                   {createdAt && ` · ${fmtDate(createdAt)}`}
-                  {' · '}
-                  <span className="font-medium">{viewLabel}</span>
                 </p>
               </div>
             </div>
@@ -403,45 +583,112 @@ export default function SharedView() {
               FinTrack
             </div>
           </div>
+
+          <SnapshotSummary viewConfig={vc} accessMode={data?.access_mode || 'read'} />
+
+          <div className="flex flex-col lg:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
+              <input
+                type="text"
+                className="w-full rounded-xl border bg-white pl-8 pr-3 py-2 text-sm outline-none"
+                style={{ borderColor: '#e5e7eb' }}
+                placeholder="Search projects, clients, status…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="rounded-xl border bg-white px-3 py-2 text-sm outline-none"
+              style={{ borderColor: '#e5e7eb' }}
+              value={filterClient}
+              onChange={e => setFilterClient(e.target.value)}
+            >
+              <option value="">All clients</option>
+              {allClients.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select
+              className="rounded-xl border bg-white px-3 py-2 text-sm outline-none"
+              style={{ borderColor: '#e5e7eb' }}
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e5e7eb' }}>
+              {[
+                { id: 'card', Icon: LayoutGrid, label: 'Card' },
+                { id: 'list', Icon: List, label: 'List' },
+                { id: 'board', Icon: Columns, label: 'Board' },
+              ].map(({ id, Icon, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setViewType(id)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
+                  style={{ background: viewType === id ? '#ffffff' : 'transparent', color: viewType === id ? '#2563eb' : '#64748b' }}
+                >
+                  <Icon size={12} />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => load({ silent: true })}
+              className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2"
+              style={{ borderColor: '#e5e7eb', color: '#475569' }}
+            >
+              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ── Expiry notice ── */}
       {expiresAt && (
         <div className={`py-2 text-center text-xs font-medium ${expired ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
           <Clock className="inline mr-1" size={11} />
-          {expired
-            ? `This link expired on ${fmtDateTime(expiresAt)}`
-            : `This link expires on ${fmtDateTime(expiresAt)}`
-          }
+          {expired ? `This link expired on ${fmtDateTime(expiresAt)}` : `This link expires on ${fmtDateTime(expiresAt)}`}
         </div>
       )}
 
-      {/* ── Body ── */}
-      <main className={`mx-auto px-4 sm:px-6 py-8 ${viewType === 'board' ? 'max-w-full' : 'max-w-5xl'}`}>
-        <FilterSummary viewConfig={vc} />
-
-        {records.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-gray-500 text-sm">No project updates included in this link.</p>
+      <main className={`mx-auto px-4 sm:px-6 py-8 ${viewType === 'board' ? 'max-w-full' : 'max-w-6xl'}`}>
+        {saveError && (
+          <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#dc2626' }}>
+            {saveError}
           </div>
         )}
 
-        {records.length > 0 && viewType === 'card'  && <CardView  records={records} />}
-        {records.length > 0 && viewType === 'list'  && <ListView  records={records} columns={columns} />}
-        {records.length > 0 && viewType === 'board' && <BoardView records={records} />}
+        {filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-gray-500 text-sm">No project updates match the current filters.</p>
+          </div>
+        ) : (
+          <>
+            {viewType === 'card' && <CardView records={filtered} canEdit={canEdit} onEdit={setEditRecord} />}
+            {viewType === 'list' && <ListView records={filtered} columns={listColumns} canEdit={canEdit} onEdit={setEditRecord} />}
+            {viewType === 'board' && <BoardView records={filtered} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDropStatus={moveRecordToStatus} />}
+          </>
+        )}
       </main>
 
-      {/* ── Footer ── */}
       <footer className="py-8 text-center" style={{ borderTop: '1px solid #e5e7eb' }}>
         <div className="flex items-center justify-center gap-1.5 text-xs text-gray-400 mb-1">
           <Shield size={11} />
           <span>FinTrack · Project Status</span>
         </div>
-        {createdAt && (
-          <p className="text-[11px] text-gray-300">Generated {fmtDateTime(createdAt)}</p>
-        )}
+        {createdAt && <p className="text-[11px] text-gray-300">Generated {fmtDateTime(createdAt)}</p>}
       </footer>
+
+      {canEdit && editRecord && (
+        <PublicEditModal
+          record={editRecord}
+          statusOptions={statusOptions}
+          saving={savingRecordId === editRecord.id}
+          onClose={() => setEditRecord(null)}
+          onSave={form => saveRecordChanges(editRecord, form)}
+        />
+      )}
     </div>
   )
 }

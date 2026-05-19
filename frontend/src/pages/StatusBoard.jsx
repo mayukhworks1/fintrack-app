@@ -11,7 +11,7 @@
  * • Mobile-first responsive throughout
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Activity, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, RefreshCw, Search,
@@ -26,6 +26,7 @@ import {
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
@@ -66,6 +67,14 @@ const EXPIRY_OPTS = [
   { label: '30 days',  value: 720 },
 ]
 const MAX_SHARED_VIEW_RECORDS = 50
+const STATUS_FILTER_FIELDS = [
+  { key: 'Client', label: 'Client', type: 'text' },
+  { key: 'Project', label: 'Project', type: 'text' },
+  { key: 'Status', label: 'Status', type: 'text' },
+  { key: 'Short Status', label: 'Headline', type: 'text' },
+  { key: 'Current Status (Detailed)', label: 'Detail', type: 'text' },
+  { key: 'lastModifiedTime', label: 'Last Modified', type: 'date' },
+]
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -96,9 +105,9 @@ function getViewConfigFromUrl() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Dashboard strip
 // ─────────────────────────────────────────────────────────────────────────────
-function StatusDashboard({ records, filterStatus, onFilterStatus }) {
+function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus }) {
   const total = records.length
-  const counts = STATUS_OPTIONS.reduce((acc, s) => {
+  const counts = statusOptions.reduce((acc, s) => {
     acc[s] = records.filter(r => (r.fields?.['Status'] || 'Not started') === s).length
     return acc
   }, {})
@@ -120,7 +129,7 @@ function StatusDashboard({ records, filterStatus, onFilterStatus }) {
         <span className="text-xs font-semibold">All Projects</span>
       </button>
 
-      {STATUS_OPTIONS.map(s => {
+      {statusOptions.map(s => {
         const sc = statusStyle(s)
         const cnt = counts[s] || 0
         const active = filterStatus === s
@@ -490,7 +499,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
 // ─────────────────────────────────────────────────────────────────────────────
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
-function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating }) {
+function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -500,20 +509,12 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
 
   return (
     <div
-      draggable={isEditor}
-      onDragStart={e => {
-        e.dataTransfer.setData('text/plain', record.id)
-        e.dataTransfer.effectAllowed = 'move'
-        // slight delay so the ghost image renders before the element fades
-        setTimeout(() => {}, 0)
-      }}
       className="rounded-xl p-3 transition-all select-none"
       style={{
         background: sel ? hexToRgba(clrHex, 0.08) : 'var(--card-bg)',
         border: sel ? `1.5px solid ${clrHex}` : '1px solid var(--border)',
         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-        cursor: isEditor ? 'grab' : 'default',
-        opacity: updating ? 0.6 : 1,
+        opacity: updating ? 0.6 : isDragging ? 0.45 : 1,
       }}
     >
       <div className="flex items-start justify-between gap-1 mb-1.5">
@@ -522,6 +523,22 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
           <p className="text-xs font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>{project}</p>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
+          {isEditor && (
+            <div
+              draggable={!updating}
+              onDragStart={e => {
+                e.dataTransfer.setData('text/plain', record.id)
+                e.dataTransfer.effectAllowed = 'move'
+                onDragStart?.(record.id)
+              }}
+              onDragEnd={() => onDragEnd?.()}
+              className="btn-icon p-0.5"
+              style={{ color: 'var(--text-3)', cursor: updating ? 'not-allowed' : 'grab' }}
+              title="Drag to move"
+            >
+              <GripVertical size={11} />
+            </div>
+          )}
           {isEditor && (
             <button onClick={e => { e.stopPropagation(); onSelect(record.id) }}
               className="w-4 h-4 rounded flex items-center justify-center transition-all"
@@ -554,7 +571,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
   )
 }
 
-function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds }) {
+function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId }) {
   const [dragOver, setDragOver] = useState(false)
   const sc = statusStyle(statusKey)
 
@@ -608,6 +625,9 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
             selected={selectedIds.has(r.id)}
             onSelect={onSelect}
             updating={updatingIds.has(r.id)}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            isDragging={draggedId === r.id}
           />
         ))}
       </div>
@@ -618,7 +638,7 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Modal — create/edit
 // ─────────────────────────────────────────────────────────────────────────────
-function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
+function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptions, onAddStatusOption }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
     client:                  initial?.fields?.['Client'] || '',
@@ -627,9 +647,23 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
     short_status:            initial?.fields?.['Short Status'] || '',
     current_status_detailed: initial?.fields?.['Current Status (Detailed)'] || '',
   })
+  const [newStatusOption, setNewStatusOption] = useState('')
+  const [addingStatusOption, setAddingStatusOption] = useState(false)
   const allClients  = [...new Set(allRecords.map(r => r.fields?.['Client']).filter(Boolean))].sort()
   const allProjects = [...new Set(allRecords.map(r => r.fields?.['Project']).filter(Boolean))].sort()
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  async function addStatusOptionInline() {
+    const trimmed = newStatusOption.trim()
+    if (!trimmed || !onAddStatusOption) return
+    setAddingStatusOption(true)
+    try {
+      await onAddStatusOption(trimmed)
+      set('status', trimmed)
+      setNewStatusOption('')
+    } finally {
+      setAddingStatusOption(false)
+    }
+  }
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', h)
@@ -675,9 +709,29 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
 
           {/* Status selector */}
           <div>
-            <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Status</label>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <label className="block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Status</label>
+              {onAddStatusOption && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    className="input-field text-xs py-1 px-2"
+                    style={{ width: 140 }}
+                    placeholder="Add status option"
+                    value={newStatusOption}
+                    onChange={e => setNewStatusOption(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addStatusOptionInline() } }}
+                  />
+                  <button type="button" onClick={addStatusOptionInline} disabled={addingStatusOption || !newStatusOption.trim()}
+                    className="btn-ghost text-xs px-2 py-1 flex items-center gap-1">
+                    {addingStatusOption ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                    Add
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-              {STATUS_OPTIONS.map(opt => {
+              {statusOptions.map(opt => {
                 const sc = statusStyle(opt)
                 const active = form.status === opt
                 return (
@@ -873,6 +927,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
   const [step,      setStep]      = useState('form')
   const [title,     setTitle]     = useState(defaultTitle)
   const [expiry,    setExpiry]    = useState(0)
+  const [accessMode, setAccessMode] = useState('read')
   const [saving,    setSaving]    = useState(false)
   const [error,     setError]     = useState(null)
   const [shareData, setShareData] = useState(null)
@@ -892,6 +947,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
         title: title.trim() || null,
         record_ids: selectedRecords.map(r => r.id),
         expires_hours: expiry || null,
+        access_mode: accessMode,
       }
       if (viewConfig) payload.view_config = viewConfig
       const data = await api.sharedViews.create(payload)
@@ -950,6 +1006,29 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                       className="py-1.5 rounded-xl text-xs font-semibold transition-all"
                       style={{ background: expiry === opt.value ? 'var(--accent)' : 'var(--bg-input)', color: expiry === opt.value ? '#fff' : 'var(--text-2)', border: `1px solid ${expiry === opt.value ? 'var(--accent)' : 'var(--border)'}` }}>
                       {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Access</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'read', label: 'Read only', hint: 'Recipients can view, filter, and switch layouts.' },
+                    { id: 'edit', label: 'Can edit', hint: 'Recipients can update status, headline, and details.' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setAccessMode(opt.id)}
+                      className="rounded-xl px-3 py-2 text-left transition-all"
+                      style={{
+                        background: accessMode === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
+                        border: `1px solid ${accessMode === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
+                      }}
+                    >
+                      <p className="text-xs font-semibold" style={{ color: accessMode === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
                     </button>
                   ))}
                 </div>
@@ -1034,6 +1113,17 @@ function ManageSharesModal({ onClose }) {
     try { await api.sharedViews.update(view.token, { is_active: next }); showToast(next ? 'Link enabled' : 'Link disabled', 'success') }
     catch (e) { setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v)); showToast(e.message || 'Failed', 'error') }
   }
+  async function cycleAccessMode(view) {
+    const next = view.access_mode === 'edit' ? 'read' : 'edit'
+    setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: next } : v))
+    try {
+      await api.sharedViews.update(view.token, { access_mode: next })
+      showToast(next === 'edit' ? 'Link can now edit' : 'Link set to read only', 'success')
+    } catch (e) {
+      setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: view.access_mode } : v))
+      showToast(e.message || 'Failed', 'error')
+    }
+  }
   async function deleteView(token) {
     if (!confirm('Delete this share link?')) return
     const prev = views; setViews(vs => vs.filter(v => v.token !== token))
@@ -1086,6 +1176,9 @@ function ManageSharesModal({ onClose }) {
                         </p>
                         {inactive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>DISABLED</span>}
                         {expired  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>EXPIRED</span>}
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.1)' : 'rgba(148,163,184,0.12)', color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)' }}>
+                          {v.access_mode === 'edit' ? 'CAN EDIT' : 'READ ONLY'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>…/{v.token}</span>
@@ -1098,6 +1191,9 @@ function ManageSharesModal({ onClose }) {
                       <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><ExternalLink size={12} /></a>
                       <button onClick={() => toggleActive(v)} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }} title={v.is_active ? 'Disable' : 'Enable'}>
                         {v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                      </button>
+                      <button onClick={() => cycleAccessMode(v)} className="btn-icon p-1.5" style={{ color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)' }} title={v.access_mode === 'edit' ? 'Set read only' : 'Allow edit'}>
+                        {v.access_mode === 'edit' ? <Pencil size={12} /> : <Eye size={12} />}
                       </button>
                       <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}><MapPin size={12} /></button>
                       <button onClick={() => deleteView(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}
@@ -1261,16 +1357,18 @@ export default function StatusBoard() {
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [records,     setRecords]     = useState([])
+  const [statusPicklists, setStatusPicklists] = useState({})
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
 
   // ── View config (persisted in URL) ────────────────────────────────────────
-  const initConfig = getViewConfigFromUrl() || { type: 'card', filterClient: '', filterStatus: '', search: '', columns: DEFAULT_COLUMNS }
+  const initConfig = getViewConfigFromUrl() || { type: 'card', filterClient: '', filterStatus: '', search: '', columns: DEFAULT_COLUMNS, advancedConditions: [] }
   const [viewType,      setViewType]      = useState(initConfig.type || 'card')
   const [filterClient,  setFilterClient]  = useState(initConfig.filterClient || '')
   const [filterStatus,  setFilterStatus]  = useState(initConfig.filterStatus || '')
   const [search,        setSearch]        = useState(initConfig.search || '')
   const [listColumns,   setListColumns]   = useState(initConfig.columns || DEFAULT_COLUMNS)
+  const [advancedConditions, setAdvancedConditions] = useState(initConfig.advancedConditions || [])
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [expandedIds,   setExpandedIds]   = useState(new Set())
@@ -1285,29 +1383,44 @@ export default function StatusBoard() {
   const [manageModal,   setManageModal]   = useState(false)
   const [showViews,     setShowViews]     = useState(false)
   const [showCols,      setShowCols]      = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [copiedView,    setCopiedView]    = useState(false)
   const [shareViewModal, setShareViewModal] = useState(false)
+  const [draggedId, setDraggedId] = useState('')
+
+  const statusOptions = useMemo(() => {
+    const dynamic = statusPicklists?.Status?.options || []
+    const merged = [...new Set([...dynamic, ...STATUS_OPTIONS])]
+    return merged.length ? merged : STATUS_OPTIONS
+  }, [statusPicklists])
 
   // ── Persist view config to URL on any change ──────────────────────────────
   useEffect(() => {
-    const cfg = { type: viewType, filterClient, filterStatus, search, columns: listColumns }
+    const cfg = { type: viewType, filterClient, filterStatus, search, columns: listColumns, advancedConditions }
     const encoded = encodeViewConfig(cfg)
     const url = new URL(window.location.href)
     url.searchParams.set('v', encoded)
     window.history.replaceState({}, '', url.toString())
-  }, [viewType, filterClient, filterStatus, search, listColumns])
+  }, [viewType, filterClient, filterStatus, search, listColumns, advancedConditions])
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { const res = await api.status.list(); setRecords(res.records || []) }
+    try {
+      const [res, picklists] = await Promise.all([
+        api.status.list(),
+        api.status.picklists.get().catch(() => ({})),
+      ])
+      setRecords(res.records || [])
+      setStatusPicklists(picklists || {})
+    }
     catch (e) { setError(e.message || 'Failed to load') }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
 
   // ── Derived / filtered data ───────────────────────────────────────────────
-  const filtered = records.filter(r => {
+  const baseFiltered = records.filter(r => {
     const f = r.fields || {}
     if (filterClient && f['Client'] !== filterClient) return false
     if (filterStatus && (f['Status'] || 'Not started') !== filterStatus) return false
@@ -1318,6 +1431,10 @@ export default function StatusBoard() {
     }
     return true
   })
+  const filtered = useMemo(
+    () => applyConditions(baseFiltered, advancedConditions, r => r.fields || {}),
+    [baseFiltered, advancedConditions]
+  )
   const grouped = filtered.reduce((acc, r) => {
     const cl = r.fields?.['Client'] || 'Unknown'
     if (!acc[cl]) acc[cl] = []
@@ -1352,6 +1469,7 @@ export default function StatusBoard() {
     if (cfg.filterStatus !== undefined) setFilterStatus(cfg.filterStatus)
     if (cfg.search !== undefined)       setSearch(cfg.search)
     if (cfg.columns)      setListColumns(cfg.columns)
+    if (cfg.advancedConditions) setAdvancedConditions(cfg.advancedConditions)
     clearSelection()
   }
 
@@ -1385,6 +1503,7 @@ export default function StatusBoard() {
   async function handleKanbanDrop(toStatus, e) {
     e.preventDefault()
     const id = e.dataTransfer.getData('text/plain')
+    setDraggedId('')
     if (!id) return
     const record = records.find(r => r.id === id)
     const fromStatus = record?.fields?.['Status'] || 'Not started'
@@ -1407,7 +1526,20 @@ export default function StatusBoard() {
   }
 
   // ── Current view config (for saved views) ────────────────────────────────
-  const currentConfig = { type: viewType, filterClient, filterStatus, search, columns: listColumns }
+  const currentConfig = { type: viewType, filterClient, filterStatus, search, columns: listColumns, advancedConditions }
+
+  async function addStatusOption(option) {
+    const trimmed = option.trim()
+    if (!trimmed) return
+    try {
+      const res = await api.status.picklists.add('Status', trimmed)
+      setStatusPicklists(prev => ({ ...prev, Status: { ...(prev.Status || {}), options: res.options || [] } }))
+      showToast('Status option added', 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to add option', 'error')
+      throw e
+    }
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -1493,7 +1625,7 @@ export default function StatusBoard() {
 
         {/* ── Status Dashboard ── */}
         {!loading && records.length > 0 && (
-          <StatusDashboard records={records} filterStatus={filterStatus} onFilterStatus={setFilterStatus} />
+          <StatusDashboard records={records} statusOptions={statusOptions} filterStatus={filterStatus} onFilterStatus={setFilterStatus} />
         )}
 
         {/* ── Filter bar ── */}
@@ -1508,6 +1640,13 @@ export default function StatusBoard() {
             <option value="">All clients</option>
             {allClients.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <button
+            onClick={() => setShowAdvancedFilters(v => !v)}
+            className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <SlidersHorizontal size={12} />
+            {showAdvancedFilters ? 'Hide advanced' : 'Advanced filters'}
+          </button>
           {/* Select all (card/list views) */}
           {filtered.length > 0 && isEditor && viewType !== 'board' && (
             <button
@@ -1522,8 +1661,20 @@ export default function StatusBoard() {
           )}
         </div>
 
+        {showAdvancedFilters && (
+          <div className="rounded-2xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+            <FilterBuilder
+              fields={STATUS_FILTER_FIELDS}
+              records={records}
+              getFieldValue={r => r.fields || {}}
+              conditions={advancedConditions}
+              onChange={setAdvancedConditions}
+            />
+          </div>
+        )}
+
         {/* ── Active filter chips ── */}
-        {(filterClient || filterStatus || search) && (
+        {(filterClient || filterStatus || search || advancedConditions.length) && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Filters:</span>
             {filterClient && (
@@ -1548,7 +1699,14 @@ export default function StatusBoard() {
                 <button onClick={() => setSearch('')} style={{ color: 'var(--text-3)' }}><X size={10} /></button>
               </span>
             )}
-            <button onClick={() => { setFilterClient(''); setFilterStatus(''); setSearch('') }}
+            {advancedConditions.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                {advancedConditions.length} advanced rule{advancedConditions.length !== 1 ? 's' : ''}
+                <button onClick={() => setAdvancedConditions([])} style={{ color: 'var(--text-3)' }}><X size={10} /></button>
+              </span>
+            )}
+            <button onClick={() => { setFilterClient(''); setFilterStatus(''); setSearch(''); setAdvancedConditions([]) }}
               className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
               Clear all
             </button>
@@ -1711,7 +1869,7 @@ export default function StatusBoard() {
             )}
             <div className="overflow-x-auto -mx-4 px-4 pb-4">
               <div className="flex gap-3" style={{ minWidth: `${STATUS_OPTIONS.length * 220}px` }}>
-                {STATUS_OPTIONS.map(statusKey => {
+                {statusOptions.map(statusKey => {
                   const recs = filtered.filter(r => (r.fields?.['Status'] || 'Not started') === statusKey)
                   return (
                     <KanbanColumn
@@ -1725,6 +1883,9 @@ export default function StatusBoard() {
                       onSelect={toggleSelect}
                       onDrop={handleKanbanDrop}
                       updatingIds={updatingIds}
+                      onDragStart={setDraggedId}
+                      onDragEnd={() => setDraggedId('')}
+                      draggedId={draggedId}
                     />
                   )
                 })}
@@ -1792,6 +1953,8 @@ export default function StatusBoard() {
           onSave={modal === 'new' ? handleCreate : handleEdit}
           saving={saving}
           allRecords={records}
+          statusOptions={statusOptions}
+          onAddStatusOption={isEditor ? addStatusOption : null}
         />
       )}
       {aiModal && (

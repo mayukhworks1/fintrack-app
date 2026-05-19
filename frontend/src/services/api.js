@@ -293,6 +293,13 @@ export const api = {
     create: (data)     => request('/api/status',      { method: 'POST',   body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/status/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete: (id)       => request(`/api/status/${id}`, { method: 'DELETE' }),
+    picklists: {
+      get: () => request('/api/status/picklists'),
+      add: (fieldName, option) => request(`/api/status/picklists/${encodeURIComponent(fieldName)}`, {
+        method: 'POST',
+        body: JSON.stringify({ option }),
+      }),
+    },
     aiUpdate: (record_ids, extra_context = '') =>
       request('/api/status/ai-update', {
         method: 'POST',
@@ -309,6 +316,10 @@ export const api = {
     accesses: (token) => request(`/api/shared-views/${token}/accesses`),
     // Public — no auth header needed (still uses request() but no token will be found for public users)
     publicGet: (token) => request(`/api/public/view/${token}`, {}, 1),
+    publicUpdate: (token, recordId, data) => request(`/api/public/view/${token}/records/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   },
   admin: {
     stats:              ()       => request('/api/admin/stats'),

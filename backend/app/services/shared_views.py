@@ -20,6 +20,7 @@ from ..db.postgres import get_pool
 logger = logging.getLogger("fintrack.shared_views")
 
 _MAX_RECORD_IDS = 50
+_ALLOWED_ACCESS_MODES = {"read", "edit"}
 _ALLOWED_VIEW_TYPES = {"card", "list", "board"}
 _COLUMN_ALIASES = {
     "Client": "Client",
@@ -98,6 +99,7 @@ class SharedViewService:
         role: str,
         ip: Optional[str] = None,
         expires_at: Optional[datetime] = None,
+        access_mode: str = "read",
         view_config: Optional[dict] = None,
     ) -> dict:
         pool = get_pool()
@@ -107,6 +109,8 @@ class SharedViewService:
             raise ValueError("At least one record_id required")
         if len(record_ids) > _MAX_RECORD_IDS:
             raise ValueError(f"Maximum {_MAX_RECORD_IDS} records per share")
+        if access_mode not in _ALLOWED_ACCESS_MODES:
+            raise ValueError("Invalid access mode")
 
         token = _new_token()
         safe_view_config = _sanitize_view_config(view_config)
@@ -114,8 +118,8 @@ class SharedViewService:
             row = await conn.fetchrow(
                 """
                 INSERT INTO shared_views
-                    (token, title, record_ids, created_by, created_from_ip, expires_at, view_config)
-                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7::jsonb)
+                    (token, title, record_ids, created_by, created_from_ip, expires_at, access_mode, view_config)
+                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb)
                 RETURNING *
                 """,
                 token,
@@ -124,6 +128,7 @@ class SharedViewService:
                 role,
                 ip,
                 expires_at,
+                access_mode,
                 json.dumps(safe_view_config) if safe_view_config is not None else None,
             )
         return _row(row)
@@ -136,8 +141,10 @@ class SharedViewService:
         parts: list[str] = []
         params: list = []
         idx = 1
-        for field in ("title", "is_active", "expires_at"):
+        for field in ("title", "is_active", "expires_at", "access_mode"):
             if field in data:
+                if field == "access_mode" and data[field] not in _ALLOWED_ACCESS_MODES:
+                    raise ValueError("Invalid access mode")
                 parts.append(f"{field} = ${idx}")
                 params.append(data[field])
                 idx += 1
@@ -174,6 +181,32 @@ class SharedViewService:
                 "SELECT * FROM shared_views ORDER BY created_at DESC"
             )
         return [_row(r) for r in rows]
+
+    async def get_public_view(self, token: str) -> dict:
+        pool = get_pool()
+        if not pool:
+            raise RuntimeError("Database unavailable")
+
+        async with pool.acquire() as conn:
+            view = await conn.fetchrow(
+                "SELECT * FROM shared_views WHERE token = $1", token
+            )
+        if not view:
+            raise ValueError("View not found")
+        view = _row(view)
+
+        if not view["is_active"]:
+            raise ValueError("This link has been disabled by the owner")
+
+        if view["expires_at"]:
+            exp = view["expires_at"]
+            if isinstance(exp, str):
+                exp = datetime.fromisoformat(exp)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                raise ValueError("This link has expired")
+        return view
 
     async def get(self, token: str) -> Optional[dict]:
         pool = get_pool()
@@ -213,26 +246,7 @@ class SharedViewService:
         if not pool:
             raise RuntimeError("Database unavailable")
 
-        async with pool.acquire() as conn:
-            view = await conn.fetchrow(
-                "SELECT * FROM shared_views WHERE token = $1", token
-            )
-        if not view:
-            raise ValueError("View not found")
-
-        view = _row(view)
-
-        if not view["is_active"]:
-            raise ValueError("This link has been disabled by the owner")
-
-        if view["expires_at"]:
-            exp = view["expires_at"]
-            if isinstance(exp, str):
-                exp = datetime.fromisoformat(exp)
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if exp < datetime.now(timezone.utc):
-                raise ValueError("This link has expired")
+        view = await self.get_public_view(token)
 
         # Fetch status records from PG mirror
         record_ids: list[str] = view.get("record_ids") or []
@@ -304,10 +318,37 @@ class SharedViewService:
             "title": view.get("title"),
             "created_at": view.get("created_at"),
             "expires_at": view.get("expires_at"),
+            "access_mode": view.get("access_mode") or "read",
             "records": records,
             "total": len(records),
             "view_config": vc,
         }
+
+    async def update_public_record(self, token: str, record_id: str, fields: dict) -> dict[str, Any]:
+        view = await self.get_public_view(token)
+        if (view.get("access_mode") or "read") != "edit":
+            raise PermissionError("This link is view-only")
+
+        record_ids = view.get("record_ids") or []
+        if isinstance(record_ids, str):
+            record_ids = json.loads(record_ids)
+        if record_id not in record_ids:
+            raise ValueError("Record is not part of this shared view")
+
+        allowed_fields = {
+            "Status": fields.get("Status"),
+            "Short Status": fields.get("Short Status"),
+            "Current Status (Detailed)": fields.get("Current Status (Detailed)"),
+        }
+        cleaned = {k: v for k, v in allowed_fields.items() if v is not None}
+        if not cleaned:
+            raise ValueError("No editable fields provided")
+
+        from ..services.status import StatusService
+        updated = await StatusService().update_record(record_id, cleaned)
+
+        # Public updates should still invalidate shared-view reads quickly.
+        return updated
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

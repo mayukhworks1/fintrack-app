@@ -302,6 +302,7 @@ CREATE TABLE IF NOT EXISTS shared_views (
     created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     created_from_ip  VARCHAR(100),
     expires_at       TIMESTAMPTZ,
+    access_mode      VARCHAR(10)   NOT NULL DEFAULT 'read',
     is_active        BOOLEAN       NOT NULL DEFAULT TRUE,
     access_count     INTEGER       NOT NULL DEFAULT 0,
     last_accessed_at TIMESTAMPTZ
@@ -310,6 +311,7 @@ CREATE INDEX IF NOT EXISTS sv_token_idx   ON shared_views (token);
 CREATE INDEX IF NOT EXISTS sv_created_idx ON shared_views (created_at DESC);
 CREATE INDEX IF NOT EXISTS sv_active_idx  ON shared_views (is_active, expires_at);
 ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS view_config JSONB;
+ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS access_mode VARCHAR(10) NOT NULL DEFAULT 'read';
 
 CREATE TABLE IF NOT EXISTS shared_view_accesses (
     id          UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
