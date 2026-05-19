@@ -208,6 +208,8 @@ export const api = {
       request(`/api/ai/report/history?limit=${limit}`),
     reportHistoryDetail: (id) =>
       request(`/api/ai/report/history/${encodeURIComponent(id)}`),
+    reportHistoryDelete: (id) =>
+      request(`/api/ai/report/history/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
   invoices: {
     list:    (params = {}) => {
@@ -251,6 +253,16 @@ export const api = {
         return res.json()
       })
     },
+  },
+  associations: {
+    search: (q, limit = 10) =>
+      request(`/api/associations/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+    getRecord: (sourceTable, teableId) =>
+      request(`/api/associations/record/${encodeURIComponent(sourceTable)}/${encodeURIComponent(teableId)}`),
+    link: (data) =>
+      request('/api/associations/link', { method: 'POST', body: JSON.stringify(data) }),
+    unlink: (sourceTable, teableId) =>
+      request(`/api/associations/record/${encodeURIComponent(sourceTable)}/${encodeURIComponent(teableId)}`, { method: 'DELETE' }),
   },
   webInvoices: {
     // File upload bypasses the standard request() so the browser sets the

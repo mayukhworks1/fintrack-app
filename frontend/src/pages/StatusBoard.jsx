@@ -27,6 +27,7 @@ import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
+import AssociationLinkModal from '../components/AssociationLinkModal'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
@@ -147,6 +148,23 @@ const BOARD_GROUP_OPTIONS = [
   { value: 'Status', label: 'Status' },
   { value: 'Client', label: 'Client' },
 ]
+const CARD_GROUP_OPTIONS = [
+  { value: 'Client', label: 'Client' },
+  { value: 'Status', label: 'Status' },
+]
+const CARD_GROUP_SORT_OPTIONS = [
+  { value: 'count-desc', label: 'Most projects first' },
+  { value: 'count-asc', label: 'Least projects first' },
+  { value: 'name-asc', label: 'Group A-Z' },
+  { value: 'name-desc', label: 'Group Z-A' },
+]
+const CARD_RECORD_SORT_OPTIONS = [
+  { value: 'project-asc', label: 'Project A-Z' },
+  { value: 'project-desc', label: 'Project Z-A' },
+  { value: 'modified-desc', label: 'Recently updated' },
+  { value: 'modified-asc', label: 'Oldest updated' },
+  { value: 'status-asc', label: 'Status A-Z' },
+]
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -234,8 +252,10 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detail Panel — slide-in from right
 // ─────────────────────────────────────────────────────────────────────────────
-function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
+function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
   const f = record?.fields || {}
+  const assoc = record?.association
+  const related = assoc?.related_counts?.project || {}
   const client  = f['Client']  || ''
   const project = f['Project'] || ''
   const status  = f['Status']  || ''
@@ -282,6 +302,9 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
             <div className="flex items-center gap-1">
               {isEditor && (
                 <>
+                  <button onClick={onLink} className="btn-icon p-2" title="Link association" style={{ color: 'var(--accent)' }}>
+                    <Link2 size={15} />
+                  </button>
                   <button onClick={onEdit} className="btn-icon p-2" title="Edit" style={{ color: 'var(--text-3)' }}>
                     <Pencil size={15} />
                   </button>
@@ -330,6 +353,17 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Project</p>
                     <p style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
                   </div>
+                  {assoc?.project?.name && (
+                    <div className="rounded-xl p-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Link2 size={12} style={{ color: 'var(--accent)' }} />
+                        <p className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>Linked across modules</p>
+                      </div>
+                      <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                        {related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -352,6 +386,8 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, onSelect, expanded, onToggle, deleting, compact = false, showClientAccents = true }) {
   const f       = record.fields || {}
+  const assoc   = record.association
+  const related = assoc?.related_counts?.project || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
   const short   = f['Short Status'] || ''
@@ -405,6 +441,15 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
               }}>
               {client}
             </span>
+            {assoc?.project?.name && (
+              <div className="mb-1.5">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                  <Link2 size={10} />
+                  {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
             {/* Project name */}
             <p className="text-sm font-bold leading-snug" style={{ color: 'var(--text-1)' }}>{project}</p>
           </div>
@@ -486,6 +531,8 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
 // ─────────────────────────────────────────────────────────────────────────────
 function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true, layout }) {
   const f = record.fields || {}
+  const assoc = record.association
+  const related = assoc?.related_counts?.project || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
   const status   = f['Status']  || ''
@@ -531,6 +578,13 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
           <span className="text-[13px] font-semibold block truncate" style={{ color: 'var(--text-1)' }}>
             {project}
           </span>
+          {assoc?.project?.name && (
+            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+              style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+              <Link2 size={10} />
+              {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       )}
       {columns.includes('Status') && (
@@ -1698,6 +1752,9 @@ export default function StatusBoard() {
     search: '',
     columns: DEFAULT_COLUMNS,
     boardGroupBy: 'Status',
+    cardGroupBy: 'Client',
+    cardGroupSort: 'count-desc',
+    cardRecordSort: 'project-asc',
     advancedConditions: [],
     theme: 'cobalt',
     density: 'comfortable',
@@ -1710,6 +1767,9 @@ export default function StatusBoard() {
   const [search,        setSearch]        = useState(initConfig.search || '')
   const [listColumns,   setListColumns]   = useState(initConfig.columns || DEFAULT_COLUMNS)
   const [boardGroupBy,  setBoardGroupBy]  = useState(initConfig.boardGroupBy || 'Status')
+  const [cardGroupBy,   setCardGroupBy]   = useState(initConfig.cardGroupBy || 'Client')
+  const [cardGroupSort, setCardGroupSort] = useState(initConfig.cardGroupSort || 'count-desc')
+  const [cardRecordSort, setCardRecordSort] = useState(initConfig.cardRecordSort || 'project-asc')
   const [advancedConditions, setAdvancedConditions] = useState(initConfig.advancedConditions || [])
   const [themeId,       setThemeId]       = useState(initConfig.theme || 'cobalt')
   const [density,       setDensity]       = useState(initConfig.density || 'comfortable')
@@ -1724,6 +1784,7 @@ export default function StatusBoard() {
   const [deletingId,    setDeletingId]    = useState(null)
   const [updatingIds,   setUpdatingIds]   = useState(new Set())  // kanban DnD in-flight
   const [detailRecord,  setDetailRecord]  = useState(null)
+  const [associationRecord, setAssociationRecord] = useState(null)
   const [aiModal,       setAiModal]       = useState(false)
   const [shareModal,    setShareModal]    = useState(false)
   const [manageModal,   setManageModal]   = useState(false)
@@ -1758,6 +1819,9 @@ export default function StatusBoard() {
       search,
       columns: listColumns,
       boardGroupBy,
+      cardGroupBy,
+      cardGroupSort,
+      cardRecordSort,
       advancedConditions,
       theme: themeId,
       density,
@@ -1768,7 +1832,7 @@ export default function StatusBoard() {
     const url = new URL(window.location.href)
     url.searchParams.set('v', encoded)
     window.history.replaceState({}, '', url.toString())
-  }, [viewType, filterClient, filterStatus, search, listColumns, boardGroupBy, advancedConditions, themeId, density, showDashboard, showClientAccents])
+  }, [viewType, filterClient, filterStatus, search, listColumns, boardGroupBy, cardGroupBy, cardGroupSort, cardRecordSort, advancedConditions, themeId, density, showDashboard, showClientAccents])
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -1803,12 +1867,59 @@ export default function StatusBoard() {
     () => applyConditions(baseFiltered, advancedConditions, r => r.fields || {}),
     [baseFiltered, advancedConditions]
   )
-  const grouped = filtered.reduce((acc, r) => {
-    const cl = r.fields?.['Client'] || 'Unknown'
-    if (!acc[cl]) acc[cl] = []
-    acc[cl].push(r)
-    return acc
-  }, {})
+  const cardGroups = useMemo(() => {
+    const groups = new Map()
+    for (const record of filtered) {
+      const rawValue = record.fields?.[cardGroupBy]
+      const key = rawValue || (cardGroupBy === 'Status' ? 'Not started' : 'Unknown')
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(record)
+    }
+
+    const sortRecords = (records) => {
+      const items = [...records]
+      items.sort((a, b) => {
+        const af = a.fields || {}
+        const bf = b.fields || {}
+        switch (cardRecordSort) {
+          case 'project-desc':
+            return String(bf['Project'] || '').localeCompare(String(af['Project'] || ''))
+          case 'modified-desc':
+            return new Date(bf.lastModifiedTime || 0).getTime() - new Date(af.lastModifiedTime || 0).getTime()
+          case 'modified-asc':
+            return new Date(af.lastModifiedTime || 0).getTime() - new Date(bf.lastModifiedTime || 0).getTime()
+          case 'status-asc':
+            return String(af['Status'] || 'Not started').localeCompare(String(bf['Status'] || 'Not started'))
+          case 'project-asc':
+          default:
+            return String(af['Project'] || '').localeCompare(String(bf['Project'] || ''))
+        }
+      })
+      return items
+    }
+
+    const shaped = [...groups.entries()].map(([key, records]) => ({
+      key,
+      records: sortRecords(records),
+      count: records.length,
+    }))
+
+    shaped.sort((a, b) => {
+      switch (cardGroupSort) {
+        case 'count-asc':
+          return a.count - b.count || String(a.key).localeCompare(String(b.key))
+        case 'name-desc':
+          return String(b.key).localeCompare(String(a.key))
+        case 'name-asc':
+          return String(a.key).localeCompare(String(b.key))
+        case 'count-desc':
+        default:
+          return b.count - a.count || String(a.key).localeCompare(String(b.key))
+      }
+    })
+
+    return shaped
+  }, [filtered, cardGroupBy, cardGroupSort, cardRecordSort])
   const allClients = [...new Set(recordsForView.map(r => r.fields?.['Client']).filter(Boolean))].sort()
   const boardColumnKeys = useMemo(() => {
     const ordered = boardGroupBy === 'Status' ? statusOptions : [...new Set(filtered.map(r => r.fields?.[boardGroupBy] || 'Unassigned'))].sort((a, b) => String(a).localeCompare(String(b)))
@@ -1850,6 +1961,9 @@ export default function StatusBoard() {
     if (cfg.search !== undefined)       setSearch(cfg.search)
     if (cfg.columns !== undefined)      setListColumns(cfg.columns)
     if (cfg.boardGroupBy !== undefined) setBoardGroupBy(cfg.boardGroupBy)
+    if (cfg.cardGroupBy !== undefined) setCardGroupBy(cfg.cardGroupBy)
+    if (cfg.cardGroupSort !== undefined) setCardGroupSort(cfg.cardGroupSort)
+    if (cfg.cardRecordSort !== undefined) setCardRecordSort(cfg.cardRecordSort)
     if (cfg.advancedConditions !== undefined) setAdvancedConditions(cfg.advancedConditions)
     if (cfg.theme)        setThemeId(cfg.theme)
     if (cfg.density)      setDensity(cfg.density)
@@ -1925,6 +2039,9 @@ export default function StatusBoard() {
     search,
     columns: listColumns,
     boardGroupBy,
+    cardGroupBy,
+    cardGroupSort,
+    cardRecordSort,
     advancedConditions,
     theme: themeId,
     density,
@@ -2041,6 +2158,47 @@ export default function StatusBoard() {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {viewType === 'card' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group by</span>
+                  <select
+                    className="input-field text-xs py-1.5 min-w-[110px]"
+                    value={cardGroupBy}
+                    onChange={e => setCardGroupBy(e.target.value)}
+                  >
+                    {CARD_GROUP_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group order</span>
+                  <select
+                    className="input-field text-xs py-1.5 min-w-[160px]"
+                    value={cardGroupSort}
+                    onChange={e => setCardGroupSort(e.target.value)}
+                  >
+                    {CARD_GROUP_SORT_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Cards</span>
+                  <select
+                    className="input-field text-xs py-1.5 min-w-[150px]"
+                    value={cardRecordSort}
+                    onChange={e => setCardRecordSort(e.target.value)}
+                  >
+                    {CARD_RECORD_SORT_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
 
@@ -2224,20 +2382,23 @@ export default function StatusBoard() {
         {/* ══ CARD VIEW ══ */}
         {!loading && !error && filtered.length > 0 && viewType === 'card' && (
           <div className="space-y-6">
-            {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([client, recs]) => {
-              const clrHex = clientColor(client)
+            {cardGroups.map(({ key, records: recs, count }) => {
+              const clrHex = cardGroupBy === 'Client' ? clientColor(key) : statusStyle(key).color
+              const groupStyle = cardGroupBy === 'Status'
+                ? statusStyle(key)
+                : { bg: hexToRgba(clrHex, 0.1), border: hexToRgba(clrHex, 0.3), color: clrHex, dot: clrHex }
               const groupSel = recs.filter(r => selectedIds.has(r.id)).length
               return (
-                <section key={client} className="space-y-3">
+                <section key={key} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-                        style={{ background: hexToRgba(clrHex, 0.1), border: `1px solid ${hexToRgba(clrHex, 0.3)}`, color: clrHex }}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: clrHex }} />
-                        {client}
+                        style={{ background: groupStyle.bg, border: `1px solid ${groupStyle.border}`, color: groupStyle.color }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: groupStyle.dot }} />
+                        {key}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                        {recs.length} project{recs.length !== 1 ? 's' : ''}
+                        {count} project{count !== 1 ? 's' : ''}
                         {groupSel > 0 && <span className="ml-1 font-semibold" style={{ color: clrHex }}>· {groupSel} selected</span>}
                       </span>
                     </div>
@@ -2401,9 +2562,18 @@ export default function StatusBoard() {
         <DetailPanel
           record={detailRecord}
           onClose={() => setDetailRecord(null)}
+          onLink={() => { setAssociationRecord(detailRecord); setDetailRecord(null) }}
           onEdit={() => { setModal(detailRecord); setDetailRecord(null) }}
           onDelete={() => { handleDelete(detailRecord); setDetailRecord(null) }}
           isEditor={isEditor}
+        />
+      )}
+      {associationRecord && (
+        <AssociationLinkModal
+          sourceTable="status"
+          record={associationRecord}
+          onClose={() => setAssociationRecord(null)}
+          onSaved={() => { setAssociationRecord(null); load() }}
         />
       )}
 

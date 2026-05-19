@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers import admin
+from .routers import associations as associations_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
@@ -102,6 +103,7 @@ app.include_router(web_projects_router)
 app.include_router(web_resources_router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
+app.include_router(associations_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
 

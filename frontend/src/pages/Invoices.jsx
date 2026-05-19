@@ -17,6 +17,7 @@ import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
+import AssociationLinkModal from '../components/AssociationLinkModal'
 import clsx from 'clsx'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
@@ -316,9 +317,11 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…', comp
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
+function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }) {
   if (!invoice) return null
   const f = invoice.fields || {}
+  const assoc = invoice.association
+  const related = assoc?.related_counts?.project || {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
@@ -342,6 +345,11 @@ function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {isEditor && (
+              <button onClick={onLink} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                Link
+              </button>
+            )}
             {isEditor && (
               <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
                 Edit
@@ -374,6 +382,20 @@ function InvoiceDetail({ invoice, onClose, onEdit, isEditor, onPreview }) {
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-1)', whiteSpace: 'pre-wrap' }}>
                 {f['Description']}
               </p>
+            </div>
+          )}
+
+          {assoc?.project?.name && (
+            <div className="rounded-xl p-3.5" style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Briefcase size={13} style={{ color: 'var(--accent)' }} />
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Linked portfolio association</p>
+              </div>
+              <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                <p><strong style={{ color: 'var(--text-1)' }}>Project:</strong> {assoc.project.name}</p>
+                {assoc.client?.name && <p><strong style={{ color: 'var(--text-1)' }}>Client:</strong> {assoc.client.name}</p>}
+                <p>{related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}</p>
+              </div>
             </div>
           )}
 
@@ -804,6 +826,7 @@ export default function Invoices() {
   const [previewDocs, setPreviewDocs] = useState(null)
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
+  const [associationRecord, setAssociationRecord] = useState(null)
 
   /* ── Fetch summary ── */
   const fetchSummary = useCallback(() => api.invoices.summary(), [])
@@ -1828,6 +1851,8 @@ export default function Invoices() {
                     </td></tr>
                   : records.map(r => {
                       const f = r.fields || {}
+                      const assoc = r.association
+                      const related = assoc?.related_counts?.project || {}
                       const outstanding = Number(f['Outstanding Amount'] || 0)
                       const refs = parseAttachments(f['Reference'])
                       const pdfs = parseAttachments(f['Invoice PDF'])
@@ -1845,7 +1870,16 @@ export default function Invoices() {
                             </span>
                           </td>
                           <td className="tbl-cell">
-                            <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium block truncate" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
+                              {assoc?.project?.name && (
+                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                                  <Briefcase size={9} />
+                                  {related.status || 0} status · {related.projects || 0} project
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="tbl-cell">
                             <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span>
@@ -1941,9 +1975,19 @@ export default function Invoices() {
         <InvoiceDetail
           invoice={drawer.invoice}
           onClose={closeDrawer}
+          onLink={() => { setAssociationRecord(drawer.invoice); closeDrawer() }}
           onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer.invoice })}
           isEditor={isEditor}
           onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+        />,
+        document.body
+      )}
+      {associationRecord && createPortal(
+        <AssociationLinkModal
+          sourceTable="invoices"
+          record={associationRecord}
+          onClose={() => setAssociationRecord(null)}
+          onSaved={() => { setAssociationRecord(null); refresh() }}
         />,
         document.body
       )}

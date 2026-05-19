@@ -1,6 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..services.teable import TeableService
+from ..services.associations import AssociationService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
 from ..db.attribution import record_user_attribution
 from .deps import require_auth, require_editor
@@ -10,6 +11,10 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 def get_teable():
     return TeableService()
+
+
+def get_associations():
+    return AssociationService()
 
 
 @router.get("")
@@ -23,6 +28,7 @@ async def list_projects(
     _role: str = Depends(require_auth),
 ):
     teable = get_teable()
+    associations = get_associations()
     resolved = resolve_status(status) if status else None
     records = await teable.list_records(
         status=resolved,
@@ -32,6 +38,7 @@ async def list_projects(
         take=limit,
         skip=skip,
     )
+    records = await associations.hydrate_records("projects", records)
     return {"records": records, "count": len(records)}
 
 
@@ -48,15 +55,20 @@ async def search_projects(
     _role: str = Depends(require_auth),
 ):
     teable = get_teable()
+    associations = get_associations()
     records = await teable.search_records(q, take=limit)
+    records = await associations.hydrate_records("projects", records)
     return {"records": records, "count": len(records)}
 
 
 @router.get("/{record_id}")
 async def get_project(record_id: str, _role: str = Depends(require_auth)):
     teable = get_teable()
+    associations = get_associations()
     try:
-        return await teable.get_record(record_id)
+        record = await teable.get_record(record_id)
+        hydrated = await associations.hydrate_records("projects", [record])
+        return hydrated[0] if hydrated else record
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 

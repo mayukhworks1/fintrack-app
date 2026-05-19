@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
+import AssociationLinkModal from '../components/AssociationLinkModal'
 import { api } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
@@ -98,6 +99,7 @@ export default function ProjectDetail() {
   const [analyzing, setAnalyzing]         = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting]           = useState(false)
+  const [showAssociationModal, setShowAssociationModal] = useState(false)
 
   const loadRecord = useCallback(async () => {
     if (isNew) return
@@ -169,6 +171,8 @@ export default function ProjectDetail() {
   )
 
   const f = record?.fields || {}
+  const assoc = record?.association
+  const related = assoc?.related_counts?.project || {}
   const profitPct = Number(f['Profit percentage'] || 0)
   const fmt = (n) => formatInr(n)
 
@@ -208,6 +212,11 @@ export default function ProjectDetail() {
             </button>
             {isEditor && (
               <>
+                <button onClick={() => setShowAssociationModal(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
+                  style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                  Link
+                </button>
                 <button onClick={() => setEditing(true)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
                   style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
@@ -267,6 +276,30 @@ export default function ProjectDetail() {
       ) : (
         <div className="space-y-4">
 
+          {assoc?.project?.name && (
+            <div className="card">
+              <h2 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-3)' }}>
+                Linked Portfolio Association
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Canonical client</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{assoc.client?.name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Canonical project</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{assoc.project?.name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Connected records</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                    {related.status || 0} status · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Key metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Key financial metrics">
             <MetricCard label="Amount Billed"  value={fmt(f['Amount Billed So far'])} />
@@ -317,6 +350,15 @@ export default function ProjectDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {showAssociationModal && record && (
+        <AssociationLinkModal
+          sourceTable="projects"
+          record={record}
+          onClose={() => setShowAssociationModal(false)}
+          onSaved={() => { setShowAssociationModal(false); loadRecord() }}
+        />
       )}
     </div>
   )

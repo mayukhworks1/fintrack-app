@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from ..services.associations import AssociationService
 from ..services.status import StatusService
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
@@ -25,6 +26,10 @@ router = APIRouter(prefix="/api/status", tags=["status"])
 
 def _svc() -> StatusService:
     return StatusService()
+
+
+def _assoc() -> AssociationService:
+    return AssociationService()
 
 
 def _ip(request: Request) -> str:
@@ -68,6 +73,7 @@ async def list_statuses(
             client=client or None,
             project=project or None,
         )
+        records = await _assoc().hydrate_records("status", records)
         return {"records": records, "total": len(records)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch status updates: {e}")
@@ -157,7 +163,9 @@ async def get_status(
 ):
     svc = _svc()
     try:
-        return await svc.get_record(record_id)
+        record = await svc.get_record(record_id)
+        hydrated = await _assoc().hydrate_records("status", [record])
+        return hydrated[0] if hydrated else record
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 

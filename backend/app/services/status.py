@@ -49,7 +49,11 @@ async def _bust_valkey_status() -> None:
 
 class StatusService:
     def __init__(self):
-        self.token    = settings.teable_api_token
+        self.token    = (
+            settings.teable_all_api_token
+            or settings.teable_api_token
+            or settings.teable_web_api_token
+        )
         self.base_url = settings.teable_base_url.rstrip("/")
         self.table_id = settings.teable_status_table_id
 

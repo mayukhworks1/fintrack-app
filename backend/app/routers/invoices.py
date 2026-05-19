@@ -7,11 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from typing import Optional
 from pydantic import BaseModel
 from ..services.invoice import InvoiceService
+from ..services.associations import AssociationService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
+
+
+def _associations() -> AssociationService:
+    return AssociationService()
 
 
 def _validate_paid_invoice(fields: dict) -> None:
@@ -83,11 +88,13 @@ async def list_invoices(
     _role:    str           = Depends(require_auth),
 ):
     try:
-        return await InvoiceService().list_invoices(
+        result = await InvoiceService().list_invoices(
             status=status, project=project,
             limit=limit, skip=skip,
             order_by=order_by, order=order,
         )
+        result["records"] = await _associations().hydrate_records("invoices", result.get("records", []))
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -95,7 +102,9 @@ async def list_invoices(
 @router.get("/{record_id}")
 async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
     try:
-        return await InvoiceService().get_invoice(record_id)
+        record = await InvoiceService().get_invoice(record_id)
+        hydrated = await _associations().hydrate_records("invoices", [record])
+        return hydrated[0] if hydrated else record
     except Exception as e:
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 

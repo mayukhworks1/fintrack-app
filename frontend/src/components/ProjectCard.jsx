@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight } from 'lucide-react'
+import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, Link2 } from 'lucide-react'
 import { formatInr, formatPct } from '../utils/format'
 import clsx from 'clsx'
 
@@ -34,6 +34,8 @@ function HealthBar({ health, profitPct }) {
 export default function ProjectCard({ record }) {
   const navigate   = useNavigate()
   const f          = record?.fields || {}
+  const assoc      = record?.association
+  const related    = assoc?.related_counts?.project || {}
   const profitPct  = parseFloat(f['Profit percentage'] || 0)
   const billed     = parseFloat(f['Amount Billed So far'] || 0)
   const target     = parseFloat(f['Target Revenue'] || 0)
@@ -53,6 +55,13 @@ export default function ProjectCard({ record }) {
         <div className="min-w-0">
           <h3 className="font-bold text-sm truncate" style={{ color: 'var(--text-1)' }}>{f['Project Name'] || '—'}</h3>
           <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{f['Client'] || '—'}</p>
+          {assoc?.project?.name && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold"
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}>
+              <Link2 size={10} />
+              {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''} · {related.status || 0} status
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <StatusBadge status={f['Project Status']} />

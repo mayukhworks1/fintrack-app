@@ -62,6 +62,9 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     filter_project = view_config.get("filterProject")
     filter_category = view_config.get("filterCategory")
     board_group_by = view_config.get("boardGroupBy")
+    card_group_by = view_config.get("cardGroupBy")
+    card_group_sort = view_config.get("cardGroupSort")
+    card_record_sort = view_config.get("cardRecordSort")
     search = view_config.get("search")
     theme = view_config.get("theme")
     density = view_config.get("density")
@@ -98,6 +101,15 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(board_group_by, str) and board_group_by.strip():
         clean["boardGroupBy"] = board_group_by.strip()[:120]
+
+    if isinstance(card_group_by, str) and card_group_by.strip():
+        clean["cardGroupBy"] = card_group_by.strip()[:120]
+
+    if isinstance(card_group_sort, str) and card_group_sort.strip():
+        clean["cardGroupSort"] = card_group_sort.strip()[:120]
+
+    if isinstance(card_record_sort, str) and card_record_sort.strip():
+        clean["cardRecordSort"] = card_record_sort.strip()[:120]
 
     if isinstance(search, str) and search.strip():
         clean["search"] = search.strip()[:255]

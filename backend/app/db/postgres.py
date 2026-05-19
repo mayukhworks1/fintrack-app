@@ -7,6 +7,9 @@ Tables created on first startup:
   chat_sessions    — AI assistant conversation groups
   chat_messages    — individual AI chat turns
   report_history   — generated AI/board reports for replay and audit
+  client_entities  — canonical client identities across modules
+  project_entities — canonical project/engagement identities across modules
+  record_links     — links mirrored/source records to canonical entities
   projects_mirror  — Teable project records (full replica)
   invoices_mirror  — Teable invoice records (full replica)
   web_invoices_mirror — Teable web invoice records (full replica)
@@ -137,6 +140,50 @@ CREATE TABLE IF NOT EXISTS report_history (
 );
 CREATE INDEX IF NOT EXISTS rpt_created_idx ON report_history (created_at DESC);
 CREATE INDEX IF NOT EXISTS rpt_type_idx    ON report_history (report_type, created_at DESC);
+
+-- ── Cross-module association layer ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS client_entities (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    canonical_name   VARCHAR(255) NOT NULL,
+    normalized_name  VARCHAR(255) NOT NULL UNIQUE,
+    notes            TEXT,
+    is_active        BOOLEAN      NOT NULL DEFAULT TRUE
+);
+CREATE INDEX IF NOT EXISTS ce_name_idx ON client_entities (canonical_name);
+
+CREATE TABLE IF NOT EXISTS project_entities (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_entity_id UUID         REFERENCES client_entities(id) ON DELETE SET NULL,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    canonical_name   VARCHAR(255) NOT NULL,
+    normalized_name  VARCHAR(255) NOT NULL,
+    notes            TEXT,
+    is_active        BOOLEAN      NOT NULL DEFAULT TRUE,
+    UNIQUE (client_entity_id, normalized_name)
+);
+CREATE INDEX IF NOT EXISTS pe_name_idx   ON project_entities (canonical_name);
+CREATE INDEX IF NOT EXISTS pe_client_idx ON project_entities (client_entity_id, canonical_name);
+
+CREATE TABLE IF NOT EXISTS record_links (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_table     VARCHAR(20)  NOT NULL,
+    teable_id        VARCHAR(60)  NOT NULL,
+    client_entity_id UUID         REFERENCES client_entities(id) ON DELETE SET NULL,
+    project_entity_id UUID        REFERENCES project_entities(id) ON DELETE SET NULL,
+    link_mode        VARCHAR(20)  NOT NULL DEFAULT 'auto',
+    match_confidence NUMERIC(5,2) NOT NULL DEFAULT 0,
+    linked_by_role   VARCHAR(20),
+    linked_by_ip     VARCHAR(45),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE (source_table, teable_id)
+);
+CREATE INDEX IF NOT EXISTS rl_source_idx  ON record_links (source_table, teable_id);
+CREATE INDEX IF NOT EXISTS rl_client_idx  ON record_links (client_entity_id);
+CREATE INDEX IF NOT EXISTS rl_project_idx ON record_links (project_entity_id);
 
 -- ── Teable mirror: projects ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS projects_mirror (

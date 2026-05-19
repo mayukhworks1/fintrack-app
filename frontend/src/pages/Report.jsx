@@ -120,6 +120,7 @@ const REPORT_MODES = [
 export default function Report() {
   const [reportMode, setReportMode] = useState('board-pack')
   const [report,     setReport]    = useState('')
+  const [reportMeta, setReportMeta] = useState({})
   const [model,      setModel]     = useState('')
   const [loading,    setLoading]   = useState(false)
   const [error,      setError]     = useState('')
@@ -131,6 +132,7 @@ export default function Report() {
   const [history,    setHistory]   = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [activeHistoryId, setActiveHistoryId] = useState('')
+  const [deletingHistoryId, setDeletingHistoryId] = useState('')
   const abortRef = useRef(null)
 
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -154,6 +156,7 @@ export default function Report() {
     if (mode === reportMode) return
     setReportMode(mode)
     setReport('')
+    setReportMeta({})
     setModel('')
     setError('')
     setFromCache(false)
@@ -165,6 +168,7 @@ export default function Report() {
   const generate = async ({ force = false } = {}) => {
     setLoading(true)
     setReport('')
+    setReportMeta({})
     setModel('')
     setError('')
     setFromCache(false)
@@ -186,6 +190,7 @@ export default function Report() {
         setCachedAt(resp.cached_at || '')
       }
       setReport(resp.report || '')
+      setReportMeta(resp.metadata || {})
       setModel(resp.model || '')
       setDuration(resp.duration_ms || 0)
       setIsEmpty(!!resp.empty)
@@ -237,6 +242,7 @@ export default function Report() {
     try {
       const resp = await api.ai.reportHistoryDetail(id)
       setReport(resp.report || '')
+      setReportMeta(resp.metadata || {})
       setModel(resp.model || '')
       setFromCache(false)
       setCachedAt(resp.created_at || '')
@@ -248,6 +254,29 @@ export default function Report() {
       setError('Failed to open report history: ' + e.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const deleteHistory = async (id) => {
+    if (!window.confirm('Delete this saved report from history?')) return
+    setDeletingHistoryId(id)
+    try {
+      await api.ai.reportHistoryDelete(id)
+      setHistory(items => items.filter(item => item.id !== id))
+      if (activeHistoryId === id) {
+        setActiveHistoryId('')
+        setReport('')
+        setReportMeta({})
+        setModel('')
+        setFromCache(false)
+        setCachedAt('')
+        setDuration(0)
+        setIsEmpty(false)
+      }
+    } catch (e) {
+      setError('Failed to delete report history: ' + e.message)
+    } finally {
+      setDeletingHistoryId('')
     }
   }
 
@@ -267,6 +296,16 @@ export default function Report() {
   })()
 
   const currentMode = REPORT_MODES.find(m => m.id === reportMode)
+  const metricCards = reportMode === 'status-briefing'
+    ? [
+        { label: 'Status Rows', value: reportMeta.statuses ?? '—' },
+      ]
+    : [
+        { label: 'Projects', value: reportMeta.projects ?? '—' },
+        { label: 'Invoices', value: reportMeta.invoices ?? '—' },
+        { label: 'Pending Invoices', value: reportMeta.pending_invoices ?? '—' },
+        { label: 'At-Risk Projects', value: reportMeta.at_risk_projects ?? '—' },
+      ]
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 animate-fade-in">
@@ -356,34 +395,60 @@ export default function Report() {
               const active = activeHistoryId === item.id
               const meta = item.metadata || {}
               return (
-                <button
+                <div
                   key={item.id}
-                  onClick={() => openHistory(item.id)}
-                  className="text-left rounded-lg p-3 transition-colors"
+                  className="rounded-lg p-3 transition-colors"
                   style={{
                     border: active ? '1px solid var(--accent)' : '1px solid var(--card-border)',
                     background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
                   }}
                 >
-                  <div className="flex items-center gap-2">
-                    <Eye size={13} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
-                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>
-                      {item.title || item.report_type}
-                    </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      onClick={() => openHistory(item.id)}
+                      className="text-left flex-1 min-w-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Eye size={13} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
+                        <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+                          {item.title || item.report_type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                        {new Date(item.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                      <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                        {item.report_type} · {item.model || 'n/a'}
+                        {meta.pending_invoices != null ? ` · ${meta.pending_invoices} pending` : ''}
+                      </p>
+                    </button>
+                    <button
+                      onClick={() => deleteHistory(item.id)}
+                      disabled={deletingHistoryId === item.id}
+                      className="btn-ghost px-2 py-1 text-[11px]"
+                      title="Delete saved report"
+                      style={{ color: 'var(--fin-negative)' }}
+                    >
+                      <Trash2 size={12} className={deletingHistoryId === item.id ? 'animate-pulse' : ''} />
+                    </button>
                   </div>
-                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                    {new Date(item.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
-                  </p>
-                  <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--text-3)' }}>
-                    {item.report_type} · {item.model || 'n/a'}
-                    {meta.pending_invoices != null ? ` · ${meta.pending_invoices} pending` : ''}
-                  </p>
-                </button>
+                </div>
               )
             })}
           </div>
         )}
       </div>
+
+      {report && !isEmpty && Object.keys(reportMeta || {}).length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map(card => (
+            <div key={card.label} className="card">
+              <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>{card.label}</p>
+              <p className="text-xl font-bold mt-1" style={{ color: 'var(--text-1)' }}>{card.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Cache + freshness indicators (board-pack only) ──────────── */}
       {report && !isEmpty && reportMode === 'board-pack' && (

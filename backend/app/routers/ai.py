@@ -28,6 +28,7 @@ from fastapi.responses import StreamingResponse
 
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
+from ..services.status import StatusService
 from ..services.openrouter import (
     chat_with_ai, autofill_project, analyze_project, generate_report,
     generate_status_briefing,
@@ -109,6 +110,44 @@ def _get_client_ip(request: Request) -> str:
         if val:
             return val.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+def _append_status_context(context: str, status_records: list[dict]) -> str:
+    """Append a compact status-board context block for status-aware AI answers."""
+    status_records = status_records or []
+    if not status_records:
+        return context
+
+    by_status: dict[str, int] = {}
+    by_client: dict[str, int] = {}
+    status_lines: list[str] = []
+
+    for r in status_records:
+        sf = r.get("fields", {})
+        status = sf.get("Status") or "Not started"
+        client = sf.get("Client") or "Unknown"
+        project = sf.get("Project") or "Unknown project"
+        short = (sf.get("Short Status") or "").strip()
+        detail = (sf.get("Current Status (Detailed)") or "").strip()
+
+        by_status[status] = by_status.get(status, 0) + 1
+        by_client[client] = by_client.get(client, 0) + 1
+
+        snippet = short or detail or "No status note recorded"
+        if detail and detail != short:
+            snippet = f"{snippet} — {detail[:120]}" if short else detail[:160]
+        status_lines.append(f"- {client} / {project} [{status}]: {snippet}")
+
+    top_clients = sorted(by_client.items(), key=lambda item: (-item[1], item[0]))[:8]
+    context += (
+        "\n\n=== LIVE STATUS BOARD SUMMARY ===\n"
+        f"Total Status Records: {len(status_records)}\n"
+        f"By Status: {by_status}\n"
+        f"Top Clients By Active Status Rows: {top_clients}\n"
+        "\n=== LIVE PROJECT STATUS UPDATES ===\n"
+        + "\n".join(status_lines[:40])
+    )
+    return context
 
 
 # ── Context builder — PG mirror + Valkey cache ────────────────────────────────
@@ -220,17 +259,7 @@ async def _build_context_pg(pool) -> str:
                 max_invoices=25,
             )
             context += "\n\n=== TOON CONTEXT (structured tokens) ===\n" + toon_ctx
-            if status_records:
-                status_lines = []
-                for r in status_records:
-                    sf = r.get("fields", {})
-                    short  = sf.get("Short Status", "")
-                    detail = sf.get("Current Status (Detailed)", "")
-                    line   = f"- {sf.get('Client','?')} / {sf.get('Project','?')}: {short}"
-                    if detail and detail.strip() != short.strip():
-                        line += f" — {detail[:150]}"
-                    status_lines.append(line)
-                context += "\n\n=== LIVE PROJECT STATUS UPDATES ===\n" + "\n".join(status_lines)
+            context = _append_status_context(context, status_records)
     except Exception:
         pass  # TOON is additive — never break chat
 
@@ -247,9 +276,10 @@ async def _build_context_teable() -> str:
     teable  = TeableService()
     inv_svc = InvoiceService()
 
-    (summary, all_records), (inv_summary, inv_records) = await asyncio.gather(
+    (summary, all_records), (inv_summary, inv_records), status_records = await asyncio.gather(
         asyncio.gather(teable.get_summary(), teable.get_all_records()),
         asyncio.gather(inv_svc.get_summary(), inv_svc.get_all_invoices()),
+        StatusService().list_all(),
     )
 
     project_text = (
@@ -265,7 +295,8 @@ async def _build_context_teable() -> str:
     )
     records_text = format_chat_records_context(all_records, limit=120)
     invoice_text = _fmt_chat_invoice_context(inv_summary, inv_records, limit=60)
-    return project_text + "\n" + records_text + "\n\n" + invoice_text
+    context = project_text + "\n" + records_text + "\n\n" + invoice_text
+    return _append_status_context(context, status_records)
 
 
 # ── Chat session persistence helpers ─────────────────────────────────────────
@@ -1163,6 +1194,7 @@ async def ai_report(
             "model":        cached_result.get("model", ""),
             "from_cache":   from_cache,
             "cached_at":    cached_result.get("generated_at", ""),
+            "metadata":     cached_result.get("metadata") or {},
         }
         if not from_cache:
             response["duration_ms"] = cached_result.get("duration_ms", 0)
@@ -1273,6 +1305,24 @@ async def ai_report_history_detail(
     }
 
 
+@router.delete("/report/history/{history_id}")
+async def ai_report_history_delete(
+    history_id: str,
+    _role: str = Depends(require_auth),
+):
+    """Delete one stored generated report."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is not available")
+    deleted = await pool.fetchval(
+        "DELETE FROM report_history WHERE id = $1 RETURNING id",
+        history_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Report history item not found")
+    return {"ok": True, "id": str(deleted)}
+
+
 # ── Status Briefing ───────────────────────────────────────────────────────────
 
 @router.get("/status-briefing")
@@ -1317,6 +1367,7 @@ async def ai_status_briefing(
             "model":        result.get("model_short", result.get("model", "")),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "duration_ms":  int((time.time() - t0) * 1000),
+            "metadata":     {"statuses": len(status_records)},
             "history_id":   history_id,
         }
 

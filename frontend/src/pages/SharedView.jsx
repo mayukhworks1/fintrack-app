@@ -237,17 +237,69 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
   )
 }
 
-function CardView({ records, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true }) {
+function CardView({
+  records,
+  resourceType,
+  canEdit,
+  onEdit,
+  onDetail,
+  compact = false,
+  showClientAccents = true,
+  groupByField,
+  groupSort = 'count-desc',
+  recordSort = 'project-asc',
+}) {
   const meta = RESOURCE_META[resourceType]
-  const grouped = records.reduce((acc, r) => {
-    const groupValue = r.fields?.[meta.clientField] || 'Unknown'
-    if (!acc[groupValue]) acc[groupValue] = []
-    acc[groupValue].push(r)
-    return acc
-  }, {})
+  const groups = new Map()
+  for (const record of records) {
+    const groupValue = record.fields?.[groupByField] || (groupByField === meta.statusField ? 'Unassigned' : 'Unknown')
+    if (!groups.has(groupValue)) groups.set(groupValue, [])
+    groups.get(groupValue).push(record)
+  }
+
+  const sortRecords = (items) => {
+    const ordered = [...items]
+    ordered.sort((a, b) => {
+      const af = a.fields || {}
+      const bf = b.fields || {}
+      switch (recordSort) {
+        case 'project-desc':
+          return String(bf[meta.titleField] || '').localeCompare(String(af[meta.titleField] || ''))
+        case 'modified-desc':
+          return new Date(bf.lastModifiedTime || 0).getTime() - new Date(af.lastModifiedTime || 0).getTime()
+        case 'modified-asc':
+          return new Date(af.lastModifiedTime || 0).getTime() - new Date(bf.lastModifiedTime || 0).getTime()
+        case 'status-asc':
+          return String(af[meta.statusField] || '').localeCompare(String(bf[meta.statusField] || ''))
+        case 'project-asc':
+        default:
+          return String(af[meta.titleField] || '').localeCompare(String(bf[meta.titleField] || ''))
+      }
+    })
+    return ordered
+  }
+
+  const grouped = [...groups.entries()].map(([groupValue, items]) => ({
+    groupValue,
+    recs: sortRecords(items),
+    count: items.length,
+  })).sort((a, b) => {
+    switch (groupSort) {
+      case 'count-asc':
+        return a.count - b.count || String(a.groupValue).localeCompare(String(b.groupValue))
+      case 'name-desc':
+        return String(b.groupValue).localeCompare(String(a.groupValue))
+      case 'name-asc':
+        return String(a.groupValue).localeCompare(String(b.groupValue))
+      case 'count-desc':
+      default:
+        return b.count - a.count || String(a.groupValue).localeCompare(String(b.groupValue))
+    }
+  })
+
   return (
     <div className="space-y-8">
-      {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([groupValue, recs]) => {
+      {grouped.map(({ groupValue, recs, count }) => {
         const clrHex = clientColor(groupValue)
         return (
           <section key={groupValue}>
@@ -257,7 +309,7 @@ function CardView({ records, resourceType, canEdit, onEdit, onDetail, compact = 
                 <span className="w-2 h-2 rounded-full" style={{ background: clrHex }} />
                 {groupValue}
               </span>
-              <span className="text-sm text-gray-400">{recs.length} {meta.noun}{recs.length !== 1 ? 's' : ''}</span>
+              <span className="text-sm text-gray-400">{count} {meta.noun}{count !== 1 ? 's' : ''}</span>
             </div>
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${compact ? 'gap-3' : 'gap-4'}`}>
               {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} />)}
@@ -666,6 +718,7 @@ export default function SharedView() {
   const showClientAccents = vc.showClientAccents !== false
   const boardGroupOptions = BOARD_GROUP_OPTIONS[resourceType] || [meta.statusField]
   const activeBoardGroupBy = boardGroupOptions.includes(boardGroupBy) ? boardGroupBy : meta.statusField
+  const activeCardGroupBy = [meta.clientField, meta.statusField].includes(vc.cardGroupBy) ? vc.cardGroupBy : meta.clientField
   const accentStyle = { '--share-accent': theme.accent, '--share-accent-dim': theme.accentDim, '--share-accent-soft': theme.accentSoft }
 
   const recordsForView = useMemo(() => {
@@ -922,7 +975,20 @@ export default function SharedView() {
           </div>
         ) : (
           <>
-            {viewType === 'card' && <CardView records={filtered} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} compact={compact} showClientAccents={showClientAccents} />}
+            {viewType === 'card' && (
+              <CardView
+                records={filtered}
+                resourceType={resourceType}
+                canEdit={canEdit}
+                onEdit={setEditRecord}
+                onDetail={setDetailRecord}
+                compact={compact}
+                showClientAccents={showClientAccents}
+                groupByField={activeCardGroupBy}
+                groupSort={vc.cardGroupSort || 'count-desc'}
+                recordSort={vc.cardRecordSort || 'project-asc'}
+              />
+            )}
             {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} />}
             {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} groupByField={activeBoardGroupBy} />}
           </>

@@ -130,6 +130,8 @@ const SUGGESTIONS = [
   'Which project has the highest profit %?',
   'Summarize the overall portfolio health',
   'Which client has the most projects?',
+  'What does the status board say is blocked right now?',
+  'Which projects are currently On Hold or Input Pending?',
   'Are any projects below target revenue?',
   'Total billing for Birla Open Minds?',
   'Which projects are at risk?',
@@ -200,7 +202,7 @@ function Message({ msg }) {
 
 const WELCOME = {
   role: 'assistant',
-  content: "Hi! I'm FinTrackAI. I have live access to all your Fintrack project data — every client, billing amount, profit margin, and target.\n\nWhat would you like to know?",
+  content: "Hi! I'm FinTrackAI. I have live access to your project portfolio, invoice tracker, and current status board.\n\nAsk me about revenue, collections, risk, blockers, client delays, or what is happening right now across projects.",
 }
 
 const STORAGE_KEY = 'fintrack-ai-history'
