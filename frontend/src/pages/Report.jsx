@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check,
   Square, Printer, TrendingUp, Zap, Clock, Activity, BarChart2,
-  History, Eye,
+  History, Eye, Trash2,
 } from 'lucide-react'
 import { api } from '../services/api'
 

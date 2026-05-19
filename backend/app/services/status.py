@@ -49,7 +49,12 @@ async def _bust_valkey_status() -> None:
 
 class StatusService:
     def __init__(self):
-        self.token    = (
+        self.record_token = (
+            settings.teable_api_token
+            or settings.teable_all_api_token
+            or settings.teable_web_api_token
+        )
+        self.schema_token = (
             settings.teable_all_api_token
             or settings.teable_api_token
             or settings.teable_web_api_token
@@ -60,8 +65,14 @@ class StatusService:
     @property
     def _headers(self) -> dict:
         return {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {self.record_token}",
             "Content-Type":  "application/json",
+        }
+
+    def _headers_for(self, token: str | None) -> dict:
+        return {
+            "Authorization": f"Bearer {token or self.record_token}",
+            "Content-Type": "application/json",
         }
 
     @property
@@ -199,10 +210,26 @@ class StatusService:
 
     async def get_picklists(self) -> dict[str, Any]:
         async def _load():
-            async with httpx.AsyncClient(timeout=10) as client:
-                res = await client.get(self._field_url, headers=self._headers)
-                res.raise_for_status()
-                fields = res.json()
+            fields = None
+            last_error: Exception | None = None
+            for token in [self.record_token, self.schema_token]:
+                if not token:
+                    continue
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        res = await client.get(self._field_url, headers=self._headers_for(token))
+                        res.raise_for_status()
+                        fields = res.json()
+                        break
+                except httpx.HTTPStatusError as exc:
+                    last_error = exc
+                    if exc.response.status_code in (401, 403):
+                        continue
+                    raise
+            if fields is None:
+                if last_error:
+                    logger.warning("status picklist metadata unavailable: %s", last_error)
+                return {}
 
             result = {}
             for field in fields:
@@ -254,7 +281,7 @@ class StatusService:
         body = self._field_convert_payload(field, updated_choices)
 
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.put(url, json=body, headers=self._headers)
+            res = await client.put(url, json=body, headers=self._headers_for(self.schema_token))
             try:
                 res.raise_for_status()
             except httpx.HTTPStatusError as e:
