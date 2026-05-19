@@ -26,6 +26,7 @@ class SharedViewCreate(BaseModel):
     title: Optional[str] = None
     record_ids: list[str]
     expires_hours: Optional[int] = None   # None = never expires
+    view_config: Optional[dict] = None    # view type, columns etc — stored in PG, sent to public viewer
 
 
 class SharedViewUpdate(BaseModel):
@@ -74,6 +75,7 @@ async def create_shared_view(
             role=role,
             ip=_ip(request),
             expires_at=_expiry(body.expires_hours),
+            view_config=body.view_config,
         )
         return view
     except (ValueError, RuntimeError) as e:

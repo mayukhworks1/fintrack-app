@@ -309,6 +309,7 @@ CREATE TABLE IF NOT EXISTS shared_views (
 CREATE INDEX IF NOT EXISTS sv_token_idx   ON shared_views (token);
 CREATE INDEX IF NOT EXISTS sv_created_idx ON shared_views (created_at DESC);
 CREATE INDEX IF NOT EXISTS sv_active_idx  ON shared_views (is_active, expires_at);
+ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS view_config JSONB;
 
 CREATE TABLE IF NOT EXISTS shared_view_accesses (
     id          UUID             PRIMARY KEY DEFAULT gen_random_uuid(),

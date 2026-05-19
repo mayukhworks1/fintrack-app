@@ -20,6 +20,16 @@ from ..db.postgres import get_pool
 logger = logging.getLogger("fintrack.shared_views")
 
 _MAX_RECORD_IDS = 50
+_ALLOWED_VIEW_TYPES = {"card", "list", "board"}
+_COLUMN_ALIASES = {
+    "Client": "Client",
+    "Project": "Project",
+    "Status": "Status",
+    "Short Status": "Short Status",
+    "Detailed Status": "Current Status (Detailed)",
+    "Current Status (Detailed)": "Current Status (Detailed)",
+    "Last Modified": "Last Modified",
+}
 
 
 def _new_token() -> str:
@@ -38,6 +48,45 @@ def _row(row) -> dict:
     return out
 
 
+def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
+    """Persist only the public-view fields we explicitly support."""
+    if not isinstance(view_config, dict):
+        return None
+
+    view_type = view_config.get("type")
+    columns = view_config.get("columns")
+    filter_client = view_config.get("filterClient")
+    filter_status = view_config.get("filterStatus")
+    search = view_config.get("search")
+
+    clean: dict[str, Any] = {}
+
+    if isinstance(view_type, str) and view_type in _ALLOWED_VIEW_TYPES:
+        clean["type"] = view_type
+
+    if isinstance(columns, list):
+        safe_columns = []
+        for c in columns:
+            if not isinstance(c, str):
+                continue
+            normalized = _COLUMN_ALIASES.get(c)
+            if normalized and normalized not in safe_columns:
+                safe_columns.append(normalized)
+        if safe_columns:
+            clean["columns"] = safe_columns
+
+    if isinstance(filter_client, str) and filter_client.strip():
+        clean["filterClient"] = filter_client.strip()[:255]
+
+    if isinstance(filter_status, str) and filter_status.strip():
+        clean["filterStatus"] = filter_status.strip()[:120]
+
+    if isinstance(search, str) and search.strip():
+        clean["search"] = search.strip()[:255]
+
+    return clean or None
+
+
 class SharedViewService:
 
     # ── Write ─────────────────────────────────────────────────────────────────
@@ -49,6 +98,7 @@ class SharedViewService:
         role: str,
         ip: Optional[str] = None,
         expires_at: Optional[datetime] = None,
+        view_config: Optional[dict] = None,
     ) -> dict:
         pool = get_pool()
         if not pool:
@@ -59,12 +109,13 @@ class SharedViewService:
             raise ValueError(f"Maximum {_MAX_RECORD_IDS} records per share")
 
         token = _new_token()
+        safe_view_config = _sanitize_view_config(view_config)
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 INSERT INTO shared_views
-                    (token, title, record_ids, created_by, created_from_ip, expires_at)
-                VALUES ($1, $2, $3::jsonb, $4, $5, $6)
+                    (token, title, record_ids, created_by, created_from_ip, expires_at, view_config)
+                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7::jsonb)
                 RETURNING *
                 """,
                 token,
@@ -73,6 +124,7 @@ class SharedViewService:
                 role,
                 ip,
                 expires_at,
+                json.dumps(safe_view_config) if safe_view_config is not None else None,
             )
         return _row(row)
 
@@ -187,7 +239,8 @@ class SharedViewService:
         if isinstance(record_ids, str):
             record_ids = json.loads(record_ids)
 
-        records: list[dict] = []
+        record_map: dict[str, dict[str, Any]] = {}
+        found_ids: set[str] = set()
         if record_ids:
             async with pool.acquire() as conn:
                 rows = await conn.fetch(
@@ -195,7 +248,7 @@ class SharedViewService:
                     SELECT teable_id, fields::text AS fields
                     FROM status_mirror
                     WHERE teable_id = ANY($1::text[])
-                    ORDER BY client, project
+                    ORDER BY array_position($1::text[], teable_id)
                     """,
                     record_ids,
                 )
@@ -204,13 +257,47 @@ class SharedViewService:
                     fields = json.loads(row["fields"]) if isinstance(row["fields"], str) else (row["fields"] or {})
                 except Exception:
                     fields = {}
-                records.append({"id": row["teable_id"], "fields": fields})
+                teable_id = row["teable_id"]
+                found_ids.add(teable_id)
+                record_map[teable_id] = {"id": teable_id, "fields": fields}
+
+        # If the mirror is behind, try live Teable for the missing records so
+        # public shares degrade more gracefully instead of silently dropping rows.
+        missing_ids = [rid for rid in record_ids if rid not in found_ids]
+        if missing_ids:
+            try:
+                from ..services.status import StatusService
+
+                svc = StatusService()
+                for rid in missing_ids:
+                    try:
+                        live = await svc.get_record(rid)
+                    except Exception:
+                        logger.debug("shared view live status fallback failed for %s", rid)
+                        continue
+                    if live and live.get("id"):
+                        record_map[live["id"]] = {"id": live["id"], "fields": live.get("fields") or {}}
+            except Exception as exc:
+                logger.debug("shared view live fallback unavailable: %s", exc)
+
+        # Rebuild in original shared order so mirror/live fallback mixes do not
+        # reshuffle the public snapshot.
+        records = [record_map[rid] for rid in record_ids if rid in record_map]
 
         # Log access asynchronously
         ip = _extract_ip(request)
         ua = request.headers.get("user-agent", "")
         referer = (request.headers.get("referer") or request.headers.get("origin") or "")[:500]
         asyncio.create_task(self._log_access(token, ip, ua, referer))
+
+        # Parse view_config (stored as JSONB — may come back as dict or str)
+        vc = view.get("view_config")
+        if isinstance(vc, str):
+            try:
+                vc = json.loads(vc)
+            except Exception:
+                vc = None
+        vc = _sanitize_view_config(vc)
 
         return {
             "token": token,
@@ -219,6 +306,7 @@ class SharedViewService:
             "expires_at": view.get("expires_at"),
             "records": records,
             "total": len(records),
+            "view_config": vc,
         }
 
     # ── Internal ──────────────────────────────────────────────────────────────

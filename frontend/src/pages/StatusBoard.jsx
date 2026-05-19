@@ -65,6 +65,7 @@ const EXPIRY_OPTS = [
   { label: '7 days',   value: 168 },
   { label: '30 days',  value: 720 },
 ]
+const MAX_SHARED_VIEW_RECORDS = 50
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -868,9 +869,9 @@ function AIUpdateModal({ selectedRecords, onClose, onShare }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Share Modal
 // ─────────────────────────────────────────────────────────────────────────────
-function ShareModal({ selectedRecords, onClose }) {
+function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = '', isViewShare = false, onClose }) {
   const [step,      setStep]      = useState('form')
-  const [title,     setTitle]     = useState('')
+  const [title,     setTitle]     = useState(defaultTitle)
   const [expiry,    setExpiry]    = useState(0)
   const [saving,    setSaving]    = useState(false)
   const [error,     setError]     = useState(null)
@@ -881,7 +882,19 @@ function ShareModal({ selectedRecords, onClose }) {
   async function createShare() {
     setSaving(true); setError(null)
     try {
-      const data = await api.sharedViews.create({ title: title.trim() || null, record_ids: selectedRecords.map(r => r.id), expires_hours: expiry || null })
+      if (selectedRecords.length === 0) {
+        throw new Error('No records selected to share.')
+      }
+      if (selectedRecords.length > MAX_SHARED_VIEW_RECORDS) {
+        throw new Error(`Public sharing is limited to ${MAX_SHARED_VIEW_RECORDS} records. Narrow the current view first.`)
+      }
+      const payload = {
+        title: title.trim() || null,
+        record_ids: selectedRecords.map(r => r.id),
+        expires_hours: expiry || null,
+      }
+      if (viewConfig) payload.view_config = viewConfig
+      const data = await api.sharedViews.create(payload)
       setShareData(data); setStep('created')
     } catch (e) { setError(e.message || 'Failed to create share link') }
     finally { setSaving(false) }
@@ -905,7 +918,7 @@ function ShareModal({ selectedRecords, onClose }) {
               <Share2 size={15} style={{ color: '#0ea5e9' }} />
             </div>
             <div>
-              <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? 'Share with Manager' : 'Link Ready!'}</h2>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? (isViewShare ? 'Share Current View' : 'Share with Manager') : 'Link Ready!'}</h2>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} · no login needed</p>
             </div>
           </div>
@@ -944,11 +957,20 @@ function ShareModal({ selectedRecords, onClose }) {
               {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>{error}</p>}
               <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
                 <Shield size={13} style={{ color: '#0ea5e9', marginTop: 1, flexShrink: 0 }} />
-                <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>IP, location, device & browser tracked on every open. Disable or delete anytime.</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+                  {isViewShare
+                    ? `This creates a public snapshot of the ${selectedRecords.length} records currently visible here. IP, location, device and browser are tracked on every open.`
+                    : 'IP, location, device & browser tracked on every open. Disable or delete anytime.'}
+                </p>
               </div>
+              {isViewShare && (
+                <p className="text-[11px]" style={{ color: selectedRecords.length > MAX_SHARED_VIEW_RECORDS ? '#ef4444' : 'var(--text-3)' }}>
+                  Public shares support up to {MAX_SHARED_VIEW_RECORDS} records per link.
+                </p>
+              )}
               <div className="flex items-center justify-end gap-2">
                 <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-                <button onClick={createShare} disabled={saving} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+                <button onClick={createShare} disabled={saving || selectedRecords.length > MAX_SHARED_VIEW_RECORDS || selectedRecords.length === 0} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Generate Link
                 </button>
               </div>
@@ -1264,6 +1286,7 @@ export default function StatusBoard() {
   const [showViews,     setShowViews]     = useState(false)
   const [showCols,      setShowCols]      = useState(false)
   const [copiedView,    setCopiedView]    = useState(false)
+  const [shareViewModal, setShareViewModal] = useState(false)
 
   // ── Persist view config to URL on any change ──────────────────────────────
   useEffect(() => {
@@ -1312,11 +1335,14 @@ export default function StatusBoard() {
   function clearSelection() { setSelectedIds(new Set()) }
   function toggleExpand(id) { setExpandedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
-  // ── Share view URL ────────────────────────────────────────────────────────
+  // ── Share view — opens modal with all visible records + current view config ─
   function shareViewUrl() {
-    navigator.clipboard.writeText(window.location.href)
-    setCopiedView(true); setTimeout(() => setCopiedView(false), 2000)
-    showToast('View URL copied! Share with anyone who has app access.', 'success')
+    if (filtered.length === 0) { showToast('No records visible to share.', 'error'); return }
+    if (filtered.length > MAX_SHARED_VIEW_RECORDS) {
+      showToast(`Public sharing is limited to ${MAX_SHARED_VIEW_RECORDS} records. Narrow the current view first.`, 'error')
+      return
+    }
+    setShareViewModal(true)
   }
 
   // ── Load saved view ───────────────────────────────────────────────────────
@@ -1440,12 +1466,12 @@ export default function StatusBoard() {
               {showViews && <SavedViewsMenu currentConfig={currentConfig} onLoad={loadSavedView} onClose={() => setShowViews(false)} />}
             </div>
 
-            {/* Share view URL */}
+            {/* Share view — creates a real public link via PG */}
             <button onClick={shareViewUrl}
               className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5"
-              title="Copy URL with current view config">
-              {copiedView ? <CheckCheck size={12} style={{ color: '#10b981' }} /> : <Copy size={12} />}
-              <span className="hidden sm:inline">{copiedView ? 'Copied!' : 'Share View'}</span>
+              title="Generate a public share link for the current view">
+              <Share2 size={12} />
+              <span className="hidden sm:inline">Share View</span>
             </button>
 
             {isEditor && (
@@ -1773,6 +1799,15 @@ export default function StatusBoard() {
       )}
       {shareModal && (
         <ShareModal selectedRecords={selectedRecords} onClose={() => setShareModal(false)} />
+      )}
+      {shareViewModal && (
+        <ShareModal
+          selectedRecords={filtered}
+          viewConfig={currentConfig}
+          title={`Status Update · ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+          isViewShare
+          onClose={() => setShareViewModal(false)}
+        />
       )}
       {manageModal && (
         <ManageSharesModal onClose={() => setManageModal(false)} />
