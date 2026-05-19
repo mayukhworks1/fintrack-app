@@ -73,65 +73,6 @@ async def list_statuses(
         raise HTTPException(status_code=500, detail=f"Failed to fetch status updates: {e}")
 
 
-# ── GET ONE ────────────────────────────────────────────────────────────────
-
-@router.get("/{record_id}")
-async def get_status(
-    record_id: str,
-    _auth=Depends(require_auth),
-):
-    svc = _svc()
-    try:
-        return await svc.get_record(record_id)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-# ── CREATE ─────────────────────────────────────────────────────────────────
-
-@router.post("", status_code=201)
-async def create_status(
-    request: Request,
-    body: StatusCreate,
-    role: str = Depends(require_editor),
-):
-    """Create a new status record (editor role required)."""
-    await _check_write_rate(request)
-
-    svc = _svc()
-    fields = body.to_teable_fields()
-    if not fields.get("Client") or not fields.get("Project"):
-        raise HTTPException(status_code=422, detail="client and project are required")
-    try:
-        return await svc.create_record(fields, request=request, role=role)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── UPDATE ─────────────────────────────────────────────────────────────────
-
-@router.patch("/{record_id}")
-async def update_status(
-    record_id: str,
-    request: Request,
-    body: StatusUpdate,
-    role: str = Depends(require_editor),
-):
-    """Update an existing status record (editor role required)."""
-    await _check_write_rate(request)
-
-    svc = _svc()
-    fields = body.to_teable_fields()
-    if not fields:
-        raise HTTPException(status_code=422, detail="No fields provided to update")
-    try:
-        return await svc.update_record(record_id, fields, request=request, role=role)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── AI UPDATE ──────────────────────────────────────────────────────────────
-
 class AIUpdateRequest(BaseModel):
     record_ids: list[str]
     extra_context: Optional[str] = None
@@ -203,6 +144,63 @@ async def add_status_picklist_option(
         return await StatusService().add_picklist_option(field_name, option)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── GET ONE ────────────────────────────────────────────────────────────────
+
+@router.get("/{record_id}")
+async def get_status(
+    record_id: str,
+    _auth=Depends(require_auth),
+):
+    svc = _svc()
+    try:
+        return await svc.get_record(record_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ── CREATE ─────────────────────────────────────────────────────────────────
+
+@router.post("", status_code=201)
+async def create_status(
+    request: Request,
+    body: StatusCreate,
+    role: str = Depends(require_editor),
+):
+    """Create a new status record (editor role required)."""
+    await _check_write_rate(request)
+
+    svc = _svc()
+    fields = body.to_teable_fields()
+    if not fields.get("Client") or not fields.get("Project"):
+        raise HTTPException(status_code=422, detail="client and project are required")
+    try:
+        return await svc.create_record(fields, request=request, role=role)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── UPDATE ─────────────────────────────────────────────────────────────────
+
+@router.patch("/{record_id}")
+async def update_status(
+    record_id: str,
+    request: Request,
+    body: StatusUpdate,
+    role: str = Depends(require_editor),
+):
+    """Update an existing status record (editor role required)."""
+    await _check_write_rate(request)
+
+    svc = _svc()
+    fields = body.to_teable_fields()
+    if not fields:
+        raise HTTPException(status_code=422, detail="No fields provided to update")
+    try:
+        return await svc.update_record(record_id, fields, request=request, role=role)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
