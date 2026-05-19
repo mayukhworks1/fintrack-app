@@ -155,6 +155,33 @@ export const api = {
         signal: opts.signal,
         timeout: AI_TIMEOUT_MS,
       }),
+    chatStream: async (message, history = [], opts = {}) => {
+      const token = getAuthToken()
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+      if (!_deviceHint) {
+        try { _deviceHint = await getDeviceHintHeader() } catch {}
+      }
+      const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+      const res = await fetch(`${BASE_URL}/api/ai/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader,
+          ...hintHeader,
+        },
+        body: JSON.stringify({
+          message,
+          history,
+          session_id: opts.sessionId || null,
+        }),
+        signal: opts.signal,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+      }
+      return res
+    },
     autofill: (description, opts = {}) =>
       request('/api/ai/autofill', {
         method: 'POST',

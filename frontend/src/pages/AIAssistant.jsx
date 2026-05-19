@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Send, Loader2, Bot, User, Sparkles, Trash2, Database,
+  Send, Bot, User, Sparkles, Trash2, Database,
   AlertCircle, ChevronDown, Copy, Check, Square,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -198,45 +198,13 @@ function Message({ msg }) {
   )
 }
 
-function TypingIndicator({ onStop }) {
-  return (
-    <div className="flex gap-2 sm:gap-3 mb-5" aria-live="polite" aria-label="AI is analyzing your data">
-      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0"
-        style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
-        <Bot size={12} style={{ color: 'var(--accent)' }} />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-3"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            {[0, 150, 300].map((delay) => (
-              <span key={delay} className="w-1.5 h-1.5 rounded-full animate-bounce"
-                style={{ background: 'var(--text-3)', animationDelay: `${delay}ms` }} aria-hidden="true" />
-            ))}
-          </div>
-          <span className="text-xs" style={{ color: 'var(--text-3)' }}>Analyzing…</span>
-        </div>
-        {onStop && (
-          <button
-            onClick={onStop}
-            aria-label="Stop generating"
-            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
-            style={{ color: 'var(--fin-negative)', border: '1px solid var(--fin-neg-border)' }}
-          >
-            <Square size={9} fill="currentColor" /> Stop
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 const WELCOME = {
   role: 'assistant',
   content: "Hi! I'm FinTrackAI. I have live access to all your Fintrack project data — every client, billing amount, profit margin, and target.\n\nWhat would you like to know?",
 }
 
 const STORAGE_KEY = 'fintrack-ai-history'
+const SESSION_KEY = 'fintrack-ai-session'
 
 function loadHistory() {
   try {
@@ -255,6 +223,9 @@ export default function AIAssistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  const [sessionId, setSessionId] = useState(() => {
+    try { return localStorage.getItem(SESSION_KEY) || '' } catch { return '' }
+  })
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
@@ -262,6 +233,13 @@ export default function AIAssistant() {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(-40))) } catch {}
   }, [history])
+
+  useEffect(() => {
+    try {
+      if (sessionId) localStorage.setItem(SESSION_KEY, sessionId)
+      else localStorage.removeItem(SESSION_KEY)
+    } catch {}
+  }, [sessionId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -275,18 +253,91 @@ export default function AIAssistant() {
     if (!msg || loading) return
     setInput('')
     const priorHistory = history
-    setHistory(prev => [...prev, { role: 'user', content: msg }])
+    const assistantIndex = priorHistory.length + 1
+    setHistory(prev => [...prev, { role: 'user', content: msg }, { role: 'assistant', content: 'Analyzing…', model: null, streaming: true }])
     setLoading(true)
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
 
     try {
-      const { reply, model } = await api.ai.chat(msg, priorHistory, { signal: ctrl.signal })
-      setHistory(prev => [...prev, { role: 'assistant', content: reply, model }])
+      const res = await api.ai.chatStream(msg, sessionId ? [] : priorHistory, {
+        signal: ctrl.signal,
+        sessionId,
+      })
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let finalModel = null
+      let finalReply = ''
+
+      if (!reader) throw new Error('Streaming is unavailable')
+
+      const applyAssistantState = (updater) => {
+        setHistory(prev => prev.map((entry, index) => (
+          index === assistantIndex ? updater(entry) : entry
+        )))
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const frames = buffer.split('\n\n')
+        buffer = frames.pop() || ''
+
+        for (const frame of frames) {
+          const line = frame
+            .split('\n')
+            .find(part => part.startsWith('data: '))
+          if (!line) continue
+
+          let event
+          try {
+            event = JSON.parse(line.slice(6))
+          } catch {
+            continue
+          }
+
+          if (event.type === 'session' && event.session_id) {
+            setSessionId(event.session_id)
+            continue
+          }
+
+          if (event.type === 'delta') {
+            finalReply += event.delta || ''
+            applyAssistantState(entry => ({ ...entry, content: finalReply, streaming: true }))
+            continue
+          }
+
+          if (event.type === 'done') {
+            finalReply = event.content || finalReply
+            finalModel = event.model_short || null
+            applyAssistantState(entry => ({
+              ...entry,
+              content: finalReply,
+              model: finalModel,
+              streaming: false,
+            }))
+            continue
+          }
+
+          if (event.type === 'error') {
+            throw new Error(event.error || 'Streaming failed')
+          }
+        }
+      }
+
+      if (!finalReply.trim()) {
+        throw new Error('AI returned an empty response')
+      }
     } catch (e) {
       if (e.name === 'AbortError') {
-        setHistory(prev => [...prev, { role: 'assistant', content: 'Generation stopped.', error: false, model: null }])
+        setHistory(prev => prev.map((entry, index) => (
+          index === assistantIndex
+            ? { ...entry, content: entry.content || 'Generation stopped.', streaming: false }
+            : entry
+        )))
       } else {
         const raw = e.message || ''
         const errMsg = raw.includes('500')
@@ -294,7 +345,11 @@ export default function AIAssistant() {
           : raw.includes('OPENROUTER')
             ? raw
             : `AI error: ${raw}`
-        setHistory(prev => [...prev, { role: 'assistant', content: errMsg, error: true }])
+        setHistory(prev => prev.map((entry, index) => (
+          index === assistantIndex
+            ? { ...entry, content: errMsg, error: true, streaming: false }
+            : entry
+        )))
         toast(errMsg, 'error', 6000)
       }
     } finally {
@@ -312,7 +367,11 @@ export default function AIAssistant() {
     abortRef.current?.abort()
     const fresh = [{ role: 'assistant', content: "Chat cleared. Ask me anything about your projects." }]
     setHistory(fresh)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)) } catch {}
+    setSessionId('')
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh))
+      localStorage.removeItem(SESSION_KEY)
+    } catch {}
     inputRef.current?.focus()
   }
 
@@ -360,8 +419,6 @@ export default function AIAssistant() {
       <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5"
         role="log" aria-label="Chat messages" aria-live="polite">
         {history.map((msg, i) => <Message key={i} msg={msg} />)}
-        {loading && <TypingIndicator onStop={stopGeneration} />}
-
         {showSuggestions && !loading && (
           <div className="mt-2">
             <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>

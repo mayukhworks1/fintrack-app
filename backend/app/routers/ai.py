@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
@@ -30,6 +31,8 @@ from ..services.openrouter import (
     chat_with_ai, autofill_project, analyze_project, generate_report,
     generate_status_briefing,
     _format_records_context,
+    format_chat_records_context,
+    stream_chat_with_ai,
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 from .deps import require_auth
@@ -72,6 +75,33 @@ def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 60) -> str:
+    """Compact invoice context for interactive chat."""
+    lines = [
+        "=== INVOICE TRACKING SUMMARY ===",
+        f"Total Invoices: {summary['total_invoices']}",
+        f"Total Raised (pre-tax): ₹{summary['total_raised']:,.0f}",
+        f"Total with GST: ₹{summary['total_with_tax']:,.0f}",
+        f"Total Received: ₹{summary['total_received']:,.0f}",
+        f"Outstanding: ₹{summary['total_outstanding']:,.0f}",
+        f"Collection Rate: {summary['collection_rate']:.1f}%",
+        f"By Status: {summary['by_status']}",
+        "",
+        "=== LIVE INVOICE RECORDS ===",
+    ]
+    for r in records[:limit]:
+        f = r.get("fields", {})
+        lines.append(
+            f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
+            f"{f.get('Payment Status','?')} | "
+            f"Raised ₹{float(f.get('Amount Raised') or 0):,.0f} | "
+            f"Tax ₹{float(f.get('Amount with Tax') or 0):,.0f} | "
+            f"Received ₹{float(f.get('Amount Received') or 0):,.0f} | "
+            f"Outstanding ₹{float(f.get('Outstanding Amount') or 0):,.0f}"
+        )
+    return "\n".join(lines)
+
+
 def _get_client_ip(request: Request) -> str:
     for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
         val = request.headers.get(header, "")
@@ -103,8 +133,8 @@ async def _build_context_pg(pool) -> str:
 
     # ── 2. Build from PG mirrors ─────────────────────────────────────────
     proj_rows, inv_rows = await asyncio.gather(
-        pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 300"),
-        pool.fetch("SELECT fields FROM invoices_mirror  ORDER BY raised_date DESC NULLS LAST LIMIT 100"),
+        pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 120"),
+        pool.fetch("SELECT fields FROM invoices_mirror  ORDER BY raised_date DESC NULLS LAST LIMIT 60"),
     )
 
     # asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
@@ -149,7 +179,7 @@ async def _build_context_pg(pool) -> str:
         f"By Client: {by_client}\n"
         f"By Health: {by_health}\n"
     )
-    records_text = _format_records_context([{"fields": f} for f in proj_fields])
+    records_text = format_chat_records_context([{"fields": f} for f in proj_fields], limit=120)
 
     # ── 4. Compute invoice summary ───────────────────────────────────────
     total_raised   = sum(_safe_float(f.get("Amount Raised"))    for f in inv_fields)
@@ -171,7 +201,7 @@ async def _build_context_pg(pool) -> str:
         "collection_rate":   coll_rate,
         "by_status":         inv_by_status,
     }
-    invoice_text = _fmt_invoice_context(inv_summary, [{"fields": f} for f in inv_fields])
+    invoice_text = _fmt_chat_invoice_context(inv_summary, [{"fields": f} for f in inv_fields], limit=60)
 
     context = project_text + "\n" + records_text + "\n\n" + invoice_text
 
@@ -185,8 +215,8 @@ async def _build_context_pg(pool) -> str:
                 projects=[{"fields": f} for f in proj_fields],
                 invoices=[{"fields": f} for f in inv_fields],
                 statuses=status_records,
-                max_projects=50,
-                max_invoices=50,
+                max_projects=25,
+                max_invoices=25,
             )
             context += "\n\n=== TOON CONTEXT (structured tokens) ===\n" + toon_ctx
             if status_records:
@@ -232,8 +262,8 @@ async def _build_context_teable() -> str:
         f"By Health: {summary['by_health']}\n"
         f"Targets Achieved: {summary.get('target_achieved_count', 0)}/{summary['total_projects']}\n"
     )
-    records_text = _format_records_context(all_records)
-    invoice_text = _fmt_invoice_context(inv_summary, inv_records)
+    records_text = format_chat_records_context(all_records, limit=120)
+    invoice_text = _fmt_chat_invoice_context(inv_summary, inv_records, limit=60)
     return project_text + "\n" + records_text + "\n\n" + invoice_text
 
 
@@ -419,6 +449,72 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/stream")
+async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depends(require_auth)):
+    """Streaming variant of chat for lower perceived latency."""
+    ip = _client_ip(request)
+    allowed, _remaining = await rate_check(ip, limit=30, window_sec=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests — AI chat is limited to 30 messages/min. Try again shortly.",
+            headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
+        )
+
+    pool = get_pool()
+    session_id = body.session_id
+    if pool:
+        context = await _build_context_pg(pool)
+        session_id = await _ensure_session(pool, session_id, role, request)
+    else:
+        context = await _build_context_teable()
+
+    history: list[dict] = []
+    if pool and session_id:
+        history = await _load_session_history(pool, session_id, limit=12)
+    if not history:
+        history = [{"role": m.role, "content": m.content} for m in body.history]
+
+    async def event_stream():
+        started = time.time()
+        final_content = ""
+        final_model = ""
+        final_tokens = None
+        try:
+            if session_id:
+                yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
+            async for event in stream_chat_with_ai(body.message, history, context):
+                if event["type"] == "done":
+                    final_content = event["content"]
+                    final_model = event["model"]
+                    final_tokens = event.get("tokens_used")
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+            return
+        finally:
+            if pool and session_id and final_content:
+                duration_ms = int((time.time() - started) * 1000)
+                asyncio.create_task(_save_messages(
+                    pool, session_id,
+                    body.message,
+                    final_content,
+                    final_model,
+                    final_tokens,
+                    duration_ms,
+                ))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/autofill")

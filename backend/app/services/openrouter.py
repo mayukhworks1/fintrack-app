@@ -29,6 +29,7 @@ import io
 import json
 import re
 from dataclasses import dataclass
+from typing import AsyncIterator
 from typing import Any, Optional
 
 import httpx
@@ -54,10 +55,10 @@ class ModelSpec:
 # returning "No endpoints found" and replace with a working alternative.
 MODELS: list[ModelSpec] = [
     # ── Tier 1: large, clean, reliably available ──────────────────────
-    ModelSpec("meta-llama/llama-4-maverick:free",                leakage=0,
-              notes="128K ctx, vision-capable"),
     ModelSpec("meta-llama/llama-4-scout:free",                   leakage=0,
               notes="Fast, vision-capable"),
+    ModelSpec("meta-llama/llama-4-maverick:free",                leakage=0,
+              notes="128K ctx, vision-capable"),
     ModelSpec("meta-llama/llama-3.3-70b-instruct:free",          leakage=0),
     ModelSpec("deepseek/deepseek-chat-v3-0324:free",             leakage=0),
     ModelSpec("google/gemini-2.5-pro-exp-03-25:free",            leakage=0,
@@ -310,6 +311,29 @@ async def _post_with_retries(payload: dict, retries: int = 2) -> httpx.Response:
     raise RuntimeError("Unreachable")
 
 
+async def _stream_post_with_retries(payload: dict, retries: int = 1) -> httpx.Response:
+    """Open a streaming POST with one short retry on transient failures."""
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            req = _client().build_request("POST", OPENROUTER_API_URL, headers=_make_headers(), json=payload)
+            resp = await _client().send(req, stream=True)
+            if resp.status_code >= 500 and attempt < retries:
+                await resp.aclose()
+                await asyncio.sleep(0.6 * (2 ** attempt))
+                continue
+            return resp
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            last_err = e
+            if attempt < retries:
+                await asyncio.sleep(0.6 * (2 ** attempt))
+                continue
+            raise
+    if last_err:
+        raise last_err
+    raise RuntimeError("Unreachable")
+
+
 # ── Core chat orchestrator ────────────────────────────────────────────
 async def _try_chat(
     messages: list[dict],
@@ -403,6 +427,142 @@ async def _try_chat(
     )
 
 
+async def stream_chat_with_ai(
+    message: str,
+    history: list[dict],
+    context: str = "",
+) -> AsyncIterator[dict[str, Any]]:
+    """
+    Stream chat deltas as {"type": "delta", "delta": "..."} events and finish
+    with {"type": "done", "content": "...", "model": "...", "model_short": "..."}.
+    """
+    if not settings.openrouter_api_key:
+        raise ValueError("OPENROUTER_API_KEY is not configured. Add it to HF Space secrets.")
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if context:
+        messages.append({"role": "system", "content": context})
+    for h in history[-12:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+
+    errors: list[str] = []
+
+    for spec in _ordered_models():
+        resp: httpx.Response | None = None
+        try:
+            payload: dict[str, Any] = {
+                "model": spec.id,
+                "messages": messages,
+                "max_tokens": 1024,
+                "temperature": 0.5,
+                "stream": True,
+            }
+            if spec.supports_reasoning_param:
+                payload["reasoning"] = {"exclude": True}
+
+            resp = await _stream_post_with_retries(payload)
+
+            if resp.status_code == 401:
+                raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
+            if resp.status_code == 402:
+                raise ValueError("OpenRouter quota exceeded — check free-tier limits")
+            if resp.status_code >= 400:
+                body = await resp.aread()
+                text = body.decode("utf-8", errors="ignore")[:200]
+                if resp.status_code in (400, 404, 422, 429) or "model" in text.lower():
+                    errors.append(f"{_short(spec.id)}: {text or ('HTTP ' + str(resp.status_code))}")
+                    await resp.aclose()
+                    continue
+                raise ValueError(f"OpenRouter error ({resp.status_code}): {text}")
+
+            full_raw = ""
+            emitted = ""
+            opened = False
+            closed = False
+
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+
+                delta = (
+                    payload.get("choices", [{}])[0]
+                    .get("delta", {})
+                    .get("content", "")
+                ) or ""
+                if not delta:
+                    continue
+
+                full_raw += delta
+
+                if not opened:
+                    idx = full_raw.find(ANSWER_OPEN)
+                    if idx == -1:
+                        continue
+                    opened = True
+                    full_raw = full_raw[idx + len(ANSWER_OPEN):]
+
+                if ANSWER_CLOSE in full_raw:
+                    full_raw = full_raw.split(ANSWER_CLOSE, 1)[0]
+                    closed = True
+
+                if len(full_raw) > len(emitted):
+                    chunk = full_raw[len(emitted):]
+                    emitted = full_raw
+                    if chunk:
+                        yield {"type": "delta", "delta": chunk}
+
+                if closed:
+                    break
+
+            final_content = _extract_answer(full_raw if opened else full_raw or emitted).strip()
+            if not final_content:
+                errors.append(f"{_short(spec.id)}: response had no extractable answer")
+                await resp.aclose()
+                continue
+
+            if final_content != emitted:
+                tail = final_content[len(emitted):]
+                if tail:
+                    yield {"type": "delta", "delta": tail}
+
+            yield {
+                "type": "done",
+                "content": final_content,
+                "model": spec.id,
+                "model_short": _short(spec.id),
+            }
+            await resp.aclose()
+            return
+
+        except (httpx.TimeoutException, httpx.ConnectError):
+            errors.append(f"{_short(spec.id)}: timeout/network")
+            if resp is not None:
+                await resp.aclose()
+            continue
+        except ValueError:
+            if resp is not None:
+                await resp.aclose()
+            raise
+        except Exception as e:
+            errors.append(f"{_short(spec.id)}: {str(e)[:100]}")
+            if resp is not None:
+                await resp.aclose()
+            continue
+
+    raise ValueError(
+        ("All AI models are unavailable right now. Tried: " + "; ".join(errors))
+        if errors else "No models configured."
+    )
+
+
 # Backwards-compat alias used elsewhere
 _strip_reasoning = _extract_answer
 
@@ -444,6 +604,40 @@ def _format_records_context(records: list[dict]) -> str:
         if contrib is not None:
             lines.append(f"  Resource Contribution: {contrib}%")
         lines.append("")
+    return "\n".join(lines)
+
+
+def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
+    """Compact one-line-per-project context for chat to keep prompts fast."""
+    if not records:
+        return "No project records found."
+    lines = ["=== LIVE PROJECT DATA ==="]
+    for i, rec in enumerate(records[:limit], 1):
+        f = rec.get("fields", {})
+        billed = f.get("Amount Billed So far")
+        profit = f.get("Actual Profit")
+        margin = f.get("Profit percentage")
+        target = f.get("Target Revenue")
+        parts = [
+            f"[Project {i}] {f.get('Client', '?')} / {f.get('Project Name', '?')}",
+            f"Status {f.get('Project Status', 'N/A')}",
+            f"Health {f.get('Health', 'N/A')}",
+        ]
+        if billed not in (None, ""):
+            try: parts.append(f"Billed ₹{float(billed):,.0f}")
+            except (ValueError, TypeError): pass
+        if profit not in (None, ""):
+            try: parts.append(f"Profit ₹{float(profit):,.0f}")
+            except (ValueError, TypeError): pass
+        if margin not in (None, ""):
+            try: parts.append(f"Margin {float(margin):.1f}%")
+            except (ValueError, TypeError): pass
+        if target not in (None, ""):
+            try: parts.append(f"Target ₹{float(target):,.0f}")
+            except (ValueError, TypeError): pass
+        if f.get("Target Achieved") not in (None, ""):
+            parts.append(f"Target Achieved {f.get('Target Achieved')}")
+        lines.append(" | ".join(parts))
     return "\n".join(lines)
 
 
