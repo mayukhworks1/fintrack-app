@@ -20,25 +20,7 @@ import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 
-// ── Status type detector → visual style ─────────────────────────────────────
-function detectStatusType(short = '', detail = '') {
-  const t = (short + ' ' + detail).toLowerCase()
-  if (/complet|closed|delivered|done|cleared|launched/i.test(t))
-    return { type: 'complete',    color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.25)',  dot: '#10b981' }
-  if (/block|critical|issue|fail|error|problem|escalat/i.test(t))
-    return { type: 'blocked',     color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)',   dot: '#ef4444' }
-  if (/hold|await|wait|pending client|pause|dormant/i.test(t))
-    return { type: 'onhold',      color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.25)',  dot: '#f59e0b' }
-  if (/uat|testing|qa|test\s/i.test(t))
-    return { type: 'uat',         color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)',  border: 'rgba(14,165,233,0.25)',  dot: '#0ea5e9' }
-  if (/invoice|billing|payment|presale/i.test(t))
-    return { type: 'billing',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.25)',  dot: '#8b5cf6' }
-  if (/new business|discovery|demo|poc|lead/i.test(t))
-    return { type: 'bizdev',      color: '#ec4899', bg: 'rgba(236,72,153,0.08)', border: 'rgba(236,72,153,0.25)',  dot: '#ec4899' }
-  if (/dev|develop|build|implement|progress|config/i.test(t))
-    return { type: 'active',      color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.25)',  dot: '#3b82f6' }
-  return   { type: 'default',     color: 'var(--text-3)', bg: 'var(--bg-input)', border: 'var(--border)',          dot: 'var(--text-3)' }
-}
+// Status type detection removed — will be driven by a real Teable field later.
 
 // ── Client colour palette ────────────────────────────────────────────────────
 const PALETTE = [
@@ -91,24 +73,22 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
   const project = f['Project'] || '?'
   const short   = f['Short Status'] || ''
   const detail  = f['Current Status (Detailed)'] || ''
-  const st      = detectStatusType(short, detail)
   const clrHex  = clientColor(client)
   const hasDetail = detail.trim() && detail.trim() !== short.trim()
-  const accentDot = st.dot === 'var(--text-3)' ? '#6366f1' : st.dot
 
   return (
     <div
       className="relative rounded-2xl overflow-hidden transition-all duration-200 group"
       style={{
-        background: selected ? hexToRgba(accentDot, 0.07) : 'var(--card-bg)',
-        border: selected ? `1.5px solid ${accentDot}` : '1px solid var(--border)',
+        background: selected ? hexToRgba(clrHex, 0.07) : 'var(--card-bg)',
+        border: selected ? `1.5px solid ${clrHex}` : '1px solid var(--border)',
         boxShadow: selected
-          ? `0 0 0 3px ${hexToRgba(accentDot, 0.18)}, 0 2px 8px rgba(15,23,42,0.08)`
+          ? `0 0 0 3px ${hexToRgba(clrHex, 0.18)}, 0 2px 8px rgba(15,23,42,0.08)`
           : '0 1px 4px rgba(15,23,42,0.05)',
       }}
     >
-      {/* Coloured left indicator bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: st.dot }} />
+      {/* Client-coloured left bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: clrHex }} />
 
       <div className="pl-4 pr-3 pt-3 pb-3">
         {/* ── Top row: checkbox · badges · actions ── */}
@@ -120,8 +100,8 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
             className="flex-shrink-0 mt-0.5 rounded-md transition-all focus:outline-none focus-visible:ring-2"
             style={{
               width: 20, height: 20,
-              background: selected ? accentDot : 'transparent',
-              border: `2px solid ${selected ? accentDot : 'var(--border)'}`,
+              background: selected ? clrHex : 'transparent',
+              border: `2px solid ${selected ? clrHex : 'var(--border)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             aria-label={selected ? 'Deselect' : 'Select'}
@@ -174,13 +154,6 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
             {short}
           </p>
         )}
-
-        {/* ── Status type pill ── */}
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide"
-          style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
-          <span className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style={{ background: st.dot }} />
-          {st.type}
-        </span>
 
         {/* ── Detail — collapsible ── */}
         {hasDetail && (
@@ -705,21 +678,32 @@ function ManageSharesModal({ onClose }) {
   }
 
   async function toggleActive(view) {
+    // Optimistic update — flip immediately, revert on error
+    const next = !view.is_active
+    setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: next } : v))
     try {
-      await api.sharedViews.update(view.token, { is_active: !view.is_active })
-      showToast(view.is_active ? 'Link disabled' : 'Link enabled', 'success')
-      await loadViews()
-    } catch (e) { showToast(e.message, 'error') }
+      await api.sharedViews.update(view.token, { is_active: next })
+      showToast(next ? 'Link enabled' : 'Link disabled', 'success')
+    } catch (e) {
+      // Revert
+      setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v))
+      showToast(e.message || 'Failed to update', 'error')
+    }
   }
 
   async function deleteView(token) {
     if (!confirm('Delete this share link? This cannot be undone.')) return
+    // Optimistic remove
+    const prev = views
+    setViews(vs => vs.filter(v => v.token !== token))
+    if (selected === token) setSelected(null)
     try {
       await api.sharedViews.delete(token)
       showToast('Link deleted', 'success')
-      setViews(vs => vs.filter(v => v.token !== token))
-      if (selected === token) setSelected(null)
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) {
+      setViews(prev)  // revert
+      showToast(e.message || 'Failed to delete', 'error')
+    }
   }
 
   async function viewAccesses(token) {

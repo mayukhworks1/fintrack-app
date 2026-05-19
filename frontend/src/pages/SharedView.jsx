@@ -39,25 +39,7 @@ function isExpired(iso) {
   return new Date(iso) < new Date()
 }
 
-// Status type detector
-function detectStatusType(short = '', detail = '') {
-  const t = (short + ' ' + detail).toLowerCase()
-  if (/complet|closed|delivered|done|cleared|launched/i.test(t))
-    return { label: 'Complete',    color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)' }
-  if (/block|critical|issue|fail|error|escalat/i.test(t))
-    return { label: 'Needs Attention', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)' }
-  if (/hold|await|wait|pending client|pause|dormant/i.test(t))
-    return { label: 'On Hold',     color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)' }
-  if (/uat|testing|qa|test\s/i.test(t))
-    return { label: 'In Testing',  color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)',  border: 'rgba(14,165,233,0.2)' }
-  if (/invoice|billing|payment|presale/i.test(t))
-    return { label: 'Billing',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.2)' }
-  if (/new business|discovery|demo|poc|lead/i.test(t))
-    return { label: 'Biz Dev',     color: '#ec4899', bg: 'rgba(236,72,153,0.08)', border: 'rgba(236,72,153,0.2)' }
-  if (/dev|develop|build|implement|progress|config/i.test(t))
-    return { label: 'In Progress', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.2)' }
-  return   { label: 'Active',      color: '#6b7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)' }
-}
+// Status type detection removed — will be driven by a real Teable field later.
 
 // Client colour palette
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316']
@@ -72,44 +54,36 @@ function hexRgba(hex, a) {
 }
 
 // ── Status card ────────────────────────────────────────────────────────────────
+const PUB_PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316']
+const _pubCmap = {}
+function pubClientColor(name) {
+  if (!_pubCmap[name]) { _pubCmap[name] = PUB_PALETTE[Object.keys(_pubCmap).length % PUB_PALETTE.length] }
+  return _pubCmap[name]
+}
+
 function PublicStatusCard({ record }) {
   const [expanded, setExpanded] = useState(false)
-  const f = record.fields || {}
+  const f       = record.fields || {}
+  const client  = f['Client']  || ''
   const project = f['Project'] || 'Unknown Project'
   const short   = f['Short Status'] || ''
   const detail  = f['Current Status (Detailed)'] || ''
-  const st      = detectStatusType(short, detail)
+  const clr     = pubClientColor(client)
   const hasDetail = detail.trim() && detail.trim() !== short.trim()
 
   return (
     <div className="rounded-2xl overflow-hidden"
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-      }}>
-      {/* Status type color bar */}
-      <div className="h-1" style={{ background: st.color }} />
+      style={{ background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+      {/* Client-coloured top bar */}
+      <div className="h-1" style={{ background: clr }} />
 
       <div className="p-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div>
-            <h3 className="text-base font-bold text-gray-900 leading-snug">{project}</h3>
-          </div>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold flex-shrink-0"
-            style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
-            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: st.color }} />
-            {st.label}
-          </span>
-        </div>
+        <h3 className="text-base font-bold text-gray-900 leading-snug mb-2">{project}</h3>
 
-        {/* Short status */}
         {short && (
           <p className="text-sm font-semibold text-gray-800 leading-snug mb-3">{short}</p>
         )}
 
-        {/* Detail */}
         {hasDetail && (
           <>
             {expanded ? (
@@ -120,7 +94,7 @@ function PublicStatusCard({ record }) {
             <button
               onClick={() => setExpanded(x => !x)}
               className="mt-2 flex items-center gap-1 text-xs font-semibold"
-              style={{ color: st.color }}>
+              style={{ color: clr }}>
               {expanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show more</>}
             </button>
           </>
