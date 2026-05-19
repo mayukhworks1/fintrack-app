@@ -61,6 +61,7 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     filter_status = view_config.get("filterStatus")
     filter_project = view_config.get("filterProject")
     filter_category = view_config.get("filterCategory")
+    board_group_by = view_config.get("boardGroupBy")
     search = view_config.get("search")
     theme = view_config.get("theme")
     density = view_config.get("density")
@@ -94,6 +95,9 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(filter_category, str) and filter_category.strip():
         clean["filterCategory"] = filter_category.strip()[:255]
+
+    if isinstance(board_group_by, str) and board_group_by.strip():
+        clean["boardGroupBy"] = board_group_by.strip()[:120]
 
     if isinstance(search, str) and search.strip():
         clean["search"] = search.strip()[:255]

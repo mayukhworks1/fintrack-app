@@ -75,6 +75,11 @@ const RESOURCE_META = {
     defaultColumns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup'],
   },
 }
+const BOARD_GROUP_OPTIONS = {
+  status: ['Status', 'Client'],
+  projects: ['Project Status', 'Client', 'Health'],
+  invoices: ['Payment Status', 'Project', 'Category'],
+}
 
 function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
 function fmtDate(iso) {
@@ -326,26 +331,30 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
   )
 }
 
-function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDetail, onDropStatus, compact = false, showClientAccents = true }) {
+function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDetail, onDropStatus, compact = false, showClientAccents = true, groupByField }) {
   const meta = RESOURCE_META[resourceType]
   const [draggedId, setDraggedId] = useState('')
-  const byStatus = statusOptions.reduce((acc, s) => ({ ...acc, [s]: [] }), {})
+  const draggable = groupByField === meta.statusField
+  const columnKeys = draggable
+    ? statusOptions
+    : [...new Set(records.map(r => r.fields?.[groupByField] || 'Unassigned'))].sort((a, b) => String(a).localeCompare(String(b)))
+  const byStatus = columnKeys.reduce((acc, s) => ({ ...acc, [s]: [] }), {})
   records.forEach(r => {
-    const status = r.fields?.[meta.statusField] || 'Uncategorized'
+    const status = r.fields?.[groupByField] || 'Unassigned'
     if (!byStatus[status]) byStatus[status] = []
     byStatus[status].push(r)
   })
   return (
     <div className="flex gap-4 overflow-x-auto pb-2" style={{ minHeight: 200 }}>
-      {statusOptions.map(status => {
+      {columnKeys.map(status => {
         const recs = byStatus[status] || []
-        const st = simpleStatusStyle(status)
+        const st = draggable ? simpleStatusStyle(status) : { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8', text: '#475569' }
         return (
           <div key={status} className="flex-shrink-0 w-[250px] sm:w-72 rounded-2xl overflow-hidden"
             style={{ background: '#fff', border: '1px solid #e5e7eb' }}
-            onDragOver={e => { if (canEdit) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
+            onDragOver={e => { if (canEdit && draggable) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
             onDrop={e => {
-              if (!canEdit) return
+              if (!canEdit || !draggable) return
               e.preventDefault()
               const id = e.dataTransfer.getData('text/plain')
               setDraggedId('')
@@ -377,11 +386,15 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDe
                       </div>
                       {canEdit && (
                         <div
-                          draggable
-                          onDragStart={e => { e.dataTransfer.setData('text/plain', r.id); e.dataTransfer.effectAllowed = 'move'; setDraggedId(r.id) }}
+                          draggable={draggable}
+                          onDragStart={e => {
+                            if (!draggable) return
+                            e.dataTransfer.setData('text/plain', r.id); e.dataTransfer.effectAllowed = 'move'; setDraggedId(r.id)
+                          }}
                           onDragEnd={() => setDraggedId('')}
-                          className="p-1 rounded-lg text-gray-400 cursor-grab"
-                          title="Drag to move"
+                          className="p-1 rounded-lg text-gray-400"
+                          style={{ cursor: draggable ? 'grab' : 'not-allowed', opacity: draggable ? 1 : 0.45 }}
+                          title={draggable ? 'Drag to move' : `Grouped by ${groupByField}; drag is only available when grouped by ${meta.statusField}`}
                         >
                           <Columns size={12} />
                         </div>
@@ -606,6 +619,7 @@ export default function SharedView() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [viewType, setViewType] = useState('card')
+  const [boardGroupBy, setBoardGroupBy] = useState('')
   const [editRecord, setEditRecord] = useState(null)
   const [detailRecord, setDetailRecord] = useState(null)
   const [savingRecordId, setSavingRecordId] = useState('')
@@ -627,6 +641,7 @@ export default function SharedView() {
       setRecords(res.records || [])
       setPendingStatusById({})
       setViewType(vc.type || rmeta.defaultView)
+      setBoardGroupBy(vc.boardGroupBy || rmeta.statusField)
       setSearch(prev => prev || vc.search || '')
       setFilterPrimary(prev => prev || vc[rmeta.primaryFilterKey] || '')
       setFilterStatus(prev => prev || vc.filterStatus || '')
@@ -649,6 +664,8 @@ export default function SharedView() {
   const compact = vc.density === 'compact'
   const showDashboard = vc.showDashboard ?? meta.showDashboardByDefault
   const showClientAccents = vc.showClientAccents !== false
+  const boardGroupOptions = BOARD_GROUP_OPTIONS[resourceType] || [meta.statusField]
+  const activeBoardGroupBy = boardGroupOptions.includes(boardGroupBy) ? boardGroupBy : meta.statusField
   const accentStyle = { '--share-accent': theme.accent, '--share-accent-dim': theme.accentDim, '--share-accent-soft': theme.accentSoft }
 
   const recordsForView = useMemo(() => {
@@ -877,6 +894,11 @@ export default function SharedView() {
                 </button>
               ))}
             </div>
+            {viewType === 'board' && (
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
+                {boardGroupOptions.map(v => <option key={v} value={v}>Group by {v}</option>)}
+              </select>
+            )}
             <button onClick={() => load({ silent: true })} className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2" style={{ borderColor: '#e5e7eb', color: '#475569' }}>
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
               Refresh
@@ -902,7 +924,7 @@ export default function SharedView() {
           <>
             {viewType === 'card' && <CardView records={filtered} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} compact={compact} showClientAccents={showClientAccents} />}
             {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} />}
-            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} />}
+            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} groupByField={activeBoardGroupBy} />}
           </>
         )}
       </main>

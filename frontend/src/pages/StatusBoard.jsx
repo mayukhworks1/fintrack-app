@@ -143,6 +143,10 @@ const STATUS_FILTER_FIELDS = [
   { key: 'Current Status (Detailed)', label: 'Detail', type: 'text' },
   { key: 'lastModifiedTime', label: 'Last Modified', type: 'date' },
 ]
+const BOARD_GROUP_OPTIONS = [
+  { value: 'Status', label: 'Status' },
+  { value: 'Client', label: 'Client' },
+]
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -591,7 +595,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
 // ─────────────────────────────────────────────────────────────────────────────
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
-function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true }) {
+function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -617,16 +621,17 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {isEditor && (
             <div
-              draggable={!updating}
+              draggable={!updating && !dragDisabled}
               onDragStart={e => {
+                if (dragDisabled) return
                 e.dataTransfer.setData('text/plain', record.id)
                 e.dataTransfer.effectAllowed = 'move'
                 onDragStart?.(record.id)
               }}
               onDragEnd={() => onDragEnd?.()}
               className="btn-icon p-0.5"
-              style={{ color: 'var(--text-3)', cursor: updating ? 'not-allowed' : 'grab' }}
-              title="Drag to move"
+              style={{ color: 'var(--text-3)', cursor: updating || dragDisabled ? 'not-allowed' : 'grab', opacity: dragDisabled ? 0.45 : 1 }}
+              title={dragDisabled ? 'Switch board grouping back to Status to drag cards' : 'Drag to move'}
             >
               <GripVertical size={11} />
             </div>
@@ -663,11 +668,12 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
   )
 }
 
-function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true }) {
+function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true }) {
   const [dragOver, setDragOver] = useState(false)
-  const sc = statusStyle(statusKey)
+  const sc = draggable ? statusStyle(statusLabel) : { color: '#475569', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8' }
 
   function handleDragOver(e) {
+    if (!draggable || !isEditor) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOver(true)
@@ -683,14 +689,14 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
       }}
       onDragOver={handleDragOver}
       onDragLeave={() => setDragOver(false)}
-      onDrop={e => { setDragOver(false); onDrop(statusKey, e) }}
+      onDrop={e => { setDragOver(false); if (draggable && isEditor) onDrop(statusKey, e) }}
     >
       {/* Column header */}
       <div className="flex items-center justify-between px-3 py-2.5 rounded-t-2xl"
         style={{ borderBottom: `1.5px solid ${sc.border}`, background: sc.bg }}>
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: sc.dot }} />
-          <span className="text-xs font-bold" style={{ color: sc.color }}>{statusKey}</span>
+          <span className="text-xs font-bold" style={{ color: sc.color }}>{statusLabel}</span>
         </div>
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
           style={{ background: sc.color, color: '#fff' }}>{records.length}</span>
@@ -704,7 +710,7 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
               style={{ borderColor: sc.border }}>
               <Plus size={14} style={{ color: sc.color }} />
             </div>
-            <p className="text-[10px] font-medium" style={{ color: 'var(--text-3)' }}>Drop here</p>
+            <p className="text-[10px] font-medium" style={{ color: 'var(--text-3)' }}>{draggable ? 'Drop here' : 'No records'}</p>
           </div>
         )}
         {records.map(r => (
@@ -722,6 +728,7 @@ function KanbanColumn({ statusKey, records, isEditor, onEdit, onDetail, selected
             isDragging={draggedId === r.id}
             compact={compact}
             showClientAccents={showClientAccents}
+            dragDisabled={!draggable}
           />
         ))}
       </div>
@@ -1690,6 +1697,7 @@ export default function StatusBoard() {
     filterStatus: '',
     search: '',
     columns: DEFAULT_COLUMNS,
+    boardGroupBy: 'Status',
     advancedConditions: [],
     theme: 'cobalt',
     density: 'comfortable',
@@ -1701,6 +1709,7 @@ export default function StatusBoard() {
   const [filterStatus,  setFilterStatus]  = useState(initConfig.filterStatus || '')
   const [search,        setSearch]        = useState(initConfig.search || '')
   const [listColumns,   setListColumns]   = useState(initConfig.columns || DEFAULT_COLUMNS)
+  const [boardGroupBy,  setBoardGroupBy]  = useState(initConfig.boardGroupBy || 'Status')
   const [advancedConditions, setAdvancedConditions] = useState(initConfig.advancedConditions || [])
   const [themeId,       setThemeId]       = useState(initConfig.theme || 'cobalt')
   const [density,       setDensity]       = useState(initConfig.density || 'comfortable')
@@ -1748,6 +1757,7 @@ export default function StatusBoard() {
       filterStatus,
       search,
       columns: listColumns,
+      boardGroupBy,
       advancedConditions,
       theme: themeId,
       density,
@@ -1758,7 +1768,7 @@ export default function StatusBoard() {
     const url = new URL(window.location.href)
     url.searchParams.set('v', encoded)
     window.history.replaceState({}, '', url.toString())
-  }, [viewType, filterClient, filterStatus, search, listColumns, advancedConditions, themeId, density, showDashboard, showClientAccents])
+  }, [viewType, filterClient, filterStatus, search, listColumns, boardGroupBy, advancedConditions, themeId, density, showDashboard, showClientAccents])
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -1800,10 +1810,15 @@ export default function StatusBoard() {
     return acc
   }, {})
   const allClients = [...new Set(recordsForView.map(r => r.fields?.['Client']).filter(Boolean))].sort()
+  const boardColumnKeys = useMemo(() => {
+    const ordered = boardGroupBy === 'Status' ? statusOptions : [...new Set(filtered.map(r => r.fields?.[boardGroupBy] || 'Unassigned'))].sort((a, b) => String(a).localeCompare(String(b)))
+    return ordered.length ? ordered : ['Unassigned']
+  }, [boardGroupBy, filtered, statusOptions])
   const selectedRecords = recordsForView.filter(r => selectedIds.has(r.id))
   const hasSelection = selectedIds.size > 0
   const theme = resolveTheme(themeId)
   const compact = density === 'compact'
+  const boardIsDraggable = boardGroupBy === 'Status'
   const boardVars = useMemo(() => ({
     '--accent': theme.accent,
     '--accent-dim': theme.accentDim,
@@ -1834,6 +1849,7 @@ export default function StatusBoard() {
     if (cfg.filterStatus !== undefined) setFilterStatus(cfg.filterStatus)
     if (cfg.search !== undefined)       setSearch(cfg.search)
     if (cfg.columns !== undefined)      setListColumns(cfg.columns)
+    if (cfg.boardGroupBy !== undefined) setBoardGroupBy(cfg.boardGroupBy)
     if (cfg.advancedConditions !== undefined) setAdvancedConditions(cfg.advancedConditions)
     if (cfg.theme)        setThemeId(cfg.theme)
     if (cfg.density)      setDensity(cfg.density)
@@ -1908,6 +1924,7 @@ export default function StatusBoard() {
     filterStatus,
     search,
     columns: listColumns,
+    boardGroupBy,
     advancedConditions,
     theme: themeId,
     density,
@@ -2011,6 +2028,21 @@ export default function StatusBoard() {
                 />
               )}
             </div>
+
+            {viewType === 'board' && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Group by</span>
+                <select
+                  className="input-field text-xs py-1.5 min-w-[120px]"
+                  value={boardGroupBy}
+                  onChange={e => setBoardGroupBy(e.target.value)}
+                >
+                  {BOARD_GROUP_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Share view — creates a real public link via PG */}
             <button onClick={shareViewUrl}
@@ -2295,17 +2327,18 @@ export default function StatusBoard() {
             {isEditor && (
               <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
                 <GripVertical size={12} />
-                Drag cards between columns to update their status
+                {boardIsDraggable ? 'Drag cards between columns to update their status' : `Board is grouped by ${boardGroupBy}. Switch back to Status to drag and update.`}
               </p>
             )}
             <div className="overflow-x-auto -mx-4 px-4 pb-4">
-              <div className="flex gap-3" style={{ minWidth: `${statusOptions.length * 240}px` }}>
-                {statusOptions.map(statusKey => {
-                  const recs = filtered.filter(r => (r.fields?.['Status'] || 'Not started') === statusKey)
+              <div className="flex gap-3" style={{ minWidth: `${boardColumnKeys.length * 240}px` }}>
+                {boardColumnKeys.map(columnKey => {
+                  const recs = filtered.filter(r => (r.fields?.[boardGroupBy] || (boardGroupBy === 'Status' ? 'Not started' : 'Unassigned')) === columnKey)
                   return (
                     <KanbanColumn
-                      key={statusKey}
-                      statusKey={statusKey}
+                      key={columnKey}
+                      statusKey={columnKey}
+                      statusLabel={columnKey}
                       records={recs}
                       isEditor={isEditor}
                       onEdit={r => setModal(r)}
@@ -2319,6 +2352,7 @@ export default function StatusBoard() {
                       draggedId={draggedId}
                       compact={compact}
                       showClientAccents={showClientAccents}
+                      draggable={boardIsDraggable}
                     />
                   )
                 })}
