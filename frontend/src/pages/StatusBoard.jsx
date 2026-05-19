@@ -86,6 +86,32 @@ function statusStyle(s) {
 // ── List view columns ─────────────────────────────────────────────────────────
 const ALL_COLUMNS = ['Client', 'Project', 'Status', 'Short Status', 'Detailed Status', 'Last Modified']
 const DEFAULT_COLUMNS = ['Client', 'Project', 'Status', 'Short Status']
+const LIST_COLUMN_META = {
+  'Client': { label: 'Client', track: 'minmax(150px, 1.05fr)', minWidth: 150 },
+  'Project': { label: 'Project', track: 'minmax(240px, 1.6fr)', minWidth: 240 },
+  'Status': { label: 'Status', track: '144px', minWidth: 144 },
+  'Short Status': { label: 'Headline', track: 'minmax(260px, 1.55fr)', minWidth: 260 },
+  'Detailed Status': { label: 'Detail', track: 'minmax(320px, 1.75fr)', minWidth: 320 },
+  'Last Modified': { label: 'Modified', track: '112px', minWidth: 112 },
+}
+
+function getListLayout(columns, isEditor) {
+  const active = columns.filter(col => LIST_COLUMN_META[col])
+  const actionWidth = isEditor ? 96 : 44
+  const baseTracks = [isEditor ? '28px' : '16px']
+  const tracks = [
+    ...baseTracks,
+    ...active.map(col => LIST_COLUMN_META[col].track),
+    `${actionWidth}px`,
+  ]
+  const minWidth = active.reduce((sum, col) => sum + LIST_COLUMN_META[col].minWidth, 0) + actionWidth + (isEditor ? 28 : 16) + 48
+  return {
+    active,
+    actionWidth,
+    gridTemplateColumns: tracks.join(' '),
+    minWidth,
+  }
+}
 
 // ── Client colour palette ─────────────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316','#6366f1','#84cc16']
@@ -454,7 +480,7 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
 // ─────────────────────────────────────────────────────────────────────────────
 // List View Row
 // ─────────────────────────────────────────────────────────────────────────────
-function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true }) {
+function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true, layout }) {
   const f = record.fields || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
@@ -467,8 +493,11 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
   const sel      = selected
 
   return (
-    <div className={`flex items-center gap-2 px-3 transition-colors group ${compact ? 'py-2' : 'py-2.5'}`}
+    <div className={`grid gap-3 px-4 transition-colors group ${compact ? 'py-2.5' : 'py-3'}`}
       style={{
+        gridTemplateColumns: layout.gridTemplateColumns,
+        minWidth: layout.minWidth,
+        alignItems: 'center',
         background: sel ? hexToRgba(clrHex, 0.05) : (idx % 2 === 0 ? 'var(--card-bg)' : 'var(--bg-input)'),
         borderBottom: '1px solid var(--border)',
         borderLeft: showClientAccents && sel ? `3px solid ${clrHex}` : '3px solid transparent',
@@ -477,7 +506,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
       {/* Checkbox */}
       {isEditor ? (
         <button onClick={() => onSelect(record.id)}
-          className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all"
+          className="w-4 h-4 rounded flex items-center justify-center transition-all"
           style={{ background: sel ? clrHex : 'transparent', border: `1.5px solid ${sel ? clrHex : 'var(--border)'}` }}>
           {sel && <Check size={9} color="#fff" strokeWidth={3} />}
         </button>
@@ -485,17 +514,23 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
 
       {/* Dynamic columns */}
       {columns.includes('Client') && (
-        <span className="text-[11px] font-bold truncate" style={{ color: showClientAccents ? clrHex : 'var(--text-2)', minWidth: 80, maxWidth: 100 }}>
-          {client}
-        </span>
+        <div className="min-w-0">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold truncate"
+            style={{ color: showClientAccents ? clrHex : 'var(--text-2)', background: showClientAccents ? hexToRgba(clrHex, 0.08) : 'var(--bg-input)', border: `1px solid ${showClientAccents ? hexToRgba(clrHex, 0.18) : 'var(--border)'}` }}>
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: clrHex }} />
+            <span className="truncate">{client}</span>
+          </span>
+        </div>
       )}
       {columns.includes('Project') && (
-        <span className="text-xs font-semibold truncate flex-1" style={{ color: 'var(--text-1)', minWidth: 120 }}>
-          {project}
-        </span>
+        <div className="min-w-0">
+          <span className="text-[13px] font-semibold block truncate" style={{ color: 'var(--text-1)' }}>
+            {project}
+          </span>
+        </div>
       )}
       {columns.includes('Status') && (
-        <span className="flex-shrink-0" style={{ minWidth: 110 }}>
+        <div className="min-w-0">
           {status && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
               style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
@@ -503,26 +538,33 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
               {status}
             </span>
           )}
-        </span>
+        </div>
       )}
       {columns.includes('Short Status') && (
-        <span className="text-[12px] truncate flex-1 hidden sm:block" style={{ color: 'var(--text-2)', minWidth: 100 }}>
-          {short}
-        </span>
+        <div className="min-w-0">
+          <span className="text-[12px] block truncate" style={{ color: 'var(--text-2)' }}>
+            {short || '—'}
+          </span>
+        </div>
       )}
       {columns.includes('Detailed Status') && (
-        <span className="text-[11px] truncate hidden lg:block" style={{ color: 'var(--text-3)', maxWidth: 200 }}>
-          {detail}
-        </span>
+        <div className="min-w-0">
+          <span className="text-[11px] block leading-relaxed"
+            style={{ color: 'var(--text-3)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {detail || '—'}
+          </span>
+        </div>
       )}
       {columns.includes('Last Modified') && (
-        <span className="text-[10px] flex-shrink-0 hidden md:block" style={{ color: 'var(--text-3)', minWidth: 80 }}>
-          {fmtShortDate(modified)}
-        </span>
+        <div className="min-w-0">
+          <span className="text-[11px] block tabular-nums" style={{ color: 'var(--text-3)' }}>
+            {fmtShortDate(modified) || '—'}
+          </span>
+        </div>
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-auto sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-end gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <button onClick={() => onDetail(record)} className="btn-icon p-1" style={{ color: 'var(--text-3)' }} title="View">
           <Eye size={12} />
         </button>
@@ -1164,7 +1206,7 @@ function ManageSharesModal({ onClose }) {
   const [loadingAcc, setLoadingAcc] = useState(false)
   const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
   useEffect(() => { loadViews() }, [])
-  async function loadViews() { setLoading(true); try { const r = await api.sharedViews.list(); setViews(r.views || []) } catch {} finally { setLoading(false) } }
+  async function loadViews() { setLoading(true); try { const r = await api.sharedViews.list('status'); setViews(r.views || []) } catch {} finally { setLoading(false) } }
   async function toggleActive(view) {
     const next = !view.is_active
     setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: next } : v))
@@ -1696,6 +1738,7 @@ export default function StatusBoard() {
     }),
     [records, pendingStatusById]
   )
+  const listLayout = useMemo(() => getListLayout(listColumns, isEditor), [listColumns, isEditor])
 
   // ── Persist view config to URL on any change ──────────────────────────────
   useEffect(() => {
@@ -1931,7 +1974,7 @@ export default function StatusBoard() {
               <div className="relative">
                 <button onClick={() => { setShowCols(s => !s); setShowViews(false); setShowSettings(false) }}
                   className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                  <SlidersHorizontal size={12} /> Columns
+                  <SlidersHorizontal size={12} /> Columns ({listColumns.length})
                 </button>
                 {showCols && <ColumnSelector columns={listColumns} onChange={setListColumns} onClose={() => setShowCols(false)} />}
               </div>
@@ -2084,6 +2127,18 @@ export default function StatusBoard() {
           </div>
         )}
 
+        {viewType === 'list' && !loading && !error && filtered.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>Visible columns</span>
+            {listLayout.active.map(col => (
+              <span key={col} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                {LIST_COLUMN_META[col]?.label || col}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* ── Loading ── */}
         {loading && (
           <div className="flex items-center justify-center py-20">
@@ -2193,36 +2248,37 @@ export default function StatusBoard() {
 
         {/* ══ LIST VIEW ══ */}
         {!loading && !error && filtered.length > 0 && viewType === 'list' && (
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            {/* Header */}
-            <div className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
-              style={{ background: 'var(--bg-input)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
-              <span className="w-4 flex-shrink-0" />
-              {listColumns.includes('Client')          && <span style={{ minWidth: 80,  maxWidth: 100 }}>Client</span>}
-              {listColumns.includes('Project')         && <span className="flex-1"       style={{ minWidth: 120 }}>Project</span>}
-              {listColumns.includes('Status')          && <span                          style={{ minWidth: 110 }}>Status</span>}
-              {listColumns.includes('Short Status')    && <span className="flex-1 hidden sm:block" style={{ minWidth: 100 }}>Headline</span>}
-              {listColumns.includes('Detailed Status') && <span className="hidden lg:block" style={{ maxWidth: 200 }}>Detail</span>}
-              {listColumns.includes('Last Modified')   && <span className="hidden md:block" style={{ minWidth: 80 }}>Modified</span>}
-              <span className="ml-auto" style={{ minWidth: 64 }} />
+          <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', boxShadow: '0 12px 28px rgba(15,23,42,0.05)' }}>
+            <div className="overflow-x-auto">
+              <div className="min-w-full">
+                <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em]"
+                  style={{ gridTemplateColumns: listLayout.gridTemplateColumns, minWidth: listLayout.minWidth, background: 'linear-gradient(180deg, rgba(248,250,252,0.98), rgba(241,245,249,0.98))', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+                  <span />
+                  {listLayout.active.map(col => (
+                    <span key={col} className="min-w-0 truncate">{LIST_COLUMN_META[col]?.label || col}</span>
+                  ))}
+                  <span className="text-right">Actions</span>
+                </div>
+                {filtered.map((r, i) => (
+                  <ListViewRow
+                    key={r.id}
+                    record={r}
+                    idx={i}
+                    isEditor={isEditor}
+                    onEdit={() => setModal(r)}
+                    onDelete={() => handleDelete(r)}
+                    onDetail={setDetailRecord}
+                    selected={selectedIds.has(r.id)}
+                    onSelect={toggleSelect}
+                    columns={listColumns}
+                    deleting={deletingId === r.id}
+                    compact={compact}
+                    showClientAccents={showClientAccents}
+                    layout={listLayout}
+                  />
+                ))}
+              </div>
             </div>
-            {filtered.map((r, i) => (
-              <ListViewRow
-                key={r.id}
-                record={r}
-                idx={i}
-                isEditor={isEditor}
-                onEdit={() => setModal(r)}
-                onDelete={() => handleDelete(r)}
-                onDetail={setDetailRecord}
-                selected={selectedIds.has(r.id)}
-                onSelect={toggleSelect}
-                columns={listColumns}
-                deleting={deletingId === r.id}
-                compact={compact}
-                showClientAccents={showClientAccents}
-              />
-            ))}
             {/* Summary row */}
             <div className="px-3 py-2 text-xs flex items-center gap-3 flex-wrap"
               style={{ background: 'var(--bg-input)', borderTop: '1px solid var(--border)', color: 'var(--text-3)' }}>

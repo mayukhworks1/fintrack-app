@@ -27,6 +27,7 @@ class SharedViewCreate(BaseModel):
     record_ids: list[str]
     expires_hours: Optional[int] = None   # None = never expires
     access_mode: Optional[str] = "read"   # read | edit
+    resource_type: Optional[str] = "status"
     view_config: Optional[dict] = None    # view type, columns etc — stored in PG, sent to public viewer
 
 
@@ -38,9 +39,22 @@ class SharedViewUpdate(BaseModel):
 
 
 class PublicSharedViewUpdate(BaseModel):
+    # status
     status: Optional[str] = None
     short_status: Optional[str] = None
     current_status_detailed: Optional[str] = None
+    # projects
+    client: Optional[str] = None
+    project_name: Optional[str] = None
+    project_status: Optional[str] = None
+    amount_billed: Optional[float] = None
+    # invoices
+    invoice_number: Optional[str] = None
+    payment_status: Optional[str] = None
+    amount_received: Optional[float] = None
+    cleared_date: Optional[str] = None
+    remark: Optional[str] = None
+    next_followup: Optional[str] = None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -69,7 +83,7 @@ async def create_shared_view(
     body: SharedViewCreate,
     role: str = Depends(require_editor),
 ):
-    """Create a shared view link for selected status records."""
+    """Create a shared link for selected records."""
     if not body.record_ids:
         raise HTTPException(status_code=422, detail="At least one record must be selected")
     if len(body.record_ids) > 50:
@@ -85,6 +99,7 @@ async def create_shared_view(
             expires_at=_expiry(body.expires_hours),
             access_mode=body.access_mode or "read",
             view_config=body.view_config,
+            resource_type=body.resource_type or "status",
         )
         return view
     except (ValueError, RuntimeError) as e:
@@ -94,10 +109,13 @@ async def create_shared_view(
 
 
 @router.get("/api/shared-views")
-async def list_shared_views(_: str = Depends(require_editor)):
-    """List all shared view links (newest first)."""
+async def list_shared_views(
+    resource_type: Optional[str] = Query(None),
+    _: str = Depends(require_editor),
+):
+    """List shared links (newest first), optionally filtered by module."""
     svc = SharedViewService()
-    views = await svc.list_all()
+    views = await svc.list_all(resource_type=resource_type)
     return {"views": views, "total": len(views)}
 
 
@@ -196,12 +214,32 @@ async def update_public_view_record(
         raise HTTPException(status_code=429, detail="Too many updates from this link. Try again shortly.")
 
     fields = {}
+    if body.client is not None:
+        fields["Client"] = body.client
+    if body.project_name is not None:
+        fields["Project Name"] = body.project_name
+    if body.project_status is not None:
+        fields["Project Status"] = body.project_status
+    if body.amount_billed is not None:
+        fields["Amount Billed So far"] = body.amount_billed
     if body.status is not None:
         fields["Status"] = body.status
     if body.short_status is not None:
         fields["Short Status"] = body.short_status
     if body.current_status_detailed is not None:
         fields["Current Status (Detailed)"] = body.current_status_detailed
+    if body.invoice_number is not None:
+        fields["Invoice Number"] = body.invoice_number
+    if body.payment_status is not None:
+        fields["Payment Status"] = body.payment_status
+    if body.amount_received is not None:
+        fields["Amount Received"] = body.amount_received
+    if body.cleared_date is not None:
+        fields["Cleared Date"] = body.cleared_date
+    if body.remark is not None:
+        fields["Remark"] = body.remark
+    if body.next_followup is not None:
+        fields["Next followup"] = body.next_followup
 
     try:
         return await SharedViewService().update_public_record(token, record_id, fields, request=request)

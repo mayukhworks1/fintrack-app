@@ -6,6 +6,7 @@ Tables created on first startup:
   login_sessions   — active login tokens with last-seen tracking
   chat_sessions    — AI assistant conversation groups
   chat_messages    — individual AI chat turns
+  report_history   — generated AI/board reports for replay and audit
   projects_mirror  — Teable project records (full replica)
   invoices_mirror  — Teable invoice records (full replica)
   web_invoices_mirror — Teable web invoice records (full replica)
@@ -121,6 +122,21 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     duration_ms INTEGER
 );
 CREATE INDEX IF NOT EXISTS cm_session_idx ON chat_messages (session_id, ts);
+
+-- ── AI report history ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS report_history (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    report_type VARCHAR(40)  NOT NULL DEFAULT 'board-pack',
+    title       VARCHAR(255),
+    content     TEXT         NOT NULL,
+    model       VARCHAR(120),
+    role        VARCHAR(20),
+    ip          VARCHAR(45),
+    metadata    JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS rpt_created_idx ON report_history (created_at DESC);
+CREATE INDEX IF NOT EXISTS rpt_type_idx    ON report_history (report_type, created_at DESC);
 
 -- ── Teable mirror: projects ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS projects_mirror (
@@ -320,11 +336,15 @@ CREATE INDEX IF NOT EXISTS sv_created_idx ON shared_views (created_at DESC);
 CREATE INDEX IF NOT EXISTS sv_active_idx  ON shared_views (is_active, expires_at);
 ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS view_config JSONB;
 ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS access_mode VARCHAR(10) NOT NULL DEFAULT 'read';
+ALTER TABLE shared_views ADD COLUMN IF NOT EXISTS resource_type VARCHAR(20) NOT NULL DEFAULT 'status';
 
 CREATE TABLE IF NOT EXISTS shared_view_accesses (
     id          UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
     view_token  VARCHAR(32)      NOT NULL,
     accessed_at TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    event_type  VARCHAR(20)      NOT NULL DEFAULT 'view',
+    viewer_key  VARCHAR(120),
+    record_id   VARCHAR(60),
     ip          VARCHAR(100),
     country     VARCHAR(100),
     country_code VARCHAR(4),
@@ -385,6 +405,9 @@ ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS country_code VARCHAR(4
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS region VARCHAR(100);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS geo_source VARCHAR(20);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS accuracy_m INTEGER;
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS event_type VARCHAR(20) NOT NULL DEFAULT 'view';
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS viewer_key VARCHAR(120);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS record_id VARCHAR(60);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);

@@ -308,7 +308,7 @@ export const api = {
       }),
   },
   sharedViews: {
-    list: ()          => request('/api/shared-views'),
+    list: (resourceType = '') => request(resourceType ? `/api/shared-views?resource_type=${encodeURIComponent(resourceType)}` : '/api/shared-views'),
     get:  (token)     => request(`/api/shared-views/${token}`),
     create: (data)    => request('/api/shared-views', { method: 'POST', body: JSON.stringify(data) }),
     update: (token, data) => request(`/api/shared-views/${token}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -334,6 +334,8 @@ export const api = {
     mirrorInvoices:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/invoices?${q}`) },
     mirrorWebInvoices:(p = {})  => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/web-invoices?${q}`) },
     recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
+    sharedLinks:   (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/shared-links?${q}`) },
+    sharedLinkAccesses: (token, limit = 200) => request(`/api/admin/shared-links/${token}/accesses?limit=${limit}`),
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),
     getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),

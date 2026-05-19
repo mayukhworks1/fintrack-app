@@ -16,6 +16,7 @@ import { useToast } from '../context/ToastContext'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { DocPreviewModal } from '../components/DocPreviewModal'
+import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import clsx from 'clsx'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
@@ -801,6 +802,8 @@ export default function Invoices() {
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer, setDrawer] = useState(null)
   const [previewDocs, setPreviewDocs] = useState(null)
+  const [shareModal, setShareModal] = useState(false)
+  const [manageModal, setManageModal] = useState(false)
 
   /* ── Fetch summary ── */
   const fetchSummary = useCallback(() => api.invoices.summary(), [])
@@ -1125,6 +1128,20 @@ export default function Invoices() {
           </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          {isEditor && workspace === 'invoices' && (
+            <>
+              <button onClick={() => setShareModal(true)} className="btn-ghost">
+                <ExternalLink size={14} />
+                <span className="hidden sm:inline">Share View</span>
+                <span className="sm:hidden">Share</span>
+              </button>
+              <button onClick={() => setManageModal(true)} className="btn-ghost">
+                <Eye size={14} />
+                <span className="hidden sm:inline">Links</span>
+                <span className="sm:hidden">Links</span>
+              </button>
+            </>
+          )}
           <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
             <ExternalLink size={14} />
             <span className="hidden sm:inline">Raise Externally</span>
@@ -1940,6 +1957,26 @@ export default function Invoices() {
           options={formOptions}
         />,
         document.body
+      )}
+      {isEditor && shareModal && (
+        <ShareLinkModal
+          resourceType="invoices"
+          selectedRecords={records}
+          title={`Invoices · ${statusFilter || projectFilter || 'Current View'}`}
+          recordLabel="invoice"
+          viewConfig={{
+            type: 'list',
+            filterProject: projectFilter || '',
+            filterCategory: categoryFilter || '',
+            filterStatus: statusFilter || '',
+            search,
+            columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup', 'Remark'],
+          }}
+          onClose={() => setShareModal(false)}
+        />
+      )}
+      {isEditor && manageModal && (
+        <ManageSharedLinksModal resourceType="invoices" onClose={() => setManageModal(false)} />
       )}
       <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
     </div>

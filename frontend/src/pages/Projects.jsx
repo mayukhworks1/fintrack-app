@@ -6,6 +6,7 @@ import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
+import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -60,6 +61,8 @@ export default function Projects() {
   const [searchResults, setSearchResults] = useState(null)
   const [sortBy, setSortBy]           = useState('Amount Billed So far')
   const [showFilters, setShowFilters] = useState(false)
+  const [shareModal, setShareModal] = useState(false)
+  const [manageModal, setManageModal] = useState(false)
   const searchTimer = useRef(null)
   const searchInputRef = useRef(null)
 
@@ -134,6 +137,20 @@ export default function Projects() {
           </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          {isEditor && (
+            <>
+              <button onClick={() => setShareModal(true)}
+                className="px-3 py-2 rounded-xl text-sm font-semibold"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
+                Share View
+              </button>
+              <button onClick={() => setManageModal(true)}
+                className="px-3 py-2 rounded-xl text-sm font-semibold"
+                style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
+                Links
+              </button>
+            </>
+          )}
           <button onClick={refresh} disabled={loading} aria-label="Refresh"
             className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
             style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'transparent' }}
@@ -296,6 +313,25 @@ export default function Projects() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
         </div>
+      )}
+
+      {isEditor && shareModal && (
+        <ShareLinkModal
+          resourceType="projects"
+          selectedRecords={displayed}
+          title={`Projects · ${status || client || 'Current View'}`}
+          recordLabel="project"
+          viewConfig={{
+            type: 'card',
+            filterClient: client || '',
+            filterStatus: status || '',
+            search,
+          }}
+          onClose={() => setShareModal(false)}
+        />
+      )}
+      {isEditor && manageModal && (
+        <ManageSharedLinksModal resourceType="projects" onClose={() => setManageModal(false)} />
       )}
     </div>
   )

@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..db.postgres import get_pool
+from ..services.shared_views import SharedViewService
 from .deps import require_admin
 
 logger = logging.getLogger("fintrack.admin")
@@ -61,6 +62,27 @@ def _no_db():
         status_code=503,
         content={"error": "PostgreSQL unavailable"},
     )
+
+
+@router.get("/shared-links")
+async def admin_shared_links(
+    resource_type: Optional[str] = Query(None),
+    _: str = Depends(require_admin),
+):
+    svc = SharedViewService()
+    views = await svc.list_all(resource_type=resource_type)
+    return {"views": views, "total": len(views)}
+
+
+@router.get("/shared-links/{token}/accesses")
+async def admin_shared_link_accesses(
+    token: str,
+    limit: int = Query(200, ge=1, le=500),
+    _: str = Depends(require_admin),
+):
+    svc = SharedViewService()
+    accesses = await svc.get_accesses(token, limit=limit)
+    return {"accesses": accesses, "total": len(accesses)}
 
 
 # ── Manual sync trigger ───────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ Editor controls: expiry, disable, delete.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -24,16 +25,12 @@ logger = logging.getLogger("fintrack.shared_views")
 _MAX_RECORD_IDS = 50
 _ALLOWED_ACCESS_MODES = {"read", "edit"}
 _ALLOWED_VIEW_TYPES = {"card", "list", "board"}
+_ALLOWED_RESOURCE_TYPES = {"status", "projects", "invoices"}
 _ALLOWED_THEMES = {"cobalt", "emerald", "amber", "rose", "slate"}
 _ALLOWED_DENSITIES = {"comfortable", "compact"}
 _COLUMN_ALIASES = {
-    "Client": "Client",
-    "Project": "Project",
-    "Status": "Status",
-    "Short Status": "Short Status",
     "Detailed Status": "Current Status (Detailed)",
     "Current Status (Detailed)": "Current Status (Detailed)",
-    "Last Modified": "Last Modified",
 }
 
 
@@ -62,6 +59,8 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     columns = view_config.get("columns")
     filter_client = view_config.get("filterClient")
     filter_status = view_config.get("filterStatus")
+    filter_project = view_config.get("filterProject")
+    filter_category = view_config.get("filterCategory")
     search = view_config.get("search")
     theme = view_config.get("theme")
     density = view_config.get("density")
@@ -78,8 +77,8 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
         for c in columns:
             if not isinstance(c, str):
                 continue
-            normalized = _COLUMN_ALIASES.get(c)
-            if normalized and normalized not in safe_columns:
+            normalized = _COLUMN_ALIASES.get(c, c.strip())
+            if normalized and len(normalized) <= 120 and normalized not in safe_columns:
                 safe_columns.append(normalized)
         if safe_columns:
             clean["columns"] = safe_columns
@@ -89,6 +88,12 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(filter_status, str) and filter_status.strip():
         clean["filterStatus"] = filter_status.strip()[:120]
+
+    if isinstance(filter_project, str) and filter_project.strip():
+        clean["filterProject"] = filter_project.strip()[:255]
+
+    if isinstance(filter_category, str) and filter_category.strip():
+        clean["filterCategory"] = filter_category.strip()[:255]
 
     if isinstance(search, str) and search.strip():
         clean["search"] = search.strip()[:255]
@@ -121,6 +126,7 @@ class SharedViewService:
         expires_at: Optional[datetime] = None,
         access_mode: str = "read",
         view_config: Optional[dict] = None,
+        resource_type: str = "status",
     ) -> dict:
         pool = get_pool()
         if not pool:
@@ -131,6 +137,8 @@ class SharedViewService:
             raise ValueError(f"Maximum {_MAX_RECORD_IDS} records per share")
         if access_mode not in _ALLOWED_ACCESS_MODES:
             raise ValueError("Invalid access mode")
+        if resource_type not in _ALLOWED_RESOURCE_TYPES:
+            raise ValueError("Invalid resource type")
 
         token = _new_token()
         safe_view_config = _sanitize_view_config(view_config)
@@ -138,8 +146,8 @@ class SharedViewService:
             row = await conn.fetchrow(
                 """
                 INSERT INTO shared_views
-                    (token, title, record_ids, created_by, created_from_ip, expires_at, access_mode, view_config)
-                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb)
+                    (token, title, record_ids, created_by, created_from_ip, expires_at, access_mode, view_config, resource_type)
+                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9)
                 RETURNING *
                 """,
                 token,
@@ -150,6 +158,7 @@ class SharedViewService:
                 expires_at,
                 access_mode,
                 json.dumps(safe_view_config) if safe_view_config is not None else None,
+                resource_type,
             )
         return _row(row)
 
@@ -192,14 +201,20 @@ class SharedViewService:
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
-    async def list_all(self) -> list[dict]:
+    async def list_all(self, resource_type: Optional[str] = None) -> list[dict]:
         pool = get_pool()
         if not pool:
             return []
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM shared_views ORDER BY created_at DESC"
-            )
+            if resource_type:
+                rows = await conn.fetch(
+                    "SELECT * FROM shared_views WHERE resource_type = $1 ORDER BY created_at DESC",
+                    resource_type,
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT * FROM shared_views ORDER BY created_at DESC"
+                )
         return [_row(r) for r in rows]
 
     async def get_public_view(self, token: str) -> dict:
@@ -268,11 +283,20 @@ class SharedViewService:
 
         view = await self.get_public_view(token)
 
-        # Fetch status records from PG mirror
+        resource_type = view.get("resource_type") or "status"
+        if resource_type not in _ALLOWED_RESOURCE_TYPES:
+            raise ValueError("This link type is no longer supported")
+
+        # Fetch records from PG mirror
         record_ids: list[str] = view.get("record_ids") or []
         if isinstance(record_ids, str):
             record_ids = json.loads(record_ids)
 
+        mirror_table = {
+            "status": "status_mirror",
+            "projects": "projects_mirror",
+            "invoices": "invoices_mirror",
+        }[resource_type]
         record_map: dict[str, dict[str, Any]] = {}
         found_ids: set[str] = set()
         if record_ids:
@@ -280,7 +304,7 @@ class SharedViewService:
                 rows = await conn.fetch(
                     """
                     SELECT teable_id, fields::text AS fields
-                    FROM status_mirror
+                    FROM """ + mirror_table + """
                     WHERE teable_id = ANY($1::text[])
                     ORDER BY array_position($1::text[], teable_id)
                     """,
@@ -295,24 +319,21 @@ class SharedViewService:
                 found_ids.add(teable_id)
                 record_map[teable_id] = {"id": teable_id, "fields": fields}
 
-        # If the mirror is behind, try live Teable for the missing records so
-        # public shares degrade more gracefully instead of silently dropping rows.
+        # If the mirror is behind, try the live table for missing records.
         missing_ids = [rid for rid in record_ids if rid not in found_ids]
         if missing_ids:
             try:
-                from ..services.status import StatusService
-
-                svc = StatusService()
+                svc = _live_service_for(resource_type)
                 for rid in missing_ids:
                     try:
-                        live = await svc.get_record(rid)
+                        live = await _live_get_record(resource_type, svc, rid)
                     except Exception:
-                        logger.debug("shared view live status fallback failed for %s", rid)
+                        logger.debug("shared view live %s fallback failed for %s", resource_type, rid)
                         continue
                     if live and live.get("id"):
                         record_map[live["id"]] = {"id": live["id"], "fields": live.get("fields") or {}}
             except Exception as exc:
-                logger.debug("shared view live fallback unavailable: %s", exc)
+                logger.debug("shared view live %s fallback unavailable: %s", resource_type, exc)
 
         # Rebuild in original shared order so mirror/live fallback mixes do not
         # reshuffle the public snapshot.
@@ -328,6 +349,7 @@ class SharedViewService:
             ua,
             referer,
             request.headers.get("x-client-hint", ""),
+            resource_type=resource_type,
         ))
 
         # Parse view_config (stored as JSONB — may come back as dict or str)
@@ -345,6 +367,7 @@ class SharedViewService:
             "created_at": view.get("created_at"),
             "expires_at": view.get("expires_at"),
             "access_mode": view.get("access_mode") or "read",
+            "resource_type": resource_type,
             "records": records,
             "total": len(records),
             "view_config": vc,
@@ -354,6 +377,7 @@ class SharedViewService:
         view = await self.get_public_view(token)
         if (view.get("access_mode") or "read") != "edit":
             raise PermissionError("This link is view-only")
+        resource_type = view.get("resource_type") or "status"
 
         record_ids = view.get("record_ids") or []
         if isinstance(record_ids, str):
@@ -361,43 +385,43 @@ class SharedViewService:
         if record_id not in record_ids:
             raise ValueError("Record is not part of this shared view")
 
-        allowed_fields = {
-            "Status": fields.get("Status"),
-            "Short Status": fields.get("Short Status"),
-            "Current Status (Detailed)": fields.get("Current Status (Detailed)"),
-        }
-        cleaned = {k: v for k, v in allowed_fields.items() if v is not None}
+        cleaned = _public_edit_fields(resource_type, fields)
         if not cleaned:
             raise ValueError("No editable fields provided")
 
-        # Public edit links must be fully traceable just like authenticated
-        # writes. We use a dedicated pseudo-role so record_history can show
-        # that the change came from a shared edit link.
-        from ..services.status import StatusService
-        updated = await StatusService().update_record(
-            record_id,
-            cleaned,
-            request=request,
-            role="shared_edit",
-        )
+        updated = await _live_update_record(resource_type, record_id, cleaned, request)
 
-        # Do not wait for the background sync loop to make PostgreSQL catch up.
-        # Mirror the updated record immediately so shared/public reads and admin
-        # audit views reflect the change right away.
         try:
             pool = get_pool()
             if pool and isinstance(updated, dict) and updated.get("fields"):
-                from ..db.sync import upsert_record, _extract_status
+                from ..db.sync import upsert_record, _extract_invoice, _extract_project, _extract_status
+                source, mirror_table, extractor = {
+                    "status": ("status", "status_mirror", _extract_status),
+                    "projects": ("projects", "projects_mirror", _extract_project),
+                    "invoices": ("invoices", "invoices_mirror", _extract_invoice),
+                }[resource_type]
                 await upsert_record(
                     pool=pool,
-                    source="status",
-                    mirror_table="status_mirror",
+                    source=source,
+                    mirror_table=mirror_table,
                     teable_id=record_id,
                     fields=updated.get("fields") or {},
-                    extractor=_extract_status,
+                    extractor=extractor,
                 )
         except Exception as exc:
-            logger.debug("shared view immediate status_mirror upsert failed for %s: %s", record_id, exc)
+            logger.debug("shared view immediate %s mirror upsert failed for %s: %s", resource_type, record_id, exc)
+
+        if request is not None:
+            asyncio.create_task(self._log_access(
+                token,
+                _extract_ip(request),
+                request.headers.get("user-agent", ""),
+                (request.headers.get("referer") or request.headers.get("origin") or "")[:500],
+                request.headers.get("x-client-hint", ""),
+                resource_type=resource_type,
+                event_type="edit",
+                record_id=record_id,
+            ))
 
         return updated
 
@@ -410,6 +434,9 @@ class SharedViewService:
         user_agent: str,
         referer: Optional[str],
         client_hint: str = "",
+        resource_type: str = "status",
+        event_type: str = "view",
+        record_id: Optional[str] = None,
     ) -> None:
         """Geo-enrich and insert access record; update counter. Fire-and-forget."""
         pool = get_pool()
@@ -443,18 +470,41 @@ class SharedViewService:
         browser_lon = browser_geo.get("lon") if isinstance(browser_geo.get("lon"), (int, float)) else None
         browser_accuracy = browser_geo.get("accuracyM") if isinstance(browser_geo.get("accuracyM"), (int, float)) else None
         geo_source = "browser" if browser_lat is not None and browser_lon is not None else "ip"
+        viewer_key = hashlib.sha256(
+            "|".join([
+                token,
+                ip or "",
+                user_agent or "",
+                str(device_label or ""),
+                str(ch.get("model") or ""),
+                resource_type,
+            ]).encode("utf-8")
+        ).hexdigest()[:96]
 
         try:
             async with pool.acquire() as conn:
+                should_increment = False
+                if event_type == "view":
+                    seen = await conn.fetchval(
+                        """
+                        SELECT 1 FROM shared_view_accesses
+                        WHERE view_token = $1 AND viewer_key = $2 AND event_type = 'view'
+                        LIMIT 1
+                        """,
+                        token,
+                        viewer_key,
+                    )
+                    should_increment = seen is None
                 await conn.execute(
                     """
                     INSERT INTO shared_view_accesses
-                        (view_token, ip, country, country_code, region, city, isp, lat, lon, timezone,
+                        (view_token, event_type, viewer_key, record_id, ip, country, country_code, region, city, isp, lat, lon, timezone,
                          geo_source, accuracy_m, os, browser, device_type, device_label, device_model, platform_version,
                          user_agent, referer)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
                     """,
-                    token, ip or None,
+                    token, event_type, viewer_key, record_id,
+                    ip or None,
                     geo.get("country"), geo.get("country_code"), geo.get("region"), geo.get("city"), geo.get("isp"),
                     browser_lat if browser_lat is not None else geo.get("lat"),
                     browser_lon if browser_lon is not None else geo.get("lon"),
@@ -468,14 +518,20 @@ class SharedViewService:
                     (user_agent[:1000] if user_agent else None),
                     referer or None,
                 )
-                await conn.execute(
-                    """
-                    UPDATE shared_views
-                    SET access_count = access_count + 1, last_accessed_at = NOW()
-                    WHERE token = $1
-                    """,
-                    token,
-                )
+                if should_increment:
+                    await conn.execute(
+                        """
+                        UPDATE shared_views
+                        SET access_count = access_count + 1, last_accessed_at = NOW()
+                        WHERE token = $1
+                        """,
+                        token,
+                    )
+                elif event_type == "view":
+                    await conn.execute(
+                        "UPDATE shared_views SET last_accessed_at = NOW() WHERE token = $1",
+                        token,
+                    )
         except Exception as exc:
             logger.debug("shared_view_access insert failed: %s", exc)
 
@@ -488,3 +544,82 @@ def _extract_ip(request) -> str:
         if v:
             return v.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+def _live_service_for(resource_type: str):
+    if resource_type == "status":
+        from ..services.status import StatusService
+        return StatusService()
+    if resource_type == "projects":
+        from ..services.teable import TeableService
+        return TeableService()
+    if resource_type == "invoices":
+        from ..services.invoice import InvoiceService
+        return InvoiceService()
+    raise ValueError("Unsupported resource type")
+
+
+async def _live_get_record(resource_type: str, service, record_id: str) -> dict[str, Any]:
+    if resource_type == "status":
+        return await service.get_record(record_id)
+    if resource_type == "projects":
+        return await service.get_record(record_id)
+    if resource_type == "invoices":
+        return await service.get_invoice(record_id)
+    raise ValueError("Unsupported resource type")
+
+
+def _public_edit_fields(resource_type: str, fields: dict) -> dict[str, Any]:
+    if resource_type == "status":
+        allowed = {
+            "Status": fields.get("Status"),
+            "Short Status": fields.get("Short Status"),
+            "Current Status (Detailed)": fields.get("Current Status (Detailed)"),
+        }
+    elif resource_type == "projects":
+        allowed = {
+            "Client": fields.get("Client"),
+            "Project Name": fields.get("Project Name"),
+            "Project Status": fields.get("Project Status"),
+            "Amount Billed So far": fields.get("Amount Billed So far"),
+        }
+    elif resource_type == "invoices":
+        allowed = {
+            "Invoice Number": fields.get("Invoice Number"),
+            "Payment Status": fields.get("Payment Status"),
+            "Amount Received": fields.get("Amount Received"),
+            "Cleared Date": fields.get("Cleared Date"),
+            "Remark": fields.get("Remark"),
+            "Next followup": fields.get("Next followup"),
+        }
+        if allowed.get("Payment Status") == "Paid":
+            if allowed.get("Amount Received") in (None, "", 0, 0.0):
+                raise ValueError("Amount Received is required when Payment Status is Paid")
+            if not allowed.get("Cleared Date"):
+                raise ValueError("Cleared Date is required when Payment Status is Paid")
+    else:
+        raise ValueError("Unsupported resource type")
+    return {k: v for k, v in allowed.items() if v is not None}
+
+
+async def _live_update_record(resource_type: str, record_id: str, cleaned: dict[str, Any], request) -> dict[str, Any]:
+    if resource_type == "status":
+        from ..services.status import StatusService
+        return await StatusService().update_record(record_id, cleaned, request=request, role="shared_edit")
+    if resource_type == "projects":
+        from ..db.attribution import record_user_attribution
+        from ..services.teable import TeableService
+        try:
+            await record_user_attribution(request, "shared_edit", record_id)
+        except Exception:
+            pass
+        return await TeableService().update_record(record_id, cleaned)
+    if resource_type == "invoices":
+        from ..db.attribution import record_user_attribution
+        from ..services.invoice import InvoiceService
+        try:
+            await record_user_attribution(request, "shared_edit", record_id)
+        except Exception:
+            pass
+        return await InvoiceService().update_invoice(record_id, cleaned)
+    raise ValueError("Unsupported resource type")

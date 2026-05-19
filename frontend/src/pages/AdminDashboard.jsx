@@ -2180,6 +2180,123 @@ function HistoryTab() {
   )
 }
 
+function SharedLinksTab() {
+  const [data, setData] = useState({ views: [], total: 0 })
+  const [loading, setLoading] = useState(true)
+  const [resourceType, setResourceType] = useState('')
+  const [selected, setSelected] = useState(null)
+  const [accesses, setAccesses] = useState([])
+  const [loadingAccesses, setLoadingAccesses] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setData(await api.admin.sharedLinks({ resource_type: resourceType || undefined }))
+    } finally {
+      setLoading(false)
+    }
+  }, [resourceType])
+
+  useEffect(() => { load() }, [load])
+
+  async function toggleAccesses(token) {
+    if (selected === token) { setSelected(null); return }
+    setSelected(token)
+    setLoadingAccesses(true)
+    try {
+      const res = await api.admin.sharedLinkAccesses(token)
+      setAccesses(res.accesses || [])
+    } finally {
+      setLoadingAccesses(false)
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Shared Links</h2>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>Public link inventory with unique viewers and edit events.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <FilterSelect label="Module" value={resourceType} onChange={setResourceType}>
+            <option value="">All modules</option>
+            <option value="status">Status</option>
+            <option value="projects">Projects</option>
+            <option value="invoices">Invoices</option>
+          </FilterSelect>
+          <button onClick={load} className="btn-ghost text-xs px-3 py-2 flex items-center gap-1.5"><RefreshCw size={12} />Refresh</button>
+        </div>
+      </div>
+
+      <div className="card p-0 overflow-hidden">
+        {loading ? <Skeleton rows={6} /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  {['Title','Module','Access','Viewers','Created','Last Seen','Token','Logs'].map(h => <th key={h} className="tbl-head">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {(data.views || []).map(v => (
+                  <>
+                    <tr key={v.token} className="tbl-row">
+                      <td className="tbl-cell font-medium" style={{ color: 'var(--text-1)' }}>{v.title || 'Untitled link'}</td>
+                      <td className="tbl-cell"><Badge color="blue">{(v.resource_type || 'status').toUpperCase()}</Badge></td>
+                      <td className="tbl-cell"><Badge color={v.access_mode === 'edit' ? 'amber' : 'green'}>{v.access_mode || 'read'}</Badge></td>
+                      <td className="tbl-cell">{fmt(v.access_count || 0)}</td>
+                      <td className="tbl-cell">{ts(v.created_at)}</td>
+                      <td className="tbl-cell">{ts(v.last_accessed_at)}</td>
+                      <td className="tbl-cell"><code className="text-[11px]">{v.token}</code></td>
+                      <td className="tbl-cell">
+                        <button onClick={() => toggleAccesses(v.token)} className="btn-ghost text-xs px-2 py-1">{selected === v.token ? 'Hide' : 'Show'}</button>
+                      </td>
+                    </tr>
+                    {selected === v.token && (
+                      <tr key={`${v.token}:logs`}>
+                        <td colSpan={8} className="tbl-cell" style={{ background: 'var(--bg-input)' }}>
+                          {loadingAccesses ? <Skeleton rows={3} /> : accesses.length === 0 ? (
+                            <p className="text-xs" style={{ color: 'var(--text-3)' }}>No events yet.</p>
+                          ) : (
+                            <div className="space-y-2 max-h-72 overflow-y-auto">
+                              {accesses.map((a, i) => (
+                                <div key={i} className="rounded-xl px-3 py-2 text-xs flex items-start justify-between gap-3"
+                                  style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Badge color={a.event_type === 'edit' ? 'amber' : 'green'}>{String(a.event_type || 'view').toUpperCase()}</Badge>
+                                      <span className="font-mono">{a.ip || '?'}</span>
+                                      {a.country && <span style={{ color: 'var(--text-3)' }}>{[a.city, a.region, a.country].filter(Boolean).join(', ')}</span>}
+                                      {a.geo_source && <span style={{ color: 'var(--text-3)' }}>{a.geo_source === 'browser' ? 'GPS' : 'IP Geo'}</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ color: 'var(--text-3)' }}>
+                                      {a.device_label && <span>{a.device_label}</span>}
+                                      {a.record_id && <code>{a.record_id}</code>}
+                                    </div>
+                                  </div>
+                                  <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}>{ts(a.accessed_at)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+                {!data.views?.length && (
+                  <tr><td colSpan={8} className="tbl-cell text-center" style={{ color: 'var(--text-3)' }}>No shared links found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 // ── Tab: HF Logs ──────────────────────────────────────────────────────────────
 
 // Strip ANSI escape codes from log text
@@ -2377,6 +2494,7 @@ const TABS = [
   { id: 'projects',  label: 'Projects',  icon: Database          },
   { id: 'invoices',  label: 'Invoices',  icon: FileText          },
   { id: 'history',   label: 'History',   icon: History           },
+  { id: 'shared',    label: 'Shared',    icon: Link2             },
   { id: 'hflogs',    label: 'HF Logs',   icon: Terminal          },
 ]
 
@@ -2414,6 +2532,7 @@ export default function AdminDashboard({ embedded = false }) {
       {tab === 'projects'  && <ProjectsMirrorTab />}
       {tab === 'invoices'  && <InvoicesTab />}
       {tab === 'history'   && <HistoryTab />}
+      {tab === 'shared'    && <SharedLinksTab />}
       {tab === 'hflogs'    && <HfLogsTab />}
     </>
   )
