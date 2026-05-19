@@ -148,12 +148,12 @@ export default function SharedView() {
 
             {isDisabled && (
               <>
-                <h1 className="text-xl font-bold text-gray-900 mb-2">Link Disabled</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Access Restricted</h1>
                 <p className="text-sm text-gray-600 leading-relaxed">
-                  This status update link has been disabled by the owner.
+                  This page has been restricted and is no longer accessible.
                 </p>
                 <p className="text-sm text-gray-500 mt-2">
-                  Please contact the person who shared this link to request an updated one.
+                  Please contact the admin who shared this link for an updated one.
                 </p>
               </>
             )}
@@ -162,27 +162,29 @@ export default function SharedView() {
               <>
                 <h1 className="text-xl font-bold text-gray-900 mb-2">Link Expired</h1>
                 <p className="text-sm text-gray-600 leading-relaxed">
-                  This status update link has passed its expiry date.
+                  This link has passed its expiry date and is no longer accessible.
                 </p>
                 <p className="text-sm text-gray-500 mt-2">
-                  Please contact the person who shared this link to request a fresh one.
+                  Please contact the admin who shared this link to request a fresh one.
                 </p>
               </>
             )}
 
             {isNotFound && (
               <>
-                <h1 className="text-xl font-bold text-gray-900 mb-2">Link Not Found</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Access Restricted</h1>
                 <p className="text-sm text-gray-600">
-                  This link doesn't exist or may have been deleted.
+                  This page has been removed or is restricted — please contact the admin for access.
                 </p>
               </>
             )}
 
             {!isDisabled && !isExpiredLink && !isNotFound && (
               <>
-                <h1 className="text-xl font-bold text-gray-900 mb-2">Unavailable</h1>
-                <p className="text-sm text-gray-500">{error}</p>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+                <p className="text-sm text-gray-500">
+                  This page is not accessible. Please contact the admin who shared this link.
+                </p>
               </>
             )}
           </div>

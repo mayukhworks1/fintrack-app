@@ -173,6 +173,8 @@ export const api = {
       const qs = opts.force ? '?force=true' : ''
       return request(`/api/ai/report${qs}`, { signal: opts.signal, timeout: AI_TIMEOUT_MS })
     },
+    statusBriefing: (opts = {}) =>
+      request('/api/ai/status-briefing', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
     reportInvalidate: () =>
       request('/api/ai/report/invalidate', { method: 'POST' }),
   },

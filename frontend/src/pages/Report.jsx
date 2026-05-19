@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check,
-  Square, Printer, TrendingUp, Zap, Clock,
+  Square, Printer, TrendingUp, Zap, Clock, Activity, BarChart2,
 } from 'lucide-react'
 import { api } from '../services/api'
 
@@ -93,8 +93,31 @@ function AiText({ text }) {
   return <div className="space-y-1.5">{elements}</div>
 }
 
+// ── Report mode configs ───────────────────────────────────────────────────────
+const REPORT_MODES = [
+  {
+    id:       'board-pack',
+    label:    'Board Pack',
+    icon:     BarChart2,
+    desc:     'Full executive report — financials, P&L, invoice health, project status',
+    genLabel: 'Analysing portfolio…',
+    hint:     'Covers revenue, margins, collections, at-risk projects, and status updates',
+    features: ['Portfolio overview', 'Cash flow', 'Recommendations'],
+  },
+  {
+    id:       'status-briefing',
+    label:    'Status Briefing',
+    icon:     Activity,
+    desc:     'Delivery status only — what\'s happening across projects right now',
+    genLabel: 'Reading project status…',
+    hint:     'Focuses on delivery health, blockers, and next steps — no financial data',
+    features: ['Status by category', 'Blockers flagged', 'Key actions'],
+  },
+]
+
 /* ── Main Report page ────────────────────────────────────────────────────── */
 export default function Report() {
+  const [reportMode, setReportMode] = useState('board-pack')
   const [report,     setReport]    = useState('')
   const [model,      setModel]     = useState('')
   const [loading,    setLoading]   = useState(false)
@@ -108,6 +131,18 @@ export default function Report() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // Clear report when switching modes
+  const switchMode = (mode) => {
+    if (mode === reportMode) return
+    setReportMode(mode)
+    setReport('')
+    setModel('')
+    setError('')
+    setFromCache(false)
+    setCachedAt('')
+    setIsEmpty(false)
+  }
+
   const generate = async ({ force = false } = {}) => {
     setLoading(true)
     setReport('')
@@ -120,11 +155,19 @@ export default function Report() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     try {
-      const resp = await api.ai.report({ signal: ctrl.signal, force })
+      let resp
+      if (reportMode === 'status-briefing') {
+        resp = await api.ai.statusBriefing({ signal: ctrl.signal })
+        // status-briefing is never cached
+        setFromCache(false)
+        setCachedAt('')
+      } else {
+        resp = await api.ai.report({ signal: ctrl.signal, force })
+        setFromCache(!!resp.from_cache)
+        setCachedAt(resp.cached_at || '')
+      }
       setReport(resp.report || '')
       setModel(resp.model || '')
-      setFromCache(!!resp.from_cache)
-      setCachedAt(resp.cached_at || '')
       setDuration(resp.duration_ms || 0)
       setIsEmpty(!!resp.empty)
     } catch (e) {
@@ -182,16 +225,18 @@ export default function Report() {
     } catch { return '' }
   })()
 
+  const currentMode = REPORT_MODES.find(m => m.id === reportMode)
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 animate-fade-in">
 
       {/* ── Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="page-title">Executive Report</h1>
+          <h1 className="page-title">AI Reports</h1>
           <p className="text-xs sm:text-sm mt-1 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
             <Database size={11} style={{ color: 'var(--accent)' }} />
-            AI-generated board pack from your live portfolio data
+            {currentMode?.desc}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -224,8 +269,33 @@ export default function Report() {
         </div>
       </div>
 
-      {/* ── Cache + freshness indicators ─────────────────────────────── */}
-      {report && !isEmpty && (
+      {/* ── Mode tabs ────────────────────────────────────────────────── */}
+      <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+        {REPORT_MODES.map(mode => {
+          const Icon = mode.icon
+          const active = reportMode === mode.id
+          return (
+            <button
+              key={mode.id}
+              onClick={() => switchMode(mode.id)}
+              className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: active ? 'var(--card-bg)' : 'transparent',
+                color:      active ? 'var(--text-1)'  : 'var(--text-3)',
+                boxShadow:  active ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                border:     active ? '1px solid var(--card-border)' : '1px solid transparent',
+              }}
+            >
+              <Icon size={14} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
+              <span className="hidden xs:inline">{mode.label}</span>
+              <span className="inline xs:hidden">{mode.label.split(' ')[0]}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Cache + freshness indicators (board-pack only) ──────────── */}
+      {report && !isEmpty && reportMode === 'board-pack' && (
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
           {fromCache ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium"
@@ -274,13 +344,12 @@ export default function Report() {
             style={{ width: 56, height: 56, borderRadius: 12, background: 'var(--accent-dim)' }}>
             <FileText size={22} style={{ color: 'var(--accent)' }} />
           </div>
-          <p className="font-semibold text-base sm:text-lg" style={{ color: 'var(--text-1)' }}>Generate Your Executive Report</p>
+          <p className="font-semibold text-base sm:text-lg" style={{ color: 'var(--text-1)' }}>Generate {currentMode?.label}</p>
           <p className="text-xs sm:text-sm mt-2 max-w-sm" style={{ color: 'var(--text-3)' }}>
-            AI synthesises your live projects and invoices into a board-ready summary with
-            financial performance, collections analysis, and prioritised action items.
+            {currentMode?.hint}
           </p>
           <div className="flex items-center gap-3 sm:gap-4 mt-6 text-[11px] flex-wrap justify-center" style={{ color: 'var(--text-3)' }}>
-            {['Portfolio overview', 'Cash flow', 'Recommendations'].map((label) => (
+            {(currentMode?.features || []).map((label) => (
               <span key={label} className="flex items-center gap-1.5">
                 <span className="w-1 h-1 rounded-full" style={{ background: 'var(--accent)' }} />
                 {label}
@@ -304,7 +373,7 @@ export default function Report() {
             <Sparkles size={22} style={{ color: 'var(--accent)' }} />
           </div>
           <p className="font-semibold text-sm sm:text-base" style={{ color: 'var(--text-1)' }}>
-            Analysing your portfolio…
+            {currentMode?.genLabel || 'Generating report…'}
           </p>
           <p className="text-xs sm:text-sm mt-1.5" style={{ color: 'var(--text-3)' }}>
             Reading mirror data and consulting the model — ~10-30 seconds
@@ -353,7 +422,7 @@ export default function Report() {
               style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--accent-dim)' }}>
               <FileText size={13} style={{ color: 'var(--accent)' }} />
             </div>
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Executive Report</span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{currentMode?.label || 'Report'}</span>
             <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
               {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}
             </span>

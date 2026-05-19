@@ -290,6 +290,7 @@ CREATE TABLE IF NOT EXISTS status_mirror (
 CREATE INDEX IF NOT EXISTS stm_client_idx  ON status_mirror (client);
 CREATE INDEX IF NOT EXISTS stm_project_idx ON status_mirror (project);
 CREATE INDEX IF NOT EXISTS stm_synced_idx  ON status_mirror (synced_at DESC);
+ALTER TABLE status_mirror ADD COLUMN IF NOT EXISTS status VARCHAR(100);
 
 -- ── Shared Views (manager share links with access tracking) ──────────────────
 CREATE TABLE IF NOT EXISTS shared_views (

@@ -37,7 +37,10 @@ STATUS_TABLE_FIELD_IDS = {
     "Project":                  "fldWgtXYJN178I0jzeW",
     "Current Status (Detailed)":"fld4MneRM2LeXS15cpv",
     "Short Status":             "fldyfl9bugT9bLJzWuv",
+    "Status":                   "fldKC43dvuXF91zMTaU",
 }
+
+STATUS_OPTIONS = ["Completed", "On Hold", "Input Pending", "In progress", "Not started"]
 
 STATUS_ALIAS = {
     "active": "🟢 Active",
@@ -152,6 +155,7 @@ class StatusCreate(BaseModel):
     project: str
     current_status_detailed: Optional[str] = Field(None, max_length=5000)
     short_status: Optional[str] = Field(None, max_length=300)
+    status: Optional[str] = None          # single-select: Completed | On Hold | Input Pending | In progress | Not started
 
     def to_teable_fields(self) -> dict:
         m: dict = {"Client": self.client, "Project": self.project}
@@ -159,6 +163,8 @@ class StatusCreate(BaseModel):
             m["Current Status (Detailed)"] = self.current_status_detailed
         if self.short_status is not None:
             m["Short Status"] = self.short_status
+        if self.status is not None:
+            m["Status"] = self.status
         return m
 
 
@@ -167,6 +173,7 @@ class StatusUpdate(BaseModel):
     project: Optional[str] = None
     current_status_detailed: Optional[str] = Field(None, max_length=5000)
     short_status: Optional[str] = Field(None, max_length=300)
+    status: Optional[str] = None          # single-select: Completed | On Hold | Input Pending | In progress | Not started
 
     def to_teable_fields(self) -> dict:
         m: dict = {}
@@ -178,4 +185,6 @@ class StatusUpdate(BaseModel):
             m["Current Status (Detailed)"] = self.current_status_detailed
         if self.short_status is not None:
             m["Short Status"] = self.short_status
+        if self.status is not None:
+            m["Status"] = self.status
         return m

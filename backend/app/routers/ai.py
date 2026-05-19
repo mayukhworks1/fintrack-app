@@ -28,6 +28,7 @@ from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.openrouter import (
     chat_with_ai, autofill_project, analyze_project, generate_report,
+    generate_status_briefing,
     _format_records_context,
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
@@ -829,3 +830,44 @@ async def ai_report_invalidate(_role: str = Depends(require_auth)):
     from ..utils.cache import cache
     n = cache.bust(_REPORT_CACHE_KEY)
     return {"ok": True, "purged": n}
+
+
+# ── Status Briefing ───────────────────────────────────────────────────────────
+
+@router.get("/status-briefing")
+async def ai_status_briefing(
+    request: Request,
+    _role: str = Depends(require_auth),
+):
+    """
+    Generate a focused status briefing based on the Current Status table.
+    Lighter than the full board pack — delivery health only, no financials.
+    Results are NOT cached (always fresh so new statuses are reflected).
+    """
+    t0 = time.time()
+    try:
+        from ..services.status import StatusService
+        svc_status = StatusService()
+        status_records = await svc_status.list_all()
+
+        if not status_records:
+            return {
+                "report":      "No project status records available. Add status updates first.",
+                "model":       "n/a",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": int((time.time() - t0) * 1000),
+                "empty":       True,
+            }
+
+        result = await generate_status_briefing(status_records)
+        return {
+            "report":       result["content"],
+            "model":        result.get("model_short", result.get("model", "")),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms":  int((time.time() - t0) * 1000),
+        }
+
+    except Exception as e:
+        import logging
+        logging.getLogger("fintrack.ai").exception("Status briefing failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))

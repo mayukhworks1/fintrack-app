@@ -15,12 +15,24 @@ import {
   Share2, Copy, CheckCheck, ExternalLink, Eye,
   Clock, ToggleLeft, ToggleRight, Link2, Zap,
   MapPin, Monitor, Smartphone, Globe, Shield,
+  LayoutGrid, List, Columns,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 
-// Status type detection removed — will be driven by a real Teable field later.
+// ── Status field config ───────────────────────────────────────────────────────
+const STATUS_OPTIONS = ['Completed', 'On Hold', 'Input Pending', 'In progress', 'Not started']
+const STATUS_CONFIG = {
+  'Completed':     { color: '#10b981', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.30)', dot: '#10b981' },
+  'In progress':   { color: '#3b82f6', bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.30)', dot: '#3b82f6' },
+  'On Hold':       { color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',  border: 'rgba(245,158,11,0.30)',  dot: '#f59e0b' },
+  'Input Pending': { color: '#f97316', bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.30)', dot: '#f97316' },
+  'Not started':   { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.25)', dot: '#94a3b8' },
+}
+function statusStyle(s) {
+  return STATUS_CONFIG[s] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)', dot: '#94a3b8' }
+}
 
 // ── Client colour palette ────────────────────────────────────────────────────
 const PALETTE = [
@@ -73,7 +85,9 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
   const project = f['Project'] || '?'
   const short   = f['Short Status'] || ''
   const detail  = f['Current Status (Detailed)'] || ''
+  const status  = f['Status'] || ''
   const clrHex  = clientColor(client)
+  const sc      = statusStyle(status)
   const hasDetail = detail.trim() && detail.trim() !== short.trim()
 
   return (
@@ -120,6 +134,13 @@ function StatusCard({ record, isEditor, onEdit, onDelete, selected, onSelect, ex
               style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
               {project}
             </span>
+            {status && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                {status}
+              </span>
+            )}
           </div>
 
           {/* Actions — always visible on mobile, hover on desktop */}
@@ -190,6 +211,7 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
   const [form, setForm] = useState({
     client:                   initial?.fields?.['Client'] || '',
     project:                  initial?.fields?.['Project'] || '',
+    status:                   initial?.fields?.['Status'] || '',
     short_status:             initial?.fields?.['Short Status'] || '',
     current_status_detailed:  initial?.fields?.['Current Status (Detailed)'] || '',
   })
@@ -247,6 +269,30 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords }) {
               <datalist id="project-list">
                 {allProjects.map(p => <option key={p} value={p} />)}
               </datalist>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
+              Status
+            </label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {STATUS_OPTIONS.map(opt => {
+                const sc = statusStyle(opt)
+                const active = form.status === opt
+                return (
+                  <button key={opt} type="button"
+                    onClick={() => set('status', active ? '' : opt)}
+                    className="py-1.5 px-1 rounded-xl text-[10px] font-semibold text-center transition-all leading-tight"
+                    style={{
+                      background: active ? sc.bg : 'var(--bg-input)',
+                      color:      active ? sc.color : 'var(--text-3)',
+                      border:     `1.5px solid ${active ? sc.border : 'var(--border)'}`,
+                    }}>
+                    {opt}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -887,6 +933,8 @@ export default function StatusBoard() {
   const [aiModal,       setAiModal]       = useState(false)
   const [shareModal,    setShareModal]    = useState(false)
   const [manageModal,   setManageModal]   = useState(false)
+  const [viewMode,      setViewMode]      = useState('card')  // 'card' | 'list' | 'board'
+  const [filterStatus,  setFilterStatus]  = useState('')
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -904,9 +952,10 @@ export default function StatusBoard() {
   const filtered = records.filter(r => {
     const f = r.fields || {}
     if (filterClient && f['Client'] !== filterClient) return false
+    if (filterStatus && f['Status'] !== filterStatus) return false
     if (search) {
       const q = search.toLowerCase()
-      const hay = [f['Client'], f['Project'], f['Short Status'], f['Current Status (Detailed)']].join(' ').toLowerCase()
+      const hay = [f['Client'], f['Project'], f['Short Status'], f['Current Status (Detailed)'], f['Status']].join(' ').toLowerCase()
       if (!hay.includes(q)) return false
     }
     return true
@@ -1005,11 +1054,29 @@ export default function StatusBoard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+              {[
+                { id: 'card',  Icon: LayoutGrid, title: 'Card view' },
+                { id: 'list',  Icon: List,        title: 'List view' },
+                { id: 'board', Icon: Columns,     title: 'Board view by status' },
+              ].map(({ id, Icon, title }) => (
+                <button key={id} onClick={() => setViewMode(id)} title={title}
+                  className="p-1.5 transition-all"
+                  style={{
+                    color:      viewMode === id ? 'var(--accent)' : 'var(--text-3)',
+                    background: viewMode === id ? 'var(--card-bg)' : 'transparent',
+                  }}>
+                  <Icon size={14} />
+                </button>
+              ))}
+            </div>
             {isEditor && (
               <button onClick={() => setManageModal(true)}
                 className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-1.5">
-                <Link2 size={12} /> Manage Links
+                <Link2 size={12} /> <span className="hidden sm:inline">Manage Links</span>
               </button>
             )}
             <button onClick={load} disabled={loading} className="btn-icon p-2" title="Refresh" style={{ color: 'var(--text-3)' }}>
@@ -1017,7 +1084,7 @@ export default function StatusBoard() {
             </button>
             {isEditor && (
               <button onClick={() => setModal('new')} className="btn-primary flex items-center gap-2 text-sm px-3 py-1.5">
-                <Plus size={13} /> Add Status
+                <Plus size={13} /> Add
               </button>
             )}
           </div>
@@ -1031,10 +1098,15 @@ export default function StatusBoard() {
               placeholder="Search client, project, or status…"
               value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <select className="input-field text-sm sm:w-48"
+          <select className="input-field text-sm sm:w-40"
             value={filterClient} onChange={e => setFilterClient(e.target.value)}>
             <option value="">All clients</option>
             {allClients.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select className="input-field text-sm sm:w-40"
+            value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {/* Select All toggle */}
           {filtered.length > 0 && isEditor && (
@@ -1096,15 +1168,15 @@ export default function StatusBoard() {
         {!loading && !error && records.length > 0 && filtered.length === 0 && (
           <div className="text-center py-12">
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>No entries match your filter.</p>
-            <button onClick={() => { setSearch(''); setFilterClient('') }}
+            <button onClick={() => { setSearch(''); setFilterClient(''); setFilterStatus('') }}
               className="text-xs font-semibold mt-2" style={{ color: 'var(--accent)' }}>
               Clear filters
             </button>
           </div>
         )}
 
-        {/* ── Cards grouped by client ── */}
-        {!loading && !error && filtered.length > 0 &&
+        {/* ── Card view (grouped by client) ── */}
+        {!loading && !error && filtered.length > 0 && viewMode === 'card' &&
           Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([client, recs]) => {
             const clrHex = clientColor(client)
             const groupSelected = recs.filter(r => selectedIds.has(r.id)).length
@@ -1159,6 +1231,153 @@ export default function StatusBoard() {
             )
           })
         }
+
+        {/* ── List view ── */}
+        {!loading && !error && filtered.length > 0 && viewMode === 'list' && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {/* Header row */}
+            <div className="grid text-[11px] font-semibold uppercase tracking-wider px-4 py-2.5"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)',
+                gridTemplateColumns: '28px 1fr 1fr 130px 1fr auto' }}>
+              <span />
+              <span>Client</span>
+              <span>Project</span>
+              <span>Status</span>
+              <span>Short Status</span>
+              <span />
+            </div>
+            {filtered.map((r, i) => {
+              const f = r.fields || {}
+              const client  = f['Client']  || '?'
+              const project = f['Project'] || '?'
+              const short   = f['Short Status'] || ''
+              const status  = f['Status'] || ''
+              const clrHex  = clientColor(client)
+              const sc      = statusStyle(status)
+              const sel     = selectedIds.has(r.id)
+              return (
+                <div key={r.id}
+                  className="grid items-center px-4 py-2.5 gap-2 transition-colors"
+                  style={{
+                    gridTemplateColumns: '28px 1fr 1fr 130px 1fr auto',
+                    background: sel ? hexToRgba(clrHex, 0.06) : (i % 2 === 0 ? 'var(--card-bg)' : 'var(--bg-input)'),
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                  {/* Checkbox */}
+                  {isEditor ? (
+                    <button onClick={() => toggleSelect(r.id)}
+                      className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all"
+                      style={{ background: sel ? clrHex : 'transparent', border: `2px solid ${sel ? clrHex : 'var(--border)'}` }}>
+                      {sel && <Check size={10} color="#fff" strokeWidth={3} />}
+                    </button>
+                  ) : <span />}
+                  {/* Client */}
+                  <span className="text-xs font-bold truncate" style={{ color: clrHex }}>{client}</span>
+                  {/* Project */}
+                  <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{project}</span>
+                  {/* Status badge */}
+                  <span>
+                    {status && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                        {status}
+                      </span>
+                    )}
+                  </span>
+                  {/* Short status */}
+                  <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{short}</span>
+                  {/* Actions */}
+                  {isEditor && (
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => setModal(r)} className="btn-icon p-1" title="Edit" style={{ color: 'var(--text-3)' }}>
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => handleDelete(r)} className="btn-icon p-1" title="Delete"
+                        style={{ color: 'rgba(239,68,68,0.5)' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.5)'}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Board view (kanban by Status) ── */}
+        {!loading && !error && filtered.length > 0 && viewMode === 'board' && (
+          <div className="overflow-x-auto -mx-4 px-4 pb-4">
+            <div className="flex gap-3" style={{ minWidth: `${STATUS_OPTIONS.length * 240}px` }}>
+              {STATUS_OPTIONS.map(statusKey => {
+                const sc   = statusStyle(statusKey)
+                const recs = filtered.filter(r => (r.fields?.['Status'] || 'Not started') === statusKey)
+                return (
+                  <div key={statusKey} className="flex-1 min-w-[220px]">
+                    {/* Column header */}
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-2"
+                      style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: sc.dot }} />
+                      <span className="text-xs font-bold flex-1 truncate" style={{ color: sc.color }}>{statusKey}</span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.2)', color: sc.color }}>{recs.length}</span>
+                    </div>
+                    {/* Cards in column */}
+                    <div className="space-y-2">
+                      {recs.length === 0 && (
+                        <div className="text-center py-6 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                          No projects
+                        </div>
+                      )}
+                      {recs.map(r => {
+                        const f = r.fields || {}
+                        const client  = f['Client']  || '?'
+                        const project = f['Project'] || '?'
+                        const short   = f['Short Status'] || ''
+                        const clrHex  = clientColor(client)
+                        const sel     = selectedIds.has(r.id)
+                        return (
+                          <div key={r.id} className="rounded-xl p-3 transition-all"
+                            style={{
+                              background: sel ? hexToRgba(clrHex, 0.08) : 'var(--card-bg)',
+                              border: sel ? `1.5px solid ${clrHex}` : '1px solid var(--border)',
+                              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                            }}>
+                            <div className="flex items-start gap-2 mb-1.5">
+                              {isEditor && (
+                                <button onClick={() => toggleSelect(r.id)}
+                                  className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center mt-0.5 transition-all"
+                                  style={{ background: sel ? clrHex : 'transparent', border: `1.5px solid ${sel ? clrHex : 'var(--border)'}` }}>
+                                  {sel && <Check size={8} color="#fff" strokeWidth={3} />}
+                                </button>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[10px] font-bold" style={{ color: clrHex }}>{client}</span>
+                                <p className="text-xs font-semibold leading-snug mt-0.5" style={{ color: 'var(--text-1)' }}>{project}</p>
+                              </div>
+                              {isEditor && (
+                                <button onClick={() => setModal(r)} className="btn-icon p-0.5 flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+                                  <Pencil size={11} />
+                                </button>
+                              )}
+                            </div>
+                            {short && (
+                              <p className="text-[11px] leading-snug" style={{ color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                {short}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Floating action bar (shows when items selected) ── */}

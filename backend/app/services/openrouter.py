@@ -1135,3 +1135,86 @@ async def ai_status_update(
         {"role": "user",   "content": prompt},
     ]
     return await _try_chat(messages, max_tokens=1500, temperature=0.4, extract=False)
+
+
+# ── Status Briefing ───────────────────────────────────────────────────────────
+
+_STATUS_BRIEFING_SYSTEM = """You are FinTrackAI, a project delivery analyst.
+Your job: write a concise Status Briefing — a focused update on what is happening
+across active projects right now. This is NOT a financial report.
+
+RULES:
+- Output ONLY the report, wrapped in ===ANSWER=== ... ===END=== markers.
+- Focus exclusively on project delivery status, blockers, and next steps.
+- Do NOT discuss revenue, invoices, or financial metrics.
+- Group projects by their status category (In progress / On Hold / Input Pending / Not started / Completed).
+- Each entry: project name, one-line status headline, and if blocked — say why.
+- End with a 3-bullet "Key Actions" section.
+- Be direct. No filler. No preamble.
+"""
+
+
+async def generate_status_briefing(
+    status_records: list[dict],
+) -> dict:
+    """
+    Generate a concise Status Briefing focused on project delivery status.
+    No financial data — this is the manager-facing 'what's happening' view.
+    """
+    if not status_records:
+        raise ValueError("No status records provided for briefing")
+
+    today = __import__("datetime").date.today().isoformat()
+
+    # Group by Status field
+    grouped: dict[str, list] = {}
+    for r in status_records:
+        f = r.get("fields", {})
+        status = f.get("Status") or "Not started"
+        grouped.setdefault(status, []).append(r)
+
+    # Build the prompt data
+    lines = [f"Status Briefing as of {today}. {len(status_records)} projects total.\n"]
+
+    status_order = ["In progress", "Input Pending", "On Hold", "Not started", "Completed"]
+    for cat in status_order:
+        recs = grouped.get(cat, [])
+        if not recs:
+            continue
+        lines.append(f"\n{cat.upper()} ({len(recs)} projects):")
+        for r in recs:
+            f = r.get("fields", {})
+            client  = f.get("Client", "?")
+            project = f.get("Project", "?")
+            short   = f.get("Short Status") or ""
+            detail  = f.get("Current Status (Detailed)") or ""
+            entry = f"- {client} / {project}"
+            if short:
+                entry += f": {short}"
+            if detail and detail.strip() != short.strip():
+                entry += f" | {detail[:300]}"
+            lines.append(entry)
+
+    # Any statuses not in the order list
+    for cat, recs in grouped.items():
+        if cat not in status_order:
+            lines.append(f"\n{cat.upper()} ({len(recs)} projects):")
+            for r in recs:
+                f = r.get("fields", {})
+                lines.append(f"- {f.get('Client','?')} / {f.get('Project','?')}: {f.get('Short Status','')}")
+
+    prompt = "\n".join(lines) + (
+        "\n\nWrite the Status Briefing now. Group by status category. "
+        "Flag any blocked or on-hold projects clearly. "
+        "End with 'Key Actions:' — 3 bullet points.\n\n"
+        "IMPORTANT: Start with ===ANSWER=== and end with ===END==="
+    )
+
+    messages = [
+        {"role": "system", "content": _STATUS_BRIEFING_SYSTEM},
+        {"role": "user",   "content": prompt},
+    ]
+    result = await _try_chat(messages, max_tokens=2000, temperature=0.3, extract=False)
+    raw = result.get("content", "")
+    result["content"] = _clean_report_output(raw)
+    return result

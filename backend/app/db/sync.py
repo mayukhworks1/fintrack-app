@@ -171,6 +171,7 @@ def _extract_status(fields: dict) -> dict:
         "project":       _coerce_str(fields.get("Project"),                   255),
         "short_status":  _coerce_str(fields.get("Short Status"),              500),
         "detail_status": (str(fields.get("Current Status (Detailed)") or "")[:10000] or None),
+        "status":        _coerce_str(fields.get("Status"),                    100),
         "modified_time": fields.get("lastModifiedTime"),
     }
 
