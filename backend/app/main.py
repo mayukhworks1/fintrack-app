@@ -14,6 +14,7 @@ from .config import settings
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers import admin
 from .routers import status as status_router
+from .routers import shared_views as shared_views_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -79,7 +80,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="FinTrack API",
     description="AI-powered project finance tracker backed by Teable",
-    version="2.2.0",
+    version="2.3.0",
     lifespan=lifespan,
 )
 
@@ -102,6 +103,7 @@ app.include_router(web_resources_router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
 app.include_router(status_router.router)
+app.include_router(shared_views_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────

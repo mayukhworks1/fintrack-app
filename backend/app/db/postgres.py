@@ -291,6 +291,44 @@ CREATE INDEX IF NOT EXISTS stm_client_idx  ON status_mirror (client);
 CREATE INDEX IF NOT EXISTS stm_project_idx ON status_mirror (project);
 CREATE INDEX IF NOT EXISTS stm_synced_idx  ON status_mirror (synced_at DESC);
 
+-- ── Shared Views (manager share links with access tracking) ──────────────────
+CREATE TABLE IF NOT EXISTS shared_views (
+    id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    token            VARCHAR(32)   UNIQUE NOT NULL,
+    title            VARCHAR(500),
+    record_ids       JSONB         NOT NULL DEFAULT '[]'::jsonb,
+    created_by       VARCHAR(50)   NOT NULL,
+    created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    created_from_ip  VARCHAR(100),
+    expires_at       TIMESTAMPTZ,
+    is_active        BOOLEAN       NOT NULL DEFAULT TRUE,
+    access_count     INTEGER       NOT NULL DEFAULT 0,
+    last_accessed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS sv_token_idx   ON shared_views (token);
+CREATE INDEX IF NOT EXISTS sv_created_idx ON shared_views (created_at DESC);
+CREATE INDEX IF NOT EXISTS sv_active_idx  ON shared_views (is_active, expires_at);
+
+CREATE TABLE IF NOT EXISTS shared_view_accesses (
+    id          UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
+    view_token  VARCHAR(32)      NOT NULL,
+    accessed_at TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    ip          VARCHAR(100),
+    country     VARCHAR(100),
+    city        VARCHAR(100),
+    isp         VARCHAR(200),
+    lat         DOUBLE PRECISION,
+    lon         DOUBLE PRECISION,
+    timezone    VARCHAR(100),
+    os          VARCHAR(200),
+    browser     VARCHAR(200),
+    device_type VARCHAR(100),
+    user_agent  TEXT,
+    referer     VARCHAR(500)
+);
+CREATE INDEX IF NOT EXISTS sva_token_idx ON shared_view_accesses (view_token);
+CREATE INDEX IF NOT EXISTS sva_time_idx  ON shared_view_accesses (accessed_at DESC);
+
 -- ── Idempotent column migrations ──────────────────────────────────────────
 -- Safe to run on every startup — adds missing columns to existing tables
 -- without touching tables that already have them (IF NOT EXISTS guard).

@@ -10,7 +10,10 @@ Security:
 - Attribution wired: every mutation captured in record_history
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from ..services.status import StatusService
 from ..models import StatusCreate, StatusUpdate
@@ -125,6 +128,54 @@ async def update_status(
         return await svc.update_record(record_id, fields, request=request, role=role)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── AI UPDATE ──────────────────────────────────────────────────────────────
+
+class AIUpdateRequest(BaseModel):
+    record_ids: list[str]
+    extra_context: Optional[str] = None
+
+
+@router.post("/ai-update")
+async def generate_ai_status_update(
+    request: Request,
+    body: AIUpdateRequest,
+    role: str = Depends(require_editor),
+):
+    """
+    Generate an AI-written status update narrative for selected records.
+    Rate-limited: shared with status mutation pool (30/min/IP).
+    """
+    await _check_write_rate(request)
+
+    if not body.record_ids:
+        raise HTTPException(status_code=422, detail="At least one record_id required")
+    if len(body.record_ids) > 30:
+        raise HTTPException(status_code=422, detail="Maximum 30 records per AI update")
+
+    # Fetch records from PG mirror (fast path)
+    svc = _svc()
+    all_records = await svc.list_all()
+    id_set = set(body.record_ids)
+    selected = [r for r in all_records if r.get("id") in id_set]
+
+    if not selected:
+        raise HTTPException(status_code=404, detail="None of the selected records were found")
+
+    try:
+        from ..services.openrouter import ai_status_update
+        result = await ai_status_update(
+            records=selected,
+            extra_context=body.extra_context or "",
+        )
+        return {
+            "text": result.get("content", ""),
+            "model": result.get("model", ""),
+            "record_count": len(selected),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI update failed: {e}")
 
 
 # ── DELETE ─────────────────────────────────────────────────────────────────

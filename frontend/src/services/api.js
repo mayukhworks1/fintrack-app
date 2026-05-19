@@ -291,6 +291,22 @@ export const api = {
     create: (data)     => request('/api/status',      { method: 'POST',   body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/status/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete: (id)       => request(`/api/status/${id}`, { method: 'DELETE' }),
+    aiUpdate: (record_ids, extra_context = '') =>
+      request('/api/status/ai-update', {
+        method: 'POST',
+        body: JSON.stringify({ record_ids, extra_context }),
+        timeout: AI_TIMEOUT_MS,
+      }),
+  },
+  sharedViews: {
+    list: ()          => request('/api/shared-views'),
+    get:  (token)     => request(`/api/shared-views/${token}`),
+    create: (data)    => request('/api/shared-views', { method: 'POST', body: JSON.stringify(data) }),
+    update: (token, data) => request(`/api/shared-views/${token}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (token)   => request(`/api/shared-views/${token}`, { method: 'DELETE' }),
+    accesses: (token) => request(`/api/shared-views/${token}/accesses`),
+    // Public — no auth header needed (still uses request() but no token will be found for public users)
+    publicGet: (token) => request(`/api/public/view/${token}`, {}, 1),
   },
   admin: {
     stats:              ()       => request('/api/admin/stats'),

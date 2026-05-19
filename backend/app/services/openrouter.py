@@ -1023,3 +1023,59 @@ async def generate_report(
     # extract=False: bypass ===ANSWER=== protocol — report is long-form prose,
     # not a Q&A answer, and the main SYSTEM_PROMPT's "no markdown" rule must not apply.
     return await _try_chat(messages, max_tokens=4096, temperature=0.4, extract=False)
+
+
+_AI_UPDATE_SYSTEM = (
+    "You are a project status writer for a software agency. "
+    "Your job is to produce a clear, factual, well-structured status update for a manager. "
+    "Be honest, specific, and concise. Use plain prose — no fluff, no generic filler. "
+    "Group by project if multiple are selected. "
+    "Use markdown: ## for project headings, bullet points for key points. "
+    "End with a 'Summary' section with 2–3 sentences of overall portfolio health."
+)
+
+
+async def ai_status_update(
+    records: list[dict],
+    extra_context: str = "",
+) -> dict:
+    """
+    Generate an AI-written status update narrative for the given status records.
+
+    records: list of {"id":..., "fields": {"Client":..., "Project":...,
+              "Short Status":..., "Current Status (Detailed)":...}}
+    extra_context: optional additional instruction from the user.
+    """
+    if not records:
+        raise ValueError("No records provided for AI update")
+
+    lines: list[str] = ["Selected project status records:"]
+    for r in records:
+        f = r.get("fields", {})
+        client  = f.get("Client", "Unknown")
+        project = f.get("Project", "Unknown")
+        short   = f.get("Short Status") or ""
+        detail  = f.get("Current Status (Detailed)") or ""
+        lines.append(f"\n### {client} — {project}")
+        if short:
+            lines.append(f"  Status: {short}")
+        if detail and detail.strip() != short.strip():
+            lines.append(f"  Detail: {detail[:800]}")
+
+    body = "\n".join(lines)
+    if extra_context:
+        body += f"\n\nAdditional context from user: {extra_context[:300]}"
+
+    prompt = (
+        f"{body}\n\n"
+        "Write a professional status update report covering the projects above. "
+        "Be honest and specific. Flag any blockers or risks clearly. "
+        "Format: markdown with ## per project, bullets for key points, "
+        "then a final ## Summary section."
+    )
+
+    messages = [
+        {"role": "system", "content": _AI_UPDATE_SYSTEM},
+        {"role": "user",   "content": prompt},
+    ]
+    return await _try_chat(messages, max_tokens=1500, temperature=0.4, extract=False)

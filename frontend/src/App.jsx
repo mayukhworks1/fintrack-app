@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
@@ -18,6 +18,7 @@ const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
 const Report        = lazy(() => import('./pages/Report'))
 const StatusBoard   = lazy(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazy(() => import('./pages/WebInvoices'))
+const SharedView    = lazy(() => import('./pages/SharedView'))  // public — no auth
 
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
@@ -30,6 +31,21 @@ function RouteFallback() {
 
 export default function App() {
   const { status, isWeb, isAll, isAdmin } = useAuth()
+  const location = useLocation()
+
+  // ── Public routes — no authentication required ──────────────────────────
+  if (location.pathname.startsWith('/view/')) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/view/:token" element={<SharedView />} />
+          </Routes>
+        </Suspense>
+        <VercelAnalytics />
+      </ErrorBoundary>
+    )
+  }
 
   if (status === 'loading') {
     return (
