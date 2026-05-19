@@ -10,15 +10,49 @@ import AdminDashboard from './pages/AdminDashboard' // eager — admin role
 import { useAuth } from './context/AuthContext'
 
 /* Lazy-loaded routes — split into separate chunks for snappier initial paint */
-const Projects      = lazy(() => import('./pages/Projects'))
-const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
-const Invoices      = lazy(() => import('./pages/Invoices'))
-const Analytics     = lazy(() => import('./pages/Analytics'))
-const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
-const Report        = lazy(() => import('./pages/Report'))
-const StatusBoard   = lazy(() => import('./pages/StatusBoard'))
-const WebInvoices   = lazy(() => import('./pages/WebInvoices'))
-const SharedView    = lazy(() => import('./pages/SharedView'))  // public — no auth
+const CHUNK_RELOAD_KEY = 'fintrack:chunk-reload'
+
+function isChunkLoadError(error) {
+  const msg = String(error?.message || error || '')
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Failed to load module script') ||
+    msg.includes('error loading dynamically imported module')
+  )
+}
+
+function lazyWithReload(importer) {
+  return lazy(async () => {
+    try {
+      const mod = await importer()
+      try { sessionStorage.removeItem(CHUNK_RELOAD_KEY) } catch {}
+      return mod
+    } catch (error) {
+      if (typeof window !== 'undefined' && isChunkLoadError(error)) {
+        try {
+          const alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1'
+          if (!alreadyReloaded) {
+            sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+            window.location.reload()
+            return new Promise(() => {})
+          }
+        } catch {}
+      }
+      throw error
+    }
+  })
+}
+
+const Projects      = lazyWithReload(() => import('./pages/Projects'))
+const ProjectDetail = lazyWithReload(() => import('./pages/ProjectDetail'))
+const Invoices      = lazyWithReload(() => import('./pages/Invoices'))
+const Analytics     = lazyWithReload(() => import('./pages/Analytics'))
+const AIAssistant   = lazyWithReload(() => import('./pages/AIAssistant'))
+const Report        = lazyWithReload(() => import('./pages/Report'))
+const StatusBoard   = lazyWithReload(() => import('./pages/StatusBoard'))
+const WebInvoices   = lazyWithReload(() => import('./pages/WebInvoices'))
+const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
 
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
