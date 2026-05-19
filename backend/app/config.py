@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     teable_web_projects_table_id: str = "tbl4qgQkatguBwrzxtf"
     # Web Resources table (tblMjssDx55GOfLtgqo)
     teable_web_resources_table_id: str = "tblMjssDx55GOfLtgqo"
+    # Current Status table — project-level status updates (Master@2026)
+    teable_status_table_id: str = "tblgdbV6T4Ly9n6YNCU"
     # Signing key for session tokens — set APP_SECRET in prod.
     app_secret: str = "fintrack-dev-secret-change-me"
     # How long a login token stays valid (seconds). Default 7 days.

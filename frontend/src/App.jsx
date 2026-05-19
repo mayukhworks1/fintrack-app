@@ -16,6 +16,7 @@ const Invoices      = lazy(() => import('./pages/Invoices'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
 const AIAssistant   = lazy(() => import('./pages/AIAssistant'))
 const Report        = lazy(() => import('./pages/Report'))
+const StatusBoard   = lazy(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazy(() => import('./pages/WebInvoices'))
 
 /* Lightweight chunk-loading fallback */
@@ -77,6 +78,7 @@ export default function App() {
               <Route path="/analytics"    element={<Analytics />} />
               <Route path="/ai"           element={<AIAssistant />} />
               <Route path="/report"       element={<Report />} />
+              <Route path="/status"       element={<StatusBoard />} />
               <Route path="/admin"        element={<AdminDashboard embedded={true} />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>

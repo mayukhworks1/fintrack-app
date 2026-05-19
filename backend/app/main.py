@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers import admin
+from .routers import status as status_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -100,6 +101,7 @@ app.include_router(web_projects_router)
 app.include_router(web_resources_router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
+app.include_router(status_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────

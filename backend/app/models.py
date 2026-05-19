@@ -28,6 +28,17 @@ FIELD_IDS = {
     "Revenue of resource based on given contribution percentage.": "flduGX7KvgEMpy27aNA",
 }
 
+# ---------------------------------------------------------------------------
+# Current Status table field IDs  (tblgdbV6T4Ly9n6YNCU)
+# ---------------------------------------------------------------------------
+
+STATUS_TABLE_FIELD_IDS = {
+    "Client":                   "fldsBzy2dYYTRNKhpAD",
+    "Project":                  "fldWgtXYJN178I0jzeW",
+    "Current Status (Detailed)":"fld4MneRM2LeXS15cpv",
+    "Short Status":             "fldyfl9bugT9bLJzWuv",
+}
+
 STATUS_ALIAS = {
     "active": "🟢 Active",
     "completed": "✅ Completed",
@@ -130,3 +141,41 @@ class AutofillRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     record_id: str
+
+
+# ---------------------------------------------------------------------------
+# Status update models
+# ---------------------------------------------------------------------------
+
+class StatusCreate(BaseModel):
+    client: str
+    project: str
+    current_status_detailed: Optional[str] = None
+    short_status: Optional[str] = None
+
+    def to_teable_fields(self) -> dict:
+        m: dict = {"Client": self.client, "Project": self.project}
+        if self.current_status_detailed is not None:
+            m["Current Status (Detailed)"] = self.current_status_detailed
+        if self.short_status is not None:
+            m["Short Status"] = self.short_status
+        return m
+
+
+class StatusUpdate(BaseModel):
+    client: Optional[str] = None
+    project: Optional[str] = None
+    current_status_detailed: Optional[str] = None
+    short_status: Optional[str] = None
+
+    def to_teable_fields(self) -> dict:
+        m: dict = {}
+        if self.client is not None:
+            m["Client"] = self.client
+        if self.project is not None:
+            m["Project"] = self.project
+        if self.current_status_detailed is not None:
+            m["Current Status (Detailed)"] = self.current_status_detailed
+        if self.short_status is not None:
+            m["Short Status"] = self.short_status
+        return m

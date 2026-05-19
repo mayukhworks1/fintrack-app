@@ -807,6 +807,7 @@ async def generate_report(
     records: list[dict],
     invoice_summary: dict | None = None,
     invoice_records: list[dict] | None = None,
+    status_records: list[dict] | None = None,
 ) -> dict:
     """
     Full executive report for the portfolio.
@@ -934,6 +935,39 @@ async def generate_report(
     worst = summary.get("worst_project") or {}
     today = __import__("datetime").date.today().isoformat()
 
+    # ── TOON context block ─────────────────────────────────────────────────
+    # Structured token representation of all entities for reliable AI parsing.
+    toon_block = ""
+    try:
+        from .toon import encode_portfolio
+        toon_block = "\n\nTOON CONTEXT (structured tokens — use these for exact figures):\n" + encode_portfolio(
+            projects=capped,
+            invoices=invoice_records or [],
+            statuses=status_records or [],
+            max_projects=60,
+            max_invoices=80,
+        ) + "\n"
+    except Exception:
+        pass  # TOON is additive — never block the report
+
+    # ── Status updates block ───────────────────────────────────────────────
+    status_block = ""
+    if status_records:
+        lines = []
+        for r in status_records:
+            f = r.get("fields", {})
+            client  = f.get("Client", "?")
+            project = f.get("Project", "?")
+            short   = f.get("Short Status", "")
+            detail  = f.get("Current Status (Detailed)", "")
+            entry   = f"- {client} / {project}"
+            if short:
+                entry += f": {short}"
+            if detail and detail.strip() != short.strip():
+                entry += f" — {detail[:200]}"
+            lines.append(entry)
+        status_block = f"\nLIVE PROJECT STATUS UPDATES ({len(status_records)} entries):\n" + "\n".join(lines) + "\n"
+
     prompt = (
         f"Write a complete executive board report dated {today}.\n"
         f"Use ALL numbers below exactly as given. No approximation.\n\n"
@@ -959,15 +993,18 @@ async def generate_report(
         + invoice_block
         + pending_block
         + bp_block
+        + status_block
 
         + f"\nPROJECT DETAIL (top {len(capped)} by priority):\n"
-        + "\n".join(project_lines) + "\n\n"
+        + "\n".join(project_lines) + "\n"
+        + toon_block + "\n"
 
         "Now write the full report using these sections in order:\n\n"
         "Portfolio Overview:\n"
         "Financial Performance:\n"
         "Per-Client Breakdown:\n"
         + ("Cash Flow & Collections:\n" if invoice_summary else "")
+        + ("Current Project Status:\n" if status_records else "")
         + "Project Health Analysis:\n"
         "Risks & Concerns:\n"
         "Recommendations:\n"
@@ -975,6 +1012,7 @@ async def generate_report(
         "Each section: write the section label exactly as shown above (e.g. 'Portfolio Overview:') "
         "on its own line, then bullet points starting with '- '. "
         "Name every at-risk project and every pending invoice explicitly. "
+        "For Current Project Status: include each project's short status and any critical detail. "
         "No filler sentences. No preamble before the first section."
     )
 

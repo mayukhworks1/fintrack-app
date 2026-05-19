@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
-  ChevronLeft, ChevronRight, ShieldCheck
+  ChevronLeft, ChevronRight, ShieldCheck, Activity
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -16,6 +16,7 @@ const nav = [
   { to: '/analytics', label: 'Analytics',    icon: BarChart3 },
   { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText },
   { to: '/report',    label: 'Report',       icon: FileText },
+  { to: '/status',    label: 'Status Board', icon: Activity },
 ]
 
 function OfflineBanner({ collapsed }) {

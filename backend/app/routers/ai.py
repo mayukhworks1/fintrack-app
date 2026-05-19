@@ -174,7 +174,35 @@ async def _build_context_pg(pool) -> str:
 
     context = project_text + "\n" + records_text + "\n\n" + invoice_text
 
-    # ── 5. Cache for 5 min ───────────────────────────────────────────────
+    # ── 5. Append TOON context + live status updates ─────────────────────
+    try:
+        from ..services.status import StatusService
+        from ..services.toon import encode_portfolio
+        status_records = await StatusService().list_all()
+        if status_records or proj_fields or inv_fields:
+            toon_ctx = encode_portfolio(
+                projects=[{"fields": f} for f in proj_fields],
+                invoices=[{"fields": f} for f in inv_fields],
+                statuses=status_records,
+                max_projects=50,
+                max_invoices=50,
+            )
+            context += "\n\n=== TOON CONTEXT (structured tokens) ===\n" + toon_ctx
+            if status_records:
+                status_lines = []
+                for r in status_records:
+                    sf = r.get("fields", {})
+                    short  = sf.get("Short Status", "")
+                    detail = sf.get("Current Status (Detailed)", "")
+                    line   = f"- {sf.get('Client','?')} / {sf.get('Project','?')}: {short}"
+                    if detail and detail.strip() != short.strip():
+                        line += f" — {detail[:150]}"
+                    status_lines.append(line)
+                context += "\n\n=== LIVE PROJECT STATUS UPDATES ===\n" + "\n".join(status_lines)
+    except Exception:
+        pass  # TOON is additive — never break chat
+
+    # ── 6. Cache for 5 min ───────────────────────────────────────────────
     await vk.cache_set(_CONTEXT_CACHE_KEY, context, _CONTEXT_TTL)
     return context
 
@@ -716,10 +744,21 @@ async def ai_report(
         # at the same time get ONE LLM call shared between them).
         async def _generate():
             t0 = time.time()
+
+            # Fetch status updates in parallel with main payload
+            from ..services.status import StatusService
+            svc_status = StatusService()
+
             if pool:
-                payload = await _build_report_payload_pg(pool)
+                payload, status_records = await asyncio.gather(
+                    _build_report_payload_pg(pool),
+                    svc_status.list_all(),
+                )
             else:
-                payload = await _build_report_payload_teable()
+                payload, status_records = await asyncio.gather(
+                    _build_report_payload_teable(),
+                    svc_status.list_all(),
+                )
 
             # Empty portfolio guard — don't waste an LLM call on no data
             if not payload["project_records"] and not payload.get("invoice_records"):
@@ -736,6 +775,7 @@ async def ai_report(
                 payload["project_records"],
                 invoice_summary=payload.get("invoice_summary"),
                 invoice_records=payload.get("invoice_records"),
+                status_records=status_records or [],
             )
             return {
                 "report":       result["content"],

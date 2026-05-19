@@ -281,6 +281,17 @@ export const api = {
       unassign: (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'DELETE' }),
     },
   },
+  status: {
+    list: (params = {}) => {
+      const q = new URLSearchParams()
+      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/status?${q}`)
+    },
+    get:    (id)       => request(`/api/status/${id}`),
+    create: (data)     => request('/api/status',      { method: 'POST',   body: JSON.stringify(data) }),
+    update: (id, data) => request(`/api/status/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+    delete: (id)       => request(`/api/status/${id}`, { method: 'DELETE' }),
+  },
   admin: {
     stats:              ()       => request('/api/admin/stats'),
     auditLog:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/audit-log?${q}`) },
