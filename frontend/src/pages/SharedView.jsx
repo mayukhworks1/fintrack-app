@@ -181,7 +181,7 @@ function SummaryStrip({ records, statusOptions, filterStatus, onFilterStatus, ac
   )
 }
 
-function ResourceCard({ record, resourceType, canEdit, onEdit, compact = false, showClientAccents = true }) {
+function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true }) {
   const meta = RESOURCE_META[resourceType]
   const f = record.fields || {}
   const groupValue = f[meta.clientField] || 'Unknown'
@@ -199,6 +199,7 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, compact = false, 
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge value={statusValue} />
+            <button onClick={() => onDetail(record)} className="p-1 rounded-lg text-gray-400 hover:text-slate-700" title="View details"><Eye size={12} /></button>
             {canEdit && <button onClick={() => onEdit(record)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600"><Pencil size={12} /></button>}
           </div>
         </div>
@@ -231,7 +232,7 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, compact = false, 
   )
 }
 
-function CardView({ records, resourceType, canEdit, onEdit, compact = false, showClientAccents = true }) {
+function CardView({ records, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true }) {
   const meta = RESOURCE_META[resourceType]
   const grouped = records.reduce((acc, r) => {
     const groupValue = r.fields?.[meta.clientField] || 'Unknown'
@@ -254,7 +255,7 @@ function CardView({ records, resourceType, canEdit, onEdit, compact = false, sho
               <span className="text-sm text-gray-400">{recs.length} {meta.noun}{recs.length !== 1 ? 's' : ''}</span>
             </div>
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${compact ? 'gap-3' : 'gap-4'}`}>
-              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} compact={compact} showClientAccents={showClientAccents} />)}
+              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} />)}
             </div>
           </section>
         )
@@ -263,7 +264,7 @@ function CardView({ records, resourceType, canEdit, onEdit, compact = false, sho
   )
 }
 
-function ListView({ records, columns, resourceType, canEdit, onEdit, showClientAccents = true }) {
+function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true }) {
   const meta = RESOURCE_META[resourceType]
   const cols = (columns || meta.defaultColumns).filter(c => meta.columns.includes(c))
   return (
@@ -272,7 +273,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, showClientA
         <thead>
           <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
             {cols.map(col => <th key={col} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap">{col}</th>)}
-            {canEdit && <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap text-right">Edit</th>}
+            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -310,11 +311,12 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, showClientA
                     ].includes(col) && <span className="text-gray-700">{f[col] || '—'}</span>}
                   </td>
                 ))}
-                {canEdit && (
-                  <td className="px-4 py-3 align-top text-right">
+                <td className="px-4 py-3 align-top text-right">
+                  <button onClick={() => onDetail(r)} className="p-1 rounded-lg text-gray-400 hover:text-slate-700" title="View details"><Eye size={12} /></button>
+                  {canEdit && (
                     <button onClick={() => onEdit(r)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit"><Pencil size={12} /></button>
-                  </td>
-                )}
+                  )}
+                </td>
               </tr>
             )
           })}
@@ -324,7 +326,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, showClientA
   )
 }
 
-function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDropStatus, compact = false, showClientAccents = true }) {
+function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDetail, onDropStatus, compact = false, showClientAccents = true }) {
   const meta = RESOURCE_META[resourceType]
   const [draggedId, setDraggedId] = useState('')
   const byStatus = statusOptions.reduce((acc, s) => ({ ...acc, [s]: [] }), {})
@@ -385,7 +387,10 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDr
                         </div>
                       )}
                     </div>
-                    {canEdit && <button onClick={() => onEdit(r)} className="mt-2 p-1 rounded-lg text-gray-400 hover:text-blue-600"><Pencil size={12} /></button>}
+                    <div className="mt-2 flex items-center gap-1">
+                      <button onClick={() => onDetail(r)} className="p-1 rounded-lg text-gray-400 hover:text-slate-700" title="View details"><Eye size={12} /></button>
+                      {canEdit && <button onClick={() => onEdit(r)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit"><Pencil size={12} /></button>}
+                    </div>
                   </div>
                 )
               })}
@@ -393,6 +398,87 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDr
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function DetailModal({ resourceType, record, onClose }) {
+  const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
+  const f = record?.fields || {}
+  const groupValue = f[meta.clientField] || 'Unknown'
+  const titleValue = f[meta.titleField] || 'Untitled'
+  const statusValue = f[meta.statusField] || ''
+  const accent = clientColor(groupValue)
+  const entries = Object.entries(f)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .sort(([a], [b]) => a.localeCompare(b))
+
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  if (!record) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
+      onClick={onClose}>
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[28px] shadow-2xl bg-white"
+        style={{ border: '1px solid #e5e7eb' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b" style={{ borderColor: '#e5e7eb', background: `linear-gradient(135deg, ${hexRgba(accent, 0.14)}, rgba(255,255,255,0.98))` }}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
+                style={{ background: hexRgba(accent, 0.12), border: `1px solid ${hexRgba(accent, 0.24)}`, color: accent }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
+                {groupValue}
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 leading-tight">{titleValue}</h2>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusBadge value={statusValue} />
+                <span className="text-xs text-slate-500">Record ID: {record.id}</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="overflow-y-auto max-h-[calc(90vh-132px)] p-6">
+          {resourceType === 'invoices' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+              {[
+                ['Project', f['Project'] || '—'],
+                ['Category', f['Category'] || '—'],
+                ['Amount Raised', fmtInr(f['Amount Raised'])],
+                ['Amount Received', fmtInr(f['Amount Received'])],
+                ['Raised Date', fmtDate(f['Raised Date'])],
+                ['Cleared Date', fmtDate(f['Cleared Date'])],
+                ['Next follow-up', fmtDate(f['Next followup'])],
+                ['Payment Status', f['Payment Status'] || '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border px-4 py-3" style={{ borderColor: '#e5e7eb', background: '#f8fafc' }}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 mb-1">{label}</p>
+                  <p className="text-sm font-semibold text-slate-700">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {entries.map(([key, value]) => (
+              <div key={key} className="rounded-2xl border px-4 py-3" style={{ borderColor: '#e5e7eb' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 mb-1">{key}</p>
+                <p className="text-sm text-slate-700 break-words whitespace-pre-wrap">
+                  {/(Amount|Profit)/i.test(key) && typeof value !== 'string' ? fmtInr(value) : String(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -521,6 +607,7 @@ export default function SharedView() {
   const [filterCategory, setFilterCategory] = useState('')
   const [viewType, setViewType] = useState('card')
   const [editRecord, setEditRecord] = useState(null)
+  const [detailRecord, setDetailRecord] = useState(null)
   const [savingRecordId, setSavingRecordId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
 
@@ -546,6 +633,8 @@ export default function SharedView() {
       setFilterCategory(prev => prev || vc.filterCategory || '')
     } catch (e) {
       setError(e.message || 'This link is unavailable')
+      setData(null)
+      setRecords([])
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -682,17 +771,26 @@ export default function SharedView() {
   if (error) {
     const isDisabled = /disabled/i.test(error)
     const isExpiredLink = /expired/i.test(error)
+    const isMissingLink = /not found|unavailable|not accessible/i.test(error)
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#f8fafc' }}>
         <div className="w-full max-w-sm">
           <div className="bg-white rounded-2xl p-8 text-center shadow-sm" style={{ border: '1px solid #e5e7eb' }}>
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 ${isDisabled ? 'bg-amber-50' : 'bg-red-50'}`}
-              style={{ border: `1px solid ${isDisabled ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
-              <AlertCircle size={28} className={isDisabled ? 'text-amber-500' : 'text-red-500'} />
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 ${(isDisabled || isExpiredLink) ? 'bg-amber-50' : 'bg-red-50'}`}
+              style={{ border: `1px solid ${(isDisabled || isExpiredLink) ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
+              <AlertCircle size={28} className={(isDisabled || isExpiredLink) ? 'text-amber-500' : 'text-red-500'} />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2">{isExpiredLink ? 'Link Expired' : 'Access Restricted'}</h1>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">
+              {isExpiredLink ? 'Link Expired' : isDisabled ? 'Link Disabled' : isMissingLink ? 'Link Not Found' : 'Access Restricted'}
+            </h1>
             <p className="text-sm text-gray-600 leading-relaxed">
-              {isDisabled ? 'This link has been disabled by the owner.' : isExpiredLink ? 'This link has passed its expiry date.' : 'This page is not accessible.'}
+              {isDisabled
+                ? 'This link has been disabled by the owner.'
+                : isExpiredLink
+                  ? 'This link has passed its expiry date.'
+                  : isMissingLink
+                    ? 'This shared link was deleted, is invalid, or no longer exists.'
+                    : 'This page is not accessible.'}
             </p>
           </div>
         </div>
@@ -802,9 +900,9 @@ export default function SharedView() {
           </div>
         ) : (
           <>
-            {viewType === 'card' && <CardView records={filtered} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} compact={compact} showClientAccents={showClientAccents} />}
-            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} showClientAccents={showClientAccents} />}
-            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} />}
+            {viewType === 'card' && <CardView records={filtered} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} compact={compact} showClientAccents={showClientAccents} />}
+            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} />}
+            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} />}
           </>
         )}
       </main>
@@ -827,6 +925,7 @@ export default function SharedView() {
           onSave={form => saveRecordChanges(editRecord, form)}
         />
       )}
+      {detailRecord && <DetailModal resourceType={resourceType} record={detailRecord} onClose={() => setDetailRecord(null)} />}
     </div>
   )
 }

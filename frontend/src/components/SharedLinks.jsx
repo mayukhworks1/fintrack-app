@@ -242,9 +242,11 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
   const [views, setViews] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
-  const [accesses, setAccesses] = useState([])
-  const [loadingAcc, setLoadingAcc] = useState(false)
+  const [accessesByToken, setAccessesByToken] = useState({})
+  const [loadingAccessToken, setLoadingAccessToken] = useState('')
   const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
+  const [togglingTokens, setTogglingTokens] = useState(() => new Set())
+  const [deletingTokens, setDeletingTokens] = useState(() => new Set())
 
   useEffect(() => { loadViews() }, [resourceType])
   useEffect(() => {
@@ -265,13 +267,21 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
 
   async function toggleActive(view) {
     const next = !view.is_active
+    setTogglingTokens(tokens => new Set(tokens).add(view.token))
     setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: next } : v))
     try {
-      await api.sharedViews.update(view.token, { is_active: next })
+      const updated = await api.sharedViews.update(view.token, { is_active: next })
+      setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...(updated || {}), is_active: updated?.is_active ?? next } : v))
       showToast(next ? 'Link enabled' : 'Link disabled', 'success')
     } catch (e) {
       setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v))
       showToast(e.message || 'Failed', 'error')
+    } finally {
+      setTogglingTokens(tokens => {
+        const nextTokens = new Set(tokens)
+        nextTokens.delete(view.token)
+        return nextTokens
+      })
     }
   }
 
@@ -299,6 +309,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
   async function deleteView(token) {
     if (!confirm('Delete this share link?')) return
     const prev = views
+    setDeletingTokens(tokens => new Set(tokens).add(token))
     setViews(vs => vs.filter(v => v.token !== token))
     if (selected === token) setSelected(null)
     try {
@@ -307,18 +318,25 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
     } catch (e) {
       setViews(prev)
       showToast(e.message || 'Failed', 'error')
+    } finally {
+      setDeletingTokens(tokens => {
+        const nextTokens = new Set(tokens)
+        nextTokens.delete(token)
+        return nextTokens
+      })
     }
   }
 
   async function viewAccesses(token) {
     if (selected === token) { setSelected(null); return }
     setSelected(token)
-    setLoadingAcc(true)
+    if (accessesByToken[token]) return
+    setLoadingAccessToken(token)
     try {
       const r = await api.sharedViews.accesses(token)
-      setAccesses(r.accesses || [])
+      setAccessesByToken(prev => ({ ...prev, [token]: r.accesses || [] }))
     } finally {
-      setLoadingAcc(false)
+      setLoadingAccessToken('')
     }
   }
 
@@ -344,7 +362,10 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
             const expired = isExpired(v.expires_at)
             const inactive = !v.is_active
             const updatingMode = updatingTokens.has(v.token)
+            const toggling = togglingTokens.has(v.token)
+            const deleting = deletingTokens.has(v.token)
             const url = `${window.location.origin}/view/${v.token}`
+            const accesses = accessesByToken[v.token] || []
             return (
               <div key={v.token}>
                 <div className="rounded-xl p-3 transition-all"
@@ -373,24 +394,28 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><ExternalLink size={12} /></a>
-                      <button onClick={() => toggleActive(v)} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }} title={v.is_active ? 'Disable' : 'Enable'}>
-                        {v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                      <button onClick={() => toggleActive(v)} disabled={toggling || deleting} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)', opacity: toggling ? 0.75 : 1 }} title={v.is_active ? 'Disable' : 'Enable'}>
+                        {toggling ? <Loader2 size={14} className="animate-spin" /> : (v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />)}
                       </button>
                       <div className="flex items-center rounded-lg p-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                        <button onClick={() => setAccessMode(v, 'read')} disabled={updatingMode}
+                        <button onClick={() => setAccessMode(v, 'read')} disabled={updatingMode || deleting}
                           className="px-2 py-1 rounded-md text-[10px] font-semibold transition"
                           style={{ color: v.access_mode === 'read' ? '#1f2937' : 'var(--text-3)', background: v.access_mode === 'read' ? 'var(--card-bg)' : 'transparent', opacity: updatingMode ? 0.72 : 1 }}>
                           View
                         </button>
-                        <button onClick={() => setAccessMode(v, 'edit')} disabled={updatingMode}
+                        <button onClick={() => setAccessMode(v, 'edit')} disabled={updatingMode || deleting}
                           className="px-2 py-1 rounded-md text-[10px] font-semibold transition flex items-center gap-1"
                           style={{ color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)', background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.12)' : 'transparent', opacity: updatingMode ? 0.72 : 1 }}>
                           Edit
                           {updatingMode && <Loader2 size={9} className="animate-spin" />}
                         </button>
                       </div>
-                      <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}><MapPin size={12} /></button>
-                      <button onClick={() => deleteView(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}><Trash2 size={12} /></button>
+                      <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}>
+                        {loadingAccessToken === v.token ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />}
+                      </button>
+                      <button onClick={() => deleteView(v.token)} disabled={deleting} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)', opacity: deleting ? 0.75 : 1 }}>
+                        {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -399,7 +424,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
                     <div className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}>
                       Events — {accesses.length} entries
                     </div>
-                    {loadingAcc ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
+                    {loadingAccessToken === v.token ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
                     : accesses.length === 0 ? <p className="text-xs text-center py-4" style={{ color: 'var(--text-3)' }}>No entries yet</p>
                     : (
                       <div className="max-h-56 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
