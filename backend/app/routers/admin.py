@@ -19,6 +19,7 @@ GET /api/admin/chat-sessions/{id}   — messages in a single session
 GET /api/admin/sync-log             — Teable sync run history
 GET /api/admin/mirror/projects      — projects_mirror table
 GET /api/admin/mirror/invoices      — invoices_mirror table
+GET /api/admin/mirror/status        — status_mirror table
 GET /api/admin/record-history       — field-level change log
 """
 
@@ -102,14 +103,16 @@ async def admin_sync_diagnose(_: str = Depends(require_admin)):
 
     base = settings.teable_base_url.rstrip("/")
     tables = {
-        "projects":   settings.teable_table_id,
-        "invoices":   settings.teable_invoice_table_id,
+        "projects":    settings.teable_table_id,
+        "invoices":    settings.teable_invoice_table_id,
         "web_invoices": settings.teable_web_invoice_table_id,
+        "status":      settings.teable_status_table_id,
     }
     mirrors = {
         "projects":    "projects_mirror",
         "invoices":    "invoices_mirror",
         "web_invoices": "web_invoices_mirror",
+        "status":      "status_mirror",
     }
     token_names = {
         settings.teable_api_token:     "TEABLE_API_TOKEN",
@@ -232,6 +235,8 @@ async def admin_stats(_: str = Depends(require_admin)):
             (SELECT MAX(synced_at) FROM invoices_mirror)                              AS invoices_last_sync,
             (SELECT COUNT(*) FROM web_invoices_mirror)                                AS web_invoices_total,
             (SELECT MAX(synced_at) FROM web_invoices_mirror)                          AS web_invoices_last_sync,
+            (SELECT COUNT(*) FROM status_mirror)                                  AS status_total,
+            (SELECT MAX(synced_at) FROM status_mirror)                            AS status_last_sync,
 
             -- Combined invoice totals (for overview)
             (SELECT COUNT(*) FROM invoices_mirror    WHERE payment_status ILIKE '%paid%')     AS invoices_paid,
@@ -780,6 +785,55 @@ async def admin_mirror_web_invoices(
                fields::text AS fields
         FROM web_invoices_mirror {where_sql}
         ORDER BY raised_date DESC NULLS LAST, synced_at DESC
+        LIMIT ${idx} OFFSET ${idx+1}
+        """,
+        *params, limit, offset,
+    )
+
+    records = []
+    for row in rows:
+        d = _row_to_dict(row)
+        try:
+            d["fields"] = json.loads(d.get("fields") or "{}")
+        except Exception:
+            d["fields"] = {}
+        records.append(d)
+
+    return {"total": total, "limit": limit, "offset": offset, "rows": records}
+
+
+@router.get("/mirror/status")
+async def admin_mirror_status(
+    limit:   int           = Query(100, ge=1, le=500),
+    offset:  int           = Query(0, ge=0),
+    client:  Optional[str] = Query(None),
+    project: Optional[str] = Query(None),
+    _:       str           = Depends(require_admin),
+):
+    """Status mirror — typed columns from the Current Status Teable table."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    where: list[str] = []
+    params: list     = []
+    idx = 1
+
+    if client:
+        where.append(f"client ILIKE ${idx}"); params.append(f"%{client}%"); idx += 1
+    if project:
+        where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM status_mirror {where_sql}", *params)
+    rows  = await pool.fetch(
+        f"""
+        SELECT teable_id, synced_at,
+               client, project, short_status, detail_status, modified_time,
+               fields::text AS fields
+        FROM status_mirror {where_sql}
+        ORDER BY synced_at DESC
         LIMIT ${idx} OFFSET ${idx+1}
         """,
         *params, limit, offset,

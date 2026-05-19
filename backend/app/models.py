@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +150,8 @@ class AnalyzeRequest(BaseModel):
 class StatusCreate(BaseModel):
     client: str
     project: str
-    current_status_detailed: Optional[str] = None
-    short_status: Optional[str] = None
+    current_status_detailed: Optional[str] = Field(None, max_length=5000)
+    short_status: Optional[str] = Field(None, max_length=300)
 
     def to_teable_fields(self) -> dict:
         m: dict = {"Client": self.client, "Project": self.project}
@@ -165,8 +165,8 @@ class StatusCreate(BaseModel):
 class StatusUpdate(BaseModel):
     client: Optional[str] = None
     project: Optional[str] = None
-    current_status_detailed: Optional[str] = None
-    short_status: Optional[str] = None
+    current_status_detailed: Optional[str] = Field(None, max_length=5000)
+    short_status: Optional[str] = Field(None, max_length=300)
 
     def to_teable_fields(self) -> dict:
         m: dict = {}

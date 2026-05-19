@@ -165,6 +165,16 @@ def _extract_web_invoice(fields: dict) -> dict:
     }
 
 
+def _extract_status(fields: dict) -> dict:
+    return {
+        "client":        _coerce_str(fields.get("Client"),                    255),
+        "project":       _coerce_str(fields.get("Project"),                   255),
+        "short_status":  _coerce_str(fields.get("Short Status"),              500),
+        "detail_status": (str(fields.get("Current Status (Detailed)") or "")[:10000] or None),
+        "modified_time": fields.get("lastModifiedTime"),
+    }
+
+
 # Map table_id → (source name, mirror table, extractor)
 def _table_config(table_id: str) -> Optional[tuple]:
     if table_id == settings.teable_table_id:
@@ -173,6 +183,8 @@ def _table_config(table_id: str) -> Optional[tuple]:
         return ("invoices", "invoices_mirror", _extract_invoice)
     if table_id == settings.teable_web_invoice_table_id:
         return ("web_invoices", "web_invoices_mirror", _extract_web_invoice)
+    if table_id == settings.teable_status_table_id:
+        return ("status", "status_mirror", _extract_status)
     return None
 
 
@@ -594,6 +606,9 @@ async def run_sync(incremental: bool = False) -> None:
     if settings.teable_web_invoice_table_id and (web_token or any_token):
         tasks.append(("web_invoices", "web_invoices_mirror",
                        settings.teable_web_invoice_table_id, web_token or any_token, _extract_web_invoice))
+    if settings.teable_status_table_id and (main_token or any_token):
+        tasks.append(("status", "status_mirror",
+                       settings.teable_status_table_id, main_token or any_token, _extract_status))
 
     if not tasks:
         logger.warning("run_sync: no tables configured — check TEABLE_*_TABLE_ID settings")
@@ -678,6 +693,8 @@ async def _write_sync_log(
                 # the TTL to expire.
                 await vk.delete(_CHAT_CONTEXT_CACHE_KEY)
                 await _cache_bust("report:")
+                await vk.delete("status:list:None:None")  # most common cache key
+                await _cache_bust("status:")
         except Exception:
             pass  # Valkey unavailable — context will expire naturally
 

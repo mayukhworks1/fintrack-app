@@ -8,6 +8,8 @@ Tables created on first startup:
   chat_messages    — individual AI chat turns
   projects_mirror  — Teable project records (full replica)
   invoices_mirror  — Teable invoice records (full replica)
+  web_invoices_mirror — Teable web invoice records (full replica)
+  status_mirror    — Teable Current Status table replica (tblgdbV6T4Ly9n6YNCU)
   record_history   — field-level change log for mirrored records
   sync_log         — sync run metadata
 """
@@ -272,6 +274,22 @@ CREATE TABLE IF NOT EXISTS web_invoices_mirror (
 CREATE INDEX IF NOT EXISTS wim_status_idx  ON web_invoices_mirror (payment_status);
 CREATE INDEX IF NOT EXISTS wim_project_idx ON web_invoices_mirror (project);
 CREATE INDEX IF NOT EXISTS wim_date_idx    ON web_invoices_mirror (raised_date DESC);
+
+-- ── Current Status table mirror (tblgdbV6T4Ly9n6YNCU) ────────────────────────
+CREATE TABLE IF NOT EXISTS status_mirror (
+    teable_id     VARCHAR(60)   PRIMARY KEY,
+    synced_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    fields        JSONB         NOT NULL DEFAULT '{}'::jsonb,
+
+    client        VARCHAR(255),
+    project       VARCHAR(255),
+    short_status  VARCHAR(500),
+    detail_status TEXT,
+    modified_time TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS stm_client_idx  ON status_mirror (client);
+CREATE INDEX IF NOT EXISTS stm_project_idx ON status_mirror (project);
+CREATE INDEX IF NOT EXISTS stm_synced_idx  ON status_mirror (synced_at DESC);
 
 -- ── Idempotent column migrations ──────────────────────────────────────────
 -- Safe to run on every startup — adds missing columns to existing tables

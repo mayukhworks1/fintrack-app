@@ -1,6 +1,6 @@
 # FinTrack — AI-Powered Project Finance Manager
 
-Full-stack app to manage project billing, invoices, and portfolio health with an AI assistant, analytics, live admin dashboard, and full CRUD — deployed on Cloudflare Pages + Hugging Face Spaces (Docker).
+Full-stack app for agency project billing, invoice tracking, and portfolio health monitoring. Built with React + FastAPI, deployed on Cloudflare Pages + Hugging Face Spaces.
 
 ---
 
@@ -21,21 +21,21 @@ Full-stack app to manage project billing, invoices, and portfolio health with an
 
 ```
 Browser  ──→  Cloudflare Pages (React/Vite)
-                  │
                   │  REST /api/*
                   ▼
-           HF Space  FastAPI
+           HF Space — FastAPI (Python 3.11)
            ├── Auth (HMAC tokens, 5 roles)
-           ├── Routers (projects, invoices, ai, admin, webhooks)
-           ├── Services (Teable live API reads/writes)
-           ├── Async audit queue  ──→  PostgreSQL  audit_log
-           ├── Background sync    ──→  PostgreSQL  *_mirror tables
-           └── Valkey  (geo cache, rate-limit, chat context cache)
+           ├── Routers (projects, invoices, ai, status, admin, webhooks)
+           ├── Services (Teable live API writes; PG mirrors for reads)
+           ├── TOON encoder  ──→  Structured tokens for AI context
+           ├── Async audit queue  ──→  PostgreSQL audit_log
+           ├── Background sync    ──→  PostgreSQL *_mirror tables
+           └── Valkey (geo cache, rate-limit, chat context, report cache)
 
-Teable  ←→  FastAPI  (webhook: instant | 30 s incremental | 5 min full sync)
+Teable ←→ FastAPI (webhook: instant | 30 s incremental | 5 min full sync)
 ```
 
-### Teable → PostgreSQL Mirror Sync (3-tier)
+### 4-Table Teable → PostgreSQL Mirror Sync
 
 | Tier | Trigger | Scope |
 |------|---------|-------|
@@ -43,75 +43,48 @@ Teable  ←→  FastAPI  (webhook: instant | 30 s incremental | 5 min full sync)
 | Incremental | Every 30 s | 200 most-recently-modified records |
 | Full | Every 5 min | All records (guaranteed consistency) |
 
-Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`.  
-Every sync busts the `chat:context` Valkey key so the AI always uses fresh data.
+Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`, `status_mirror`.
 
 ---
 
-## Valkey Usage
+## Teable Tables
 
-| Key pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `geo:{ip}` | 24 h | IP → country/city/ISP cache (ipapi.co) |
-| `ratelimit:{ip}` | sliding 60 s | Sliding-window rate limiter (Sorted Set) |
-| `session_touch:{token_hint}` | 5 min | Prevents redundant DB writes on heartbeat |
-| `chat:context` | 5 min | Formatted AI context string (busted on sync) |
-
----
-
-## PostgreSQL Usage
-
-| Table | Purpose |
-|-------|---------|
-| `audit_log` | Every HTTP request — role, path, status, geo, timing |
-| `login_sessions` | Active tokens with 4-state status (online / idle / logged_out / expired) |
-| `chat_sessions` | AI conversation groups |
-| `chat_messages` | Individual AI turns — used as server-side history |
-| `projects_mirror` | Full Teable projects replica (JSONB + typed columns) |
-| `invoices_mirror` | Full Teable main invoices replica |
-| `web_invoices_mirror` | Full Teable web invoices replica |
-| `record_history` | Field-level change log (old_fields / new_fields JSONB diff) |
-| `sync_log` | Sync run metadata (created/updated/unchanged counts, errors) |
-
-Schema is bootstrapped idempotently at startup — `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS` migrations so existing databases get new columns automatically.
+| Name | Table ID | Purpose |
+|------|----------|---------|
+| Projects | `tbl4fi155DuWlh40By3` | Project billing + P&L |
+| Invoices | `tblyWvNkprE1HnaVZIH` | Main invoice tracker |
+| Web Invoices | `tbllkYiaS68BlcOc1Jy` | Client-facing invoice module |
+| Web Projects | `tbl4qgQkatguBwrzxtf` | Web project tracker |
+| Web Resources | `tblMjssDx55GOfLtgqo` | Resource management |
+| **Current Status** | `tblgdbV6T4Ly9n6YNCU` | Live project status updates |
 
 ---
 
-## Async Logging Architecture
+## Modules
 
-All HTTP request logging is **non-blocking fire-and-forget**:
+### Main App (editor / viewer roles)
+- **Dashboard** — KPI grid, client P&L bars, at-risk projects, top projects
+- **Projects** — Full CRUD with filters, sort, search, AI autofill
+- **Invoices** — Invoice tracker, AI PDF parser, aging analysis
+- **Analytics** — Cash flow charts, DSO, concentration risk
+- **AI Assistant** — Chat with full portfolio context (PG-backed, <10ms context build)
+- **Report** — AI executive board report (TOON-enhanced, 4096 token, cached 10min)
+- **Status Board** — Live project status updates per client/project (new)
 
+### Status Board (`/status`)
+- Cards grouped by client, collapsible detail view
+- Editor: create/edit/delete inline via modal
+- Data synced to PG mirror via 3-tier sync + webhook
+- Changes bust `chat:context` + `report:executive` caches immediately
+
+### TOON — Token Oriented Object Notation
+All entities serialised as structured tokens: `[TYPE|key:value|key:value|...]`
 ```
-HTTP request completes
-  → middleware calls enqueue_audit(**kwargs)   ← synchronous, ~0 µs
-  → response returned to client immediately
-
-Background audit_worker coroutine:
-  → drains queue in batches up to 100 rows
-  → geo-enriches concurrently (Valkey cache makes most <1 ms)
-  → executemany INSERT into audit_log
-  → flush interval ≤ 500 ms
+[PROJECT|client:Birla Open Minds|name:PMS Phase 1.1|status:🟢 Active|margin:35.2|risk:LOW]
+[INVOICE|num:INV-001|project:PMS Phase 1.1|outstanding:50000|status:Pending|aging:15d]
+[STATUS|client:Birla Open Minds|project:PMS Phase 1.1|short:UAT in progress|detail:…]
 ```
-
-Queue is bounded at 2000 entries. Under extreme load (DB down / traffic spike) old entries are silently dropped — HTTP responses are never delayed for logging.
-
----
-
-## AI Chat Optimization
-
-Context for each chat message is built once and cached:
-
-```
-Chat request arrives
-  ↓
-Check Valkey "chat:context"
-  ├── HIT  → ~1 ms   (most requests)
-  └── MISS → query PG mirrors → format → cache for 5 min → ~10 ms
-
-Old approach: 4 live Teable API calls per message → ~500–2000 ms
-```
-
-Chat history is server-side: the backend loads the last 12 message-pairs from `chat_messages` by `session_id`, so clients don't need to re-send growing history payloads.
+Used in AI chat context + report generation for reliable structured AI parsing.
 
 ---
 
@@ -125,71 +98,158 @@ Chat history is server-side: the backend loads the last 12 message-pairs from `c
 | `all` | `APP_ALL_PASSWORD` | Web projects + resources |
 | `admin` | `APP_ADMIN_PASSWORD` | PostgreSQL admin dashboard |
 
-Token format: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL, signed with `APP_SECRET`.
+Token: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL.
 
 ---
 
-## Admin Dashboard (embedded)
+## PostgreSQL Schema
 
-Accessible at `/admin` for `editor` role (or standalone for `admin` role):
+| Table | Purpose |
+|-------|---------|
+| `audit_log` | Every HTTP request — role, path, status, geo, timing, device |
+| `login_sessions` | Active tokens, last-seen, 4-state status |
+| `chat_sessions` | AI conversation groups |
+| `chat_messages` | Individual AI turns — server-side history |
+| `projects_mirror` | Full Teable projects replica (JSONB + typed columns) |
+| `invoices_mirror` | Main invoices replica |
+| `web_invoices_mirror` | Web invoices replica |
+| `status_mirror` | Current Status table replica |
+| `record_history` | Field-level change log with full actor attribution |
+| `sync_log` | Sync run metadata per table |
 
-- **Overview** — aggregate stats, error rates, requests by role
-- **Audit Log** — every request with expandable geo/device detail, click-to-expand rows
-- **Sessions** — 4-state honest status (online/idle/logged_out/expired), active filter
-- **AI Chats** — session list + full message thread viewer
-- **Sync Log** — per-table sync history + "Trigger Full Sync Now" button
-- **Projects/Invoices** — mirror table browser (All/Main/Web toggle for invoices)
-- **History** — field-level change log
+Schema is bootstrapped idempotently: `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
+
+---
+
+## Async Audit Architecture
+
+```
+HTTP request completes
+  → middleware enqueue_audit(**kwargs)   ← sync, ~0 µs
+  → response returned immediately
+
+audit_worker (background):
+  → drains queue in batches up to 100 rows
+  → geo-enriches concurrently (Valkey 24h cache)
+  → executemany INSERT into audit_log
+  → flush interval ≤ 500 ms
+```
+
+Queue bounded at 2000 entries. HTTP responses never blocked for logging.
+
+All writes (projects, invoices, status) also write to `record_history` via the attribution pipeline: HTTP handler → Valkey attribution set → sync loop pops and writes `record_history` row with full actor data (IP, geo, OS, browser, device).
+
+---
+
+## Valkey Usage
+
+| Key pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `geo:{ip}` | 24 h | IP → country/city/ISP/lat/lon/tz cache |
+| `ratelimit:{ip}` | 60 s | Sliding-window rate limiter |
+| `session_touch:{token_hint}` | 5 min | Rate-limit session heartbeat DB writes |
+| `chat:context` | 5 min | Formatted AI context (busted on sync + status write) |
+| `report:executive` | 10 min | AI report cache (busted on sync + status write) |
+| `attrib:{teable_id}` | 2 min | Actor attribution bridge (HTTP → sync loop) |
+| `status:list:*` | 1 min | Status records cache |
+
+---
+
+## AI Optimization
+
+### Chat context (<10ms)
+```
+Request → Valkey "chat:context" HIT → 1ms
+                              MISS → PG mirrors + TOON encode → 10ms → cache 5min
+```
+Context includes projects, invoices, TOON tokens, and live status updates.
+
+### Report (cached 10min)
+- Data from PG mirrors (not Teable) + status records
+- TOON-encoded structured context for precise AI parsing
+- "Current Project Status:" section from status_mirror
+- 4096 max tokens, 180s timeout (handles 12+ model fallbacks)
+- Coalesced via `cache.get_or_set` — concurrent "Generate" clicks = 1 LLM call
+
+---
+
+## Rate Limiting
+
+| Endpoint group | Limit |
+|----------------|-------|
+| AI chat | 20/min/IP |
+| AI report force-regen | 10/min/IP |
+| Status mutations | 30/min/IP |
+
+---
+
+## Admin Dashboard
+
+Accessible at `/admin` (editor role) or standalone (admin role):
+
+| Tab | Contents |
+|-----|----------|
+| Overview | Stats including status_mirror count |
+| Audit Log | 12 filters, geo/device detail, purge controls |
+| Sessions | 4-state status, active filter |
+| AI Chats | Session list + thread viewer |
+| Sync Log | Per-table history + trigger button |
+| Projects | projects_mirror browser |
+| Invoices | All/Main/Web toggle |
+| Status | status_mirror browser (new) |
+| History | Field-level change log with actor attribution |
 
 ---
 
 ## Local Development
 
-### Backend
-
 ```bash
+# Backend
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # fill in tokens
 uvicorn app.main:app --reload --port 8000
+
+# Frontend
+cd frontend && npm install && npm run dev   # :5173, proxies /api → :8000
 ```
 
 Required `.env`:
 ```
 TEABLE_API_TOKEN=...
-TEABLE_WEB_API_TOKEN=...   # optional, falls back to TEABLE_API_TOKEN
 OPENROUTER_API_KEY=...
 APP_PASSWORD=...
-APP_SECRET=...             # any random 32-char string
-POSTGRES_URL=...           # optional but recommended
-VALKEY_URL=...             # optional but recommended
-```
-
-### Frontend
-
-```bash
-cd frontend && npm install && npm run dev   # :5173, proxies /api → :8000
+APP_SECRET=...            # random 32-char string
+POSTGRES_URL=...          # postgres://user:pass@host:port/db?sslmode=require
+VALKEY_URL=...            # rediss://user:pass@host:port
 ```
 
 ---
 
 ## HF Space Secrets
 
-Set in your Hugging Face Space → Settings → Repository secrets:
-
 | Secret | Purpose |
 |--------|---------|
-| `TEABLE_API_TOKEN` | Teable auth (projects + main invoices) |
-| `TEABLE_WEB_API_TOKEN` | Teable auth (web invoices — falls back to main token) |
-| `TEABLE_ALL_API_TOKEN` | Teable auth (web projects) |
-| `OPENROUTER_API_KEY` | AI model API key |
-| `APP_PASSWORD` | Editor role password |
-| `APP_VIEW_PASSWORD` | Viewer role password |
-| `APP_WEB_PASSWORD` | Web role password |
-| `APP_ALL_PASSWORD` | All role password |
-| `APP_ADMIN_PASSWORD` | Admin role password (default: `Master@2026`) |
-| `APP_SECRET` | HMAC signing key (any random string) |
-| `POSTGRES_URL` | Aiven PostgreSQL DSN (`postgres://...`) |
-| `VALKEY_URL` | Aiven Valkey DSN (`rediss://...`) |
-| `TEABLE_WEBHOOK_SECRET` | Shared secret for webhook auth (optional) |
+| `TEABLE_API_TOKEN` | Projects + main invoices |
+| `TEABLE_WEB_API_TOKEN` | Web invoices |
+| `TEABLE_ALL_API_TOKEN` | Web projects |
+| `TEABLE_STATUS_TABLE_ID` | Current Status table (default: `tblgdbV6T4Ly9n6YNCU`) |
+| `OPENROUTER_API_KEY` | AI API key |
+| `APP_PASSWORD` | Editor role |
+| `APP_VIEW_PASSWORD` | Viewer role |
+| `APP_WEB_PASSWORD` | Web role |
+| `APP_ALL_PASSWORD` | All role |
+| `APP_ADMIN_PASSWORD` | Admin role (default: `Master@2026`) |
+| `APP_SECRET` | HMAC signing key |
+| `POSTGRES_URL` | Aiven PostgreSQL DSN |
+| `VALKEY_URL` | Aiven Valkey DSN |
+| `TEABLE_WEBHOOK_SECRET` | Webhook HMAC auth (optional) |
+
+---
+
+## CI/CD
+
+- Push to `main` → GitHub Actions
+  - `deploy-backend.yml` → Hugging Face Spaces (Docker)
+  - `deploy-frontend.yml` → Cloudflare Pages
