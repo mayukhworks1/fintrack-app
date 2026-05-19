@@ -327,14 +327,21 @@ CREATE TABLE IF NOT EXISTS shared_view_accesses (
     accessed_at TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
     ip          VARCHAR(100),
     country     VARCHAR(100),
+    country_code VARCHAR(4),
+    region      VARCHAR(100),
     city        VARCHAR(100),
     isp         VARCHAR(200),
     lat         DOUBLE PRECISION,
     lon         DOUBLE PRECISION,
     timezone    VARCHAR(100),
+    geo_source  VARCHAR(20),
+    accuracy_m  INTEGER,
     os          VARCHAR(200),
     browser     VARCHAR(200),
     device_type VARCHAR(100),
+    device_label VARCHAR(255),
+    device_model VARCHAR(120),
+    platform_version VARCHAR(40),
     user_agent  TEXT,
     referer     VARCHAR(500)
 );
@@ -374,6 +381,13 @@ ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS timezone     VARCHAR(60);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
 ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS country_code VARCHAR(4);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS region VARCHAR(100);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS geo_source VARCHAR(20);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS accuracy_m INTEGER;
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
 """
 # ---------------------------------------------------------------------------
 

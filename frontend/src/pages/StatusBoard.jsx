@@ -1162,6 +1162,7 @@ function ManageSharesModal({ onClose }) {
   const [selected, setSelected] = useState(null)
   const [accesses, setAccesses] = useState([])
   const [loadingAcc, setLoadingAcc] = useState(false)
+  const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
   useEffect(() => { loadViews() }, [])
   async function loadViews() { setLoading(true); try { const r = await api.sharedViews.list(); setViews(r.views || []) } catch {} finally { setLoading(false) } }
   async function toggleActive(view) {
@@ -1170,15 +1171,24 @@ function ManageSharesModal({ onClose }) {
     try { await api.sharedViews.update(view.token, { is_active: next }); showToast(next ? 'Link enabled' : 'Link disabled', 'success') }
     catch (e) { setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v)); showToast(e.message || 'Failed', 'error') }
   }
-  async function cycleAccessMode(view) {
-    const next = view.access_mode === 'edit' ? 'read' : 'edit'
+  async function setAccessMode(view, next) {
+    if (!view || view.access_mode === next || updatingTokens.has(view.token)) return
+    const prev = view.access_mode
+    setUpdatingTokens(tokens => new Set(tokens).add(view.token))
     setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: next } : v))
     try {
-      await api.sharedViews.update(view.token, { access_mode: next })
+      const updated = await api.sharedViews.update(view.token, { access_mode: next })
+      setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...(updated || {}), access_mode: updated?.access_mode || next } : v))
       showToast(next === 'edit' ? 'Link can now edit' : 'Link set to read only', 'success')
     } catch (e) {
-      setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: view.access_mode } : v))
+      setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: prev } : v))
       showToast(e.message || 'Failed', 'error')
+    } finally {
+      setUpdatingTokens(tokens => {
+        const nextTokens = new Set(tokens)
+        nextTokens.delete(view.token)
+        return nextTokens
+      })
     }
   }
   async function deleteView(token) {
@@ -1220,6 +1230,7 @@ function ManageSharesModal({ onClose }) {
           {views.map(v => {
             const expired  = isExpired(v.expires_at)
             const inactive = !v.is_active
+            const updatingMode = updatingTokens.has(v.token)
             const url = `${window.location.origin}/view/${v.token}`
             return (
               <div key={v.token}>
@@ -1249,9 +1260,36 @@ function ManageSharesModal({ onClose }) {
                       <button onClick={() => toggleActive(v)} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }} title={v.is_active ? 'Disable' : 'Enable'}>
                         {v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                       </button>
-                      <button onClick={() => cycleAccessMode(v)} className="btn-icon p-1.5" style={{ color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)' }} title={v.access_mode === 'edit' ? 'Set read only' : 'Allow edit'}>
-                        {v.access_mode === 'edit' ? <Pencil size={12} /> : <Eye size={12} />}
-                      </button>
+                      <div className="flex items-center rounded-lg p-0.5"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                        <button
+                          onClick={() => setAccessMode(v, 'read')}
+                          disabled={updatingMode}
+                          className="px-2 py-1 rounded-md text-[10px] font-semibold transition"
+                          style={{
+                            color: v.access_mode === 'read' ? '#1f2937' : 'var(--text-3)',
+                            background: v.access_mode === 'read' ? 'var(--card-bg)' : 'transparent',
+                            opacity: updatingMode ? 0.72 : 1,
+                          }}
+                          title="Read only"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => setAccessMode(v, 'edit')}
+                          disabled={updatingMode}
+                          className="px-2 py-1 rounded-md text-[10px] font-semibold transition flex items-center gap-1"
+                          style={{
+                            color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)',
+                            background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.12)' : 'transparent',
+                            opacity: updatingMode ? 0.72 : 1,
+                          }}
+                          title="Can edit"
+                        >
+                          Edit
+                          {updatingMode && <Loader2 size={9} className="animate-spin" />}
+                        </button>
+                      </div>
                       <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}><MapPin size={12} /></button>
                       <button onClick={() => deleteView(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
@@ -1275,12 +1313,31 @@ function ManageSharesModal({ onClose }) {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] font-mono" style={{ color: 'var(--text-1)' }}>{a.ip || '?'}</span>
-                                {a.country && <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{a.city ? `${a.city}, ` : ''}{a.country}</span>}
+                                {(a.city || a.region || a.country) && (
+                                  <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+                                    {[a.city, a.region, a.country].filter(Boolean).join(', ')}
+                                  </span>
+                                )}
+                                {a.geo_source && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                                    style={{ background: a.geo_source === 'browser' ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.1)', color: a.geo_source === 'browser' ? '#059669' : 'var(--text-3)' }}>
+                                    {a.geo_source === 'browser' ? 'GPS' : 'IP Geo'}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {a.device_label && <span className="text-[10px] font-medium" style={{ color: 'var(--text-2)' }}>{a.device_label}</span>}
                                 {a.os && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Monitor size={8} /> {a.os}</span>}
                                 {a.browser && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Globe size={8} /> {a.browser}</span>}
                                 {a.device_type && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Smartphone size={8} /> {a.device_type}</span>}
+                                {a.device_model && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.device_model}</span>}
+                                {a.timezone && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.timezone}</span>}
+                                {a.isp && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.isp}</span>}
+                                {typeof a.lat === 'number' && typeof a.lon === 'number' && (
+                                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                                    {a.lat.toFixed(4)}, {a.lon.toFixed(4)}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-3)' }}>{fmtDate(a.accessed_at)}</span>
@@ -1988,7 +2045,7 @@ export default function StatusBoard() {
         )}
 
         {/* ── Active filter chips ── */}
-        {(filterClient || filterStatus || search || advancedConditions.length) && (
+        {Boolean(filterClient || filterStatus || search || advancedConditions.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Filters:</span>
             {filterClient && (

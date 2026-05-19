@@ -15,6 +15,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ..db.audit import build_device_label, parse_client_hint, parse_ua
+from ..db.geo import lookup as geo_lookup
 from ..db.postgres import get_pool
 
 logger = logging.getLogger("fintrack.shared_views")
@@ -320,7 +322,13 @@ class SharedViewService:
         ip = _extract_ip(request)
         ua = request.headers.get("user-agent", "")
         referer = (request.headers.get("referer") or request.headers.get("origin") or "")[:500]
-        asyncio.create_task(self._log_access(token, ip, ua, referer))
+        asyncio.create_task(self._log_access(
+            token,
+            ip,
+            ua,
+            referer,
+            request.headers.get("x-client-hint", ""),
+        ))
 
         # Parse view_config (stored as JSONB — may come back as dict or str)
         vc = view.get("view_config")
@@ -401,6 +409,7 @@ class SharedViewService:
         ip: str,
         user_agent: str,
         referer: Optional[str],
+        client_hint: str = "",
     ) -> None:
         """Geo-enrich and insert access record; update counter. Fire-and-forget."""
         pool = get_pool()
@@ -419,21 +428,43 @@ class SharedViewService:
         except Exception:
             pass
 
-        os_name, browser_name, device_type = _parse_ua(user_agent)
+        if not geo:
+            try:
+                geo = await geo_lookup(ip)
+            except Exception:
+                geo = {}
+
+        hint = parse_client_hint(client_hint or "")
+        browser_geo = hint.get("browserGeo") or {}
+        ch = hint.get("ch") or {}
+        os_name, browser_name, device_type = parse_ua(user_agent)
+        device_label = build_device_label(os_name, browser_name, device_type, hint)
+        browser_lat = browser_geo.get("lat") if isinstance(browser_geo.get("lat"), (int, float)) else None
+        browser_lon = browser_geo.get("lon") if isinstance(browser_geo.get("lon"), (int, float)) else None
+        browser_accuracy = browser_geo.get("accuracyM") if isinstance(browser_geo.get("accuracyM"), (int, float)) else None
+        geo_source = "browser" if browser_lat is not None and browser_lon is not None else "ip"
 
         try:
             async with pool.acquire() as conn:
                 await conn.execute(
                     """
                     INSERT INTO shared_view_accesses
-                        (view_token, ip, country, city, isp, lat, lon, timezone,
-                         os, browser, device_type, user_agent, referer)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                        (view_token, ip, country, country_code, region, city, isp, lat, lon, timezone,
+                         geo_source, accuracy_m, os, browser, device_type, device_label, device_model, platform_version,
+                         user_agent, referer)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
                     """,
                     token, ip or None,
-                    geo.get("country"), geo.get("city"), geo.get("isp"),
-                    geo.get("lat"), geo.get("lon"), geo.get("timezone"),
+                    geo.get("country"), geo.get("country_code"), geo.get("region"), geo.get("city"), geo.get("isp"),
+                    browser_lat if browser_lat is not None else geo.get("lat"),
+                    browser_lon if browser_lon is not None else geo.get("lon"),
+                    hint.get("timezone") or geo.get("timezone"),
+                    geo_source,
+                    int(browser_accuracy) if browser_accuracy is not None else None,
                     os_name or None, browser_name or None, device_type or None,
+                    (device_label or "")[:255] or None,
+                    ((ch.get("model") or "")[:120] or None),
+                    ((ch.get("platformVersion") or "")[:40] or None),
                     (user_agent[:1000] if user_agent else None),
                     referer or None,
                 )
@@ -457,42 +488,3 @@ def _extract_ip(request) -> str:
         if v:
             return v.split(",")[0].strip()
     return request.client.host if request.client else ""
-
-
-def _parse_ua(ua: str) -> tuple[str, str, str]:
-    """Lightweight UA parser → (os, browser, device_type)."""
-    if not ua:
-        return "", "", ""
-    u = ua.lower()
-
-    # OS
-    if "android" in u:
-        os_name, device = "Android", "mobile"
-    elif "iphone" in u:
-        os_name, device = "iOS", "mobile"
-    elif "ipad" in u:
-        os_name, device = "iPadOS", "tablet"
-    elif "windows" in u:
-        os_name, device = "Windows", "desktop"
-    elif "mac os" in u or "macintosh" in u:
-        os_name, device = "macOS", "desktop"
-    elif "linux" in u:
-        os_name, device = "Linux", "desktop"
-    else:
-        os_name, device = "", ""
-
-    # Browser
-    if "edg/" in u or "edge/" in u:
-        browser = "Edge"
-    elif "opr/" in u or "opera" in u:
-        browser = "Opera"
-    elif "chrome" in u and "safari" in u:
-        browser = "Chrome"
-    elif "firefox" in u:
-        browser = "Firefox"
-    elif "safari" in u:
-        browser = "Safari"
-    else:
-        browser = ""
-
-    return os_name, browser, device
