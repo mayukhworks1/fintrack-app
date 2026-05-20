@@ -1,69 +1,64 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
-import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react'
-import clsx from 'clsx'
+import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react'
 
 const ToastCtx = createContext(null)
 
 let _id = 0
 
-const ICONS = {
-  success: CheckCircle,
-  error: XCircle,
-  warning: AlertCircle,
-  info: Info,
-}
-
-const STYLES = {
-  success: 'border-green-500/40 bg-green-500/10 text-green-400',
-  error:   'border-red-500/40 bg-red-500/10 text-red-400',
-  warning: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400',
-  info:    'border-brand-500/40 bg-brand-500/10 text-brand-400',
-}
-
-const BORDER_COLORS = {
-  success: 'rgba(34,197,94,0.4)',
-  error:   'rgba(239,68,68,0.4)',
-  warning: 'rgba(234,179,8,0.4)',
-  info:    'rgba(34,197,94,0.35)',
-}
-const BG_COLORS = {
-  success: 'rgba(34,197,94,0.1)',
-  error:   'rgba(239,68,68,0.1)',
-  warning: 'rgba(234,179,8,0.1)',
-  info:    'rgba(34,197,94,0.08)',
-}
-const TEXT_COLORS = {
-  success: '#4ade80',
-  error:   '#f87171',
-  warning: '#facc15',
-  info:    '#4ade80',
+const CONFIGS = {
+  success: {
+    icon: CheckCircle2,
+    accent: '#22c55e',
+    border: 'rgba(34,197,94,0.35)',
+  },
+  error: {
+    icon: XCircle,
+    accent: '#ef4444',
+    border: 'rgba(239,68,68,0.35)',
+  },
+  warning: {
+    icon: AlertTriangle,
+    accent: '#f59e0b',
+    border: 'rgba(245,158,11,0.35)',
+  },
+  info: {
+    icon: Info,
+    accent: '#3b82f6',
+    border: 'rgba(59,130,246,0.35)',
+  },
 }
 
 function ToastItem({ toast, dismiss }) {
-  const Icon = ICONS[toast.type] || Info
-  const type = toast.type || 'info'
+  const cfg = CONFIGS[toast.type] || CONFIGS.info
+  const Icon = cfg.icon
+
   return (
     <div
       role="alert"
       aria-live="assertive"
-      className="flex items-start gap-3 px-4 py-3 rounded-xl shadow-xl text-sm animate-slide-in min-w-64 max-w-sm"
+      className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm min-w-[260px] max-w-sm animate-slide-in"
       style={{
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        background: BG_COLORS[type],
-        border: `1px solid ${BORDER_COLORS[type]}`,
-        boxShadow: `0 8px 32px rgba(0,0,0,0.4)`,
+        // Solid opaque background — never transparent
+        background: 'var(--card-bg)',
+        border: `1px solid ${cfg.border}`,
+        borderLeft: `3px solid ${cfg.accent}`,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12)',
+        color: 'var(--text-1)',
       }}
     >
-      <Icon size={16} className="flex-shrink-0 mt-0.5" style={{ color: TEXT_COLORS[type] }} />
-      <span className="flex-1 leading-snug" style={{ color: 'var(--text-1)' }}>{toast.message}</span>
+      <Icon size={15} className="flex-shrink-0 mt-0.5" style={{ color: cfg.accent }} />
+      <span className="flex-1 leading-snug font-medium" style={{ color: 'var(--text-1)' }}>
+        {toast.message}
+      </span>
       <button
         onClick={() => dismiss(toast.id)}
         aria-label="Dismiss notification"
-        className="flex-shrink-0 transition-colors"
+        className="flex-shrink-0 rounded-md p-0.5 transition-colors"
         style={{ color: 'var(--text-3)' }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
       >
-        <X size={14} />
+        <X size={13} />
       </button>
     </div>
   )
@@ -74,9 +69,13 @@ function ToastContainer({ toasts, dismiss }) {
   return (
     <div
       aria-label="Notifications"
-      className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end"
+      className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-[100] flex flex-col gap-2 items-end pointer-events-none"
     >
-      {toasts.map(t => <ToastItem key={t.id} toast={t} dismiss={dismiss} />)}
+      {toasts.map(t => (
+        <div key={t.id} className="pointer-events-auto">
+          <ToastItem toast={t} dismiss={dismiss} />
+        </div>
+      ))}
     </div>
   )
 }

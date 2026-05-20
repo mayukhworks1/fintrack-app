@@ -1,16 +1,54 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw, Link2, Receipt, Unlink, Clock } from 'lucide-react'
+import {
+  ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
+  RefreshCw, Receipt, Unlink, Clock, TrendingUp, DollarSign,
+  Users, Calendar, BarChart2, CheckCircle2, AlertCircle,
+} from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
-import AssociationLinkModal from '../components/AssociationLinkModal'
 import InvoicePicklist from '../components/InvoicePicklist'
 import { api } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
-import clsx from 'clsx'
 
-// Shared clean AI text renderer (no ugly markdown symbols)
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function clientColor(name = '') {
+  const PALETTE = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#6366f1','#14b8a6','#f97316']
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return PALETTE[h % PALETTE.length]
+}
+
+function hexToRgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
+  return `rgba(${r},${g},${b},${a})`
+}
+
+const STATUS_COLORS = {
+  'Active':      { bg: 'rgba(16,185,129,0.12)', color: '#10b981', dot: '#10b981' },
+  'Completed':   { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8', dot: '#6366f1' },
+  'On Hold':     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b', dot: '#f59e0b' },
+  'Cancelled':   { bg: 'rgba(239,68,68,0.12)',   color: '#f87171', dot: '#ef4444' },
+  'In Progress': { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', dot: '#3b82f6' },
+}
+function statusStyle(s) {
+  return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: '#94a3b8' }
+}
+
+const INV_STATUS = {
+  'Paid':           '#10b981',
+  'Received':       '#10b981',
+  'Partially Paid': '#f59e0b',
+  'Pending':        '#f97316',
+  'Overdue':        '#ef4444',
+  'Raised':         '#6366f1',
+  'Cancelled':      '#94a3b8',
+}
+
+// ── AI text renderer ───────────────────────────────────────────────────────────
+
 function AiText({ text }) {
   if (!text) return null
   const lines = text.split('\n')
@@ -60,25 +98,42 @@ function AiText({ text }) {
   return <div className="space-y-1.5">{elements}</div>
 }
 
+// ── Stat card ──────────────────────────────────────────────────────────────────
+
+function StatCard({ icon: Icon, label, value, accent }) {
+  return (
+    <div className="rounded-2xl p-4"
+      style={{
+        background: accent ? hexToRgba(accent, 0.06) : 'var(--card-bg)',
+        border: `1px solid ${accent ? hexToRgba(accent, 0.2) : 'var(--border)'}`,
+      }}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: accent ? hexToRgba(accent, 0.12) : 'var(--bg-input)' }}>
+          <Icon size={13} style={{ color: accent || 'var(--text-3)' }} />
+        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</p>
+      </div>
+      <p className="text-xl font-bold tabular-nums leading-none" style={{ color: accent || 'var(--text-1)' }}>
+        {value ?? '—'}
+      </p>
+    </div>
+  )
+}
+
+// ── Field ──────────────────────────────────────────────────────────────────────
+
 function Field({ label, value }) {
   if (value == null || value === '') return null
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider font-semibold mb-0.5" style={{ color: 'var(--text-3)' }}>{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-3)' }}>{label}</dt>
       <dd className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{String(value)}</dd>
     </div>
   )
 }
 
-function MetricCard({ label, value, highlight }) {
-  return (
-    <div className="card text-center"
-      style={highlight ? { border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.05)' } : {}}>
-      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p className="text-xl font-bold tabular-nums" style={{ color: highlight ? '#4ade80' : 'var(--text-1)' }}>{value}</p>
-    </div>
-  )
-}
+// ── Main ───────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -87,24 +142,22 @@ export default function ProjectDetail() {
   const { isEditor } = useAuth()
   const isNew = id === 'new'
 
-  // Viewers cannot create new projects — redirect them away
   useEffect(() => {
     if (isNew && !isEditor) navigate('/projects', { replace: true })
   }, [isNew, isEditor, navigate])
 
-  const [record, setRecord]               = useState(null)
-  const [loading, setLoading]             = useState(!isNew)
-  const [editing, setEditing]             = useState(isNew)
-  const [saving, setSaving]               = useState(false)
-  const [analysis, setAnalysis]           = useState('')
-  const [analyzing, setAnalyzing]         = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [deleting, setDeleting]           = useState(false)
-  const [showAssociationModal, setShowAssociationModal] = useState(false)
-  const [showPicklist,         setShowPicklist]         = useState(false)
-  const [linkedInvoices,       setLinkedInvoices]       = useState([])
-  const [loadingInvoices,      setLoadingInvoices]      = useState(false)
-  const [unlinkingId,          setUnlinkingId]          = useState(null)
+  const [record,          setRecord]          = useState(null)
+  const [loading,         setLoading]         = useState(!isNew)
+  const [editing,         setEditing]         = useState(isNew)
+  const [saving,          setSaving]          = useState(false)
+  const [analysis,        setAnalysis]        = useState('')
+  const [analyzing,       setAnalyzing]       = useState(false)
+  const [deleteConfirm,   setDeleteConfirm]   = useState(false)
+  const [deleting,        setDeleting]        = useState(false)
+  const [showPicklist,    setShowPicklist]     = useState(false)
+  const [linkedInvoices,  setLinkedInvoices]  = useState([])
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [unlinkingId,     setUnlinkingId]     = useState(null)
 
   const loadRecord = useCallback(async () => {
     if (isNew) return
@@ -190,107 +243,49 @@ export default function ProjectDetail() {
     try {
       const { analysis: a } = await api.ai.analyze(id)
       setAnalysis(a)
-      toast('Analysis ready', 'success')
+      toast('AI analysis ready', 'success')
     } catch (e) {
       toast('AI analysis failed: ' + e.message, 'error')
-      setAnalysis('')
     } finally {
       setAnalyzing(false)
     }
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-full" aria-label="Loading project">
-      <Loader2 size={28} className="animate-spin" style={{ color: '#4ade80' }} />
-    </div>
-  )
+  // ── Loading ────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading project…</p>
+      </div>
+    )
+  }
 
   const f = record?.fields || {}
-  const assoc = record?.association
-  const related = assoc?.related_counts?.project || {}
-  const profitPct = Number(f['Profit percentage'] || 0)
-  const fmt = (n) => formatInr(n)
+  const profitPct  = Number(f['Profit percentage'] || 0)
+  const clientName = f['Client'] || ''
+  const projectName = f['Project Name'] || 'Untitled Project'
+  const projectStatus = f['Project Status'] || ''
+  const clrHex = clientColor(clientName)
+  const sc = statusStyle(projectStatus)
 
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5 animate-fade-in">
-
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/projects')} aria-label="Back to projects"
-          className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
-          style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-          <ArrowLeft size={18} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold truncate" style={{ color: 'var(--text-1)' }}>
-            {isNew ? 'New Project' : (f['Project Name'] || 'Project')}
+  // ── New / Edit form ────────────────────────────────────────────────────
+  if (editing) {
+    return (
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 animate-fade-in">
+        {/* Back header */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => isNew ? navigate('/projects') : setEditing(false)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}
+            aria-label="Back">
+            <ArrowLeft size={16} />
+          </button>
+          <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>
+            {isNew ? 'New Project' : `Edit — ${projectName}`}
           </h1>
-          {!isNew && (
-            <p className="text-sm truncate" style={{ color: 'var(--text-3)' }}>
-              {f['Client']} · <span className="font-mono text-xs">{record?.id}</span>
-            </p>
-          )}
         </div>
-        {!isNew && !editing && (
-          <div className="flex gap-2 flex-wrap justify-end">
-            <button onClick={loadRecord} aria-label="Refresh project data"
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
-              style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-              <RefreshCw size={14} />
-            </button>
-            <button onClick={handleAnalyze} disabled={analyzing}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5 disabled:opacity-50"
-              style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}
-              aria-label="Run AI analysis">
-              {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              {analyzing ? 'Analyzing…' : 'AI Analyze'}
-            </button>
-            {isEditor && (
-              <>
-                <button onClick={() => setShowAssociationModal(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
-                  style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-                  Link
-                </button>
-                <button onClick={() => setEditing(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/5"
-                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                  <Edit2 size={13} /> Edit
-                </button>
-                {deleteConfirm ? (
-                  <div className="flex gap-1">
-                    <button onClick={handleDelete} disabled={deleting}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
-                      aria-label="Confirm delete">
-                      {deleting ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                      Confirm
-                    </button>
-                    <button onClick={() => setDeleteConfirm(false)} aria-label="Cancel delete"
-                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5"
-                      style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setDeleteConfirm(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-red-500/10"
-                    style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <Trash2 size={13} /> Delete
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Form (edit/new) */}
-      {editing ? (
-        <div className="card">
-          <h2 className="font-semibold mb-4" style={{ color: 'var(--text-1)' }}>
-            {isNew ? 'Create Project' : 'Edit Project'}
-          </h2>
+        <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
           <ProjectForm
             initial={isNew ? {} : {
               client:                    f['Client'] || '',
@@ -308,106 +303,338 @@ export default function ProjectDetail() {
             loading={saving}
           />
         </div>
-      ) : (
-        <div className="space-y-4">
+      </div>
+    )
+  }
 
-          {assoc?.project?.name && (
-            <div className="card">
-              <h2 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-3)' }}>
-                Linked Portfolio Association
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Canonical client</p>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{assoc.client?.name || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Canonical project</p>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{assoc.project?.name || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Connected records</p>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
-                    {related.status || 0} status · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+  // ── View ───────────────────────────────────────────────────────────────
+  return (
+    <div className="animate-fade-in">
 
-          {/* Key metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Key financial metrics">
-            <MetricCard label="Amount Billed"  value={fmt(f['Amount Billed So far'])} />
-            <MetricCard label="Actual Profit"  value={fmt(f['Actual Profit'])} />
-            <MetricCard label="Profit %"       value={formatPct(profitPct, 2)} highlight={profitPct > 0} />
-            <MetricCard label="Target Revenue" value={fmt(f['Target Revenue'])} />
+      {/* ── Hero header ─────────────────────────────────────────────────── */}
+      <div className="px-4 sm:px-6 pt-5 pb-6"
+        style={{
+          background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.10)} 0%, var(--card-bg) 60%)`,
+          borderBottom: '1px solid var(--border)',
+        }}>
+        {/* Breadcrumb row */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <button onClick={() => navigate('/projects')}
+            className="flex items-center gap-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 transition-all"
+            style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+            <ArrowLeft size={13} /> All Projects
+          </button>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button onClick={loadRecord} aria-label="Refresh"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+              style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
+              <RefreshCw size={13} />
+            </button>
+            <button onClick={handleAnalyze} disabled={analyzing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+              style={{ color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>
+              {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {analyzing ? 'Analysing…' : 'AI Analyze'}
+            </button>
+            {isEditor && (
+              <>
+                <button onClick={() => setShowPicklist(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
+                  <Receipt size={12} /> Link Invoice
+                </button>
+                <button onClick={() => setEditing(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
+                  <Edit2 size={12} /> Edit
+                </button>
+                {deleteConfirm ? (
+                  <div className="flex gap-1 items-center">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                      {deleting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      Confirm delete
+                    </button>
+                    <button onClick={() => setDeleteConfirm(false)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setDeleteConfirm(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', background: 'var(--card-bg)' }}>
+                    <Trash2 size={12} /> Delete
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Project identity */}
+        <div className="flex items-start gap-4">
+          {/* Colour avatar */}
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-black"
+            style={{ background: hexToRgba(clrHex, 0.18), color: clrHex, border: `1px solid ${hexToRgba(clrHex, 0.28)}` }}>
+            {(clientName[0] || 'P').toUpperCase()}
           </div>
 
-          {/* Detail fields */}
-          <div className="card">
-            <h2 className="text-xs font-bold uppercase tracking-wider mb-5" style={{ color: 'var(--text-3)' }}>
-              Project Details
+          <div className="flex-1 min-w-0">
+            {/* Client chip + status */}
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+                style={{ background: hexToRgba(clrHex, 0.12), color: clrHex, border: `1px solid ${hexToRgba(clrHex, 0.25)}` }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: clrHex }} />
+                {clientName || 'Unknown client'}
+              </span>
+              {projectStatus && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.bg}` }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                  {projectStatus}
+                </span>
+              )}
+              {f['Health'] && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                  style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                  {f['Health'] === 'Good' ? '🟢' : f['Health'] === 'At Risk' ? '🟡' : '🔴'} {f['Health']}
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-black leading-tight mb-2" style={{ color: 'var(--text-1)' }}>
+              {projectName}
+            </h1>
+
+            {/* Meta row */}
+            <div className="flex items-center gap-4 flex-wrap text-xs" style={{ color: 'var(--text-3)' }}>
+              {f['Project Start Date'] && (
+                <span className="flex items-center gap-1">
+                  <Calendar size={11} />
+                  {new Date(f['Project Start Date']).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              )}
+              {f['Duration (Months)'] && (
+                <span className="flex items-center gap-1">
+                  <Clock size={11} />
+                  {f['Duration (Months)']} months
+                </span>
+              )}
+              {f['Resource Count'] && (
+                <span className="flex items-center gap-1">
+                  <Users size={11} />
+                  {f['Resource Count']} resource{f['Resource Count'] !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Body ──────────────────────────────────────────────────────────── */}
+      <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto">
+
+        {/* ── Key metrics ───────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard icon={DollarSign}  label="Billed so far"  value={f['Amount Billed So far'] ? formatInr(f['Amount Billed So far']) : null} accent="#3b82f6" />
+          <StatCard icon={TrendingUp}  label="Actual profit"  value={f['Actual Profit'] ? formatInr(f['Actual Profit']) : null} accent={profitPct > 0 ? '#22c55e' : '#ef4444'} />
+          <StatCard icon={BarChart2}   label="Profit %"       value={profitPct ? formatPct(profitPct, 1) : null} accent={profitPct > 20 ? '#22c55e' : profitPct > 0 ? '#f59e0b' : '#ef4444'} />
+          <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="#8b5cf6" />
+        </div>
+
+        {/* ── Two-column: Details + Invoices ───────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-5">
+
+          {/* Project details */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-5 flex items-center gap-2"
+              style={{ color: 'var(--text-3)' }}>
+              <BarChart2 size={12} /> Project Details
             </h2>
-            <dl className="grid grid-cols-2 md:grid-cols-3 gap-5">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
               <Field label="Client"          value={f['Client']} />
               <Field label="Project Name"    value={f['Project Name']} />
               <Field label="Status"          value={f['Project Status']} />
               <Field label="Health"          value={f['Health']} />
-              <Field label="Start Date"      value={f['Project Start Date'] ? new Date(f['Project Start Date']).toLocaleDateString('en-IN') : null} />
+              <Field label="Start Date"      value={f['Project Start Date'] ? new Date(f['Project Start Date']).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
               <Field label="Duration"        value={f['Duration (Months)'] ? `${f['Duration (Months)']} months` : null} />
               <Field label="Resources"       value={f['Resource Count']} />
-              <Field label="Monthly Salary"  value={f['Combined monthly salary of all the resources'] ? fmt(f['Combined monthly salary of all the resources']) : null} />
-              <Field label="Overhead Cost"   value={f['Total Overhead Cost']  ? fmt(f['Total Overhead Cost'])  : null} />
-              <Field label="Input Cost"      value={f['Input cost so far']    ? fmt(f['Input cost so far'])    : null} />
-              <Field label="Target Achieved" value={f['Target Achieved '] != null ? (f['Target Achieved '] ? 'Yes ✅' : 'No ❌') : null} />
+              <Field label="Monthly Salary"  value={f['Combined monthly salary of all the resources'] ? formatInr(f['Combined monthly salary of all the resources']) : null} />
+              <Field label="Overhead Cost"   value={f['Total Overhead Cost'] ? formatInr(f['Total Overhead Cost']) : null} />
+              <Field label="Input Cost"      value={f['Input cost so far'] ? formatInr(f['Input cost so far']) : null} />
               <Field label="Contribution %"  value={f['Resource contribution percentage'] ? `${f['Resource contribution percentage']}%` : null} />
-              <Field label="Rev / Resource"  value={f['Revenue per Resource']  ? fmt(f['Revenue per Resource'])  : null} />
+              <Field label="Rev / Resource"  value={f['Revenue per Resource'] ? formatInr(f['Revenue per Resource']) : null} />
+              {f['Target Achieved '] != null && (
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Target Achieved</dt>
+                  <dd className="flex items-center gap-1.5 text-sm font-semibold"
+                    style={{ color: f['Target Achieved '] ? '#22c55e' : '#f87171' }}>
+                    {f['Target Achieved ']
+                      ? <><CheckCircle2 size={13} /> Yes</>
+                      : <><AlertCircle size={13} /> No</>}
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
 
-          {/* AI Analysis loading state */}
-          {analyzing && (
-            <div className="card flex items-center gap-3 text-sm animate-pulse"
-              style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.05)', color: '#4ade80' }}>
-              <Loader2 size={16} className="animate-spin flex-shrink-0" />
-              Generating AI analysis of this project…
-            </div>
-          )}
+          {/* Linked Invoices */}
+          <div className="rounded-2xl overflow-hidden flex flex-col"
+            style={{ border: '2px solid rgba(37,99,235,0.2)', background: 'var(--card-bg)' }}>
 
-          {/* AI Analysis result */}
-          {analysis && !analyzing && (
-            <div className="card animate-fade-in"
-              style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.04)' }}>
-              <h2 className="font-semibold mb-3 flex items-center gap-2" style={{ color: '#4ade80' }}>
-                <Sparkles size={15} aria-hidden="true" /> AI Analysis
-              </h2>
-              <AiText text={analysis} />
+            {/* Section header */}
+            <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: '1px solid rgba(37,99,235,0.12)' }}>
+              <div className="flex items-center gap-2">
+                <Receipt size={14} style={{ color: 'var(--accent)' }} />
+                <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>Linked Invoices</p>
+                {linkedInvoices.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                    style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+                    {linkedInvoices.length}
+                  </span>
+                )}
+              </div>
+              {isEditor && (
+                <button onClick={() => setShowPicklist(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                  style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                  <Receipt size={11} />
+                  {linkedInvoices.length > 0 ? 'Add invoice' : 'Link invoice'}
+                </button>
+              )}
             </div>
-          )}
 
-          {/* ── Linked Invoices ─────────────────────────────────────────── */}
-          {!isNew && (
-            <LinkedInvoicesPanel
-              invoices={linkedInvoices}
-              loading={loadingInvoices}
-              unlinkingId={unlinkingId}
-              canEdit={isEditor}
-              onOpenPicklist={() => setShowPicklist(true)}
-              onUnlink={handleUnlinkInvoice}
-            />
-          )}
+            {/* Invoice list body */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ maxHeight: 420 }}>
+              {loadingInvoices && (
+                <div className="flex items-center gap-2 py-4 justify-center" style={{ color: 'var(--text-3)' }}>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span className="text-sm">Loading…</span>
+                </div>
+              )}
+
+              {!loadingInvoices && linkedInvoices.length === 0 && (
+                <div className="flex flex-col items-center py-8 gap-3">
+                  <Receipt size={32} style={{ color: 'rgba(37,99,235,0.2)' }} />
+                  <p className="text-sm font-medium text-center" style={{ color: 'var(--text-3)' }}>
+                    No invoices linked yet
+                  </p>
+                  {isEditor && (
+                    <button onClick={() => setShowPicklist(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold"
+                      style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}>
+                      <Receipt size={12} /> Link invoices to this project
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!loadingInvoices && linkedInvoices.map((inv) => {
+                const statusColor = INV_STATUS[inv.payment_status] || 'var(--text-3)'
+                const isUnlinking = unlinkingId === inv.invoice_teable_id
+                return (
+                  <div key={inv.invoice_teable_id}
+                    className="flex items-center gap-2.5 p-3 rounded-xl"
+                    style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', opacity: isUnlinking ? 0.5 : 1 }}>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
+                          {inv.invoice_number || '—'}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                          style={{ background: `${statusColor}20`, color: statusColor }}>
+                          {inv.payment_status || '—'}
+                        </span>
+                        {inv.invoice_source === 'web_invoices' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {inv.raised_date && (
+                          <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                            <Calendar size={9} />
+                            {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                        {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
+                      </p>
+                      {inv.amount_received != null && inv.amount_received > 0 && (
+                        <p className="text-[10px] font-medium" style={{ color: '#10b981' }}>
+                          Rcvd {formatInr(inv.amount_received)}
+                        </p>
+                      )}
+                    </div>
+                    {isEditor && (
+                      <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
+                        disabled={isUnlinking}
+                        className="btn-icon flex-shrink-0 rounded-lg"
+                        style={{ padding: '0.3rem', color: 'var(--text-3)' }}
+                        title={`Unlink ${inv.invoice_number}`}
+                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+                        {isUnlinking ? <Loader2 size={12} className="animate-spin" /> : <Unlink size={12} />}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Invoice total */}
+            {linkedInvoices.length > 1 && (
+              <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0"
+                style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+                <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+                  Total ({linkedInvoices.length} invoices)
+                </span>
+                <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                  {formatInr(linkedInvoices.reduce((s, i) => s + (i.amount_raised || 0), 0))}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      {showAssociationModal && record && (
-        <AssociationLinkModal
-          sourceTable="projects"
-          record={record}
-          onClose={() => setShowAssociationModal(false)}
-          onSaved={() => { setShowAssociationModal(false); loadRecord() }}
-        />
-      )}
+        {/* ── AI analysis loading ────────────────────────────────────────── */}
+        {analyzing && (
+          <div className="rounded-2xl p-4 flex items-center gap-3 text-sm"
+            style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)', color: '#4ade80' }}>
+            <Loader2 size={16} className="animate-spin flex-shrink-0" />
+            Generating AI analysis for this project…
+          </div>
+        )}
 
+        {/* ── AI analysis result ─────────────────────────────────────────── */}
+        {analysis && !analyzing && (
+          <div className="rounded-2xl p-5 animate-fade-in"
+            style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.04)' }}>
+            <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: '#4ade80' }}>
+              <Sparkles size={15} /> AI Analysis
+            </h2>
+            <AiText text={analysis} />
+          </div>
+        )}
+      </div>
+
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
       {showPicklist && (
         <InvoicePicklist
           projectId={id}
@@ -416,154 +643,6 @@ export default function ProjectDetail() {
           onLink={handleLinkInvoice}
           onClose={() => setShowPicklist(false)}
         />
-      )}
-    </div>
-  )
-}
-
-/* ── Linked Invoices panel ─────────────────────────────────────────────── */
-const INV_STATUS_COLORS = {
-  'Paid':           { bg: 'rgba(16,185,129,0.1)',  color: '#10b981' },
-  'Received':       { bg: 'rgba(16,185,129,0.1)',  color: '#10b981' },
-  'Partially Paid': { bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
-  'Pending':        { bg: 'rgba(249,115,22,0.1)',  color: '#f97316' },
-  'Overdue':        { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
-  'Raised':         { bg: 'rgba(99,102,241,0.1)',  color: '#6366f1' },
-}
-
-function LinkedInvoicesPanel({ invoices, loading, unlinkingId, canEdit, onOpenPicklist, onUnlink }) {
-  return (
-    <div className="card">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
-          <Receipt size={13} aria-hidden="true" />
-          Linked Invoices
-          {invoices.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-              style={{ background: 'rgba(37,99,235,0.12)', color: 'var(--accent)' }}>
-              {invoices.length}
-            </span>
-          )}
-        </h2>
-        {canEdit && (
-          <button
-            onClick={onOpenPicklist}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-            style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}
-          >
-            <Link2 size={11} /> Link Invoice
-          </button>
-        )}
-      </div>
-
-      {loading && (
-        <div className="flex items-center gap-2 py-4" style={{ color: 'var(--text-3)' }}>
-          <Loader2 size={14} className="animate-spin" />
-          <span className="text-sm">Loading…</span>
-        </div>
-      )}
-
-      {!loading && invoices.length === 0 && (
-        <div className="flex flex-col items-center py-6 gap-2">
-          <Receipt size={24} style={{ color: 'var(--text-3)', opacity: 0.35 }} />
-          <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>
-            No invoices linked yet
-            {canEdit && <span className="block text-xs mt-0.5 opacity-70">Click "Link Invoice" to associate invoices with this project</span>}
-          </p>
-        </div>
-      )}
-
-      {!loading && invoices.length > 0 && (
-        <div className="space-y-2">
-          {invoices.map((inv) => {
-            const sc = INV_STATUS_COLORS[inv.payment_status] || { bg: 'var(--bg-input)', color: 'var(--text-3)' }
-            const isUnlinking = unlinkingId === inv.invoice_teable_id
-            return (
-              <div
-                key={inv.invoice_teable_id}
-                className="flex items-center gap-3 p-3 rounded-xl transition-colors"
-                style={{ background: 'var(--bg-input)', opacity: isUnlinking ? 0.5 : 1 }}
-              >
-                {/* Status dot */}
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: sc.color }} />
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>
-                      {inv.invoice_number || '—'}
-                    </span>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                      style={{ background: sc.bg, color: sc.color }}>
-                      {inv.payment_status || '—'}
-                    </span>
-                    {inv.invoice_source === 'web_invoices' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
-                        Web
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {inv.raised_date && (
-                      <span className="text-xs flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
-                        <Clock size={10} />
-                        {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </span>
-                    )}
-                    {inv.linked_by_role && (
-                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                        · Linked by {inv.linked_by_role}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Amount */}
-                <div className="text-right flex-shrink-0 mr-1">
-                  <p className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                    {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
-                  </p>
-                  {inv.amount_received != null && inv.amount_received > 0 && (
-                    <p className="text-[10px]" style={{ color: '#10b981' }}>
-                      Rcvd {formatInr(inv.amount_received)}
-                    </p>
-                  )}
-                </div>
-
-                {/* Unlink */}
-                {canEdit && (
-                  <button
-                    onClick={() => onUnlink(inv.invoice_teable_id)}
-                    disabled={isUnlinking}
-                    className="btn-icon flex-shrink-0"
-                    style={{ padding: '0.3rem', color: 'var(--text-3)' }}
-                    aria-label={`Unlink ${inv.invoice_number}`}
-                  >
-                    {isUnlinking
-                      ? <Loader2 size={12} className="animate-spin" />
-                      : <Unlink size={12} />}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-
-          {/* Summary row */}
-          {invoices.length > 1 && (
-            <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
-              <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                Total across {invoices.length} invoices
-              </span>
-              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                {formatInr(invoices.reduce((sum, i) => sum + (i.amount_raised || 0), 0))}
-              </span>
-            </div>
-          )}
-        </div>
       )}
     </div>
   )
