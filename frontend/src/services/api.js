@@ -263,6 +263,15 @@ export const api = {
       request('/api/associations/link', { method: 'POST', body: JSON.stringify(data) }),
     unlink: (sourceTable, teableId) =>
       request(`/api/associations/record/${encodeURIComponent(sourceTable)}/${encodeURIComponent(teableId)}`, { method: 'DELETE' }),
+    /** Link ALL matching records across all modules by client + project name */
+    bulkLink: (data) =>
+      request('/api/associations/bulk-link', { method: 'POST', body: JSON.stringify(data) }),
+    /** Get row counts for all association tables */
+    stats: () =>
+      request('/api/associations/stats'),
+    /** Admin: delete all association data (record_links, entities) */
+    reset: () =>
+      request('/api/associations/reset', { method: 'DELETE' }),
   },
   webInvoices: {
     // File upload bypasses the standard request() so the browser sets the

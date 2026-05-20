@@ -2483,19 +2483,181 @@ function HfLogsTab() {
   )
 }
 
+// ── AssociationsTab ───────────────────────────────────────────────────────────
+
+function AssociationsTab() {
+  const [stats, setStats]           = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [resetting, setResetting]   = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [resetResult, setResetResult]   = useState(null)
+  const [error, setError]           = useState(null)
+
+  const loadStats = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const s = await api.associations.stats()
+      setStats(s)
+    } catch (e) {
+      setError(e.message || 'Failed to load stats')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadStats() }, [loadStats])
+
+  const handleReset = async () => {
+    setResetting(true)
+    setError(null)
+    setResetResult(null)
+    try {
+      const res = await api.associations.reset()
+      setResetResult(res)
+      setConfirmReset(false)
+      await loadStats()
+    } catch (e) {
+      setError(e.message || 'Reset failed')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-5 max-w-3xl">
+
+      {/* Stats cards */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+            Association entity counts
+          </h2>
+          <button onClick={loadStats} disabled={loading}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
+            style={{ background: 'var(--bg-input)', color: 'var(--text-2)' }}>
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+
+        {loading && !stats ? (
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-3)' }}>
+            <RefreshCw size={13} className="animate-spin" /> Loading stats…
+          </div>
+        ) : stats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Client entities',     value: stats.client_entities,      color: '#3b82f6' },
+              { label: 'Project entities',    value: stats.project_entities,     color: '#8b5cf6' },
+              { label: 'Record links (total)',value: stats.record_links,         color: '#10b981' },
+              { label: 'Manual links',        value: stats.record_links_manual,  color: '#f59e0b' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="rounded-xl p-3"
+                style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                <p className="text-[10px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color }}>{fmt(value ?? 0)}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm mt-3"
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+            <AlertCircle size={14} className="flex-shrink-0" />
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* How bulk-link works */}
+      <div className="rounded-xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+        <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-1)' }}>
+          How the association system works
+        </h3>
+        <ul className="space-y-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
+          <li>• Use the <strong style={{ color: 'var(--text-2)' }}>🔗 Link</strong> button on any Status, Project or Invoice record to open the link modal.</li>
+          <li>• Type a <strong style={{ color: 'var(--text-2)' }}>client name</strong> and/or <strong style={{ color: 'var(--text-2)' }}>project name</strong>, then click <em>Link across all modules</em>.</li>
+          <li>• The backend scans all 4 mirror tables and links every matching record in a single operation.</li>
+          <li>• All links are <strong style={{ color: 'var(--text-2)' }}>manual (confidence 100)</strong> — no auto-linking runs in the background.</li>
+          <li>• Use the search field in the modal to find and reuse existing canonical names.</li>
+        </ul>
+      </div>
+
+      {/* Reset section */}
+      <div className="rounded-xl p-4 space-y-3"
+        style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.15)' }}>
+        <div>
+          <h3 className="text-xs font-semibold mb-1" style={{ color: '#f87171' }}>
+            Danger zone — reset all associations
+          </h3>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            Deletes ALL rows from <code>record_links</code>, <code>project_entities</code>, and <code>client_entities</code>.
+            This is irreversible. Use only to start fresh after bad auto-links.
+          </p>
+        </div>
+
+        {resetResult && (
+          <div className="rounded-lg px-3 py-2 text-xs"
+            style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', color: '#10b981' }}>
+            <CheckCircle2 size={12} className="inline mr-1.5" />
+            Reset complete — deleted: record_links={resetResult.deleted?.record_links ?? 0}, client_entities={resetResult.deleted?.client_entities ?? 0}, project_entities={resetResult.deleted?.project_entities ?? 0}
+          </div>
+        )}
+
+        {!confirmReset ? (
+          <button
+            onClick={() => setConfirmReset(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: 'rgba(239,68,68,0.10)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.10)'}
+          >
+            <Trash2 size={11} /> Reset all associations
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold" style={{ color: '#f87171' }}>
+              Are you sure? This cannot be undone.
+            </span>
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: '#dc2626', color: '#fff' }}
+            >
+              {resetting ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
+              {resetting ? 'Resetting…' : 'Yes, reset'}
+            </button>
+            <button
+              onClick={() => setConfirmReset(false)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-2)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'overview',  label: 'Overview',  icon: LayoutDashboard  },
-  { id: 'audit',     label: 'Audit Log', icon: ScrollText        },
-  { id: 'sessions',  label: 'Sessions',  icon: Users             },
-  { id: 'chats',     label: 'AI Chats',  icon: MessageSquareText },
-  { id: 'sync',      label: 'Sync Log',  icon: RefreshCw         },
-  { id: 'projects',  label: 'Projects',  icon: Database          },
-  { id: 'invoices',  label: 'Invoices',  icon: FileText          },
-  { id: 'history',   label: 'History',   icon: History           },
-  { id: 'shared',    label: 'Shared',    icon: Link2             },
-  { id: 'hflogs',    label: 'HF Logs',   icon: Terminal          },
+  { id: 'overview',      label: 'Overview',      icon: LayoutDashboard  },
+  { id: 'audit',         label: 'Audit Log',     icon: ScrollText        },
+  { id: 'sessions',      label: 'Sessions',      icon: Users             },
+  { id: 'chats',         label: 'AI Chats',      icon: MessageSquareText },
+  { id: 'sync',          label: 'Sync Log',      icon: RefreshCw         },
+  { id: 'projects',      label: 'Projects',      icon: Database          },
+  { id: 'invoices',      label: 'Invoices',      icon: FileText          },
+  { id: 'history',       label: 'History',       icon: History           },
+  { id: 'shared',        label: 'Shared',        icon: Link2             },
+  { id: 'associations',  label: 'Associations',  icon: Link2             },
+  { id: 'hflogs',        label: 'HF Logs',       icon: Terminal          },
 ]
 
 export default function AdminDashboard({ embedded = false }) {
@@ -2524,16 +2686,17 @@ export default function AdminDashboard({ embedded = false }) {
 
   const content = (
     <>
-      {tab === 'overview'  && <OverviewTab />}
-      {tab === 'audit'     && <AuditLogTab />}
-      {tab === 'sessions'  && <SessionsTab />}
-      {tab === 'chats'     && <ChatsTab />}
-      {tab === 'sync'      && <SyncLogTab />}
-      {tab === 'projects'  && <ProjectsMirrorTab />}
-      {tab === 'invoices'  && <InvoicesTab />}
-      {tab === 'history'   && <HistoryTab />}
-      {tab === 'shared'    && <SharedLinksTab />}
-      {tab === 'hflogs'    && <HfLogsTab />}
+      {tab === 'overview'     && <OverviewTab />}
+      {tab === 'audit'        && <AuditLogTab />}
+      {tab === 'sessions'     && <SessionsTab />}
+      {tab === 'chats'        && <ChatsTab />}
+      {tab === 'sync'         && <SyncLogTab />}
+      {tab === 'projects'     && <ProjectsMirrorTab />}
+      {tab === 'invoices'     && <InvoicesTab />}
+      {tab === 'history'      && <HistoryTab />}
+      {tab === 'shared'       && <SharedLinksTab />}
+      {tab === 'associations' && <AssociationsTab />}
+      {tab === 'hflogs'       && <HfLogsTab />}
     </>
   )
 

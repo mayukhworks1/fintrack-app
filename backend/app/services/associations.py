@@ -48,6 +48,11 @@ class AssociationService:
         return client_name, project_name
 
     async def hydrate_records(self, source_table: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Attach manual association data to each record.
+        Auto-linking is intentionally DISABLED — it created noisy incorrect links.
+        Only explicit manual links (created via upsert_manual_link) are shown.
+        """
         source = self.validate_source(source_table)
         if not records:
             return records
@@ -59,7 +64,8 @@ class AssociationService:
         if not record_ids:
             return [self._with_association(record, None) for record in records]
 
-        await self._auto_link_missing(source, records)
+        # Auto-linking removed: _auto_link_missing() was creating incorrect links
+        # by fuzzy name-matching and running on every list fetch.
         links = await self._load_links(source, record_ids)
         counts = await self._load_related_counts(links.values())
 
@@ -216,6 +222,182 @@ class AssociationService:
                 teable_id,
             )
         return {"ok": True}
+
+    async def bulk_link_by_name(
+        self,
+        client_name: str,
+        project_name: str,
+        *,
+        actor_role: Optional[str] = None,
+        actor_ip: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Given canonical client + project names, find ALL matching records across
+        every source table (status, projects, invoices, web_invoices) and link them.
+
+        Matching is done by normalised name against the mirror tables:
+          status_mirror.client / status_mirror.project
+          projects_mirror.client / projects_mirror.fields->>'Project Name'
+          invoices_mirror.project
+          web_invoices_mirror.project
+
+        Returns a summary of how many records were linked per table.
+        """
+        if not client_name.strip() and not project_name.strip():
+            raise ValueError("At least client_name or project_name is required")
+
+        pool = get_pool()
+        if not pool:
+            raise RuntimeError("PostgreSQL is not available")
+
+        client_norm  = normalize_name(client_name)
+        project_norm = normalize_name(project_name)
+
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # 1. Ensure canonical entities exist
+                client_id: Optional[str] = None
+                project_id: Optional[str] = None
+                if client_name.strip():
+                    client_id = await self._ensure_client_entity(conn, client_name)
+                if project_name.strip():
+                    project_id = await self._ensure_project_entity(conn, project_name, client_id)
+
+                # 2. Gather matching teable_ids from each mirror table
+                matches: dict[str, list[str]] = {}
+
+                # status_mirror
+                rows = await conn.fetch(
+                    """
+                    SELECT teable_id FROM status_mirror
+                    WHERE ($1 = '' OR LOWER(client) LIKE $2)
+                      AND ($3 = '' OR LOWER(project) LIKE $4)
+                    """,
+                    client_norm, f"%{client_norm}%",
+                    project_norm, f"%{project_norm}%",
+                )
+                if rows:
+                    matches["status"] = [r["teable_id"] for r in rows]
+
+                # projects_mirror
+                rows = await conn.fetch(
+                    """
+                    SELECT teable_id FROM projects_mirror
+                    WHERE ($1 = '' OR LOWER(client) LIKE $2)
+                      AND ($3 = '' OR LOWER(fields->>'Project Name') LIKE $4)
+                    """,
+                    client_norm, f"%{client_norm}%",
+                    project_norm, f"%{project_norm}%",
+                )
+                if rows:
+                    matches["projects"] = [r["teable_id"] for r in rows]
+
+                # invoices_mirror (match by project name only — no client field)
+                if project_norm:
+                    rows = await conn.fetch(
+                        """
+                        SELECT teable_id FROM invoices_mirror
+                        WHERE LOWER(project) LIKE $1
+                        """,
+                        f"%{project_norm}%",
+                    )
+                    if rows:
+                        matches["invoices"] = [r["teable_id"] for r in rows]
+
+                # web_invoices_mirror
+                if project_norm:
+                    rows = await conn.fetch(
+                        """
+                        SELECT teable_id FROM web_invoices_mirror
+                        WHERE LOWER(project) LIKE $1
+                        """,
+                        f"%{project_norm}%",
+                    )
+                    if rows:
+                        matches["web_invoices"] = [r["teable_id"] for r in rows]
+
+                # 3. Upsert record_links for every match
+                linked_counts: dict[str, int] = {}
+                for src, teable_ids in matches.items():
+                    count = 0
+                    for tid in teable_ids:
+                        await conn.execute(
+                            """
+                            INSERT INTO record_links (
+                                source_table, teable_id,
+                                client_entity_id, project_entity_id,
+                                link_mode, match_confidence,
+                                linked_by_role, linked_by_ip, updated_at
+                            )
+                            VALUES ($1,$2,$3::uuid,$4::uuid,'manual',100,$5,$6,NOW())
+                            ON CONFLICT (source_table, teable_id)
+                            DO UPDATE SET
+                                client_entity_id  = EXCLUDED.client_entity_id,
+                                project_entity_id = EXCLUDED.project_entity_id,
+                                link_mode         = 'manual',
+                                match_confidence  = 100,
+                                linked_by_role    = EXCLUDED.linked_by_role,
+                                linked_by_ip      = EXCLUDED.linked_by_ip,
+                                updated_at        = NOW()
+                            """,
+                            src, tid, client_id, project_id,
+                            actor_role, actor_ip,
+                        )
+                        count += 1
+                    linked_counts[src] = count
+
+        return {
+            "client":  {"id": client_id,  "name": _clean_name(client_name)}  if client_id  else None,
+            "project": {"id": project_id, "name": _clean_name(project_name)} if project_id else None,
+            "linked_counts": linked_counts,
+            "total": sum(linked_counts.values()),
+        }
+
+    async def reset_all(self) -> dict[str, Any]:
+        """
+        Delete ALL association data (record_links, project_entities, client_entities).
+        Intended for admin use only. Irreversible — clears ALL manual and auto links.
+        """
+        pool = get_pool()
+        if not pool:
+            raise RuntimeError("PostgreSQL is not available")
+        async with pool.acquire() as conn:
+            # Delete in FK-safe order
+            rl  = await conn.fetchval("DELETE FROM record_links     RETURNING count(*)", column=0)
+            pe  = await conn.fetchval("DELETE FROM project_entities RETURNING count(*)", column=0)
+            ce  = await conn.fetchval("DELETE FROM client_entities  RETURNING count(*)", column=0)
+        import logging
+        logging.getLogger("fintrack.services.associations").warning(
+            "Association reset: deleted %s record_links, %s project_entities, %s client_entities",
+            rl, pe, ce,
+        )
+        return {
+            "ok": True,
+            "deleted": {
+                "record_links":      rl  or 0,
+                "project_entities":  pe  or 0,
+                "client_entities":   ce  or 0,
+            },
+        }
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Return current row counts for all association tables."""
+        pool = get_pool()
+        if not pool:
+            return {}
+        async with pool.acquire() as conn:
+            ce = await conn.fetchval("SELECT COUNT(*) FROM client_entities")
+            pe = await conn.fetchval("SELECT COUNT(*) FROM project_entities")
+            rl = await conn.fetchval("SELECT COUNT(*) FROM record_links")
+            rl_manual = await conn.fetchval(
+                "SELECT COUNT(*) FROM record_links WHERE link_mode = 'manual'"
+            )
+        return {
+            "client_entities":  int(ce or 0),
+            "project_entities": int(pe or 0),
+            "record_links":     int(rl or 0),
+            "record_links_manual": int(rl_manual or 0),
+        }
 
     async def _auto_link_missing(self, source_table: str, records: list[dict[str, Any]]) -> None:
         pool = get_pool()
