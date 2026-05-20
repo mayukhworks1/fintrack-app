@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
 import InvoicePicklist from '../components/InvoicePicklist'
-import { api } from '../services/api'
+import { api, clientCacheBust } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -159,7 +159,8 @@ export default function ProjectDetail() {
   const [linkedInvoices,  setLinkedInvoices]  = useState([])
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [unlinkingId,     setUnlinkingId]     = useState(null)
-  const [invExpanded,     setInvExpanded]     = useState(false)  // collapsed by default
+  const [invExpanded,     setInvExpanded]     = useState(false)  // section collapsed by default
+  const [expandedInvId,   setExpandedInvId]   = useState(null)  // which invoice row is expanded
 
   const loadRecord = useCallback(async () => {
     if (isNew) return
@@ -219,10 +220,12 @@ export default function ProjectDetail() {
     try {
       if (isNew) {
         const created = await api.projects.create(payload)
+        clientCacheBust('/api/projects')
         toast('Project created!', 'success')
         navigate(`/projects/${created.id}`, { replace: true })
       } else {
         const updated = await api.projects.update(id, payload)
+        clientCacheBust('/api/projects')
         setRecord(updated)
         setEditing(false)
         toast('Project updated!', 'success')
@@ -238,6 +241,7 @@ export default function ProjectDetail() {
     setDeleting(true)
     try {
       await api.projects.delete(id)
+      clientCacheBust('/api/projects')
       toast('Project deleted', 'info')
       navigate('/projects', { replace: true })
     } catch (e) {
@@ -559,56 +563,84 @@ export default function ProjectDetail() {
               )}
 
               {!loadingInvoices && linkedInvoices.map((inv) => {
-                const statusColor = INV_STATUS[inv.payment_status] || 'var(--text-3)'
-                const isUnlinking = unlinkingId === inv.invoice_teable_id
+                const statusColor   = INV_STATUS[inv.payment_status] || 'var(--text-3)'
+                const isUnlinking   = unlinkingId === inv.invoice_teable_id
+                const isRowExpanded = expandedInvId === inv.invoice_teable_id
                 return (
                   <div key={inv.invoice_teable_id}
-                    className="flex items-center gap-2.5 p-3 rounded-xl"
-                    style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', opacity: isUnlinking ? 0.5 : 1 }}>
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
-                          {inv.invoice_number || '—'}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                          style={{ background: `${statusColor}20`, color: statusColor }}>
-                          {inv.payment_status || '—'}
-                        </span>
-                        {inv.invoice_source === 'web_invoices' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded"
-                            style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {inv.raised_date && (
-                          <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
-                            <Calendar size={9} />
-                            {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    className="rounded-xl overflow-hidden"
+                    style={{
+                      background: 'var(--bg-input)',
+                      border: `1px solid ${isRowExpanded ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                      opacity: isUnlinking ? 0.5 : 1,
+                    }}>
+                    {/* Row summary — click to toggle details */}
+                    <button
+                      onClick={() => setExpandedInvId(isRowExpanded ? null : inv.invoice_teable_id)}
+                      className="w-full flex items-center gap-2.5 p-3 text-left"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
+                            {inv.invoice_number || '—'}
                           </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                            style={{ background: `${statusColor}20`, color: statusColor }}>
+                            {inv.payment_status || '—'}
+                          </span>
+                          {inv.invoice_source === 'web_invoices' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
+                        {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
+                      </span>
+                      {isRowExpanded
+                        ? <ChevronUp size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                        : <ChevronDown size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+                    </button>
+                    {/* Expanded detail panel */}
+                    {isRowExpanded && (
+                      <div className="px-3 pb-3 pt-0 space-y-1.5"
+                        style={{ borderTop: '1px solid var(--border)' }}>
+                        {inv.raised_date && (
+                          <div className="flex justify-between text-xs">
+                            <span style={{ color: 'var(--text-3)' }}>Date</span>
+                            <span style={{ color: 'var(--text-2)' }}>
+                              {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                        )}
+                        {inv.amount_with_tax != null && inv.amount_with_tax !== inv.amount_raised && (
+                          <div className="flex justify-between text-xs">
+                            <span style={{ color: 'var(--text-3)' }}>With Tax</span>
+                            <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                              {formatInr(inv.amount_with_tax)}
+                            </span>
+                          </div>
+                        )}
+                        {inv.amount_received != null && inv.amount_received > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span style={{ color: 'var(--text-3)' }}>Received</span>
+                            <span className="font-semibold tabular-nums" style={{ color: '#10b981' }}>
+                              {formatInr(inv.amount_received)}
+                            </span>
+                          </div>
+                        )}
+                        {isEditor && (
+                          <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
+                            disabled={isUnlinking}
+                            className="flex items-center gap-1 mt-1 text-[11px] font-semibold"
+                            style={{ color: '#ef4444', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                            {isUnlinking ? <Loader2 size={11} className="animate-spin" /> : <Unlink size={11} />}
+                            Unlink invoice
+                          </button>
                         )}
                       </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                        {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
-                      </p>
-                      {inv.amount_received != null && inv.amount_received > 0 && (
-                        <p className="text-[10px] font-medium" style={{ color: '#10b981' }}>
-                          Rcvd {formatInr(inv.amount_received)}
-                        </p>
-                      )}
-                    </div>
-                    {isEditor && (
-                      <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
-                        disabled={isUnlinking}
-                        className="btn-icon flex-shrink-0 rounded-lg"
-                        style={{ padding: '0.3rem', color: 'var(--text-3)' }}
-                        title={`Unlink ${inv.invoice_number}`}
-                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
-                        {isUnlinking ? <Loader2 size={12} className="animate-spin" /> : <Unlink size={12} />}
-                      </button>
                     )}
                   </div>
                 )

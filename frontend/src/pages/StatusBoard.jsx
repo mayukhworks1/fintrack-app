@@ -24,7 +24,7 @@ import {
   GripVertical, ArrowRight, ChevronRight, TrendingUp,
   Receipt, Unlink,
 } from 'lucide-react'
-import { api } from '../services/api'
+import { api, clientCacheBust } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
@@ -275,7 +275,8 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
   const [loadingInvs,     setLoadingInvs]     = useState(false)
   const [showPicklist,    setShowPicklist]     = useState(false)
   const [unlinkingId,     setUnlinkingId]     = useState(null)
-  const [invExpanded,     setInvExpanded]     = useState(false)  // collapsed by default
+  const [invExpanded,     setInvExpanded]     = useState(false)  // section collapsed by default
+  const [expandedInvId,   setExpandedInvId]   = useState(null)  // which invoice row is expanded
 
   // Load linked invoices when the panel opens
   useEffect(() => {
@@ -440,9 +441,10 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                 </div>
               )}
               {!loadingInvs && linkedInvoices.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {linkedInvoices.map(inv => {
-                    const isUnlinking = unlinkingId === inv.invoice_teable_id
+                    const isUnlinking  = unlinkingId === inv.invoice_teable_id
+                    const isRowExpanded = expandedInvId === inv.invoice_teable_id
                     const statusColor = {
                       'Paid': '#10b981', 'Received': '#10b981',
                       'Partially Paid': '#f59e0b', 'Pending': '#f97316',
@@ -450,37 +452,79 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                     }[inv.payment_status] || 'var(--text-3)'
                     return (
                       <div key={inv.invoice_teable_id}
-                        className="flex items-center gap-2.5 p-3 rounded-xl"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', opacity: isUnlinking ? 0.5 : 1 }}>
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
-                              {inv.invoice_number || '—'}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold"
-                              style={{ background: `${statusColor}20`, color: statusColor }}>
-                              {inv.payment_status || '—'}
-                            </span>
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: 'var(--bg-input)',
+                          border: `1px solid ${isRowExpanded ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                          opacity: isUnlinking ? 0.5 : 1,
+                        }}>
+                        {/* Row summary — click to expand */}
+                        <button
+                          onClick={() => setExpandedInvId(isRowExpanded ? null : inv.invoice_teable_id)}
+                          className="w-full flex items-center gap-2.5 p-3 text-left"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
+                                {inv.invoice_number || '—'}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold"
+                                style={{ background: `${statusColor}20`, color: statusColor }}>
+                                {inv.payment_status || '—'}
+                              </span>
+                              {inv.invoice_source === 'web_invoices' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded"
+                                  style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
+                              )}
+                            </div>
                           </div>
-                          {inv.raised_date && (
-                            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                              {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
-                          {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
-                        </span>
-                        {isEditor && (
-                          <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
-                            disabled={isUnlinking}
-                            className="btn-icon flex-shrink-0 rounded-lg" style={{ padding: '0.35rem', color: 'var(--text-3)' }}
-                            title={`Unlink ${inv.invoice_number}`}
-                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
-                            {isUnlinking ? <Loader2 size={12} className="animate-spin" /> : <Unlink size={12} />}
-                          </button>
+                          <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
+                            {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
+                          </span>
+                          {isRowExpanded
+                            ? <ChevronUp size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                            : <ChevronDown size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+                        </button>
+                        {/* Expanded detail row */}
+                        {isRowExpanded && (
+                          <div className="px-3 pb-3 pt-0 space-y-1.5"
+                            style={{ borderTop: '1px solid var(--border)' }}>
+                            {inv.raised_date && (
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: 'var(--text-3)' }}>Date</span>
+                                <span style={{ color: 'var(--text-2)' }}>
+                                  {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                            )}
+                            {inv.amount_with_tax != null && inv.amount_with_tax !== inv.amount_raised && (
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: 'var(--text-3)' }}>With Tax</span>
+                                <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                                  {formatInr(inv.amount_with_tax)}
+                                </span>
+                              </div>
+                            )}
+                            {inv.amount_received != null && inv.amount_received > 0 && (
+                              <div className="flex justify-between text-xs">
+                                <span style={{ color: 'var(--text-3)' }}>Received</span>
+                                <span className="font-semibold tabular-nums" style={{ color: '#10b981' }}>
+                                  {formatInr(inv.amount_received)}
+                                </span>
+                              </div>
+                            )}
+                            {isEditor && (
+                              <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
+                                disabled={isUnlinking}
+                                className="flex items-center gap-1 mt-1 text-[11px] font-semibold"
+                                style={{ color: '#ef4444', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                                {isUnlinking ? <Loader2 size={11} className="animate-spin" /> : <Unlink size={11} />}
+                                Unlink invoice
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )
@@ -2007,7 +2051,7 @@ export default function StatusBoard() {
   const [showClientAccents, setShowClientAccents] = useState(initConfig.showClientAccents !== false)
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [expandedIds,   setExpandedIds]   = useState(new Set())
+  const [allExpanded,   setAllExpanded]   = useState(false)  // global expand/collapse for cards
   const [selectedIds,   setSelectedIds]   = useState(new Set())
   const [modal,         setModal]         = useState(null)
   const [saving,        setSaving]        = useState(false)
@@ -2178,7 +2222,8 @@ export default function StatusBoard() {
   }
   function selectAll() { setSelectedIds(new Set(filtered.map(r => r.id))) }
   function clearSelection() { setSelectedIds(new Set()) }
-  function toggleExpand(id) { setExpandedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  // Toggling one card expands/collapses ALL cards simultaneously
+  function toggleExpandAll() { setAllExpanded(v => !v) }
 
   // ── Share view — opens modal with all visible records + current view config ─
   function shareViewUrl() {
@@ -2212,14 +2257,26 @@ export default function StatusBoard() {
   // ── CRUD ──────────────────────────────────────────────────────────────────
   async function handleCreate(form) {
     setSaving(true)
-    try { await api.status.create(form); showToast('Created', 'success'); setModal(null); await load() }
+    try {
+      await api.status.create(form)
+      showToast('Created', 'success')
+      setModal(null)
+      clientCacheBust('/api/status')
+      await load()
+    }
     catch (e) { showToast(e.message || 'Failed', 'error') }
     finally { setSaving(false) }
   }
   async function handleEdit(form) {
     if (!modal?.id) return
     setSaving(true)
-    try { await api.status.update(modal.id, form); showToast('Saved', 'success'); setModal(null); await load() }
+    try {
+      await api.status.update(modal.id, form)
+      showToast('Saved', 'success')
+      setModal(null)
+      clientCacheBust('/api/status')
+      await load()
+    }
     catch (e) { showToast(e.message || 'Failed', 'error') }
     finally { setSaving(false) }
   }
@@ -2680,8 +2737,8 @@ export default function StatusBoard() {
                         onInvoice={openInvoicePanel}
                         selected={selectedIds.has(r.id)}
                         onSelect={toggleSelect}
-                        expanded={expandedIds.has(r.id)}
-                        onToggle={() => toggleExpand(r.id)}
+                        expanded={allExpanded}
+                        onToggle={toggleExpandAll}
                         deleting={deletingId === r.id}
                         compact={compact}
                         showClientAccents={showClientAccents}

@@ -46,6 +46,28 @@ async function _dedupedFetch(method, path, runner, externalSignal) {
   return promise
 }
 
+// ── Client-side memory cache (stale-while-revalidate pattern) ─────────────
+// GET responses are cached in-memory for 45 s. Navigating back to a page
+// returns data instantly from this cache without any network round-trip.
+// Call clientCacheBust(prefix) immediately before any load() that follows
+// a mutation so the next GET fetches fresh data from the server.
+const _clientCache = new Map()  // path → { data, ts }
+const _CLIENT_TTL  = 45_000     // 45 s
+
+function _ccGet(path) {
+  const e = _clientCache.get(path)
+  if (!e) return null
+  if (Date.now() - e.ts > _CLIENT_TTL) { _clientCache.delete(path); return null }
+  return e.data
+}
+function _ccSet(path, data) { _clientCache.set(path, { data, ts: Date.now() }) }
+
+/** Bust all cached entries whose key starts with `prefix`. Call after any
+ *  mutation that invalidates a list (create / update / delete). */
+export function clientCacheBust(prefix) {
+  for (const k of _clientCache.keys()) if (k.startsWith(prefix)) _clientCache.delete(k)
+}
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
@@ -53,9 +75,19 @@ async function request(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
 
+  // Client-side memory cache — instant return for recent GETs
+  if (method === 'GET' && !externalSignal) {
+    const hit = _ccGet(path)
+    if (hit !== null) return hit
+  }
+
   // Coalesce identical concurrent GETs across the app
-  return _dedupedFetch(method, path, () =>
+  const data = await _dedupedFetch(method, path, () =>
     _doRequest(path, options, retries), externalSignal)
+
+  // Store successful GET results for fast revisit
+  if (method === 'GET' && !externalSignal && data != null) _ccSet(path, data)
+  return data
 }
 
 async function _doRequest(path, options = {}, retries = 2) {
