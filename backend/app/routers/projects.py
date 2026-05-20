@@ -4,7 +4,14 @@ from ..services.teable import TeableService
 from ..services.associations import AssociationService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
 from ..db.attribution import record_user_attribution
+from ..db.valkey import cache_get, cache_set, cache_bust
 from .deps import require_auth, require_editor
+
+_PROJECTS_LIST_TTL = 30   # seconds
+
+
+async def _bust_projects_cache() -> None:
+    await cache_bust("projects:list:")
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -30,6 +37,10 @@ async def list_projects(
     teable = get_teable()
     associations = get_associations()
     resolved = resolve_status(status) if status else None
+    cache_key = f"projects:list:{status}:{client}:{order_by}:{order_dir}:{limit}:{skip}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
     records = await teable.list_records(
         status=resolved,
         client=client,
@@ -39,7 +50,9 @@ async def list_projects(
         skip=skip,
     )
     records = await associations.hydrate_records("projects", records)
-    return {"records": records, "count": len(records)}
+    result = {"records": records, "count": len(records)}
+    await cache_set(cache_key, result, _PROJECTS_LIST_TTL)
+    return result
 
 
 @router.get("/summary")
@@ -84,6 +97,7 @@ async def create_project(body: ProjectCreate, request: Request, role: str = Depe
             await record_user_attribution(request, role, new_id)
         except Exception:
             pass
+    await _bust_projects_cache()
     return result
 
 
@@ -101,7 +115,9 @@ async def update_project(
             await record_user_attribution(request, role, record_id)
         except Exception:
             pass
-        return await teable.update_record(record_id, fields)
+        result = await teable.update_record(record_id, fields)
+        await _bust_projects_cache()
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -115,5 +131,6 @@ async def delete_project(record_id: str, request: Request, role: str = Depends(r
         except Exception:
             pass
         await teable.delete_record(record_id)
+        await _bust_projects_cache()
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))

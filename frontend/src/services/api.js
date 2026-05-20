@@ -383,6 +383,38 @@ export const api = {
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),
     getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),
   },
+  // ── Project ↔ Invoice associations ────────────────────────────────────
+  projectInvoices: {
+    /**
+     * Lightweight invoice list for picklist dropdowns.
+     * @param {string} source  'invoices' | 'web_invoices'
+     * @param {string} q       Search term (invoice number or project name)
+     * @param {string[]} excludeIds  teable_ids already linked (to hide from list)
+     */
+    picklist: (source = 'invoices', q = '', excludeIds = []) => {
+      const params = new URLSearchParams({ source })
+      if (q)                    params.set('q', q)
+      if (excludeIds?.length)   params.set('exclude', excludeIds.join(','))
+      return request(`/api/project-invoices/picklist?${params}`)
+    },
+    /** All invoices currently linked to a project. Cached 120 s server-side. */
+    list:   (projectId) =>
+      request(`/api/project-invoices/${encodeURIComponent(projectId)}`),
+    /** Link a single invoice to a project. */
+    link:   (projectId, invoiceTId, source = 'invoices', note = '') =>
+      request(`/api/project-invoices/${encodeURIComponent(projectId)}`, {
+        method: 'POST',
+        body: JSON.stringify({ invoice_teable_id: invoiceTId, invoice_source: source, note: note || undefined }),
+      }),
+    /** Soft-delete the association (kept in DB for audit). */
+    unlink: (projectId, invoiceId) =>
+      request(`/api/project-invoices/${encodeURIComponent(projectId)}/${encodeURIComponent(invoiceId)}`, {
+        method: 'DELETE',
+      }),
+    /** Append-only audit trail for a project's invoice associations. */
+    log: (projectId, limit = 50) =>
+      request(`/api/project-invoices/${encodeURIComponent(projectId)}/log?limit=${limit}`),
+  },
   health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.

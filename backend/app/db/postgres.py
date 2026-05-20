@@ -458,6 +458,46 @@ ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS record_id VARCHAR(60);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
+
+-- ── Project ↔ Invoice direct associations (v2.4) ──────────────────────────
+-- Explicit user-driven link between a project and one or more invoices.
+-- Soft-delete (is_active = FALSE + unlinked_at) preserves full history.
+CREATE TABLE IF NOT EXISTS project_invoices (
+    id                UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_teable_id VARCHAR(60)   NOT NULL,
+    invoice_teable_id VARCHAR(60)   NOT NULL,
+    invoice_source    VARCHAR(20)   NOT NULL DEFAULT 'invoices',
+    is_active         BOOLEAN       NOT NULL DEFAULT TRUE,
+    linked_by_role    VARCHAR(50),
+    linked_by_ip      VARCHAR(60),
+    linked_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    unlinked_at       TIMESTAMPTZ,
+    unlinked_by_role  VARCHAR(50),
+    note              TEXT,
+    UNIQUE (project_teable_id, invoice_teable_id)
+);
+CREATE INDEX IF NOT EXISTS pi_project_active_idx ON project_invoices (project_teable_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS pi_invoice_active_idx ON project_invoices (invoice_teable_id) WHERE is_active = TRUE;
+
+-- Append-only audit: every link/unlink captured with full context snapshot.
+-- Never deleted — the source of truth for "who linked what, when, and why".
+CREATE TABLE IF NOT EXISTS project_invoice_log (
+    id                BIGSERIAL     PRIMARY KEY,
+    action_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    action            VARCHAR(20)   NOT NULL,   -- 'linked' | 'unlinked'
+    project_teable_id VARCHAR(60)   NOT NULL,
+    invoice_teable_id VARCHAR(60)   NOT NULL,
+    invoice_source    VARCHAR(20),
+    project_name      VARCHAR(255),             -- snapshot at action time
+    invoice_number    VARCHAR(120),             -- snapshot at action time
+    invoice_amount    NUMERIC(15,2),            -- snapshot at action time
+    payment_status    VARCHAR(60),              -- snapshot at action time
+    actor_role        VARCHAR(50),
+    actor_ip          VARCHAR(60),
+    note              TEXT
+);
+CREATE INDEX IF NOT EXISTS pil_project_idx ON project_invoice_log (project_teable_id, action_at DESC);
+CREATE INDEX IF NOT EXISTS pil_all_idx     ON project_invoice_log (action_at DESC);
 """
 # ---------------------------------------------------------------------------
 

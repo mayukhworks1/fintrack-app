@@ -19,7 +19,14 @@ from ..services.associations import AssociationService
 from ..services.status import StatusService
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
-from ..db.valkey import rate_check
+from ..db.valkey import rate_check, cache_get, cache_set, cache_bust
+
+_STATUS_LIST_TTL = 60   # seconds — cache the full status list for 60 s
+
+
+async def _bust_status_cache() -> None:
+    """Invalidate all status list cache entries after any mutation."""
+    await cache_bust("status:list:")
 
 router = APIRouter(prefix="/api/status", tags=["status"])
 
@@ -68,13 +75,19 @@ async def list_statuses(
       ?project=PMS – Phase 1.1
     """
     svc = _svc()
+    cache_key = f"status:list:{client}:{project}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         records = await svc.list_all(
             client=client or None,
             project=project or None,
         )
         records = await _assoc().hydrate_records("status", records)
-        return {"records": records, "total": len(records)}
+        result = {"records": records, "total": len(records)}
+        await cache_set(cache_key, result, _STATUS_LIST_TTL)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch status updates: {e}")
 
@@ -186,7 +199,9 @@ async def create_status(
     if not fields.get("Client") or not fields.get("Project"):
         raise HTTPException(status_code=422, detail="client and project are required")
     try:
-        return await svc.create_record(fields, request=request, role=role)
+        result = await svc.create_record(fields, request=request, role=role)
+        await _bust_status_cache()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -208,7 +223,9 @@ async def update_status(
     if not fields:
         raise HTTPException(status_code=422, detail="No fields provided to update")
     try:
-        return await svc.update_record(record_id, fields, request=request, role=role)
+        result = await svc.update_record(record_id, fields, request=request, role=role)
+        await _bust_status_cache()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -227,5 +244,6 @@ async def delete_status(
     svc = _svc()
     try:
         await svc.delete_record(record_id, request=request, role=role)
+        await _bust_status_cache()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

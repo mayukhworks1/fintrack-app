@@ -22,12 +22,15 @@ import {
   LayoutGrid, List, Columns,
   Bookmark, BookmarkPlus, Trash, SlidersHorizontal,
   GripVertical, ArrowRight, ChevronRight, TrendingUp,
+  Receipt, Unlink,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import AssociationLinkModal from '../components/AssociationLinkModal'
+import InvoicePicklist from '../components/InvoicePicklist'
+import { formatInr } from '../utils/format'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
@@ -266,6 +269,43 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
   const modified = f['lastModifiedTime'] || record?.createdTime || ''
   const clrHex  = clientColor(client)
   const sc      = statusStyle(status)
+  const toast   = useToast()
+
+  // ── Linked invoices state ──────────────────────────────────────────────
+  const [linkedInvoices,  setLinkedInvoices]  = useState([])
+  const [loadingInvs,     setLoadingInvs]     = useState(false)
+  const [showPicklist,    setShowPicklist]     = useState(false)
+  const [unlinkingId,     setUnlinkingId]     = useState(null)
+
+  // Load linked invoices when the panel opens
+  useEffect(() => {
+    if (!record?.id) return
+    setLoadingInvs(true)
+    api.projectInvoices.list(record.id)
+      .then(res => setLinkedInvoices(res.invoices || []))
+      .catch(() => {})
+      .finally(() => setLoadingInvs(false))
+  }, [record?.id])
+
+  const handleLinkInvoice = async (invoiceTId, source) => {
+    await api.projectInvoices.link(record.id, invoiceTId, source)
+    toast('Invoice linked!', 'success')
+    const res = await api.projectInvoices.list(record.id)
+    setLinkedInvoices(res.invoices || [])
+  }
+
+  const handleUnlinkInvoice = async (invoiceTeableId) => {
+    setUnlinkingId(invoiceTeableId)
+    try {
+      await api.projectInvoices.unlink(record.id, invoiceTeableId)
+      setLinkedInvoices(prev => prev.filter(i => i.invoice_teable_id !== invoiceTeableId))
+      toast('Invoice unlinked', 'info')
+    } catch (e) {
+      toast('Unlink failed: ' + e.message, 'error')
+    } finally {
+      setUnlinkingId(null)
+    }
+  }
 
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
@@ -377,8 +417,112 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
               </div>
             </div>
           </div>
+
+          {/* ── Linked Invoices ─────────────────────────────────────────── */}
+          <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                <Receipt size={11} />
+                Linked Invoices
+                {linkedInvoices.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                    style={{ background: 'rgba(37,99,235,0.15)', color: 'var(--accent)' }}>
+                    {linkedInvoices.length}
+                  </span>
+                )}
+              </p>
+              {isEditor && (
+                <button
+                  onClick={() => setShowPicklist(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors"
+                  style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}
+                >
+                  <Link2 size={10} /> Link
+                </button>
+              )}
+            </div>
+
+            {loadingInvs && (
+              <div className="flex items-center gap-2 py-2" style={{ color: 'var(--text-3)' }}>
+                <Loader2 size={12} className="animate-spin" />
+                <span className="text-xs">Loading…</span>
+              </div>
+            )}
+            {!loadingInvs && linkedInvoices.length === 0 && (
+              <p className="text-xs" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
+                No invoices linked yet{isEditor ? ' — click "Link" to associate' : ''}
+              </p>
+            )}
+            {!loadingInvs && linkedInvoices.length > 0 && (
+              <div className="space-y-2">
+                {linkedInvoices.map(inv => {
+                  const isUnlinking = unlinkingId === inv.invoice_teable_id
+                  const statusColor = {
+                    'Paid': '#10b981', 'Received': '#10b981',
+                    'Partially Paid': '#f59e0b', 'Pending': '#f97316',
+                    'Overdue': '#ef4444', 'Raised': '#6366f1',
+                  }[inv.payment_status] || 'var(--text-3)'
+                  return (
+                    <div key={inv.invoice_teable_id}
+                      className="flex items-center gap-2.5 p-2.5 rounded-xl transition-colors"
+                      style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', opacity: isUnlinking ? 0.5 : 1 }}>
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                            {inv.invoice_number || '—'}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                            style={{ background: `${statusColor}18`, color: statusColor }}>
+                            {inv.payment_status || '—'}
+                          </span>
+                        </div>
+                        {inv.raised_date && (
+                          <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                            {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
+                        {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
+                      </span>
+                      {isEditor && (
+                        <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
+                          disabled={isUnlinking}
+                          className="btn-icon flex-shrink-0" style={{ padding: '0.25rem', color: 'var(--text-3)' }}
+                          aria-label={`Unlink ${inv.invoice_number}`}>
+                          {isUnlinking ? <Loader2 size={11} className="animate-spin" /> : <Unlink size={11} />}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+                {linkedInvoices.length > 1 && (
+                  <div className="flex justify-between items-center pt-1.5 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                    <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Total ({linkedInvoices.length})</span>
+                    <span className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                      {formatInr(linkedInvoices.reduce((s, i) => s + (i.amount_raised || 0), 0))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Invoice picklist modal */}
+      {showPicklist && (
+        <InvoicePicklist
+          projectId={record.id}
+          projectName={project}
+          linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
+          onLink={handleLinkInvoice}
+          onClose={() => setShowPicklist(false)}
+        />
+      )}
     </div>
   )
 }

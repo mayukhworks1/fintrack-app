@@ -16,6 +16,7 @@ from .routers import admin
 from .routers import associations as associations_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
+from .routers import project_invoices as project_invoices_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -106,6 +107,7 @@ app.include_router(admin.router)
 app.include_router(associations_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
+app.include_router(project_invoices_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────

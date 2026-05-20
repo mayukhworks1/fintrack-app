@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X, RefreshCw, Link2, Receipt, Unlink, Clock } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
 import AssociationLinkModal from '../components/AssociationLinkModal'
+import InvoicePicklist from '../components/InvoicePicklist'
 import { api } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
@@ -100,6 +101,10 @@ export default function ProjectDetail() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting]           = useState(false)
   const [showAssociationModal, setShowAssociationModal] = useState(false)
+  const [showPicklist,         setShowPicklist]         = useState(false)
+  const [linkedInvoices,       setLinkedInvoices]       = useState([])
+  const [loadingInvoices,      setLoadingInvoices]      = useState(false)
+  const [unlinkingId,          setUnlinkingId]          = useState(null)
 
   const loadRecord = useCallback(async () => {
     if (isNew) return
@@ -114,7 +119,37 @@ export default function ProjectDetail() {
     }
   }, [id, isNew, toast])
 
+  const loadLinkedInvoices = useCallback(async () => {
+    if (isNew || !id) return
+    setLoadingInvoices(true)
+    try {
+      const res = await api.projectInvoices.list(id)
+      setLinkedInvoices(res.invoices || [])
+    } catch { /* non-fatal */ }
+    finally { setLoadingInvoices(false) }
+  }, [id, isNew])
+
+  const handleLinkInvoice = async (invoiceTId, source) => {
+    await api.projectInvoices.link(id, invoiceTId, source)
+    toast('Invoice linked!', 'success')
+    await loadLinkedInvoices()
+  }
+
+  const handleUnlinkInvoice = async (invoiceId) => {
+    setUnlinkingId(invoiceId)
+    try {
+      await api.projectInvoices.unlink(id, invoiceId)
+      setLinkedInvoices(prev => prev.filter(i => i.invoice_teable_id !== invoiceId))
+      toast('Invoice unlinked', 'info')
+    } catch (e) {
+      toast('Unlink failed: ' + e.message, 'error')
+    } finally {
+      setUnlinkingId(null)
+    }
+  }
+
   useEffect(() => { loadRecord() }, [loadRecord])
+  useEffect(() => { loadLinkedInvoices() }, [loadLinkedInvoices])
 
   const handleSave = async (payload) => {
     setSaving(true)
@@ -349,6 +384,18 @@ export default function ProjectDetail() {
               <AiText text={analysis} />
             </div>
           )}
+
+          {/* ── Linked Invoices ─────────────────────────────────────────── */}
+          {!isNew && (
+            <LinkedInvoicesPanel
+              invoices={linkedInvoices}
+              loading={loadingInvoices}
+              unlinkingId={unlinkingId}
+              canEdit={isEditor}
+              onOpenPicklist={() => setShowPicklist(true)}
+              onUnlink={handleUnlinkInvoice}
+            />
+          )}
         </div>
       )}
 
@@ -359,6 +406,164 @@ export default function ProjectDetail() {
           onClose={() => setShowAssociationModal(false)}
           onSaved={() => { setShowAssociationModal(false); loadRecord() }}
         />
+      )}
+
+      {showPicklist && (
+        <InvoicePicklist
+          projectId={id}
+          projectName={record?.fields?.['Project Name']}
+          linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
+          onLink={handleLinkInvoice}
+          onClose={() => setShowPicklist(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── Linked Invoices panel ─────────────────────────────────────────────── */
+const INV_STATUS_COLORS = {
+  'Paid':           { bg: 'rgba(16,185,129,0.1)',  color: '#10b981' },
+  'Received':       { bg: 'rgba(16,185,129,0.1)',  color: '#10b981' },
+  'Partially Paid': { bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
+  'Pending':        { bg: 'rgba(249,115,22,0.1)',  color: '#f97316' },
+  'Overdue':        { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
+  'Raised':         { bg: 'rgba(99,102,241,0.1)',  color: '#6366f1' },
+}
+
+function LinkedInvoicesPanel({ invoices, loading, unlinkingId, canEdit, onOpenPicklist, onUnlink }) {
+  return (
+    <div className="card">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
+          <Receipt size={13} aria-hidden="true" />
+          Linked Invoices
+          {invoices.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+              style={{ background: 'rgba(37,99,235,0.12)', color: 'var(--accent)' }}>
+              {invoices.length}
+            </span>
+          )}
+        </h2>
+        {canEdit && (
+          <button
+            onClick={onOpenPicklist}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+            style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}
+          >
+            <Link2 size={11} /> Link Invoice
+          </button>
+        )}
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 py-4" style={{ color: 'var(--text-3)' }}>
+          <Loader2 size={14} className="animate-spin" />
+          <span className="text-sm">Loading…</span>
+        </div>
+      )}
+
+      {!loading && invoices.length === 0 && (
+        <div className="flex flex-col items-center py-6 gap-2">
+          <Receipt size={24} style={{ color: 'var(--text-3)', opacity: 0.35 }} />
+          <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>
+            No invoices linked yet
+            {canEdit && <span className="block text-xs mt-0.5 opacity-70">Click "Link Invoice" to associate invoices with this project</span>}
+          </p>
+        </div>
+      )}
+
+      {!loading && invoices.length > 0 && (
+        <div className="space-y-2">
+          {invoices.map((inv) => {
+            const sc = INV_STATUS_COLORS[inv.payment_status] || { bg: 'var(--bg-input)', color: 'var(--text-3)' }
+            const isUnlinking = unlinkingId === inv.invoice_teable_id
+            return (
+              <div
+                key={inv.invoice_teable_id}
+                className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                style={{ background: 'var(--bg-input)', opacity: isUnlinking ? 0.5 : 1 }}
+              >
+                {/* Status dot */}
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: sc.color }} />
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>
+                      {inv.invoice_number || '—'}
+                    </span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                      style={{ background: sc.bg, color: sc.color }}>
+                      {inv.payment_status || '—'}
+                    </span>
+                    {inv.invoice_source === 'web_invoices' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+                        Web
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {inv.raised_date && (
+                      <span className="text-xs flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                        <Clock size={10} />
+                        {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                    {inv.linked_by_role && (
+                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        · Linked by {inv.linked_by_role}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div className="text-right flex-shrink-0 mr-1">
+                  <p className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                    {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
+                  </p>
+                  {inv.amount_received != null && inv.amount_received > 0 && (
+                    <p className="text-[10px]" style={{ color: '#10b981' }}>
+                      Rcvd {formatInr(inv.amount_received)}
+                    </p>
+                  )}
+                </div>
+
+                {/* Unlink */}
+                {canEdit && (
+                  <button
+                    onClick={() => onUnlink(inv.invoice_teable_id)}
+                    disabled={isUnlinking}
+                    className="btn-icon flex-shrink-0"
+                    style={{ padding: '0.3rem', color: 'var(--text-3)' }}
+                    aria-label={`Unlink ${inv.invoice_number}`}
+                  >
+                    {isUnlinking
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <Unlink size={12} />}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Summary row */}
+          {invoices.length > 1 && (
+            <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
+              <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+                Total across {invoices.length} invoices
+              </span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                {formatInr(invoices.reduce((sum, i) => sum + (i.amount_raised || 0), 0))}
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
