@@ -28,7 +28,6 @@ import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
-import AssociationLinkModal from '../components/AssociationLinkModal'
 import InvoicePicklist from '../components/InvoicePicklist'
 import { formatInr } from '../utils/format'
 
@@ -257,10 +256,8 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detail Panel — slide-in from right
 // ─────────────────────────────────────────────────────────────────────────────
-function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
+function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   const f = record?.fields || {}
-  const assoc = record?.association
-  const related = assoc?.related_counts?.project || {}
   const client  = f['Client']  || ''
   const project = f['Project'] || ''
   const status  = f['Status']  || ''
@@ -344,9 +341,6 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
             <div className="flex items-center gap-1">
               {isEditor && (
                 <>
-                  <button onClick={onLink} className="btn-icon p-2" title="Link association" style={{ color: 'var(--accent)' }}>
-                    <Link2 size={15} />
-                  </button>
                   <button onClick={onEdit} className="btn-icon p-2" title="Edit" style={{ color: 'var(--text-3)' }}>
                     <Pencil size={15} />
                   </button>
@@ -395,17 +389,6 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Project</p>
                     <p style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
                   </div>
-                  {assoc?.project?.name && (
-                    <div className="rounded-xl p-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Link2 size={12} style={{ color: 'var(--accent)' }} />
-                        <p className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>Linked across modules</p>
-                      </div>
-                      <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                        {related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -532,8 +515,6 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, onSelect, expanded, onToggle, deleting, compact = false, showClientAccents = true }) {
   const f       = record.fields || {}
-  const assoc   = record.association
-  const related = assoc?.related_counts?.project || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
   const short   = f['Short Status'] || ''
@@ -587,15 +568,6 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
               }}>
               {client}
             </span>
-            {assoc?.project?.name && (
-              <div className="mb-1.5">
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-                  <Link2 size={10} />
-                  {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
-                </span>
-              </div>
-            )}
             {/* Project name */}
             <p className="text-sm font-bold leading-snug" style={{ color: 'var(--text-1)' }}>{project}</p>
           </div>
@@ -677,8 +649,6 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
 // ─────────────────────────────────────────────────────────────────────────────
 function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true, layout }) {
   const f = record.fields || {}
-  const assoc = record.association
-  const related = assoc?.related_counts?.project || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
   const status   = f['Status']  || ''
@@ -724,13 +694,6 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
           <span className="text-[13px] font-semibold block truncate" style={{ color: 'var(--text-1)' }}>
             {project}
           </span>
-          {assoc?.project?.name && (
-            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-              style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-              <Link2 size={10} />
-              {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}
-            </span>
-          )}
         </div>
       )}
       {columns.includes('Status') && (
@@ -1984,7 +1947,6 @@ export default function StatusBoard() {
   const [deletingId,    setDeletingId]    = useState(null)
   const [updatingIds,   setUpdatingIds]   = useState(new Set())  // kanban DnD in-flight
   const [detailRecord,  setDetailRecord]  = useState(null)
-  const [associationRecord, setAssociationRecord] = useState(null)
   const [aiModal,       setAiModal]       = useState(false)
   const [shareModal,    setShareModal]    = useState(false)
   const [manageModal,   setManageModal]   = useState(false)
@@ -2786,18 +2748,9 @@ export default function StatusBoard() {
         <DetailPanel
           record={detailRecord}
           onClose={() => setDetailRecord(null)}
-          onLink={() => { setAssociationRecord(detailRecord); setDetailRecord(null) }}
           onEdit={() => { setModal(detailRecord); setDetailRecord(null) }}
           onDelete={() => { handleDelete(detailRecord); setDetailRecord(null) }}
           isEditor={isEditor}
-        />
-      )}
-      {associationRecord && (
-        <AssociationLinkModal
-          sourceTable="status"
-          record={associationRecord}
-          onClose={() => setAssociationRecord(null)}
-          onSaved={() => { setAssociationRecord(null); load() }}
         />
       )}
 
