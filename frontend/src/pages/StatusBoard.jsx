@@ -34,7 +34,7 @@ import { formatInr } from '../utils/format'
 // ── Status config ─────────────────────────────────────────────────────────────
 // Fallback only — real options are fetched dynamically from the picklist API
 // and merged at runtime in the component. This array is never shown on its own.
-const STATUS_OPTIONS_FALLBACK_FALLBACK = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
+const STATUS_OPTIONS_FALLBACK = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
 const THEME_PRESETS = {
   cobalt: {
     id: 'cobalt',
