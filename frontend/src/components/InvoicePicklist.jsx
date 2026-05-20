@@ -122,7 +122,7 @@ export default function InvoicePicklist({ projectId, projectName, linkedIds = []
     <div
       className="fixed inset-0 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', zIndex: 80 }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose() }}
     >
       <div
         className="w-full max-w-2xl flex flex-col rounded-2xl overflow-hidden"
