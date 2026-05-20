@@ -4,6 +4,7 @@ import {
   ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
   RefreshCw, Receipt, Unlink, Clock, TrendingUp, DollarSign,
   Users, Calendar, BarChart2, CheckCircle2, AlertCircle,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
 import InvoicePicklist from '../components/InvoicePicklist'
@@ -158,6 +159,7 @@ export default function ProjectDetail() {
   const [linkedInvoices,  setLinkedInvoices]  = useState([])
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [unlinkingId,     setUnlinkingId]     = useState(null)
+  const [invExpanded,     setInvExpanded]     = useState(false)  // collapsed by default
 
   const loadRecord = useCallback(async () => {
     if (isNew) return
@@ -182,10 +184,18 @@ export default function ProjectDetail() {
     finally { setLoadingInvoices(false) }
   }, [id, isNew])
 
+  // Raw link — no toast, no reload (bulk handler does both after all complete)
   const handleLinkInvoice = async (invoiceTId, source) => {
     await api.projectInvoices.link(id, invoiceTId, source)
-    toast('Invoice linked!', 'success')
+  }
+
+  const handleBulkLinkDone = async (linked, failed) => {
     await loadLinkedInvoices()
+    setInvExpanded(true) // auto-expand so user sees the newly linked invoices
+    if (failed > 0)
+      toast(`${linked} linked, ${failed} failed`, 'warning')
+    else
+      toast(`${linked} invoice${linked !== 1 ? 's' : ''} linked!`, 'success')
   }
 
   const handleUnlinkInvoice = async (invoiceId) => {
@@ -485,14 +495,18 @@ export default function ProjectDetail() {
             </dl>
           </div>
 
-          {/* Linked Invoices */}
+          {/* Linked Invoices — collapsible, collapsed by default */}
           <div className="rounded-2xl overflow-hidden flex flex-col"
             style={{ border: '2px solid rgba(37,99,235,0.2)', background: 'var(--card-bg)' }}>
 
-            {/* Section header */}
+            {/* Section header — click left side to expand/collapse */}
             <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: '1px solid rgba(37,99,235,0.12)' }}>
-              <div className="flex items-center gap-2">
+              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: invExpanded ? '1px solid rgba(37,99,235,0.12)' : 'none' }}>
+              <button
+                onClick={() => setInvExpanded(v => !v)}
+                className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              >
                 <Receipt size={14} style={{ color: 'var(--accent)' }} />
                 <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>Linked Invoices</p>
                 {linkedInvoices.length > 0 && (
@@ -501,7 +515,10 @@ export default function ProjectDetail() {
                     {linkedInvoices.length}
                   </span>
                 )}
-              </div>
+                {invExpanded
+                  ? <ChevronUp size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />
+                  : <ChevronDown size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />}
+              </button>
               {isEditor && (
                 <button onClick={() => setShowPicklist(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
@@ -509,13 +526,13 @@ export default function ProjectDetail() {
                   onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
                   onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                   <Receipt size={11} />
-                  {linkedInvoices.length > 0 ? 'Add invoice' : 'Link invoice'}
+                  {linkedInvoices.length > 0 ? 'Add' : 'Link'}
                 </button>
               )}
             </div>
 
-            {/* Invoice list body */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ maxHeight: 420 }}>
+            {/* Invoice list body — only when expanded */}
+            {invExpanded && <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ maxHeight: 420 }}>
               {loadingInvoices && (
                 <div className="flex items-center gap-2 py-4 justify-center" style={{ color: 'var(--text-3)' }}>
                   <Loader2 size={14} className="animate-spin" />
@@ -596,10 +613,10 @@ export default function ProjectDetail() {
                   </div>
                 )
               })}
-            </div>
+            </div>}
 
-            {/* Invoice total */}
-            {linkedInvoices.length > 1 && (
+            {/* Invoice total — only when expanded */}
+            {invExpanded && linkedInvoices.length > 1 && (
               <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0"
                 style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-input)' }}>
                 <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
@@ -641,6 +658,7 @@ export default function ProjectDetail() {
           projectName={record?.fields?.['Project Name']}
           linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
           onLink={handleLinkInvoice}
+          onBulkDone={handleBulkLinkDone}
           onClose={() => setShowPicklist(false)}
         />
       )}

@@ -275,6 +275,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
   const [loadingInvs,     setLoadingInvs]     = useState(false)
   const [showPicklist,    setShowPicklist]     = useState(false)
   const [unlinkingId,     setUnlinkingId]     = useState(null)
+  const [invExpanded,     setInvExpanded]     = useState(false)  // collapsed by default
 
   // Load linked invoices when the panel opens
   useEffect(() => {
@@ -291,11 +292,19 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
     if (openInvoice) setShowPicklist(true)
   }, [openInvoice])
 
+  // Raw link — no toast, no reload (bulk handler does both after all complete)
   const handleLinkInvoice = async (invoiceTId, source) => {
     await api.projectInvoices.link(record.id, invoiceTId, source)
-    toast('Invoice linked!', 'success')
+  }
+
+  const handleBulkLinkDone = async (linked, failed) => {
     const res = await api.projectInvoices.list(record.id)
     setLinkedInvoices(res.invoices || [])
+    setInvExpanded(true) // auto-expand so user sees the newly linked invoices
+    if (failed > 0)
+      toast(`${linked} linked, ${failed} failed`, 'warning')
+    else
+      toast(`${linked} invoice${linked !== 1 ? 's' : ''} linked!`, 'success')
   }
 
   const handleUnlinkInvoice = async (invoiceTeableId) => {
@@ -368,24 +377,29 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
 
         <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
 
-          {/* ── Linked Invoices — FIRST, most prominent ──────────────────── */}
+          {/* ── Linked Invoices — collapsible ────────────────────────────── */}
           <div className="rounded-2xl overflow-hidden"
             style={{ border: '2px solid rgba(37,99,235,0.22)', background: 'var(--card-bg)' }}>
-            {/* Section header */}
+            {/* Section header — click left side to expand/collapse */}
             <div className="flex items-center justify-between px-4 py-3"
-              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: '1px solid rgba(37,99,235,0.12)' }}>
-              <div className="flex items-center gap-2">
+              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: invExpanded ? '1px solid rgba(37,99,235,0.12)' : 'none' }}>
+              <button
+                onClick={() => setInvExpanded(v => !v)}
+                className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              >
                 <Receipt size={14} style={{ color: 'var(--accent)' }} />
-                <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
-                  Linked Invoices
-                </p>
+                <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>Linked Invoices</p>
                 {linkedInvoices.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
                     style={{ background: 'var(--accent)', color: '#fff' }}>
                     {linkedInvoices.length}
                   </span>
                 )}
-              </div>
+                {invExpanded
+                  ? <ChevronUp size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />
+                  : <ChevronDown size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />}
+              </button>
               {isEditor && (
                 <button
                   onClick={() => setShowPicklist(true)}
@@ -395,13 +409,13 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                   onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                 >
                   <Receipt size={11} />
-                  {linkedInvoices.length > 0 ? 'Add invoice' : 'Link invoice'}
+                  {linkedInvoices.length > 0 ? 'Add' : 'Link'}
                 </button>
               )}
             </div>
 
-            {/* Invoice list */}
-            <div className="p-4">
+            {/* Invoice list — only rendered when expanded */}
+            {invExpanded && <div className="p-4">
               {loadingInvs && (
                 <div className="flex items-center gap-2 py-2" style={{ color: 'var(--text-3)' }}>
                   <Loader2 size={12} className="animate-spin" />
@@ -481,7 +495,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                   )}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* ── Status ─────────────────────────────────────────────────── */}
@@ -535,6 +549,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
           projectName={project}
           linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
           onLink={handleLinkInvoice}
+          onBulkDone={handleBulkLinkDone}
           onClose={() => setShowPicklist(false)}
         />
       )}

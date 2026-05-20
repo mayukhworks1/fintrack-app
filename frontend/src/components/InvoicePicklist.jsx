@@ -34,7 +34,7 @@ function StatusChip({ status }) {
   )
 }
 
-export default function InvoicePicklist({ projectId, projectName, linkedIds = [], onLink, onClose }) {
+export default function InvoicePicklist({ projectId, projectName, linkedIds = [], onLink, onBulkDone, onClose }) {
   const [source,     setSource]     = useState('invoices')
   const [q,          setQ]          = useState('')
   const [invoices,   setInvoices]   = useState([])
@@ -100,20 +100,20 @@ export default function InvoicePicklist({ projectId, projectName, linkedIds = []
   const allSelected = invoices.length > 0 && selected.size === invoices.length
   const someSelected = selected.size > 0
 
-  // ── Link selected ──────────────────────────────────────────────────────
+  // ── Link selected (parallel) ───────────────────────────────────────────
   const handleLinkSelected = async () => {
     if (!someSelected) return
     setLinking(true)
     setError(null)
-    let failed = 0
-    for (const tid of selected) {
-      try {
-        await onLink(tid, source)
-      } catch {
-        failed++
-      }
-    }
+    // Fire all links in parallel — no serial waiting per invoice
+    const results = await Promise.allSettled(
+      [...selected].map(tid => onLink(tid, source))
+    )
+    const failed = results.filter(r => r.status === 'rejected').length
+    const linked = results.length - failed
     if (failed > 0) setError(`${failed} invoice${failed > 1 ? 's' : ''} failed to link`)
+    // Single callback → parent refreshes list + shows ONE summary toast
+    if (onBulkDone) onBulkDone(linked, failed)
     await loadPicklist(q, source)
     setLinking(false)
   }
