@@ -680,12 +680,12 @@ export default function SharedView() {
   const resourceType = data?.resource_type || 'status'
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
 
-  const load = async ({ silent = false } = {}) => {
+  const load = async ({ silent = false, signal } = {}) => {
     if (silent) setRefreshing(true)
     else setLoading(true)
     setError(null)
     try {
-      const res = await api.sharedViews.publicGet(token)
+      const res = await api.sharedViews.publicGet(token, { signal })
       const vc = res.view_config || {}
       const rt = res.resource_type || 'status'
       const rmeta = RESOURCE_META[rt] || RESOURCE_META.status
@@ -699,6 +699,7 @@ export default function SharedView() {
       setFilterStatus(prev => prev || vc.filterStatus || '')
       setFilterCategory(prev => prev || vc.filterCategory || '')
     } catch (e) {
+      if (e?.name === 'AbortError') return
       setError(e.message || 'This link is unavailable')
       setData(null)
       setRecords([])
@@ -708,7 +709,12 @@ export default function SharedView() {
     }
   }
 
-  useEffect(() => { if (token) load() }, [token])
+  useEffect(() => {
+    if (!token) return
+    const controller = new AbortController()
+    load({ signal: controller.signal })
+    return () => controller.abort()
+  }, [token])
 
   const canEdit = (data?.access_mode || 'read') === 'edit'
   const vc = data?.view_config || {}

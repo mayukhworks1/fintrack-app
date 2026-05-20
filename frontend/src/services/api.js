@@ -358,7 +358,7 @@ export const api = {
     delete: (token)   => request(`/api/shared-views/${token}`, { method: 'DELETE' }),
     accesses: (token) => request(`/api/shared-views/${token}/accesses`),
     // Public — no auth header needed (still uses request() but no token will be found for public users)
-    publicGet: (token) => request(`/api/public/view/${token}`, {}, 1),
+    publicGet: (token, opts = {}) => request(`/api/public/view/${token}`, { signal: opts.signal }, 1),
     publicUpdate: (token, recordId, data) => request(`/api/public/view/${token}/records/${recordId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

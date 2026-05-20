@@ -1069,11 +1069,6 @@ export default function Invoices() {
   }
 
   function openInvoiceRequestForm(group, monthKeyValue) {
-    const label = monthLabel(monthKeyValue)
-    const confirmed = window.confirm(
-      `Open the external invoice request form for ${group.project} (${label})?`
-    )
-    if (!confirmed) return
     window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')
   }
 

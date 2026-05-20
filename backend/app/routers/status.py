@@ -33,7 +33,7 @@ def _assoc() -> AssociationService:
 
 
 def _ip(request: Request) -> str:
-    for h in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
+    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):  # cf-connecting-ip is Cloudflare trusted real-IP
         v = request.headers.get(h, "")
         if v:
             return v.split(",")[0].strip()

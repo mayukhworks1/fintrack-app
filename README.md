@@ -74,13 +74,20 @@ Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`, `sta
 ### Status Board (`/status`)
 - Three view modes: **Card** (grid by client) · **List** (compact table) · **Board** (Kanban by Status)
 - Status colour coding: Completed=green · In progress=blue · On Hold=amber · Input Pending=orange · Not started=grey
-- Status filter + client filter + full-text search
+- Filters: status dashboard strip, client filter, full-text search, and advanced multi-condition filters
+- Configurable list columns: Client · Project · Status · Short Status · Detailed Status · Last Modified
+- Saved local views + internal URL state via `?v=` for authenticated users
 - Multi-select with floating action bar → AI Update narrative + Share with manager
-- Editor: create/edit/delete with modal; Status is a 5-option single-select field
+- Editor: create/edit/delete with modal; Kanban drag/drop updates status directly
+- Status picklist API: read current options and add a new `Status` option when the Teable token has field/schema edit permission
 - Data synced to PG mirror via 3-tier sync + webhook; changes bust AI caches immediately
 
 ### Shared Manager Views (`/view/:token`)
-- Generate public URLs for selected projects — no login required for viewer
+- Generate public URLs for selected status records — no login required for viewer
+- Access modes: `read` and `edit`
+- Shared links store sanitized `view_config` for public Card / List / Board rendering
+- Public page includes local search, client/status filtering, and view switching for the recipient
+- Edit-capable links can update only `Status`, `Short Status`, and `Current Status (Detailed)` and are rate-limited
 - Full access tracking: IP, geo, OS, browser, device (stored in `shared_view_accesses`)
 - Controls: title, expiry presets (Never / 1h / 24h / 3d / 7d / 30d), enable/disable, delete
 - Manage Links modal: real-time toggle (optimistic UI), access log per link
@@ -134,7 +141,7 @@ Token: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL.
 | `status_mirror` | Current Status replica — includes `status VARCHAR(100)` for the Status single-select field |
 | `record_history` | Field-level change log with full actor attribution |
 | `sync_log` | Sync run metadata per table |
-| `shared_views` | Manager share links (token, title, record_ids, expiry, is_active, access_count) |
+| `shared_views` | Manager share links (token, title, record_ids, expiry, is_active, access_mode, view_config, access_count) |
 | `shared_view_accesses` | Per-access tracking: IP, geo, OS, browser, device, user-agent |
 
 Schema is bootstrapped idempotently: `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.

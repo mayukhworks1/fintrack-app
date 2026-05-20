@@ -285,7 +285,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, onLink, isEditor }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5"
-          style={{ background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.14)}, rgba(255,255,255,0.98))`, borderBottom: '1px solid var(--border)' }}>
+          style={{ background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.14)}, var(--card-bg))`, borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
@@ -1104,9 +1104,14 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
         title: title.trim() || null,
         record_ids: selectedRecords.map(r => r.id),
         expires_hours: expiry || null,
-        access_mode: accessMode,
+        access_mode: isViewShare ? 'read' : accessMode,  // view shares are always read-only
+        resource_type: 'status',
       }
-      if (viewConfig) payload.view_config = viewConfig
+      if (viewConfig) {
+        // Strip advancedConditions — they're internal-only and not supported by the public viewer
+        const { advancedConditions: _stripped, ...safeConfig } = viewConfig
+        payload.view_config = safeConfig
+      }
       const data = await api.sharedViews.create(payload)
       setShareData(data); setStep('created')
     } catch (e) { setError(e.message || 'Failed to create share link') }
@@ -1167,29 +1172,31 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Access</label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: 'read', label: 'Read only', hint: 'Recipients can view, filter, and switch layouts.' },
-                    { id: 'edit', label: 'Can edit', hint: 'Recipients can update status, headline, and details.' },
-                  ].map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setAccessMode(opt.id)}
-                      className="rounded-xl px-3 py-2 text-left transition-all"
-                      style={{
-                        background: accessMode === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
-                        border: `1px solid ${accessMode === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
-                      }}
-                    >
-                      <p className="text-xs font-semibold" style={{ color: accessMode === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
-                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
-                    </button>
-                  ))}
+              {!isViewShare && (
+                <div>
+                  <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Access</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'read', label: 'Read only', hint: 'Recipients can view, filter, and switch layouts.' },
+                      { id: 'edit', label: 'Can edit', hint: 'Recipients can update status, headline, and details.' },
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setAccessMode(opt.id)}
+                        className="rounded-xl px-3 py-2 text-left transition-all"
+                        style={{
+                          background: accessMode === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
+                          border: `1px solid ${accessMode === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
+                        }}
+                      >
+                        <p className="text-xs font-semibold" style={{ color: accessMode === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>{error}</p>}
               <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
                 <Shield size={13} style={{ color: '#0ea5e9', marginTop: 1, flexShrink: 0 }} />
@@ -1268,6 +1275,7 @@ function ManageSharesModal({ onClose }) {
   const [accesses, setAccesses] = useState([])
   const [loadingAcc, setLoadingAcc] = useState(false)
   const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
+  const [confirmDelete, setConfirmDelete] = useState(null) // token to confirm delete
   useEffect(() => { loadViews() }, [])
   async function loadViews() { setLoading(true); try { const r = await api.sharedViews.list('status'); setViews(r.views || []) } catch {} finally { setLoading(false) } }
   async function toggleActive(view) {
@@ -1297,7 +1305,6 @@ function ManageSharesModal({ onClose }) {
     }
   }
   async function deleteView(token) {
-    if (!confirm('Delete this share link?')) return
     const prev = views; setViews(vs => vs.filter(v => v.token !== token))
     if (selected === token) setSelected(null)
     try { await api.sharedViews.delete(token); showToast('Deleted', 'success') }
@@ -1396,7 +1403,7 @@ function ManageSharesModal({ onClose }) {
                         </button>
                       </div>
                       <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}><MapPin size={12} /></button>
-                      <button onClick={() => deleteView(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}
+                      <button onClick={() => setConfirmDelete(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                         onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.6)'}>
                         <Trash2 size={12} />
@@ -1457,6 +1464,14 @@ function ManageSharesModal({ onClose }) {
           })}
         </div>
       </div>
+      {confirmDelete && (
+        <ConfirmModal
+          message="Delete this share link? Anyone with the URL will immediately lose access."
+          confirmLabel="Delete link"
+          onConfirm={() => deleteView(confirmDelete)}
+          onClose={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1510,8 +1525,10 @@ function SavedViewsMenu({ currentConfig, onLoad, onClose }) {
               </p>
             )}
           </button>
-          <button onClick={() => deleteView(v.id)} className="btn-icon p-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2"
-            style={{ color: 'rgba(239,68,68,0.6)' }}>
+          <button onClick={() => deleteView(v.id)}
+            className="btn-icon p-1 ml-2 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity"
+            style={{ color: '#ef4444' }}
+            title="Delete saved view">
             <Trash size={12} />
           </button>
         </div>
@@ -1541,6 +1558,43 @@ function SavedViewsMenu({ currentConfig, onLoad, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Column Selector (for List view)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Confirm Modal — replaces window.confirm everywhere
+// ─────────────────────────────────────────────────────────────────────────────
+function ConfirmModal({ message, confirmLabel = 'Delete', onConfirm, onClose }) {
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)' }}
+      onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-5"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <Trash size={16} style={{ color: '#ef4444' }} />
+          </div>
+          <p className="text-sm leading-relaxed pt-1.5" style={{ color: 'var(--text-1)' }}>{message}</p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+          <button
+            onClick={() => { onConfirm(); onClose() }}
+            className="text-sm px-4 py-2 rounded-xl font-semibold transition-all"
+            style={{ background: '#ef4444', color: '#fff', border: '1px solid rgba(239,68,68,0.3)' }}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ColumnSelector({ columns, onChange, onClose }) {
   return (
     <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-2xl shadow-xl overflow-hidden"
@@ -1797,6 +1851,7 @@ export default function StatusBoard() {
   const [shareViewModal, setShareViewModal] = useState(false)
   const [draggedId, setDraggedId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
+  const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm, confirmLabel? }
 
   const statusOptions = useMemo(() => {
     const dynamic = statusPicklists?.Status?.options || []
@@ -1989,15 +2044,20 @@ export default function StatusBoard() {
     finally { setSaving(false) }
   }
   async function handleDelete(record) {
-    if (!window.confirm(`Delete status for ${record.fields?.['Project']}?`)) return
-    setDeletingId(record.id)
-    if (detailRecord?.id === record.id) setDetailRecord(null)
-    try {
-      await api.status.delete(record.id); showToast('Deleted', 'success')
-      setRecords(rs => rs.filter(r => r.id !== record.id))
-      setSelectedIds(s => { const n = new Set(s); n.delete(record.id); return n })
-    } catch (e) { showToast(e.message || 'Failed', 'error') }
-    finally { setDeletingId(null) }
+    setConfirmDialog({
+      message: `Delete status update for "${record.fields?.['Project']}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        setDeletingId(record.id)
+        if (detailRecord?.id === record.id) setDetailRecord(null)
+        try {
+          await api.status.delete(record.id); showToast('Deleted', 'success')
+          setRecords(rs => rs.filter(r => r.id !== record.id))
+          setSelectedIds(s => { const n = new Set(s); n.delete(record.id); return n })
+        } catch (e) { showToast(e.message || 'Failed', 'error') }
+        finally { setDeletingId(null) }
+      },
+    })
   }
 
   // ── Kanban drag-and-drop ──────────────────────────────────────────────────
@@ -2499,10 +2559,16 @@ export default function StatusBoard() {
         {/* ══ BOARD VIEW (Kanban + DnD) ══ */}
         {!loading && !error && viewType === 'board' && (
           <div>
-            {isEditor && (
-              <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+            {isEditor && !boardIsDraggable && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3 text-xs font-medium"
+                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#d97706' }}>
                 <GripVertical size={12} />
-                {boardIsDraggable ? 'Drag cards between columns to update their status' : `Board is grouped by ${boardGroupBy}. Switch back to Status to drag and update.`}
+                Grouped by <strong>{boardGroupBy}</strong> — drag &amp; drop is disabled. Switch "Group by" to <strong>Status</strong> to move cards between columns.
+              </div>
+            )}
+            {isEditor && boardIsDraggable && (
+              <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                <GripVertical size={12} /> Drag cards between columns to update their status
               </p>
             )}
             <div className="overflow-x-auto -mx-4 px-4 pb-4">
@@ -2625,6 +2691,14 @@ export default function StatusBoard() {
       )}
       {manageModal && (
         <ManageSharesModal onClose={() => setManageModal(false)} />
+      )}
+      {confirmDialog && (
+        <ConfirmModal
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel || 'Delete'}
+          onConfirm={confirmDialog.onConfirm}
+          onClose={() => setConfirmDialog(null)}
+        />
       )}
     </div>
   )

@@ -8,8 +8,11 @@ import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 
 /* ───────── Inline text formatting (bold, strip stray markdown) ───────── */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
 function formatInline(text) {
-  return text
+  return escHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-1);font-weight:600">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/[`#*_]/g, '')

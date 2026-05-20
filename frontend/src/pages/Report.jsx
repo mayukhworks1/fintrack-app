@@ -15,7 +15,8 @@ function AiText({ text }) {
 
   const isBullet   = (s) => /^[-•·]\s/.test(s)
   const isNumbered = (s) => /^\d+\.\s/.test(s)
-  const cleanMd    = (s) => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g, '')
+  const escHtml    = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const cleanMd    = (s) => escHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g, '')
 
   while (i < lines.length) {
     const line = lines[i].trim()
