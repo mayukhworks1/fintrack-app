@@ -32,7 +32,9 @@ import InvoicePicklist from '../components/InvoicePicklist'
 import { formatInr } from '../utils/format'
 
 // ── Status config ─────────────────────────────────────────────────────────────
-const STATUS_OPTIONS = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
+// Fallback only — real options are fetched dynamically from the picklist API
+// and merged at runtime in the component. This array is never shown on its own.
+const STATUS_OPTIONS_FALLBACK_FALLBACK = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
 const THEME_PRESETS = {
   cobalt: {
     id: 'cobalt',
@@ -322,7 +324,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}>
       <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-[28px] shadow-2xl"
+        className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -364,7 +366,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
           </div>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
 
           {/* ── Linked Invoices — FIRST, most prominent ──────────────────── */}
           <div className="rounded-2xl overflow-hidden"
@@ -2012,8 +2014,8 @@ export default function StatusBoard() {
 
   const statusOptions = useMemo(() => {
     const dynamic = statusPicklists?.Status?.options || []
-    const merged = [...new Set([...dynamic, ...STATUS_OPTIONS])]
-    return merged.length ? merged : STATUS_OPTIONS
+    const merged = [...new Set([...dynamic, ...STATUS_OPTIONS_FALLBACK])]
+    return merged.length ? merged : STATUS_OPTIONS_FALLBACK
   }, [statusPicklists])
   const recordsForView = useMemo(
     () => records.map(r => {

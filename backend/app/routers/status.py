@@ -15,13 +15,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..services.associations import AssociationService
 from ..services.status import StatusService
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
 from ..db.valkey import rate_check, cache_get, cache_set, cache_bust
 
-_STATUS_LIST_TTL = 60   # seconds — cache the full status list for 60 s
+_STATUS_LIST_TTL = 300   # 5 minutes — PG mirror is source of truth, bust on mutation
 
 
 async def _bust_status_cache() -> None:
@@ -33,10 +32,6 @@ router = APIRouter(prefix="/api/status", tags=["status"])
 
 def _svc() -> StatusService:
     return StatusService()
-
-
-def _assoc() -> AssociationService:
-    return AssociationService()
 
 
 def _ip(request: Request) -> str:
@@ -84,7 +79,6 @@ async def list_statuses(
             client=client or None,
             project=project or None,
         )
-        records = await _assoc().hydrate_records("status", records)
         result = {"records": records, "total": len(records)}
         await cache_set(cache_key, result, _STATUS_LIST_TTL)
         return result
@@ -176,9 +170,7 @@ async def get_status(
 ):
     svc = _svc()
     try:
-        record = await svc.get_record(record_id)
-        hydrated = await _assoc().hydrate_records("status", [record])
-        return hydrated[0] if hydrated else record
+        return await svc.get_record(record_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 

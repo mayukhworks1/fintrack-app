@@ -7,7 +7,7 @@ from ..db.attribution import record_user_attribution
 from ..db.valkey import cache_get, cache_set, cache_bust
 from .deps import require_auth, require_editor
 
-_PROJECTS_LIST_TTL = 30   # seconds
+_PROJECTS_LIST_TTL = 180   # 3 minutes — bust on any mutation
 
 
 async def _bust_projects_cache() -> None:
