@@ -2,10 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Favicon & PWA -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Viewport -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Theme colour (matches --accent blue in light mode) -->
+    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e3a8a" media="(prefers-color-scheme: dark)" />
+
+    <!-- SEO / social -->
+    <meta name="description" content="AI-powered project finance management — track projects, invoices, and client budgets in real time." />
+    <meta name="application-name" content="FinTrack" />
+    <meta property="og:title" content="FinTrack — AI Project Finance Manager" />
+    <meta property="og:description" content="AI-powered project finance management — track projects, invoices, and client budgets in real time." />
+    <meta property="og:type" content="website" />
+
     <title>FinTrack — AI Project Finance Manager</title>
-    <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"61e6a2eca988429ba09a654faadbc31d"}'></script>
+
+    <!-- Cloudflare Web Analytics -->
+    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token":"61e6a2eca988429ba09a654faadbc31d"}'></script>
   </head>
   <body>
     <div id="root"></div>
