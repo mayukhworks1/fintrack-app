@@ -345,11 +345,11 @@ export default function AIAssistant() {
         )))
       } else {
         const raw = e.message || ''
-        const errMsg = raw.includes('500')
-          ? 'Backend error — check that OPENROUTER_API_KEY is set in HF Space secrets'
-          : raw.includes('OPENROUTER')
-            ? raw
-            : `AI error: ${raw}`
+        const errMsg = /OPENROUTER_API_KEY|Invalid OPENROUTER_API_KEY|quota exceeded/i.test(raw)
+          ? raw
+          : raw
+            ? `AI error: ${raw}`
+            : 'AI error: Something went wrong while generating the response.'
         setHistory(prev => prev.map((entry, index) => (
           index === assistantIndex
             ? { ...entry, content: errMsg, error: true, streaming: false }
@@ -407,7 +407,7 @@ export default function AIAssistant() {
             <div className="flex items-center gap-1.5">
               <Database size={9} style={{ color: 'var(--accent)' }} />
               <p className="text-[10px] sm:text-xs truncate" style={{ color: 'var(--text-3)' }}>
-                Live data · nvidia/nemotron
+                Fast mirror-backed context · multi-model fallback
               </p>
             </div>
           </div>
@@ -506,7 +506,7 @@ export default function AIAssistant() {
         <div className="flex items-center justify-between gap-2 mt-2" style={{ color: 'var(--text-3)' }}>
           <span className="text-[10px] sm:text-xs flex items-center gap-1.5 min-w-0">
             <Database size={10} style={{ color: 'var(--accent)' }} className="flex-shrink-0" />
-            <span className="truncate">AI reads live project data every response</span>
+            <span className="truncate">AI reads synced portfolio data plus live status context on every response</span>
           </span>
           {input.length > 0 && (
             <span className="text-[10px] sm:text-xs tabular-nums flex-shrink-0"

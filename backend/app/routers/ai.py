@@ -1095,19 +1095,9 @@ async def ai_report(
 
     logger = logging.getLogger("fintrack.ai.report")
 
-    # ── Rate limiting (10 force-regenerations / min per IP) ──────────────────
-    # Only count against the rate limit when bypassing cache (force=True or cold)
-    ip = _client_ip(request)
-    allowed, _ = await rate_check(ip, limit=10, window_sec=60)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many report requests — limited to 10/min. Try again shortly.",
-            headers={"Retry-After": "60"},
-        )
-
     try:
         pool = get_pool()
+        ip = _client_ip(request)
 
         # ── Force regenerate: bypass cache by busting it first ────────────
         if force:
@@ -1182,6 +1172,18 @@ async def ai_report(
                     from_cache = remote is not None
             except Exception:
                 pass
+
+        # ── Rate limiting (10 expensive report builds / min per IP) ──────────
+        # Cached reads should stay fast and should not burn the regeneration
+        # limit. Only cold-cache or force=true requests count here.
+        if force or not from_cache:
+            allowed, _ = await rate_check(ip, limit=10, window_sec=60)
+            if not allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Too many report regenerations — limited to 10/min. Try again shortly.",
+                    headers={"Retry-After": "60"},
+                )
 
         cached_result = await cache.get_or_set(
             key=_REPORT_CACHE_KEY,
