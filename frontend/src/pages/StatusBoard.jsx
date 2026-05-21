@@ -1293,9 +1293,12 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
   const [shareData, setShareData] = useState(null)
   const [copied,    setCopied]    = useState(false)
   const shareUrl = shareData ? `${window.location.origin}/view/${shareData.token}` : ''
+  const selectedExistingLink = useMemo(
+    () => existingLinks.find(link => link.token === existingToken) || null,
+    [existingLinks, existingToken],
+  )
 
   useEffect(() => {
-    if (!isViewShare) return
     let cancelled = false
     async function loadExistingLinks() {
       setLoadingLinks(true)
@@ -1316,7 +1319,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
     }
     loadExistingLinks()
     return () => { cancelled = true }
-  }, [isViewShare])
+  }, [])
 
   async function createShare() {
     setSaving(true); setError(null)
@@ -1338,13 +1341,12 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
         let data
         if (linkMode === 'update') {
           if (!existingToken) throw new Error('Choose an existing link to update.')
-          data = await api.sharedViews.update(existingToken, {
+          const updatePayload = {
             title: title.trim() || '',
             record_ids: payload.record_ids,
-            expires_hours: expiry || -1,
-            access_mode: 'read',
             view_config: payload.view_config || null,
-          })
+          }
+          data = await api.sharedViews.update(existingToken, updatePayload)
         } else {
           data = await api.sharedViews.create(payload)
         }
@@ -1362,7 +1364,13 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
           access_mode: accessMode,
           resource_type: 'status',
         }
-        const data = await api.sharedViews.create(payload)
+        const data = linkMode === 'update'
+          ? await api.sharedViews.update(existingToken, {
+              title: title.trim() || '',
+              record_ids: payload.record_ids,
+              access_mode: accessMode,
+            })
+          : await api.sharedViews.create(payload)
         setShareData(data); setStep('created')
       }
     } catch (e) { setError(e.message || 'Failed to create share link') }
@@ -1397,61 +1405,66 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
         <div className="p-5 space-y-4">
           {step === 'form' && (
             <>
-              {isViewShare && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Link action</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {[
-                      { id: 'create', label: 'Create new link', hint: 'Generate a fresh URL for this live view.' },
-                      { id: 'update', label: 'Update existing link', hint: 'Keep the same URL but replace what this link shows.' },
-                    ].map(opt => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setLinkMode(opt.id)}
-                        className="rounded-xl px-3 py-2 text-left transition-all"
-                        style={{
-                          background: linkMode === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
-                          border: `1px solid ${linkMode === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
-                        }}
-                      >
-                        <p className="text-xs font-semibold" style={{ color: linkMode === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
-                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
-                      </button>
-                    ))}
-                  </div>
-                  {linkMode === 'update' && (
-                    <div>
-                      <label className="block text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>Existing link</label>
-                      <select
-                        className="input-field w-full text-sm"
-                        value={existingToken}
-                        onChange={e => {
-                          const token = e.target.value
-                          setExistingToken(token)
-                          const current = existingLinks.find(link => link.token === token)
-                          if (current) {
-                            setTitle(current.title || '')
-                            setAccessMode(current.access_mode || 'read')
-                          }
-                        }}
-                        disabled={loadingLinks || existingLinks.length === 0}
-                      >
-                        {loadingLinks && <option value="">Loading links…</option>}
-                        {!loadingLinks && existingLinks.length === 0 && <option value="">No existing links available</option>}
-                        {!loadingLinks && existingLinks.map(link => (
-                          <option key={link.token} value={link.token}>
-                            {link.title || 'Untitled link'}{link.is_dynamic ? ' · live' : ' · snapshot'}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>
-                        Updating keeps the same public URL and replaces its scope with your current visible view.
-                      </p>
-                    </div>
-                  )}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Link action</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'create', label: 'Create new link', hint: 'Generate a fresh URL for this share.' },
+                    { id: 'update', label: 'Update existing link', hint: 'Keep the same URL but replace what this link shows.' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setLinkMode(opt.id)
+                        if (opt.id === 'update' && selectedExistingLink) {
+                          setTitle(selectedExistingLink.title || '')
+                          setAccessMode(selectedExistingLink.access_mode || 'read')
+                        }
+                      }}
+                      className="rounded-xl px-3 py-2 text-left transition-all"
+                      style={{
+                        background: linkMode === opt.id ? 'var(--accent-dim)' : 'var(--bg-input)',
+                        border: `1px solid ${linkMode === opt.id ? 'var(--accent-soft)' : 'var(--border)'}`,
+                      }}
+                    >
+                      <p className="text-xs font-semibold" style={{ color: linkMode === opt.id ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</p>
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>{opt.hint}</p>
+                    </button>
+                  ))}
                 </div>
-              )}
+                {linkMode === 'update' && (
+                  <div>
+                    <label className="block text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>Existing link</label>
+                    <select
+                      className="input-field w-full text-sm"
+                      value={existingToken}
+                      onChange={e => {
+                        const token = e.target.value
+                        setExistingToken(token)
+                        const current = existingLinks.find(link => link.token === token)
+                        if (current) {
+                          setTitle(current.title || '')
+                          setAccessMode(current.access_mode || 'read')
+                        }
+                      }}
+                      disabled={loadingLinks || existingLinks.length === 0}
+                    >
+                      {loadingLinks && <option value="">Loading links…</option>}
+                      {!loadingLinks && existingLinks.length === 0 && <option value="">No existing links available</option>}
+                      {!loadingLinks && existingLinks.map(link => (
+                        <option key={link.token} value={link.token}>
+                          {link.title || 'Untitled link'}{link.is_dynamic ? ' · live' : ' · snapshot'}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>
+                      Updating keeps the same public URL and replaces its scope.
+                      {isViewShare ? ' Filters and layout from your current visible view will be saved onto that same link.' : ' Selected projects in this modal will replace the existing snapshot scope.'}
+                    </p>
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {selectedRecords.slice(0, 8).map(r => (
                   <span key={r.id} className="text-[11px] px-2 py-0.5 rounded-lg font-medium"
@@ -1467,6 +1480,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                 <input type="text" className="input-field w-full text-sm" placeholder="e.g. May 2026 Status Update"
                   value={title} onChange={e => setTitle(e.target.value)} maxLength={200} />
               </div>
+              {linkMode === 'create' && (
               <div>
                 <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Expires</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -1479,6 +1493,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                   ))}
                 </div>
               </div>
+              )}
               {!isViewShare && (
                 <div>
                   <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Access</label>
@@ -1513,6 +1528,11 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                     : 'IP, location, device & browser tracked on every open. Disable or delete anytime.'}
                 </p>
               </div>
+              {linkMode === 'update' && (
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                  Existing expiry and other link settings stay unchanged here. Use `Links` if you want to change those separately.
+                </p>
+              )}
               {isViewShare && (
                 <div className="space-y-1">
                   <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -1522,8 +1542,8 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
               )}
               <div className="flex items-center justify-end gap-2">
                 <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-                <button onClick={createShare} disabled={saving || (isViewShare && linkMode === 'update' && !existingToken) || (!isViewShare && (selectedRecords.length === 0 || selectedRecords.length > MAX_SHARED_VIEW_RECORDS))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} {isViewShare && linkMode === 'update' ? 'Update Link' : 'Generate Link'}
+                <button onClick={createShare} disabled={saving || (linkMode === 'update' && !existingToken) || (!isViewShare && linkMode === 'create' && (selectedRecords.length === 0 || selectedRecords.length > MAX_SHARED_VIEW_RECORDS)) || (!isViewShare && linkMode === 'update' && selectedRecords.length === 0)} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} {linkMode === 'update' ? 'Update Link' : 'Generate Link'}
                 </button>
               </div>
             </>
@@ -1536,8 +1556,8 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                   <CheckCheck size={24} style={{ color: '#10b981' }} />
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{isViewShare && linkMode === 'update' ? 'Link updated!' : 'Link ready!'}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{isViewShare && linkMode === 'update' ? 'The existing public URL now reflects your current visible view.' : 'Share this URL — no login required.'}</p>
+                  <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{linkMode === 'update' ? 'Link updated!' : 'Link ready!'}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{linkMode === 'update' ? 'The existing public URL now reflects your latest saved scope.' : 'Share this URL — no login required.'}</p>
                   {isViewShare && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
                       style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
