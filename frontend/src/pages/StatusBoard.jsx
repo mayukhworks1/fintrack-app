@@ -547,7 +547,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
             <div className="rounded-2xl p-4" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: sc.color }}>Current Status</p>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold"
-                style={{ background: '#ffffff', color: sc.color, border: `1px solid ${sc.border}` }}>
+                style={{ background: 'var(--card-bg)', color: sc.color, border: `1px solid ${sc.border}` }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: sc.dot }} />
                 {status}
               </span>
@@ -2588,7 +2588,7 @@ export default function StatusBoard() {
       <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 pb-28">
 
         {/* ── Page header ── */}
-        <div className="rounded-[26px] border p-4 sm:p-5 space-y-4" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(247,249,252,0.96))', borderColor: 'var(--border)', boxShadow: '0 18px 40px rgba(15,23,42,0.06)' }}>
+        <div className="rounded-[26px] border p-4 sm:p-5 space-y-4" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
           <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-12 h-12 rounded-[18px] flex items-center justify-center flex-shrink-0"
