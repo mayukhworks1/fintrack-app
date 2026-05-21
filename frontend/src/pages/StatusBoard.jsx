@@ -2471,13 +2471,12 @@ export default function StatusBoard() {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) { setLoading(true); setError(null) }
     try {
-      const [res, picklists] = await Promise.all([
-        api.status.list(),
-        api.status.picklists.get().catch(() => ({})),
-      ])
+      const res = await api.status.list()
       setRecords(res.records || [])
       if (!silent) setPendingStatusById({})
-      setStatusPicklists(picklists || {})
+      api.status.picklists.get()
+        .then(picklists => setStatusPicklists(picklists || {}))
+        .catch(() => {})
     }
     catch (e) { if (!silent) setError(e.message || 'Failed to load') }
     finally { if (!silent) setLoading(false) }

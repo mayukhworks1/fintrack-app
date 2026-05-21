@@ -223,20 +223,26 @@ class StatusService:
         cache_key = f"status:list:{client}:{project}"
 
         async def _load() -> list[dict]:
-            # 1. Always read from Teable (source of truth — real-time data)
-            try:
-                return await self._list_from_teable(client=client, project=project)
-            except Exception as exc:
-                # 2. Only fall back to PG mirror if Teable is unreachable
-                logger.warning("Teable unavailable, falling back to PG mirror: %s", exc)
-                pg_result = await self.list_all_from_pg(client=client, project=project)
-                if pg_result is not None:
-                    return pg_result
-                raise
+            pg_result = await self.list_all_from_pg(client=client, project=project)
+            if pg_result is not None:
+                return pg_result
+            return await self._list_from_teable(client=client, project=project)
 
         return await cache.get_or_set(cache_key, ttl=_TTL_STATUS, loader=_load)
 
     async def get_record(self, record_id: str) -> dict[str, Any]:
+        pool = get_pool()
+        if pool:
+            try:
+                row = await pool.fetchrow(
+                    "SELECT teable_id, fields FROM status_mirror WHERE teable_id = $1",
+                    record_id,
+                )
+                if row:
+                    fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+                    return {"id": row["teable_id"], "fields": fields or {}}
+            except Exception as exc:
+                logger.debug("status_mirror PG get failed: %s", exc)
         async with httpx.AsyncClient() as http:
             r = await http.get(
                 f"{self._record_url}/{record_id}",

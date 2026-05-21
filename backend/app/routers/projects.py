@@ -41,7 +41,7 @@ async def list_projects(
     cached = await cache_get(cache_key)
     if cached is not None:
         return cached
-    records = await teable.list_records(
+    records = await teable.list_records_from_pg(
         status=resolved,
         client=client,
         order_by_field=order_by,
@@ -49,6 +49,15 @@ async def list_projects(
         take=limit,
         skip=skip,
     )
+    if records is None:
+        records = await teable.list_records(
+            status=resolved,
+            client=client,
+            order_by_field=order_by,
+            order_dir=order_dir,
+            take=limit,
+            skip=skip,
+        )
     records = await associations.hydrate_records("projects", records)
     result = {"records": records, "count": len(records)}
     await cache_set(cache_key, result, _PROJECTS_LIST_TTL)
@@ -58,6 +67,9 @@ async def list_projects(
 @router.get("/summary")
 async def get_summary(_role: str = Depends(require_auth)):
     teable = get_teable()
+    summary = await teable.get_summary_from_pg()
+    if summary is not None:
+        return summary
     return await teable.get_summary()
 
 

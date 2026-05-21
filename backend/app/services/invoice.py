@@ -3,10 +3,12 @@ Invoice Teable service — table tblyWvNkprE1HnaVZIH
 Handles CRUD + summary for Invoice Tracking.
 """
 import json
+import logging
 from typing import Any, Optional
 import httpx
 from ..config import settings
 from ..utils.cache import cache
+from ..db.postgres import get_pool
 
 # ── Field IDs for filter/sort params (must use IDs, not names) ─────────────
 INVOICE_FIELD_IDS = {
@@ -39,6 +41,8 @@ _TTL_LIST    = 15   # invoice list/sort/filter results
 _TTL_ALL     = 30   # full record dump (used by summary + AI)
 _TTL_SUMMARY = 30   # computed summary
 
+logger = logging.getLogger("fintrack.invoices")
+
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
     cache.bust(prefix="invoice:")
@@ -60,6 +64,179 @@ class InvoiceService:
     @property
     def _record_url(self):
         return f"{self.base_url}/api/table/{self.table_id}/record"
+
+    async def list_invoices_from_pg(
+        self,
+        status: Optional[str] = None,
+        project: Optional[str] = None,
+        limit: int = 200,
+        skip: int = 0,
+        order_by: str = "Raised Date",
+        order: str = "desc",
+    ) -> dict | None:
+        pool = get_pool()
+        if not pool:
+            return None
+        try:
+            where: list[str] = []
+            params: list[Any] = []
+            idx = 1
+            if status:
+                where.append(f"payment_status = ${idx}")
+                params.append(status)
+                idx += 1
+            if project:
+                where.append(f"project = ${idx}")
+                params.append(project)
+                idx += 1
+            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            sort_map = {
+                "Raised Date": "raised_date",
+                "Invoice Number": "invoice_number",
+                "Payment Status": "payment_status",
+                "Project": "project",
+                "Amount Raised": "amount_raised",
+                "Amount with Tax": "amount_with_tax",
+                "Amount Received": "amount_received",
+                "Cleared Date": "cleared_date",
+            }
+            sort_col = sort_map.get(order_by, "raised_date")
+            order_sql = f"ORDER BY {sort_col} {order.upper()} NULLS LAST, synced_at DESC"
+
+            total = await pool.fetchval(f"SELECT COUNT(*) FROM invoices_mirror {where_sql}", *params)
+            rows = await pool.fetch(
+                f"""
+                SELECT teable_id, fields
+                FROM invoices_mirror
+                {where_sql}
+                {order_sql}
+                LIMIT ${idx} OFFSET ${idx+1}
+                """,
+                *params, limit, skip,
+            )
+            records: list[dict[str, Any]] = []
+            for row in rows:
+                fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+                records.append({"id": row["teable_id"], "fields": fields or {}})
+            return {"records": records, "total": total or len(records)}
+        except Exception as exc:
+            logger.debug("invoices_mirror PG list failed: %s", exc)
+            return None
+
+    async def get_invoice_from_pg(self, record_id: str) -> dict | None:
+        pool = get_pool()
+        if not pool:
+            return None
+        try:
+            row = await pool.fetchrow(
+                "SELECT teable_id, fields FROM invoices_mirror WHERE teable_id = $1",
+                record_id,
+            )
+            if not row:
+                return None
+            fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+            return {"id": row["teable_id"], "fields": fields or {}}
+        except Exception as exc:
+            logger.debug("invoices_mirror PG get failed: %s", exc)
+            return None
+
+    def _compute_summary(self, records: list[dict]) -> dict:
+        total_raised = total_with_tax = total_received = total_outstanding = 0.0
+        by_status: dict[str, int] = {}
+        by_status_amounts: dict[str, float] = {}
+        by_project: dict[str, dict] = {}
+        pending_invoices: list[dict] = []
+        overdue_invoices: list[dict] = []
+
+        for r in records:
+            f = r.get("fields", {})
+            raised      = float(f.get("Amount Raised") or 0)
+            with_tax    = float(f.get("Amount with Tax") or 0)
+            status      = f.get("Payment Status", "Unknown")
+            project     = f.get("Project", "Unknown")
+            aging       = float(f.get("Agening (Days)") or 0)
+            if not aging and f.get("Raised Date"):
+                from datetime import datetime, timezone
+                try:
+                    rd = datetime.fromisoformat(f["Raised Date"].replace("Z", "+00:00"))
+                    aging = (datetime.now(timezone.utc) - rd).days
+                except Exception:
+                    pass
+            cancelled = status == "Cancelled"
+
+            if not cancelled:
+                total_raised += raised
+                total_with_tax += with_tax
+                if status == "Paid":
+                    total_received += raised
+                else:
+                    total_outstanding += raised
+
+            by_status[status] = by_status.get(status, 0) + 1
+            if not cancelled:
+                by_status_amounts[status] = round(by_status_amounts.get(status, 0.0) + raised, 2)
+
+            if project not in by_project:
+                by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
+            if not cancelled:
+                by_project[project]["raised"] += raised
+                if status == "Paid":
+                    by_project[project]["received"] += raised
+                else:
+                    by_project[project]["outstanding"] += raised
+            by_project[project]["count"] += 1
+
+            if status == "Pending":
+                pending_invoices.append({
+                    "id":          r.get("id"),
+                    "invoice_no":  f.get("Invoice Number", ""),
+                    "project":     project,
+                    "amount":      with_tax,
+                    "raised_date": f.get("Raised Date"),
+                    "followup":    f.get("Next followup"),
+                    "aging":       aging,
+                })
+                overdue_invoices.append({
+                    "id":         r.get("id"),
+                    "invoice_no": f.get("Invoice Number", ""),
+                    "project":    project,
+                    "aging":      aging,
+                    "amount":     with_tax,
+                    "currency":   "",
+                })
+
+        pending_invoices.sort(key=lambda x: x["aging"], reverse=True)
+        overdue_invoices.sort(key=lambda x: x["aging"], reverse=True)
+
+        return {
+            "total_raised":       round(total_raised, 2),
+            "total_with_tax":     round(total_with_tax, 2),
+            "total_received":     round(total_received, 2),
+            "total_outstanding":  round(total_outstanding, 2),
+            "total_invoices":     len(records),
+            "active_invoices":    len(records) - by_status.get("Cancelled", 0),
+            "by_status":          by_status,
+            "by_status_amounts":  by_status_amounts,
+            "by_project":         by_project,
+            "pending_invoices":   pending_invoices[:10],
+            "overdue_invoices":   overdue_invoices[:5],
+            "collection_rate":    round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
+        }
+
+    async def get_summary_from_pg(self) -> dict | None:
+        pool = get_pool()
+        if not pool:
+            return None
+        try:
+            rows = await pool.fetch("SELECT fields FROM invoices_mirror")
+            records = []
+            for row in rows:
+                fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+                records.append({"fields": fields or {}})
+            return self._compute_summary(records)
+        except Exception as exc:
+            logger.debug("invoices_mirror PG summary failed: %s", exc)
+            return None
 
     # ── List invoices with optional filters ───────────────────────────────
     async def list_invoices(
@@ -129,6 +306,9 @@ class InvoiceService:
 
     # ── Get single invoice ────────────────────────────────────────────────
     async def get_invoice(self, record_id: str) -> dict:
+        pg = await self.get_invoice_from_pg(record_id)
+        if pg is not None:
+            return pg
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(url, headers=self._headers)
@@ -170,100 +350,7 @@ class InvoiceService:
             return cached
 
         records = await self.get_all_invoices()
-
-        total_raised    = 0.0
-        total_with_tax  = 0.0
-        total_received  = 0.0
-        total_outstanding = 0.0
-        by_status: dict[str, int]        = {}
-        by_status_amounts: dict[str, float] = {}   # total Amount Raised per status
-        by_project: dict[str, dict]      = {}
-        pending_invoices: list[dict]     = []
-        overdue_invoices: list[dict]     = []
-
-        for r in records:
-            f = r.get("fields", {})
-            raised      = float(f.get("Amount Raised")       or 0)
-            with_tax    = float(f.get("Amount with Tax")     or 0)
-            received    = float(f.get("Amount Received")     or 0)
-            outstanding = float(f.get("Outstanding Amount")  or 0)
-            status      = f.get("Payment Status", "Unknown")
-            project     = f.get("Project", "Unknown")
-            aging       = float(f.get("Agening (Days)") or 0)
-            # Fallback: compute from Raised Date if Teable field is 0/null
-            if not aging and f.get("Raised Date"):
-                from datetime import datetime, timezone
-                try:
-                    rd = datetime.fromisoformat(f["Raised Date"].replace("Z", "+00:00"))
-                    aging = (datetime.now(timezone.utc) - rd).days
-                except Exception:
-                    pass
-            cancelled   = status == "Cancelled"
-
-            # Cancelled = voided, excluded from everything.
-            # Total Raised = Amount Raised (pre-GST) for Paid + Pending.
-            # Collected    = Amount Raised (pre-GST) for Paid invoices only.
-            # Outstanding  = Amount Raised (pre-GST) for Pending invoices only.
-            if not cancelled:
-                total_raised     += raised
-                total_with_tax   += with_tax
-                if status == "Paid":
-                    total_received += raised        # collected = pre-GST raised of Paid
-                else:  # Pending
-                    total_outstanding += raised     # outstanding = pre-GST raised of Pending
-
-            by_status[status] = by_status.get(status, 0) + 1
-            if not cancelled:
-                by_status_amounts[status] = round(by_status_amounts.get(status, 0.0) + raised, 2)
-
-            if project not in by_project:
-                by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
-            if not cancelled:
-                by_project[project]["raised"] += raised
-                if status == "Paid":
-                    by_project[project]["received"]    += raised
-                else:
-                    by_project[project]["outstanding"] += raised
-            by_project[project]["count"] += 1
-
-            if status == "Pending":
-                pending_invoices.append({
-                    "id":          r.get("id"),
-                    "invoice_no":  f.get("Invoice Number", ""),
-                    "project":     project,
-                    "amount":      with_tax,
-                    "raised_date": f.get("Raised Date"),
-                    "followup":    f.get("Next followup"),
-                    "aging":       aging,
-                })
-            if status == "Pending":
-                overdue_invoices.append({
-                    "id":         r.get("id"),
-                    "invoice_no": f.get("Invoice Number", ""),
-                    "project":    project,
-                    "aging":      aging,
-                    "amount":     with_tax,
-                    "currency":   "",
-                })
-
-        # Sort pending by aging desc
-        pending_invoices.sort(key=lambda x: x["aging"], reverse=True)
-        overdue_invoices.sort(key=lambda x: x["aging"], reverse=True)
-
-        summary = {
-            "total_raised":       round(total_raised, 2),
-            "total_with_tax":     round(total_with_tax, 2),
-            "total_received":     round(total_received, 2),
-            "total_outstanding":  round(total_outstanding, 2),
-            "total_invoices":     len(records),
-            "active_invoices":    len(records) - by_status.get("Cancelled", 0),
-            "by_status":          by_status,
-            "by_status_amounts":  by_status_amounts,
-            "by_project":         by_project,
-            "pending_invoices":   pending_invoices[:10],
-            "overdue_invoices":   overdue_invoices[:5],
-            "collection_rate":    round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
-        }
+        summary = self._compute_summary(records)
         cache.set("invoice:summary", summary, ttl=_TTL_SUMMARY)
         return summary
 

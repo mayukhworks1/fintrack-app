@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
@@ -54,6 +54,15 @@ const StatusBoard   = lazyWithReload(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazyWithReload(() => import('./pages/WebInvoices'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
 
+const WARM_IMPORTERS = [
+  () => import('./pages/Projects'),
+  () => import('./pages/Invoices'),
+  () => import('./pages/StatusBoard'),
+  () => import('./pages/Analytics'),
+  () => import('./pages/AIAssistant'),
+  () => import('./pages/Report'),
+]
+
 /* Lightweight chunk-loading fallback */
 function RouteFallback() {
   return (
@@ -66,6 +75,19 @@ function RouteFallback() {
 export default function App() {
   const { status, isWeb, isAll, isAdmin } = useAuth()
   const location = useLocation()
+
+  useEffect(() => {
+    if (status !== 'authed' || isAdmin) return
+    const runner = () => {
+      for (const load of WARM_IMPORTERS) load().catch(() => {})
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(runner, { timeout: 1200 })
+      return () => window.cancelIdleCallback?.(id)
+    }
+    const t = window.setTimeout(runner, 600)
+    return () => window.clearTimeout(t)
+  }, [status, isAdmin])
 
   // ── Public routes — no authentication required ──────────────────────────
   if (location.pathname.startsWith('/view/')) {
