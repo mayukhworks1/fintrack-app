@@ -223,13 +223,16 @@ class StatusService:
         cache_key = f"status:list:{client}:{project}"
 
         async def _load() -> list[dict]:
-            # 1. Try PG mirror (fast)
-            pg_result = await self.list_all_from_pg(client=client, project=project)
-            if pg_result is not None:
-                return pg_result
-            # 2. Fallback: live Teable
-            logger.debug("status_mirror PG unavailable — falling back to Teable")
-            return await self._list_from_teable(client=client, project=project)
+            # 1. Always read from Teable (source of truth — real-time data)
+            try:
+                return await self._list_from_teable(client=client, project=project)
+            except Exception as exc:
+                # 2. Only fall back to PG mirror if Teable is unreachable
+                logger.warning("Teable unavailable, falling back to PG mirror: %s", exc)
+                pg_result = await self.list_all_from_pg(client=client, project=project)
+                if pg_result is not None:
+                    return pg_result
+                raise
 
         return await cache.get_or_set(cache_key, ttl=_TTL_STATUS, loader=_load)
 

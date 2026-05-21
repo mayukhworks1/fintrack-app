@@ -614,137 +614,112 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, onInvoice, s
   const modified = f['lastModifiedTime'] || record?.createdTime || ''
   const clrHex   = clientColor(client)
   const sc       = statusStyle(status)
-  const hasDetail = detail.trim() && detail.trim() !== short.trim()
-  const pad = compact ? 'p-3' : 'p-4'
+  const p        = compact ? '0.75rem' : '1rem'
 
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-shadow duration-150 group flex flex-col"
+      className="rounded-xl overflow-hidden transition-shadow duration-150 group"
       style={{
-        background: selected ? hexToRgba(clrHex, 0.055) : 'var(--card-bg)',
+        background: 'var(--card-bg)',
         border: `1.5px solid ${selected ? clrHex : 'var(--border)'}`,
-        boxShadow: selected ? `0 0 0 3px ${hexToRgba(clrHex, 0.15)}` : '0 1px 4px rgba(0,0,0,0.06)',
+        boxShadow: selected ? `0 0 0 3px ${hexToRgba(clrHex, 0.15)}` : '0 1px 3px rgba(0,0,0,0.05)',
       }}
     >
       {/* Client accent bar */}
-      {showClientAccents && <div style={{ height: 3, background: clrHex, flexShrink: 0 }} />}
+      {showClientAccents && <div style={{ height: 3, background: clrHex }} />}
 
-      {/* Header: client chip + project + actions */}
-      <div className={`flex items-start gap-2 ${pad} pb-2`}>
-        {isEditor && (
-          <button
-            onClick={e => { e.stopPropagation(); onSelect(record.id) }}
-            className="flex-shrink-0 mt-0.5 rounded transition-all"
-            style={{
-              width: 16, height: 16, minWidth: 16,
-              background: selected ? clrHex : 'transparent',
-              border: `2px solid ${selected ? clrHex : 'var(--border)'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            title={selected ? 'Deselect' : 'Select'}
-          >
-            {selected && <Check size={9} color="#fff" strokeWidth={3.5} />}
-          </button>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1"
-            style={{
-              background: showClientAccents ? hexToRgba(clrHex, 0.1) : 'var(--bg-input)',
-              color: showClientAccents ? clrHex : 'var(--text-2)',
-              border: `1px solid ${showClientAccents ? hexToRgba(clrHex, 0.22) : 'var(--border)'}`,
-              letterSpacing: '0.01em',
-            }}>
-            {client}
-          </span>
-          <p className="text-[13px] font-bold leading-snug truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
-        </div>
-
-        {/* Action icons — always visible on mobile, hover-reveal on desktop */}
-        <div className="flex items-center gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      <div style={{ padding: p }}>
+        {/* Row 1: checkbox + client chip + project + actions */}
+        <div className="flex items-start gap-2 mb-2.5">
           {isEditor && (
-            <button onClick={e => { e.stopPropagation(); onInvoice?.(record) }}
-              className="btn-icon p-1 rounded" style={{ color: 'var(--accent)' }} title="Link invoice">
-              <Receipt size={12} />
+            <button
+              onClick={e => { e.stopPropagation(); onSelect(record.id) }}
+              className="flex-shrink-0 mt-0.5 rounded transition-all"
+              style={{
+                width: 15, height: 15, minWidth: 15,
+                background: selected ? clrHex : 'transparent',
+                border: `2px solid ${selected ? clrHex : 'var(--border)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {selected && <Check size={8} color="#fff" strokeWidth={3.5} />}
             </button>
           )}
-          <button onClick={e => { e.stopPropagation(); onDetail(record) }}
-            className="btn-icon p-1 rounded" style={{ color: 'var(--text-3)' }} title="View details">
-            <Eye size={12} />
-          </button>
-          {isEditor && !deleting && (
-            <>
-              <button onClick={e => { e.stopPropagation(); onEdit() }}
-                className="btn-icon p-1 rounded" style={{ color: 'var(--text-3)' }} title="Edit">
-                <Pencil size={11} />
+          <div className="flex-1 min-w-0">
+            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full mb-1"
+              style={{
+                background: showClientAccents ? hexToRgba(clrHex, 0.1) : 'var(--bg-input)',
+                color: showClientAccents ? clrHex : 'var(--text-2)',
+                border: `1px solid ${showClientAccents ? hexToRgba(clrHex, 0.2) : 'var(--border)'}`,
+              }}>
+              {client}
+            </span>
+            <p className="text-[13px] font-bold leading-snug truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
+          </div>
+          {/* Actions — hidden until hover */}
+          <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {isEditor && (
+              <button onClick={e => { e.stopPropagation(); onInvoice?.(record) }}
+                className="btn-icon p-1" style={{ color: 'var(--accent)' }} title="Link invoice">
+                <Receipt size={12} />
               </button>
-              <button onClick={e => { e.stopPropagation(); onDelete() }}
-                className="btn-icon p-1 rounded"
-                style={{ color: 'rgba(239,68,68,0.45)' }}
-                onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.45)'}
-                title="Delete">
-                <Trash2 size={11} />
-              </button>
-            </>
-          )}
-          {deleting && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)' }} />}
+            )}
+            <button onClick={e => { e.stopPropagation(); onDetail(record) }}
+              className="btn-icon p-1" style={{ color: 'var(--text-3)' }} title="View details">
+              <Eye size={12} />
+            </button>
+            {isEditor && !deleting && (
+              <>
+                <button onClick={e => { e.stopPropagation(); onEdit() }}
+                  className="btn-icon p-1" style={{ color: 'var(--text-3)' }} title="Edit">
+                  <Pencil size={11} />
+                </button>
+                <button onClick={e => { e.stopPropagation(); onDelete() }}
+                  className="btn-icon p-1"
+                  style={{ color: 'rgba(239,68,68,0.4)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.4)'}
+                  title="Delete">
+                  <Trash2 size={11} />
+                </button>
+              </>
+            )}
+            {deleting && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)' }} />}
+          </div>
         </div>
-      </div>
 
-      {/* Status badge row */}
-      <div className={`flex items-center justify-between px-${compact?'3':'4'} pb-2`}
-           style={{ paddingLeft: compact ? '0.75rem' : '1rem', paddingRight: compact ? '0.75rem' : '1rem' }}>
-        {status ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-            style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: sc.dot }} />
-            {status}
-          </span>
-        ) : <span />}
-        {modified && (
-          <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}>
-            <Clock size={9} />
-            {fmtShortDate(modified)}
-          </span>
+        {/* Row 2: status badge + last modified */}
+        <div className="flex items-center justify-between mb-2">
+          {status ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+              style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+              {status}
+            </span>
+          ) : <span />}
+          {modified && (
+            <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}>
+              <Clock size={9} />{fmtShortDate(modified)}
+            </span>
+          )}
+        </div>
+
+        {/* Short status — headline, up to 3 lines */}
+        {short && (
+          <p className="text-[13px] font-semibold leading-snug mb-1.5"
+            style={{ color: 'var(--text-1)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {short}
+          </p>
+        )}
+
+        {/* Detailed status — dimmer, 2-line clamp, no toggle */}
+        {detail && detail.trim() !== short.trim() && (
+          <p className="text-[12px] leading-snug"
+            style={{ color: 'var(--text-3)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {detail}
+          </p>
         )}
       </div>
-
-      {/* Short status headline */}
-      {short && (
-        <div className={`px-${compact?'3':'4'} pb-2`}
-             style={{ paddingLeft: compact ? '0.75rem' : '1rem', paddingRight: compact ? '0.75rem' : '1rem' }}>
-          <p className="text-[13px] font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>{short}</p>
-        </div>
-      )}
-
-      {/* Detailed notes — collapsible */}
-      {hasDetail && (
-        <div className="mt-auto" style={{
-          borderTop: '1px solid var(--border)',
-          background: 'var(--bg-subtle, rgba(0,0,0,0.02))',
-        }}>
-          <button
-            onClick={e => { e.stopPropagation(); onToggle() }}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold gap-1"
-            style={{ color: 'var(--text-3)' }}>
-            <span style={{ color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</span>
-            {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-          </button>
-          {expanded && (
-            <p className="px-3 pb-3 text-[12px] leading-relaxed whitespace-pre-wrap"
-              style={{ color: 'var(--text-2)' }}>
-              {detail}
-            </p>
-          )}
-          {!expanded && (
-            <p className="px-3 pb-2.5 text-[12px] leading-snug"
-              style={{ color: 'var(--text-3)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-              {detail}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 }
