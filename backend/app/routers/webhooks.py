@@ -174,19 +174,65 @@ async def receive_teable_webhook(
         return {"ok": False, "reason": "no records found in payload"}
 
     results = []
+    any_change = False
     for teable_id, fields, event in items:
         try:
             if event == "delete":
                 await mark_deleted(pool, source, mirror_table, teable_id)
                 results.append({"id": teable_id, "action": "deleted"})
                 logger.info("Webhook deleted %s/%s", source, teable_id)
+                any_change = True
             else:
                 action = await upsert_record(pool, source, mirror_table, teable_id, fields, extractor)
                 results.append({"id": teable_id, "action": action})
                 if action != "unchanged":
                     logger.info("Webhook %s %s/%s", action, source, teable_id)
+                    any_change = True
         except Exception as exc:
             logger.error("Webhook upsert failed for %s/%s: %s", source, teable_id, exc)
             results.append({"id": teable_id, "action": "error", "detail": str(exc)})
 
+    # Bust in-process + Valkey caches whenever the mirror actually changed.
+    # Without this, Teable-originated edits (not going through the app) would
+    # stay invisible for the full Valkey TTL (up to 5 minutes).
+    if any_change:
+        _bust_source_caches(source)
+
     return {"ok": True, "processed": results}
+
+
+def _bust_source_caches(source: str) -> None:
+    """
+    Bust the in-process TTL cache and schedule a Valkey bust for `source`.
+    Called after webhook updates so users see Teable-side changes immediately.
+    """
+    import asyncio
+    try:
+        from ..utils.cache import cache as _mem_cache
+        _mem_cache.bust(f"{source}:")
+    except Exception:
+        pass
+
+    try:
+        from ..db.valkey import cache_bust as _vk_bust, get_client as _vk_client
+        import asyncio as _asyncio
+
+        async def _do_vk_bust():
+            try:
+                vk = _vk_client()
+                if vk:
+                    await _vk_bust(f"{source}:")
+                    # For status, also clear AI/report caches
+                    if source == "status":
+                        await vk.delete("chat:context")
+                        await _vk_bust("report:")
+            except Exception:
+                pass
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_do_vk_bust())
+        except RuntimeError:
+            pass
+    except Exception:
+        pass

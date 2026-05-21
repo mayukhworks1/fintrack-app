@@ -24,7 +24,7 @@ from ..db.postgres import get_pool
 
 logger = logging.getLogger("fintrack.status")
 
-_TTL_STATUS   = 60   # 1-minute in-process cache
+_TTL_STATUS   = 20   # 20 s in-process cache — bust on every mutation, short fallback
 _CHAT_CTX_KEY = "chat:context"
 _REPORT_KEY   = "report:executive"
 
@@ -298,6 +298,22 @@ class StatusService:
 
     # ── Write operations ────────────────────────────────────────────────────
 
+    async def _sync_to_pg(self, teable_id: str, fields: dict) -> None:
+        """
+        Immediately upsert one status record into the PG mirror.
+        Called after every successful Teable write so reads never see stale data.
+        Failures are non-fatal — the 30 s incremental sync will catch up.
+        """
+        from ..db.postgres import get_pool
+        from ..db.sync import upsert_record as _upsert, _extract_status
+        pool = get_pool()
+        if not pool:
+            return
+        try:
+            await _upsert(pool, "status", "status_mirror", teable_id, fields, _extract_status)
+        except Exception as exc:
+            logger.debug("post-write PG mirror sync failed (non-fatal): %s", exc)
+
     async def create_record(
         self,
         fields: dict,
@@ -332,6 +348,11 @@ class StatusService:
             except Exception:
                 pass
 
+        # Immediately reflect the new record in the PG mirror so the next
+        # list_all() call sees it without waiting for the 30 s incremental sync.
+        if new_record.get("id") and new_record.get("fields"):
+            await self._sync_to_pg(new_record["id"], new_record["fields"])
+
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
         cache.bust(prefix="status:picklists")
@@ -359,10 +380,18 @@ class StatusService:
                 timeout=30,
             )
             r.raise_for_status()
+            updated = r.json()
+
+        # Immediately reflect the update in the PG mirror.
+        # Teable returns the full record on PATCH with fieldKeyType=name.
+        # If the response is missing fields (unlikely), we still have `fields`
+        # as a partial update — good enough until the 30 s sync runs.
+        resp_fields = updated.get("fields") or fields
+        await self._sync_to_pg(record_id, resp_fields)
 
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
-        return r.json()
+        return updated
 
     async def delete_record(
         self,
@@ -384,6 +413,16 @@ class StatusService:
                 timeout=30,
             )
             r.raise_for_status()
+
+        # Mark deleted in PG mirror immediately (don't wait for 30 s sync).
+        from ..db.postgres import get_pool
+        from ..db.sync import mark_deleted as _mark_deleted
+        pool = get_pool()
+        if pool:
+            try:
+                await _mark_deleted(pool, "status", "status_mirror", record_id)
+            except Exception as exc:
+                logger.debug("post-delete PG mirror sync failed (non-fatal): %s", exc)
 
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())

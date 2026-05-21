@@ -20,7 +20,7 @@ from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
 from ..db.valkey import rate_check, cache_get, cache_set, cache_bust
 
-_STATUS_LIST_TTL = 300   # 5 minutes — PG mirror is source of truth, bust on mutation
+_STATUS_LIST_TTL = 60    # 60 s — short enough that a missed bust is only a 60 s delay
 
 
 async def _bust_status_cache() -> None:
