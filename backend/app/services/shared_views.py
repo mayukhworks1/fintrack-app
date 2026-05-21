@@ -198,6 +198,24 @@ class SharedViewService:
         parts: list[str] = []
         params: list = []
         idx = 1
+
+        if "record_ids" in data:
+            record_ids = data["record_ids"] or []
+            is_dynamic = record_ids == ["__dynamic__"]
+            if not is_dynamic and not record_ids:
+                raise ValueError("At least one record_id required")
+            if not is_dynamic and len(record_ids) > _MAX_RECORD_IDS:
+                raise ValueError(f"Maximum {_MAX_RECORD_IDS} records per share")
+            parts.append(f"record_ids = ${idx}::jsonb")
+            params.append(json.dumps(record_ids))
+            idx += 1
+
+        if "view_config" in data:
+            safe_view_config = _sanitize_view_config(data["view_config"])
+            parts.append(f"view_config = ${idx}::jsonb")
+            params.append(json.dumps(safe_view_config) if safe_view_config is not None else None)
+            idx += 1
+
         for field in ("title", "is_active", "expires_at", "access_mode"):
             if field in data:
                 if field == "access_mode" and data[field] not in _ALLOWED_ACCESS_MODES:

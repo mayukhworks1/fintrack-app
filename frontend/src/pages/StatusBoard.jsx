@@ -1486,7 +1486,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
 // ─────────────────────────────────────────────────────────────────────────────
 // Manage Shares Modal — fully redesigned
 // ─────────────────────────────────────────────────────────────────────────────
-function ManageSharesModal({ onClose }) {
+function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0 }) {
   const { showToast } = useToast()
   const [views,         setViews]         = useState([])
   const [loading,       setLoading]       = useState(true)
@@ -1547,6 +1547,28 @@ function ManageSharesModal({ onClose }) {
       { access_mode: next },
       () => setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: prev } : v)),
     )
+  }
+
+  async function updateToCurrentView(view) {
+    if (!currentConfig) return
+    if (visibleCount <= 0) {
+      showToast('No visible projects in the current view to share.', 'error')
+      return
+    }
+    const prev = { ...view }
+    const { advancedConditions: _ignored, ...safeConfig } = currentConfig
+    setViews(vs => vs.map(v => v.token === view.token ? {
+      ...v,
+      record_ids: ['__dynamic__'],
+      is_dynamic: true,
+      view_config: safeConfig,
+    } : v))
+    await patchView(
+      view.token,
+      { record_ids: ['__dynamic__'], view_config: safeConfig },
+      () => setViews(vs => vs.map(v => v.token === view.token ? prev : v)),
+    )
+    showToast('This link now uses your current live view.', 'success')
   }
 
   async function saveTitle(view) {
@@ -1787,6 +1809,15 @@ function ManageSharesModal({ onClose }) {
                         title="Viewer activity"
                         style={{ color: selectedToken === v.token ? 'var(--accent)' : 'var(--text-3)' }}>
                         <Activity size={13} />
+                      </button>
+                      {/* Replace scope with current visible view */}
+                      <button
+                        onClick={() => updateToCurrentView(v)}
+                        disabled={isSaving || visibleCount <= 0}
+                        className="btn-icon p-1.5"
+                        title="Replace this link with the current visible view"
+                        style={{ color: visibleCount > 0 ? 'var(--accent)' : 'var(--text-3)', opacity: visibleCount > 0 ? 1 : 0.45 }}>
+                        <RefreshCw size={13} />
                       </button>
                       {/* Enable / disable */}
                       <button onClick={() => toggleActive(v)}
@@ -3175,7 +3206,11 @@ export default function StatusBoard() {
         />
       )}
       {manageModal && (
-        <ManageSharesModal onClose={() => setManageModal(false)} />
+        <ManageSharesModal
+          onClose={() => setManageModal(false)}
+          currentConfig={currentConfig}
+          visibleCount={filtered.length}
+        />
       )}
       {confirmDialog && (
         <ConfirmModal

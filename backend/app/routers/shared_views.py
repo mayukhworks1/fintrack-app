@@ -36,6 +36,8 @@ class SharedViewUpdate(BaseModel):
     is_active: Optional[bool] = None
     expires_hours: Optional[int] = None   # -1 = remove expiry
     access_mode: Optional[str] = None
+    record_ids: Optional[list[str]] = None
+    view_config: Optional[dict] = None
 
 
 class PublicSharedViewUpdate(BaseModel):
@@ -149,6 +151,10 @@ async def update_shared_view(
             data["expires_at"] = _expiry(body.expires_hours)
     if body.access_mode is not None:
         data["access_mode"] = body.access_mode
+    if body.record_ids is not None:
+        data["record_ids"] = body.record_ids
+    if body.view_config is not None:
+        data["view_config"] = body.view_config
 
     try:
         view = await svc.update(token, data)
