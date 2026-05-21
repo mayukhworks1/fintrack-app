@@ -390,7 +390,7 @@ class StatusService:
             await self._sync_to_pg(new_record["id"], new_record["fields"])
 
         _bust_all_status_caches()
-        asyncio.create_task(_bust_valkey_status())
+        await _bust_valkey_status()   # await so cache is empty before SSE fires
         cache.bust(prefix="status:picklists")
         notify_status_change()
         return new_record
@@ -427,7 +427,7 @@ class StatusService:
         await self._sync_to_pg(record_id, resp_fields)
 
         _bust_all_status_caches()
-        asyncio.create_task(_bust_valkey_status())
+        await _bust_valkey_status()   # await so cache is empty before SSE fires
         notify_status_change()
         return updated
 
@@ -463,6 +463,6 @@ class StatusService:
                 logger.debug("post-delete PG mirror sync failed (non-fatal): %s", exc)
 
         _bust_all_status_caches()
-        asyncio.create_task(_bust_valkey_status())
+        await _bust_valkey_status()   # await so cache is empty before SSE fires
         notify_status_change()
         return True

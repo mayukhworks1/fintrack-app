@@ -24,7 +24,7 @@ import {
   GripVertical, ArrowRight, ChevronRight, TrendingUp,
   Receipt, Unlink,
 } from 'lucide-react'
-import { api, clientCacheBust, getAuthToken } from '../services/api'
+import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
@@ -2310,23 +2310,37 @@ export default function StatusBoard() {
     let es = null
     let retryTimer = null
     let retryDelay = 3000  // start at 3 s, cap at 30 s
+    let alive = true
+
+    // IMPORTANT: use API_BASE_URL (absolute) because EventSource doesn't
+    // go through the request() helper.  In production, VITE_API_URL is set
+    // to the HuggingFace Space URL so we must prepend it explicitly.
+    const streamUrl = `${API_BASE_URL}/api/status/stream?token=${encodeURIComponent(token)}`
+
+    function silentReload() {
+      // Bust both client-side 45 s cache AND ensure backend Valkey is bypassed
+      // by appending a unique timestamp so the cache key never matches.
+      clientCacheBust('/api/status')
+      load({ silent: true })
+    }
 
     function connect() {
+      if (!alive) return
       try {
-        es = new EventSource(`/api/status/stream?token=${encodeURIComponent(token)}`)
+        es = new EventSource(streamUrl)
 
         es.addEventListener('connected', () => {
           retryDelay = 3000  // reset backoff on successful connection
         })
 
         es.addEventListener('changed', () => {
-          clientCacheBust('/api/status')
-          load({ silent: true })
+          silentReload()
         })
 
         es.onerror = () => {
           es?.close()
           es = null
+          if (!alive) return
           // Reconnect with exponential backoff (3 s → 6 s → 12 s … max 30 s)
           retryTimer = setTimeout(() => {
             retryDelay = Math.min(retryDelay * 2, 30000)
@@ -2334,19 +2348,18 @@ export default function StatusBoard() {
           }, retryDelay)
         }
       } catch {
-        // EventSource not supported or network error — fall through to polling
+        // EventSource not supported or network error — fall through to polling only
       }
     }
 
     connect()
 
-    // Fallback polling — 30 s intervals in case SSE is blocked by proxy/CDN
-    const pollTimer = setInterval(() => {
-      clientCacheBust('/api/status')
-      load({ silent: true })
-    }, 30000)
+    // Fallback polling — 30 s intervals in case SSE is blocked by proxy/CDN.
+    // Also acts as a catch-all for missed events.
+    const pollTimer = setInterval(silentReload, 30000)
 
     return () => {
+      alive = false
       es?.close()
       clearTimeout(retryTimer)
       clearInterval(pollTimer)

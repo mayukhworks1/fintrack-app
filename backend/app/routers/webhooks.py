@@ -204,18 +204,11 @@ async def receive_teable_webhook(
 def _bust_source_caches(source: str) -> None:
     """
     Bust the in-process TTL cache and schedule a Valkey bust for `source`.
-    Also notifies SSE subscribers so connected frontends reload immediately.
+    The Valkey bust runs first (via task), then SSE subscribers are notified
+    so the frontend reload reads fresh data, not a stale Valkey-cached response.
     Called after webhook updates so users see Teable-side changes immediately.
     """
     import asyncio
-
-    # Notify SSE subscribers immediately (zero-latency push to all open tabs)
-    if source == "status":
-        try:
-            from ..services.status import notify_status_change
-            notify_status_change()
-        except Exception:
-            pass
 
     try:
         from ..utils.cache import cache as _mem_cache
@@ -225,23 +218,29 @@ def _bust_source_caches(source: str) -> None:
 
     try:
         from ..db.valkey import cache_bust as _vk_bust, get_client as _vk_client
-        import asyncio as _asyncio
 
-        async def _do_vk_bust():
+        async def _do_vk_bust_then_notify():
+            # 1. Bust Valkey first so cache is empty before the frontend reloads
             try:
                 vk = _vk_client()
                 if vk:
                     await _vk_bust(f"{source}:")
-                    # For status, also clear AI/report caches
                     if source == "status":
                         await vk.delete("chat:context")
                         await _vk_bust("report:")
             except Exception:
                 pass
+            # 2. Now notify SSE — frontend reload will read fresh PG data
+            if source == "status":
+                try:
+                    from ..services.status import notify_status_change
+                    notify_status_change()
+                except Exception:
+                    pass
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(_do_vk_bust())
+            loop.create_task(_do_vk_bust_then_notify())
         except RuntimeError:
             pass
     except Exception:

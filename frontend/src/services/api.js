@@ -1,6 +1,9 @@
 import { getDeviceHintHeader } from '../utils/deviceInfo'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
+/** Absolute base URL for the API — needed when constructing non-fetch connections
+ *  like EventSource that don't go through the request() helper. */
+export const API_BASE_URL = BASE_URL
 const TIMEOUT_MS = 20_000
 const AI_TIMEOUT_MS = 90_000  // AI endpoints can take longer
 
