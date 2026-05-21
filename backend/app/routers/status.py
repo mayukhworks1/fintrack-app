@@ -3,6 +3,7 @@ Current Status endpoints — /api/status
 
 Read  (viewer + editor)  : GET /api/status, GET /api/status/{id}
 Write (editor only)      : POST, PATCH, DELETE
+Stream (viewer + editor) : GET /api/status/stream  — SSE push on any change
 
 Security:
 - Rate limited: 30 mutations / min / IP (shared with AI endpoints)
@@ -10,14 +11,17 @@ Security:
 - Attribution wired: every mutation captured in record_history
 """
 
+import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..services.status import StatusService
+from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
+from .auth import verify_token
 from ..db.valkey import rate_check, cache_get, cache_set, cache_bust
 
 _STATUS_LIST_TTL = 60    # 60 s — short enough that a missed bust is only a 60 s delay
@@ -51,6 +55,60 @@ async def _check_write_rate(request: Request) -> None:
             detail="Too many status updates — limited to 30/min. Try again shortly.",
             headers={"Retry-After": "60"},
         )
+
+
+# ── SSE stream ─────────────────────────────────────────────────────────────
+
+@router.get("/stream")
+async def stream_status_changes(
+    request: Request,
+    token: str = Query(..., description="Bearer token passed as query param (EventSource limitation)"),
+):
+    """
+    Server-Sent Events endpoint.  The frontend connects once on mount and
+    receives a `data: changed` event whenever any status record is mutated —
+    whether the mutation came from the app itself OR from a direct Teable edit
+    (via webhook).  The frontend then does a silent background reload.
+
+    Auth is via ?token= because the browser EventSource API cannot send
+    custom headers.
+    """
+    role = verify_token(token)
+    if role is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    queue = subscribe_sse()
+
+    async def event_generator():
+        try:
+            # Send an initial "connected" ping so the client knows the stream is live
+            yield "event: connected\ndata: ok\n\n"
+            while True:
+                # Wait for next event or send a keepalive every 25 s
+                # (proxies / Cloudflare drop idle SSE after ~30 s)
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield f"event: {event}\ndata: {event}\n\n"
+                except asyncio.TimeoutError:
+                    # Keepalive comment — keeps the connection alive through proxies
+                    yield ": keepalive\n\n"
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            unsubscribe_sse(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable Nginx buffering
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # ── LIST ───────────────────────────────────────────────────────────────────

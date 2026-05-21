@@ -204,9 +204,19 @@ async def receive_teable_webhook(
 def _bust_source_caches(source: str) -> None:
     """
     Bust the in-process TTL cache and schedule a Valkey bust for `source`.
+    Also notifies SSE subscribers so connected frontends reload immediately.
     Called after webhook updates so users see Teable-side changes immediately.
     """
     import asyncio
+
+    # Notify SSE subscribers immediately (zero-latency push to all open tabs)
+    if source == "status":
+        try:
+            from ..services.status import notify_status_change
+            notify_status_change()
+        except Exception:
+            pass
+
     try:
         from ..utils.cache import cache as _mem_cache
         _mem_cache.bust(f"{source}:")

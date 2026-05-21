@@ -24,7 +24,7 @@ import {
   GripVertical, ArrowRight, ChevronRight, TrendingUp,
   Receipt, Unlink,
 } from 'lucide-react'
-import { api, clientCacheBust } from '../services/api'
+import { api, clientCacheBust, getAuthToken } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
@@ -2281,21 +2281,77 @@ export default function StatusBoard() {
   }, [viewType, filterClient, filterStatus, search, listColumns, boardGroupBy, cardGroupBy, cardGroupSort, cardRecordSort, advancedConditions, themeId, density, showDashboard, showClientAccents])
 
   // ── Load data ─────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
-    setLoading(true); setError(null)
+  // silent=true → background refresh; no spinner, no error banner reset
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) { setLoading(true); setError(null) }
     try {
       const [res, picklists] = await Promise.all([
         api.status.list(),
         api.status.picklists.get().catch(() => ({})),
       ])
       setRecords(res.records || [])
-      setPendingStatusById({})
+      if (!silent) setPendingStatusById({})
       setStatusPicklists(picklists || {})
     }
-    catch (e) { setError(e.message || 'Failed to load') }
-    finally { setLoading(false) }
+    catch (e) { if (!silent) setError(e.message || 'Failed to load') }
+    finally { if (!silent) setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // ── Real-time SSE sync (zero-latency push from backend) ───────────────────
+  // Backend fires a "changed" event whenever any status record is mutated —
+  // whether the mutation came through this app OR directly in Teable.
+  // On event we bust the local cache then silently reload so the UI updates
+  // without any spinner / flash.
+  useEffect(() => {
+    const token = getAuthToken()
+    if (!token) return
+
+    let es = null
+    let retryTimer = null
+    let retryDelay = 3000  // start at 3 s, cap at 30 s
+
+    function connect() {
+      try {
+        es = new EventSource(`/api/status/stream?token=${encodeURIComponent(token)}`)
+
+        es.addEventListener('connected', () => {
+          retryDelay = 3000  // reset backoff on successful connection
+        })
+
+        es.addEventListener('changed', () => {
+          clientCacheBust('/api/status')
+          load({ silent: true })
+        })
+
+        es.onerror = () => {
+          es?.close()
+          es = null
+          // Reconnect with exponential backoff (3 s → 6 s → 12 s … max 30 s)
+          retryTimer = setTimeout(() => {
+            retryDelay = Math.min(retryDelay * 2, 30000)
+            connect()
+          }, retryDelay)
+        }
+      } catch {
+        // EventSource not supported or network error — fall through to polling
+      }
+    }
+
+    connect()
+
+    // Fallback polling — 30 s intervals in case SSE is blocked by proxy/CDN
+    const pollTimer = setInterval(() => {
+      clientCacheBust('/api/status')
+      load({ silent: true })
+    }, 30000)
+
+    return () => {
+      es?.close()
+      clearTimeout(retryTimer)
+      clearInterval(pollTimer)
+    }
+  }, [load])  // load is stable (useCallback with no deps)
 
   // ── Derived / filtered data ───────────────────────────────────────────────
   const baseFiltered = recordsForView.filter(r => {

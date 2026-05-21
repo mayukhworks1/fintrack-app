@@ -28,6 +28,42 @@ _TTL_STATUS   = 20   # 20 s in-process cache — bust on every mutation, short f
 _CHAT_CTX_KEY = "chat:context"
 _REPORT_KEY   = "report:executive"
 
+# ── SSE subscriber registry ─────────────────────────────────────────────────
+# Each connected frontend SSE client registers a queue here.
+# On any status mutation (app write OR Teable webhook), we push "changed"
+# into every queue so the frontend reloads immediately — true 0-latency sync.
+_sse_queues: set[asyncio.Queue] = set()
+
+
+def subscribe_sse() -> asyncio.Queue:
+    """Register a new SSE subscriber. Returns the queue to read from."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=4)
+    _sse_queues.add(q)
+    return q
+
+
+def unsubscribe_sse(q: asyncio.Queue) -> None:
+    """Remove a subscriber when the client disconnects."""
+    _sse_queues.discard(q)
+
+
+def notify_status_change(event: str = "changed") -> None:
+    """
+    Push a notification to all connected SSE clients.
+    Non-blocking: uses put_nowait, drops the event for lagging consumers.
+    Safe to call from sync or async context.
+    """
+    dead: list[asyncio.Queue] = []
+    for q in list(_sse_queues):
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            pass   # slow consumer — they'll get the next event
+        except Exception:
+            dead.append(q)
+    for q in dead:
+        _sse_queues.discard(q)
+
 
 def _bust_all_status_caches() -> None:
     """Bust in-process cache. Also bust Valkey asynchronously."""
@@ -356,6 +392,7 @@ class StatusService:
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
         cache.bust(prefix="status:picklists")
+        notify_status_change()
         return new_record
 
     async def update_record(
@@ -391,6 +428,7 @@ class StatusService:
 
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
+        notify_status_change()
         return updated
 
     async def delete_record(
@@ -426,4 +464,5 @@ class StatusService:
 
         _bust_all_status_caches()
         asyncio.create_task(_bust_valkey_status())
+        notify_status_change()
         return True
