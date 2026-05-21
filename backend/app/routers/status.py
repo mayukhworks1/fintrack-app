@@ -22,13 +22,14 @@ from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor
 from .auth import verify_token
-from ..db.valkey import rate_check, cache_get, cache_set, cache_bust
+from ..db.valkey import rate_check, cache_bust
 
-_STATUS_LIST_TTL = 60    # 60 s — short enough that a missed bust is only a 60 s delay
-
+# Valkey is NOT used for status list reads — we go straight to PG mirror
+# (1-3 ms) so there's no stale-cache window to worry about.
+# cache_bust is still imported to clean up any legacy keys on writes.
 
 async def _bust_status_cache() -> None:
-    """Invalidate all status list cache entries after any mutation."""
+    """Invalidate any legacy status list cache entries after a mutation."""
     await cache_bust("status:list:")
 
 router = APIRouter(prefix="/api/status", tags=["status"])
@@ -127,19 +128,16 @@ async def list_statuses(
       ?client=Birla Open Minds
       ?project=PMS – Phase 1.1
     """
+    # No Valkey cache here — go straight to PG mirror (1-3 ms).
+    # Removing this cache layer eliminates all stale-read windows and makes
+    # SSE-triggered reloads always return the freshest data.
     svc = _svc()
-    cache_key = f"status:list:{client}:{project}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
     try:
         records = await svc.list_all(
             client=client or None,
             project=project or None,
         )
-        result = {"records": records, "total": len(records)}
-        await cache_set(cache_key, result, _STATUS_LIST_TTL)
-        return result
+        return {"records": records, "total": len(records)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch status updates: {e}")
 

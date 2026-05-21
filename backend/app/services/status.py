@@ -24,7 +24,7 @@ from ..db.postgres import get_pool
 
 logger = logging.getLogger("fintrack.status")
 
-_TTL_STATUS   = 20   # 20 s in-process cache — bust on every mutation, short fallback
+_TTL_STATUS   = 5    # 5 s in-process cache — busted on every mutation; very short fallback
 _CHAT_CTX_KEY = "chat:context"
 _REPORT_KEY   = "report:executive"
 
