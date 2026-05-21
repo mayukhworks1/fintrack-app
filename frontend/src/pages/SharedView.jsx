@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  Activity, AlertCircle, Clock, Columns, Eye, LayoutGrid, List,
+  Activity, AlertCircle, ChevronDown, ChevronUp, Clock, Columns, Eye, LayoutGrid, List,
   Loader2, Pencil, RefreshCw, Search, Shield, X,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -851,6 +851,7 @@ export default function SharedView() {
   const [detailRecord, setDetailRecord] = useState(null)
   const [savingRecordId, setSavingRecordId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
+  const [allExpanded, setAllExpanded] = useState(false)
 
   const resourceType = data?.resource_type || 'status'
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
@@ -860,15 +861,18 @@ export default function SharedView() {
     else setLoading(true)
     setError(null)
     try {
-      const res = await api.sharedViews.publicGet(token, { signal })
+      const res = await api.sharedViews.publicGet(token, { signal, fresh: true })
       const vc = res.view_config || {}
       const rt = res.resource_type || 'status'
       const rmeta = RESOURCE_META[rt] || RESOURCE_META.status
       setData(res)
       setRecords(res.records || [])
       setPendingStatusById({})
-      setViewType(vc.type || rmeta.defaultView)
-      setBoardGroupBy(vc.boardGroupBy || rmeta.statusField)
+      if (!silent) {
+        setViewType(vc.type || rmeta.defaultView)
+        setBoardGroupBy(vc.boardGroupBy || rmeta.statusField)
+        setAllExpanded(vc.allExpanded === true)
+      }
       setSearch(prev => prev || vc.search || '')
       setFilterPrimary(prev => prev || vc[rmeta.primaryFilterKey] || '')
       setFilterStatus(prev => prev || vc.filterStatus || '')
@@ -891,13 +895,28 @@ export default function SharedView() {
     return () => controller.abort()
   }, [token])
 
+  useEffect(() => {
+    if (!token) return
+    const refresh = () => load({ silent: true })
+    const intervalId = setInterval(refresh, 15000)
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', handleVisible)
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', handleVisible)
+    }
+  }, [token])
+
   const canEdit = (data?.access_mode || 'read') === 'edit'
   const vc = data?.view_config || {}
   const theme = resolveTheme(vc.theme)
   const compact = vc.density === 'compact'
   const showDashboard = vc.showDashboard ?? meta.showDashboardByDefault
   const showClientAccents = vc.showClientAccents !== false
-  const allExpanded = vc.allExpanded === true   // honour creator's expand state
   const boardGroupOptions = BOARD_GROUP_OPTIONS[resourceType] || [meta.statusField]
   const activeBoardGroupBy = boardGroupOptions.includes(boardGroupBy) ? boardGroupBy : meta.statusField
   const activeCardGroupBy = [meta.clientField, meta.statusField].includes(vc.cardGroupBy) ? vc.cardGroupBy : meta.clientField
@@ -1133,6 +1152,16 @@ export default function SharedView() {
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
                 {boardGroupOptions.map(v => <option key={v} value={v}>Group by {v}</option>)}
               </select>
+            )}
+            {viewType === 'card' && (
+              <button
+                onClick={() => setAllExpanded(v => !v)}
+                className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2"
+                style={{ borderColor: '#e5e7eb', color: '#475569' }}
+              >
+                {allExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {allExpanded ? 'Collapse all' : 'Expand all'}
+              </button>
             )}
             <button onClick={() => load({ silent: true })} className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2" style={{ borderColor: '#e5e7eb', color: '#475569' }}>
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
