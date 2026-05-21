@@ -47,6 +47,13 @@ def _row(row) -> dict:
             out[k] = v.isoformat()
         else:
             out[k] = v
+    record_ids = out.get("record_ids")
+    if isinstance(record_ids, str):
+        try:
+            record_ids = json.loads(record_ids)
+        except Exception:
+            record_ids = []
+    out["is_dynamic"] = record_ids == ["__dynamic__"]
     return out
 
 
@@ -151,9 +158,10 @@ class SharedViewService:
         pool = get_pool()
         if not pool:
             raise RuntimeError("PostgreSQL unavailable — cannot create shared view")
-        if not record_ids:
+        is_dynamic = record_ids == ["__dynamic__"]
+        if not is_dynamic and not record_ids:
             raise ValueError("At least one record_id required")
-        if len(record_ids) > _MAX_RECORD_IDS:
+        if not is_dynamic and len(record_ids) > _MAX_RECORD_IDS:
             raise ValueError(f"Maximum {_MAX_RECORD_IDS} records per share")
         if access_mode not in _ALLOWED_ACCESS_MODES:
             raise ValueError("Invalid access mode")
@@ -307,57 +315,73 @@ class SharedViewService:
         if resource_type not in _ALLOWED_RESOURCE_TYPES:
             raise ValueError("This link type is no longer supported")
 
-        # Fetch records from PG mirror
+        # Parse record_ids — ["__dynamic__"] means "all records, live from Teable"
         record_ids: list[str] = view.get("record_ids") or []
         if isinstance(record_ids, str):
             record_ids = json.loads(record_ids)
 
-        mirror_table = {
-            "status": "status_mirror",
-            "projects": "projects_mirror",
-            "invoices": "invoices_mirror",
-        }[resource_type]
-        record_map: dict[str, dict[str, Any]] = {}
-        found_ids: set[str] = set()
-        if record_ids:
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT teable_id, fields::text AS fields
-                    FROM """ + mirror_table + """
-                    WHERE teable_id = ANY($1::text[])
-                    ORDER BY array_position($1::text[], teable_id)
-                    """,
-                    record_ids,
-                )
-            for row in rows:
-                try:
-                    fields = json.loads(row["fields"]) if isinstance(row["fields"], str) else (row["fields"] or {})
-                except Exception:
-                    fields = {}
-                teable_id = row["teable_id"]
-                found_ids.add(teable_id)
-                record_map[teable_id] = {"id": teable_id, "fields": fields}
-
-        # If the mirror is behind, try the live table for missing records.
-        missing_ids = [rid for rid in record_ids if rid not in found_ids]
-        if missing_ids:
+        # Parse view_config early so we can use filters for dynamic fetch
+        vc = view.get("view_config")
+        if isinstance(vc, str):
             try:
-                svc = _live_service_for(resource_type)
-                for rid in missing_ids:
-                    try:
-                        live = await _live_get_record(resource_type, svc, rid)
-                    except Exception:
-                        logger.debug("shared view live %s fallback failed for %s", resource_type, rid)
-                        continue
-                    if live and live.get("id"):
-                        record_map[live["id"]] = {"id": live["id"], "fields": live.get("fields") or {}}
-            except Exception as exc:
-                logger.debug("shared view live %s fallback unavailable: %s", resource_type, exc)
+                vc = json.loads(vc)
+            except Exception:
+                vc = None
+        vc = _sanitize_view_config(vc)
 
-        # Rebuild in original shared order so mirror/live fallback mixes do not
-        # reshuffle the public snapshot.
-        records = [record_map[rid] for rid in record_ids if rid in record_map]
+        is_dynamic = record_ids == ["__dynamic__"]
+
+        if is_dynamic:
+            # Dynamic live view — always fetch directly from Teable so that
+            # records added after the link was created appear automatically.
+            records = await _fetch_dynamic_records(resource_type, vc)
+        else:
+            # Fixed snapshot — fetch exactly the stored record IDs.
+            mirror_table = {
+                "status": "status_mirror",
+                "projects": "projects_mirror",
+                "invoices": "invoices_mirror",
+            }[resource_type]
+            record_map: dict[str, dict[str, Any]] = {}
+            found_ids: set[str] = set()
+            if record_ids:
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        """
+                        SELECT teable_id, fields::text AS fields
+                        FROM """ + mirror_table + """
+                        WHERE teable_id = ANY($1::text[])
+                        ORDER BY array_position($1::text[], teable_id)
+                        """,
+                        record_ids,
+                    )
+                for row in rows:
+                    try:
+                        fields = json.loads(row["fields"]) if isinstance(row["fields"], str) else (row["fields"] or {})
+                    except Exception:
+                        fields = {}
+                    teable_id = row["teable_id"]
+                    found_ids.add(teable_id)
+                    record_map[teable_id] = {"id": teable_id, "fields": fields}
+
+            # If the mirror is behind, try the live table for missing records.
+            missing_ids = [rid for rid in record_ids if rid not in found_ids]
+            if missing_ids:
+                try:
+                    svc = _live_service_for(resource_type)
+                    for rid in missing_ids:
+                        try:
+                            live = await _live_get_record(resource_type, svc, rid)
+                        except Exception:
+                            logger.debug("shared view live %s fallback failed for %s", resource_type, rid)
+                            continue
+                        if live and live.get("id"):
+                            record_map[live["id"]] = {"id": live["id"], "fields": live.get("fields") or {}}
+                except Exception as exc:
+                    logger.debug("shared view live %s fallback unavailable: %s", resource_type, exc)
+
+            # Rebuild in original shared order
+            records = [record_map[rid] for rid in record_ids if rid in record_map]
 
         # Log access asynchronously
         ip = _extract_ip(request)
@@ -372,15 +396,6 @@ class SharedViewService:
             resource_type=resource_type,
         ))
 
-        # Parse view_config (stored as JSONB — may come back as dict or str)
-        vc = view.get("view_config")
-        if isinstance(vc, str):
-            try:
-                vc = json.loads(vc)
-            except Exception:
-                vc = None
-        vc = _sanitize_view_config(vc)
-
         return {
             "token": token,
             "title": view.get("title"),
@@ -388,6 +403,7 @@ class SharedViewService:
             "expires_at": view.get("expires_at"),
             "access_mode": view.get("access_mode") or "read",
             "resource_type": resource_type,
+            "is_dynamic": is_dynamic,
             "records": records,
             "total": len(records),
             "view_config": vc,
@@ -402,7 +418,8 @@ class SharedViewService:
         record_ids = view.get("record_ids") or []
         if isinstance(record_ids, str):
             record_ids = json.loads(record_ids)
-        if record_id not in record_ids:
+        is_dynamic = record_ids == ["__dynamic__"]
+        if not is_dynamic and record_id not in record_ids:
             raise ValueError("Record is not part of this shared view")
 
         cleaned = _public_edit_fields(resource_type, fields)
@@ -620,6 +637,89 @@ def _public_edit_fields(resource_type: str, fields: dict) -> dict[str, Any]:
     else:
         raise ValueError("Unsupported resource type")
     return {k: v for k, v in allowed.items() if v is not None}
+
+
+async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list[dict[str, Any]]:
+    """
+    Fetch ALL live records from Teable for a dynamic shared view, then apply
+    the view_config filters (filterClient, filterStatus, filterProject) so the
+    link only shows the same subset the owner intended, while automatically
+    including any new records that match those filters.
+    """
+    cfg = vc or {}
+    filter_client = cfg.get("filterClient")
+    filter_status = cfg.get("filterStatus")
+    filter_project = cfg.get("filterProject")
+    filter_category = cfg.get("filterCategory")
+    search = (cfg.get("search") or "").strip().lower()
+
+    if resource_type == "status":
+        from ..services.status import StatusService
+        records = await StatusService()._list_from_teable(
+            client=filter_client or None,
+            project=filter_project or None,
+        )
+        if filter_status:
+            records = [r for r in records if (r.get("fields") or {}).get("Status") == filter_status]
+        if search:
+            records = [
+                r for r in records
+                if search in " ".join([
+                    str((r.get("fields") or {}).get("Client", "")),
+                    str((r.get("fields") or {}).get("Project", "")),
+                    str((r.get("fields") or {}).get("Short Status", "")),
+                    str((r.get("fields") or {}).get("Current Status (Detailed)", "")),
+                    str((r.get("fields") or {}).get("Status", "")),
+                ]).lower()
+            ]
+        return records
+
+    if resource_type == "projects":
+        from ..services.teable import TeableService
+        records = await TeableService().get_all_records()
+        if filter_client:
+            records = [r for r in records if (r.get("fields") or {}).get("Client") == filter_client]
+        if filter_project:
+            records = [r for r in records if (r.get("fields") or {}).get("Project Name") == filter_project]
+        if filter_status:
+            records = [r for r in records if (r.get("fields") or {}).get("Project Status") == filter_status]
+        if search:
+            records = [
+                r for r in records
+                if search in " ".join([
+                    str((r.get("fields") or {}).get("Client", "")),
+                    str((r.get("fields") or {}).get("Project Name", "")),
+                    str((r.get("fields") or {}).get("Project Status", "")),
+                    str((r.get("fields") or {}).get("Health", "")),
+                ]).lower()
+            ]
+        return records
+
+    if resource_type == "invoices":
+        from ..services.invoice import InvoiceService
+        records = await InvoiceService().get_all_invoices()
+        if filter_client:
+            records = [r for r in records if (r.get("fields") or {}).get("Client") == filter_client]
+        if filter_project:
+            records = [r for r in records if (r.get("fields") or {}).get("Project") == filter_project]
+        if filter_status:
+            records = [r for r in records if (r.get("fields") or {}).get("Payment Status") == filter_status]
+        if filter_category:
+            records = [r for r in records if (r.get("fields") or {}).get("Category") == filter_category]
+        if search:
+            records = [
+                r for r in records
+                if search in " ".join([
+                    str((r.get("fields") or {}).get("Invoice Number", "")),
+                    str((r.get("fields") or {}).get("Project", "")),
+                    str((r.get("fields") or {}).get("Category", "")),
+                    str((r.get("fields") or {}).get("Remark", "")),
+                    str((r.get("fields") or {}).get("Payment Status", "")),
+                ]).lower()
+            ]
+        return records
+
+    raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")
 
 
 async def _live_update_record(resource_type: str, record_id: str, cleaned: dict[str, Any], request) -> dict[str, Any]:

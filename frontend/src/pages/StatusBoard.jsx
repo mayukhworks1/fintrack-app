@@ -1293,26 +1293,38 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
   async function createShare() {
     setSaving(true); setError(null)
     try {
-      if (selectedRecords.length === 0) {
-        throw new Error('No records selected to share.')
+      if (isViewShare) {
+        // Dynamic live link — always fetches all matching records from Teable,
+        // so new projects added after the link is created appear automatically.
+        const payload = {
+          title: title.trim() || null,
+          record_ids: ['__dynamic__'],   // sentinel: "fetch live on every access"
+          expires_hours: expiry || null,
+          access_mode: 'read',
+          resource_type: 'status',
+        }
+        if (viewConfig) {
+          const { advancedConditions: _stripped, ...safeConfig } = viewConfig
+          payload.view_config = safeConfig
+        }
+        const data = await api.sharedViews.create(payload)
+        setShareData(data); setStep('created')
+      } else {
+        // Snapshot link — shares the currently selected records only.
+        if (selectedRecords.length === 0) throw new Error('No records selected to share.')
+        if (selectedRecords.length > MAX_SHARED_VIEW_RECORDS) {
+          throw new Error(`Public sharing is limited to ${MAX_SHARED_VIEW_RECORDS} records. Narrow the current view first.`)
+        }
+        const payload = {
+          title: title.trim() || null,
+          record_ids: selectedRecords.map(r => r.id),
+          expires_hours: expiry || null,
+          access_mode: accessMode,
+          resource_type: 'status',
+        }
+        const data = await api.sharedViews.create(payload)
+        setShareData(data); setStep('created')
       }
-      if (selectedRecords.length > MAX_SHARED_VIEW_RECORDS) {
-        throw new Error(`Public sharing is limited to ${MAX_SHARED_VIEW_RECORDS} records. Narrow the current view first.`)
-      }
-      const payload = {
-        title: title.trim() || null,
-        record_ids: selectedRecords.map(r => r.id),
-        expires_hours: expiry || null,
-        access_mode: isViewShare ? 'read' : accessMode,  // view shares are always read-only
-        resource_type: 'status',
-      }
-      if (viewConfig) {
-        // Strip advancedConditions — they're internal-only and not supported by the public viewer
-        const { advancedConditions: _stripped, ...safeConfig } = viewConfig
-        payload.view_config = safeConfig
-      }
-      const data = await api.sharedViews.create(payload)
-      setShareData(data); setStep('created')
     } catch (e) { setError(e.message || 'Failed to create share link') }
     finally { setSaving(false) }
   }
@@ -1402,7 +1414,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                 <Shield size={13} style={{ color: '#0ea5e9', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
                   {isViewShare
-                    ? `This creates a public snapshot of the ${selectedRecords.length} records currently visible here. IP, location, device and browser are tracked on every open.`
+                    ? 'Live link — always fetches the latest data from Teable. New projects added after sharing appear automatically. IP, location & device tracked on every open.'
                     : 'IP, location, device & browser tracked on every open. Disable or delete anytime.'}
                 </p>
               </div>
@@ -1418,7 +1430,7 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
               )}
               <div className="flex items-center justify-end gap-2">
                 <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-                <button onClick={createShare} disabled={saving || selectedRecords.length > MAX_SHARED_VIEW_RECORDS || selectedRecords.length === 0} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+                <button onClick={createShare} disabled={saving || (!isViewShare && (selectedRecords.length === 0 || selectedRecords.length > MAX_SHARED_VIEW_RECORDS))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Generate Link
                 </button>
               </div>
@@ -1434,6 +1446,13 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready!</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
+                  {isViewShare && (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                      style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live · new projects appear automatically
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -1653,10 +1672,22 @@ function ManageSharesModal({ onClose }) {
                       <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
                         This title is visible to the viewer as the page heading
                       </p>
+                      {v.is_dynamic && (
+                        <p className="text-[10px] mt-1" style={{ color: '#10b981' }}>
+                          Live link: records are re-fetched on every open using the saved view filters.
+                        </p>
+                      )}
                     </div>
 
                     {/* Right badges */}
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {v.is_dynamic && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                          style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          LIVE
+                        </span>
+                      )}
                       {inactive && (
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
                           style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>DISABLED</span>
