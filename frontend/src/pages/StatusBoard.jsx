@@ -1374,7 +1374,8 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
                 {selectedRecords.length > 8 && <span className="text-[11px] px-2 py-0.5 rounded-lg" style={{ color: 'var(--text-3)' }}>+{selectedRecords.length - 8} more</span>}
               </div>
               <div>
-                <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>Link title</label>
+                <label className="block text-xs font-semibold mb-0.5" style={{ color: 'var(--text-2)' }}>Page title</label>
+                <p className="text-[10px] mb-1.5" style={{ color: 'var(--text-3)' }}>Shown to the viewer as the page heading</p>
                 <input type="text" className="input-field w-full text-sm" placeholder="e.g. May 2026 Status Update"
                   value={title} onChange={e => setTitle(e.target.value)} maxLength={200} />
               </div>
@@ -1483,206 +1484,367 @@ function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Manage Shares Modal
+// Manage Shares Modal — fully redesigned
 // ─────────────────────────────────────────────────────────────────────────────
 function ManageSharesModal({ onClose }) {
   const { showToast } = useToast()
-  const [views,    setViews]    = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [selected, setSelected] = useState(null)
-  const [accesses, setAccesses] = useState([])
-  const [loadingAcc, setLoadingAcc] = useState(false)
-  const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
-  const [confirmDelete, setConfirmDelete] = useState(null) // token to confirm delete
+  const [views,         setViews]         = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [selectedToken, setSelectedToken] = useState(null)   // viewer activity panel
+  const [accesses,      setAccesses]      = useState([])
+  const [loadingAcc,    setLoadingAcc]    = useState(false)
+  const [savingTokens,  setSavingTokens]  = useState(() => new Set())  // PATCH in flight
+  const [savedTokens,   setSavedTokens]   = useState(() => new Set())  // brief "Saved ✓"
+  const [copiedToken,   setCopiedToken]   = useState(null)
+  const [editingTitle,  setEditingTitle]  = useState(null)   // token whose title is in edit mode
+  const [titleDraft,    setTitleDraft]    = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(null)
+
   useEffect(() => { loadViews() }, [])
-  async function loadViews() { setLoading(true); try { const r = await api.sharedViews.list('status'); setViews(r.views || []) } catch {} finally { setLoading(false) } }
-  async function toggleActive(view) {
-    const next = !view.is_active
-    setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: next } : v))
-    try { await api.sharedViews.update(view.token, { is_active: next }); showToast(next ? 'Link enabled' : 'Link disabled', 'success') }
-    catch (e) { setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v)); showToast(e.message || 'Failed', 'error') }
-  }
-  async function setAccessMode(view, next) {
-    if (!view || view.access_mode === next || updatingTokens.has(view.token)) return
-    const prev = view.access_mode
-    setUpdatingTokens(tokens => new Set(tokens).add(view.token))
-    setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: next } : v))
-    try {
-      const updated = await api.sharedViews.update(view.token, { access_mode: next })
-      setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...(updated || {}), access_mode: updated?.access_mode || next } : v))
-      showToast(next === 'edit' ? 'Link can now edit' : 'Link set to read only', 'success')
-    } catch (e) {
-      setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: prev } : v))
-      showToast(e.message || 'Failed', 'error')
-    } finally {
-      setUpdatingTokens(tokens => {
-        const nextTokens = new Set(tokens)
-        nextTokens.delete(view.token)
-        return nextTokens
-      })
-    }
-  }
-  async function deleteView(token) {
-    const prev = views; setViews(vs => vs.filter(v => v.token !== token))
-    if (selected === token) setSelected(null)
-    try { await api.sharedViews.delete(token); showToast('Deleted', 'success') }
-    catch (e) { setViews(prev); showToast(e.message || 'Failed', 'error') }
-  }
-  async function viewAccesses(token) {
-    if (selected === token) { setSelected(null); return }
-    setSelected(token); setLoadingAcc(true)
-    try { const r = await api.sharedViews.accesses(token); setAccesses(r.accesses || []) } catch {} finally { setLoadingAcc(false) }
-  }
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
+  async function loadViews() {
+    setLoading(true)
+    try { const r = await api.sharedViews.list('status'); setViews(r.views || []) } catch {}
+    finally { setLoading(false) }
+  }
+
+  // Generic optimistic PATCH with rollback + "Saved ✓" flash
+  async function patchView(token, patch, onRollback) {
+    setSavingTokens(s => new Set(s).add(token))
+    try {
+      await api.sharedViews.update(token, patch)
+      setSavedTokens(s => new Set(s).add(token))
+      setTimeout(() => setSavedTokens(s => { const n = new Set(s); n.delete(token); return n }), 2200)
+    } catch (e) {
+      onRollback?.()
+      showToast(e.message || 'Failed to save', 'error')
+    } finally {
+      setSavingTokens(s => { const n = new Set(s); n.delete(token); return n })
+    }
+  }
+
+  async function toggleActive(view) {
+    const next = !view.is_active
+    setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: next } : v))
+    await patchView(
+      view.token,
+      { is_active: next },
+      () => setViews(vs => vs.map(v => v.token === view.token ? { ...v, is_active: view.is_active } : v)),
+    )
+  }
+
+  async function changeAccessMode(view, next) {
+    if (view.access_mode === next || savingTokens.has(view.token)) return
+    const prev = view.access_mode
+    setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: next } : v))
+    await patchView(
+      view.token,
+      { access_mode: next },
+      () => setViews(vs => vs.map(v => v.token === view.token ? { ...v, access_mode: prev } : v)),
+    )
+  }
+
+  async function saveTitle(view) {
+    const newTitle = titleDraft.trim()
+    setEditingTitle(null)
+    if (newTitle === (view.title || '')) return
+    const prev = view.title
+    setViews(vs => vs.map(v => v.token === view.token ? { ...v, title: newTitle || null } : v))
+    await patchView(
+      view.token,
+      { title: newTitle || '' },
+      () => setViews(vs => vs.map(v => v.token === view.token ? { ...v, title: prev } : v)),
+    )
+  }
+
+  async function deleteView(token) {
+    const prev = views
+    setViews(vs => vs.filter(v => v.token !== token))
+    if (selectedToken === token) setSelectedToken(null)
+    try { await api.sharedViews.delete(token); showToast('Link deleted', 'success') }
+    catch (e) { setViews(prev); showToast(e.message || 'Failed', 'error') }
+  }
+
+  async function loadAccesses(token) {
+    if (selectedToken === token) { setSelectedToken(null); return }
+    setSelectedToken(token); setLoadingAcc(true)
+    try { const r = await api.sharedViews.accesses(token); setAccesses(r.accesses || []) } catch {}
+    finally { setLoadingAcc(false) }
+  }
+
+  function copyUrl(token) {
+    navigator.clipboard.writeText(`${window.location.origin}/view/${token}`)
+    setCopiedToken(token)
+    setTimeout(() => setCopiedToken(t => t === token ? null : t), 2500)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
-        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '90vh' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)' }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)' }}>
               <Link2 size={15} style={{ color: '#0ea5e9' }} />
             </div>
-            <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
+            <div>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
+              {!loading && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{views.length} link{views.length !== 1 ? 's' : ''}</p>}
+            </div>
           </div>
           <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-4 space-y-2">
-          {loading && <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>}
-          {!loading && views.length === 0 && <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No share links yet.</div>}
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          {loading && <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>}
+          {!loading && views.length === 0 && (
+            <div className="text-center py-12">
+              <Link2 size={24} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-3)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-3)' }}>No share links yet.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Select records and click Share to create one.</p>
+            </div>
+          )}
+
           {views.map(v => {
-            const expired  = isExpired(v.expires_at)
-            const inactive = !v.is_active
-            const updatingMode = updatingTokens.has(v.token)
-            const url = `${window.location.origin}/view/${v.token}`
+            const expired     = isExpired(v.expires_at)
+            const inactive    = !v.is_active
+            const isSaving    = savingTokens.has(v.token)
+            const justSaved   = savedTokens.has(v.token)
+            const url         = `${window.location.origin}/view/${v.token}`
+            const statusColor = inactive ? '#ef4444' : expired ? '#f59e0b' : '#10b981'
+
             return (
-              <div key={v.token}>
-                <div className="rounded-xl p-3 transition-all"
-                  style={{ background: (expired || inactive) ? 'var(--bg-input)' : 'var(--card-bg)', border: '1px solid var(--border)', opacity: (expired || inactive) ? 0.7 : 1 }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
-                          {v.title || `${Array.isArray(v.record_ids) ? v.record_ids.length : '?'} projects`}
-                        </p>
-                        {inactive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>DISABLED</span>}
-                        {expired  && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>EXPIRED</span>}
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.1)' : 'rgba(148,163,184,0.12)', color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)' }}>
-                          {v.access_mode === 'edit' ? 'CAN EDIT' : 'READ ONLY'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                        <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>…/{v.token}</span>
-                        <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Created {fmtDate(v.created_at)}</span>
-                        {v.expires_at && <span className="text-[11px] flex items-center gap-0.5" style={{ color: expired ? '#f59e0b' : 'var(--text-3)' }}><Clock size={9} /> {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}</span>}
-                        {v.last_accessed_at && (
-                          <span className="text-[11px] flex items-center gap-0.5" style={{ color: '#10b981' }}>
-                            <Activity size={9} /> Last seen {fmtDate(v.last_accessed_at)}
+              <div key={v.token} className="rounded-2xl overflow-hidden"
+                style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', opacity: (expired || inactive) ? 0.82 : 1 }}>
+
+                {/* Top accent bar — red=disabled, amber=expired, green=active */}
+                <div className="h-1 w-full" style={{ background: statusColor }} />
+
+                <div className="p-4 space-y-3">
+                  {/* ── Row 1: Title + badges ── */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      {editingTitle === v.token ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            className="input-field flex-1 text-sm font-semibold py-1"
+                            value={titleDraft}
+                            onChange={e => setTitleDraft(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveTitle(v); if (e.key === 'Escape') setEditingTitle(null) }}
+                            onBlur={() => saveTitle(v)}
+                            placeholder="Add a page title…"
+                            maxLength={200}
+                          />
+                          <button onClick={() => saveTitle(v)}
+                            className="p-1.5 rounded-lg flex-shrink-0"
+                            style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                            <Check size={13} />
+                          </button>
+                          <button onClick={() => setEditingTitle(null)}
+                            className="p-1.5 rounded-lg flex-shrink-0"
+                            style={{ color: 'var(--text-3)' }}>
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="group flex items-center gap-1.5 text-left w-full"
+                          onClick={() => { setEditingTitle(v.token); setTitleDraft(v.title || '') }}
+                          title="Click to edit page title">
+                          <span className="text-sm font-semibold" style={{ color: v.title ? 'var(--text-1)' : 'var(--text-3)' }}>
+                            {v.title || 'Untitled — click to add title'}
                           </span>
-                        )}
-                      </div>
+                          <Pencil size={10} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--text-3)' }} />
+                        </button>
+                      )}
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                        This title is visible to the viewer as the page heading
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: v.access_count > 0 ? '#10b981' : 'var(--text-2)' }}><Eye size={11} /> {v.access_count} view{v.access_count !== 1 ? 's' : ''}</span>
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><ExternalLink size={12} /></a>
-                      <button onClick={() => toggleActive(v)} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }} title={v.is_active ? 'Disable' : 'Enable'}>
+
+                    {/* Right badges */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {inactive && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                          style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>DISABLED</span>
+                      )}
+                      {expired && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                          style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>EXPIRED</span>
+                      )}
+                      <span className="flex items-center gap-1 text-[11px] font-semibold"
+                        style={{ color: v.access_count > 0 ? '#10b981' : 'var(--text-3)' }}>
+                        <Eye size={11} /> {v.access_count}
+                      </span>
+                      {v.last_accessed_at && (
+                        <span className="text-[10px] hidden sm:block" style={{ color: '#10b981' }}>
+                          Last seen {fmtDate(v.last_accessed_at)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Row 2: Full URL ── */}
+                  <div className="flex items-center gap-2 rounded-xl px-3 py-2"
+                    style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                    <Link2 size={11} className="flex-shrink-0" style={{ color: 'var(--text-3)' }} />
+                    <span className="flex-1 text-[11px] font-mono truncate" style={{ color: 'var(--text-2)' }}>{url}</span>
+                    <button onClick={() => copyUrl(v.token)}
+                      className="flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all"
+                      style={{
+                        background: copiedToken === v.token ? 'rgba(16,185,129,0.12)' : 'var(--card-bg)',
+                        color: copiedToken === v.token ? '#10b981' : 'var(--accent)',
+                        border: '1px solid var(--border)',
+                      }}>
+                      {copiedToken === v.token ? <><CheckCheck size={9} /> Copied!</> : <><Copy size={9} /> Copy</>}
+                    </button>
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                      className="flex-shrink-0 p-1.5 rounded-lg transition-colors btn-icon"
+                      style={{ color: 'var(--text-3)' }} title="Open in new tab">
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+
+                  {/* ── Row 3: Access mode + controls ── */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+
+                    {/* Access mode selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Access</span>
+                      <div className="flex items-center gap-0.5 rounded-xl p-0.5"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                        {[
+                          { id: 'read',  Icon: Eye,    label: 'View only' },
+                          { id: 'edit',  Icon: Pencil, label: 'Can edit' },
+                        ].map(({ id, Icon, label }) => {
+                          const active = v.access_mode === id
+                          return (
+                            <button key={id}
+                              onClick={() => changeAccessMode(v, id)}
+                              disabled={isSaving}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                              style={{
+                                background: active
+                                  ? (id === 'edit' ? 'rgba(59,130,246,0.14)' : 'var(--card-bg)')
+                                  : 'transparent',
+                                color: active
+                                  ? (id === 'edit' ? '#2563eb' : 'var(--text-1)')
+                                  : 'var(--text-3)',
+                                boxShadow: active ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                              }}>
+                              {isSaving && active
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <Icon size={10} />
+                              }
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {/* "Saved ✓" flash */}
+                      {justSaved && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-semibold" style={{ color: '#10b981' }}>
+                          <Check size={10} /> Saved
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right actions */}
+                    <div className="flex items-center gap-1">
+                      {v.expires_at && (
+                        <span className="text-[10px] mr-1 hidden sm:block" style={{ color: expired ? '#f59e0b' : 'var(--text-3)' }}>
+                          <Clock size={9} className="inline mr-0.5" />
+                          {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}
+                        </span>
+                      )}
+                      {/* Viewer activity toggle */}
+                      <button onClick={() => loadAccesses(v.token)}
+                        className="btn-icon p-1.5"
+                        title="Viewer activity"
+                        style={{ color: selectedToken === v.token ? 'var(--accent)' : 'var(--text-3)' }}>
+                        <Activity size={13} />
+                      </button>
+                      {/* Enable / disable */}
+                      <button onClick={() => toggleActive(v)}
+                        className="btn-icon p-1.5"
+                        title={v.is_active ? 'Disable this link' : 'Enable this link'}
+                        style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }}>
                         {v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                       </button>
-                      <div className="flex items-center rounded-lg p-0.5"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                        <button
-                          onClick={() => setAccessMode(v, 'read')}
-                          disabled={updatingMode}
-                          className="px-2 py-1 rounded-md text-[10px] font-semibold transition"
-                          style={{
-                            color: v.access_mode === 'read' ? '#1f2937' : 'var(--text-3)',
-                            background: v.access_mode === 'read' ? 'var(--card-bg)' : 'transparent',
-                            opacity: updatingMode ? 0.72 : 1,
-                          }}
-                          title="Read only"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => setAccessMode(v, 'edit')}
-                          disabled={updatingMode}
-                          className="px-2 py-1 rounded-md text-[10px] font-semibold transition flex items-center gap-1"
-                          style={{
-                            color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)',
-                            background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.12)' : 'transparent',
-                            opacity: updatingMode ? 0.72 : 1,
-                          }}
-                          title="Can edit"
-                        >
-                          Edit
-                          {updatingMode && <Loader2 size={9} className="animate-spin" />}
-                        </button>
-                      </div>
-                      <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}><MapPin size={12} /></button>
-                      <button onClick={() => setConfirmDelete(v.token)} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)' }}
+                      {/* Delete */}
+                      <button onClick={() => setConfirmDelete(v.token)}
+                        className="btn-icon p-1.5"
+                        title="Delete link"
+                        style={{ color: 'rgba(239,68,68,0.55)' }}
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.6)'}>
-                        <Trash2 size={12} />
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.55)'}>
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
                 </div>
-                {selected === v.token && (
-                  <div className="ml-3 mt-1 rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-                    <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-                      <span className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
-                        <Activity size={11} /> Viewer Activity — {accesses.length} access{accesses.length !== 1 ? 'es' : ''}
+
+                {/* ── Viewer activity panel ── */}
+                {selectedToken === v.token && (
+                  <div className="border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+                    <div className="px-4 py-2.5 flex items-center justify-between"
+                      style={{ borderBottom: accesses.length > 0 ? '1px solid var(--border)' : 'none' }}>
+                      <span className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
+                        <Activity size={11} /> Viewer Activity
+                        {!loadingAcc && <span className="font-normal" style={{ color: 'var(--text-3)' }}>— {accesses.length} access{accesses.length !== 1 ? 'es' : ''}</span>}
                       </span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>IP · Device · Location · Time</span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>IP · Device · Location</span>
                     </div>
-                    {loadingAcc ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
-                    : accesses.length === 0 ? <p className="text-xs text-center py-4" style={{ color: 'var(--text-3)' }}>No accesses yet</p>
-                    : (
-                      <div className="max-h-48 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
-                        {accesses.map((a, i) => (
-                          <div key={i} className="px-3 py-2 flex items-start gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[11px] font-mono" style={{ color: 'var(--text-1)' }}>{a.ip || '?'}</span>
-                                {(a.city || a.region || a.country) && (
-                                  <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>
-                                    {[a.city, a.region, a.country].filter(Boolean).join(', ')}
-                                  </span>
-                                )}
-                                {a.geo_source && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full"
-                                    style={{ background: a.geo_source === 'browser' ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.1)', color: a.geo_source === 'browser' ? '#059669' : 'var(--text-3)' }}>
-                                    {a.geo_source === 'browser' ? 'GPS' : 'IP Geo'}
-                                  </span>
-                                )}
+                    {loadingAcc
+                      ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
+                      : accesses.length === 0
+                        ? <p className="text-xs text-center py-5" style={{ color: 'var(--text-3)' }}>No accesses recorded yet</p>
+                        : (
+                          <div className="max-h-52 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                            {accesses.map((a, i) => (
+                              <div key={i} className="px-4 py-2.5 flex items-start gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[11px] font-mono font-semibold" style={{ color: 'var(--text-1)' }}>{a.ip || '—'}</span>
+                                    {(a.city || a.region || a.country) && (
+                                      <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+                                        {[a.city, a.region, a.country].filter(Boolean).join(', ')}
+                                      </span>
+                                    )}
+                                    {a.geo_source && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                                        style={{ background: a.geo_source === 'browser' ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.1)', color: a.geo_source === 'browser' ? '#059669' : 'var(--text-3)' }}>
+                                        {a.geo_source === 'browser' ? 'GPS' : 'IP geo'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {a.device_label && <span className="text-[10px] font-medium" style={{ color: 'var(--text-2)' }}>{a.device_label}</span>}
+                                    {a.os && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Monitor size={8} /> {a.os}</span>}
+                                    {a.browser && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Globe size={8} /> {a.browser}</span>}
+                                    {a.device_type && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Smartphone size={8} /> {a.device_type}</span>}
+                                    {a.isp && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.isp}</span>}
+                                    {a.timezone && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.timezone}</span>}
+                                  </div>
+                                </div>
+                                <span className="text-[10px] flex-shrink-0 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{fmtDate(a.accessed_at)}</span>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                {a.device_label && <span className="text-[10px] font-medium" style={{ color: 'var(--text-2)' }}>{a.device_label}</span>}
-                                {a.os && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Monitor size={8} /> {a.os}</span>}
-                                {a.browser && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Globe size={8} /> {a.browser}</span>}
-                                {a.device_type && <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Smartphone size={8} /> {a.device_type}</span>}
-                                {a.device_model && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.device_model}</span>}
-                                {a.timezone && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.timezone}</span>}
-                                {a.isp && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{a.isp}</span>}
-                                {typeof a.lat === 'number' && typeof a.lon === 'number' && (
-                                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                                    {a.lat.toFixed(4)}, {a.lon.toFixed(4)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-3)' }}>{fmtDate(a.accessed_at)}</span>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )
+                    }
                   </div>
                 )}
               </div>
@@ -1690,6 +1852,7 @@ function ManageSharesModal({ onClose }) {
           })}
         </div>
       </div>
+
       {confirmDelete && (
         <ConfirmModal
           message="Delete this share link? Anyone with the URL will immediately lose access."
