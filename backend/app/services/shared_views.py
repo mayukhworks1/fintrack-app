@@ -354,52 +354,8 @@ class SharedViewService:
             # records added after the link was created appear automatically.
             records = await _fetch_dynamic_records(resource_type, vc)
         else:
-            # Fixed snapshot — fetch exactly the stored record IDs.
-            mirror_table = {
-                "status": "status_mirror",
-                "projects": "projects_mirror",
-                "invoices": "invoices_mirror",
-            }[resource_type]
-            record_map: dict[str, dict[str, Any]] = {}
-            found_ids: set[str] = set()
-            if record_ids:
-                async with pool.acquire() as conn:
-                    rows = await conn.fetch(
-                        """
-                        SELECT teable_id, fields::text AS fields
-                        FROM """ + mirror_table + """
-                        WHERE teable_id = ANY($1::text[])
-                        ORDER BY array_position($1::text[], teable_id)
-                        """,
-                        record_ids,
-                    )
-                for row in rows:
-                    try:
-                        fields = json.loads(row["fields"]) if isinstance(row["fields"], str) else (row["fields"] or {})
-                    except Exception:
-                        fields = {}
-                    teable_id = row["teable_id"]
-                    found_ids.add(teable_id)
-                    record_map[teable_id] = {"id": teable_id, "fields": fields}
-
-            # If the mirror is behind, try the live table for missing records.
-            missing_ids = [rid for rid in record_ids if rid not in found_ids]
-            if missing_ids:
-                try:
-                    svc = _live_service_for(resource_type)
-                    for rid in missing_ids:
-                        try:
-                            live = await _live_get_record(resource_type, svc, rid)
-                        except Exception:
-                            logger.debug("shared view live %s fallback failed for %s", resource_type, rid)
-                            continue
-                        if live and live.get("id"):
-                            record_map[live["id"]] = {"id": live["id"], "fields": live.get("fields") or {}}
-                except Exception as exc:
-                    logger.debug("shared view live %s fallback unavailable: %s", resource_type, exc)
-
-            # Rebuild in original shared order
-            records = [record_map[rid] for rid in record_ids if rid in record_map]
+            # Fixed snapshot — Teable remains the source of truth.
+            records = await _fetch_snapshot_records(resource_type, record_ids)
 
         # Log access asynchronously
         ip = _extract_ip(request)
@@ -738,6 +694,24 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
         return records
 
     raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")
+
+
+async def _fetch_snapshot_records(resource_type: str, record_ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch the exact stored record IDs live from Teable, preserving order."""
+    if not record_ids:
+        return []
+
+    service = _live_service_for(resource_type)
+    records: list[dict[str, Any]] = []
+    for record_id in record_ids:
+        try:
+            live = await _live_get_record(resource_type, service, record_id)
+        except Exception as exc:
+            logger.debug("shared view live %s snapshot fetch failed for %s: %s", resource_type, record_id, exc)
+            continue
+        if live and live.get("id"):
+            records.append({"id": live["id"], "fields": live.get("fields") or {}})
+    return records
 
 
 async def _live_update_record(resource_type: str, record_id: str, cleaned: dict[str, Any], request) -> dict[str, Any]:
