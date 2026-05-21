@@ -583,9 +583,6 @@ function DetailModal({ resourceType, record, onClose }) {
   const titleValue = f[meta.titleField] || 'Untitled'
   const statusValue = f[meta.statusField] || ''
   const accent = clientColor(groupValue)
-  const entries = Object.entries(f)
-    .filter(([, value]) => value !== null && value !== undefined && value !== '')
-    .sort(([a], [b]) => a.localeCompare(b))
 
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
@@ -597,60 +594,129 @@ function DetailModal({ resourceType, record, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(10px)' }}
       onClick={onClose}>
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[28px] shadow-2xl bg-white"
-        style={{ border: '1px solid #e5e7eb' }}
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col rounded-[24px] shadow-2xl"
+        style={{ background: '#fff', border: '1px solid #e5e7eb' }}
         onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b" style={{ borderColor: '#e5e7eb', background: `linear-gradient(135deg, ${hexRgba(accent, 0.14)}, rgba(255,255,255,0.98))` }}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
-                style={{ background: hexRgba(accent, 0.12), border: `1px solid ${hexRgba(accent, 0.24)}`, color: accent }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: accent }} />
+
+        {/* ── Header ─────────────────────────────────── */}
+        <div className="px-6 pt-6 pb-5 flex-shrink-0"
+          style={{ borderBottom: '1px solid #f1f5f9', background: `linear-gradient(135deg, ${hexRgba(accent, 0.07)} 0%, #fff 70%)` }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold mb-2"
+                style={{ background: hexRgba(accent, 0.1), border: `1px solid ${hexRgba(accent, 0.22)}`, color: accent }}>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: accent }} />
                 {groupValue}
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 leading-tight">{titleValue}</h2>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <h2 className="text-[18px] font-bold text-slate-900 leading-snug">{titleValue}</h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge value={statusValue} />
-                <span className="text-xs text-slate-500">Record ID: {record.id}</span>
+                {f['Last Modified'] && (
+                  <span className="text-[11px] text-slate-400">
+                    Updated {fmtDate(f['Last Modified'])}
+                  </span>
+                )}
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80">
+            <button onClick={onClose}
+              className="flex-shrink-0 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
               <X size={16} />
             </button>
           </div>
         </div>
-        <div className="overflow-y-auto max-h-[calc(90vh-132px)] p-6">
-          {resourceType === 'invoices' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
-              {[
-                ['Project', f['Project'] || '—'],
-                ['Category', f['Category'] || '—'],
-                ['Amount Raised', fmtInr(f['Amount Raised'])],
-                ['Amount Received', fmtInr(f['Amount Received'])],
-                ['Raised Date', fmtDate(f['Raised Date'])],
-                ['Cleared Date', fmtDate(f['Cleared Date'])],
-                ['Next follow-up', fmtDate(f['Next followup'])],
-                ['Payment Status', f['Payment Status'] || '—'],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border px-4 py-3" style={{ borderColor: '#e5e7eb', background: '#f8fafc' }}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 mb-1">{label}</p>
-                  <p className="text-sm font-semibold text-slate-700">{value}</p>
+
+        {/* ── Body ───────────────────────────────────── */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          {/* STATUS resource */}
+          {resourceType === 'status' && (
+            <>
+              {f['Short Status'] && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Summary</p>
+                  <p className="text-[14px] font-semibold text-slate-800 leading-relaxed">{f['Short Status']}</p>
                 </div>
-              ))}
-            </div>
+              )}
+              {f['Current Status (Detailed)'] && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Detailed Status</p>
+                  <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{f['Current Status (Detailed)']}</p>
+                </div>
+              )}
+              {f['Notes'] && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed">{f['Notes']}</p>
+                </div>
+              )}
+            </>
           )}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {entries.map(([key, value]) => (
-              <div key={key} className="rounded-2xl border px-4 py-3" style={{ borderColor: '#e5e7eb' }}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 mb-1">{key}</p>
-                <p className="text-sm text-slate-700 break-words whitespace-pre-wrap">
-                  {/(Amount|Profit)/i.test(key) && typeof value !== 'string' ? fmtInr(value) : String(value)}
-                </p>
+
+          {/* PROJECTS resource */}
+          {resourceType === 'projects' && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  ['Health', f['Health'] || '—'],
+                  ['Billed', fmtInr(f['Amount Billed So far'])],
+                  ['Profit', fmtInr(f['Actual Profit'])],
+                  ['Margin', f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
+                    <p className="text-sm font-bold text-slate-800">{value}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {f['Notes'] && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Notes']}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* INVOICES resource */}
+          {resourceType === 'invoices' && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  ['Raised', fmtInr(f['Amount Raised'])],
+                  ['Received', fmtInr(f['Amount Received'])],
+                  ['Raised Date', fmtDate(f['Raised Date'])],
+                  ['Cleared Date', fmtDate(f['Cleared Date'])],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
+                    <p className="text-sm font-bold text-slate-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Project', f['Project'] || '—'],
+                  ['Category', f['Category'] || '—'],
+                  ['Payment Status', f['Payment Status'] || '—'],
+                  ['Next Follow-up', fmtDate(f['Next followup'])],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
+                    <p className="text-[13px] font-semibold text-slate-700">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {f['Remark'] && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed">{f['Remark']}</p>
+                </div>
+              )}
+            </>
+          )}
+
         </div>
       </div>
     </div>
