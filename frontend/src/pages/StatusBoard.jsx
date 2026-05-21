@@ -1582,10 +1582,15 @@ function ManageSharesModal({ onClose }) {
                         <span className="text-[11px] font-mono" style={{ color: 'var(--text-3)' }}>…/{v.token}</span>
                         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Created {fmtDate(v.created_at)}</span>
                         {v.expires_at && <span className="text-[11px] flex items-center gap-0.5" style={{ color: expired ? '#f59e0b' : 'var(--text-3)' }}><Clock size={9} /> {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}</span>}
+                        {v.last_accessed_at && (
+                          <span className="text-[11px] flex items-center gap-0.5" style={{ color: '#10b981' }}>
+                            <Activity size={9} /> Last seen {fmtDate(v.last_accessed_at)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--text-2)' }}><Eye size={11} /> {v.access_count}</span>
+                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: v.access_count > 0 ? '#10b981' : 'var(--text-2)' }}><Eye size={11} /> {v.access_count} view{v.access_count !== 1 ? 's' : ''}</span>
                       <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><ExternalLink size={12} /></a>
                       <button onClick={() => toggleActive(v)} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)' }} title={v.is_active ? 'Disable' : 'Enable'}>
                         {v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
@@ -1631,8 +1636,11 @@ function ManageSharesModal({ onClose }) {
                 </div>
                 {selected === v.token && (
                   <div className="ml-3 mt-1 rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-                    <div className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}>
-                      Access Log — {accesses.length} entries
+                    <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <span className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
+                        <Activity size={11} /> Viewer Activity — {accesses.length} access{accesses.length !== 1 ? 'es' : ''}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>IP · Device · Location · Time</span>
                     </div>
                     {loadingAcc ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
                     : accesses.length === 0 ? <p className="text-xs text-center py-4" style={{ color: 'var(--text-3)' }}>No accesses yet</p>
@@ -2346,6 +2354,7 @@ export default function StatusBoard() {
     density,
     showDashboard,
     showClientAccents,
+    allExpanded,   // ← include card expansion state so shared view matches
   }
 
   async function addStatusOption(option) {

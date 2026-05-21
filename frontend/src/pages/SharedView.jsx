@@ -186,13 +186,21 @@ function SummaryStrip({ records, statusOptions, filterStatus, onFilterStatus, ac
   )
 }
 
-function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true }) {
+function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true, allExpanded = false }) {
   const meta = RESOURCE_META[resourceType]
   const f = record.fields || {}
   const groupValue = f[meta.clientField] || 'Unknown'
   const titleValue = f[meta.titleField] || 'Untitled'
   const statusValue = f[meta.statusField] || ''
   const clr = clientColor(groupValue)
+  // Per-card local expand state — syncs whenever the global allExpanded changes
+  const [expanded, setExpanded] = useState(allExpanded)
+  useEffect(() => { setExpanded(allExpanded) }, [allExpanded])
+
+  const short      = resourceType === 'status' ? (f['Short Status'] || '') : ''
+  const detail     = resourceType === 'status' ? (f['Current Status (Detailed)'] || '') : ''
+  const hasDetail  = detail.trim() && detail.trim() !== short.trim()
+
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
       {showClientAccents && <div className="h-1" style={{ background: clr }} />}
@@ -210,8 +218,26 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
         </div>
         {resourceType === 'status' && (
           <>
-            {f['Short Status'] && <p className="text-sm font-semibold text-gray-800 leading-snug mb-2">{f['Short Status']}</p>}
-            {f['Current Status (Detailed)'] && <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{f['Current Status (Detailed)']}</p>}
+            {short && <p className="text-sm font-semibold text-gray-800 leading-snug mb-2">{short}</p>}
+            {hasDetail && (
+              <div>
+                <p className="text-sm text-gray-500 leading-relaxed"
+                  style={expanded
+                    ? { whiteSpace: 'pre-wrap' }
+                    : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {detail}
+                </p>
+                <button
+                  onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+                  className="mt-1 text-[11px] font-semibold flex items-center gap-0.5"
+                  style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  {expanded ? '↑ Show less' : '↓ Show more'}
+                </button>
+              </div>
+            )}
+            {!hasDetail && f['Current Status (Detailed)'] && (
+              <p className="text-sm text-gray-500 leading-relaxed">{f['Current Status (Detailed)']}</p>
+            )}
           </>
         )}
         {resourceType === 'projects' && (
@@ -248,6 +274,7 @@ function CardView({
   groupByField,
   groupSort = 'count-desc',
   recordSort = 'project-asc',
+  allExpanded = false,
 }) {
   const meta = RESOURCE_META[resourceType]
   const groups = new Map()
@@ -311,8 +338,8 @@ function CardView({
               </span>
               <span className="text-sm text-gray-400">{count} {meta.noun}{count !== 1 ? 's' : ''}</span>
             </div>
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${compact ? 'gap-3' : 'gap-4'}`}>
-              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} />)}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 ${compact ? 'gap-3' : 'gap-4'}`}>
+              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} allExpanded={allExpanded} />)}
             </div>
           </section>
         )
@@ -722,6 +749,7 @@ export default function SharedView() {
   const compact = vc.density === 'compact'
   const showDashboard = vc.showDashboard ?? meta.showDashboardByDefault
   const showClientAccents = vc.showClientAccents !== false
+  const allExpanded = vc.allExpanded === true   // honour creator's expand state
   const boardGroupOptions = BOARD_GROUP_OPTIONS[resourceType] || [meta.statusField]
   const activeBoardGroupBy = boardGroupOptions.includes(boardGroupBy) ? boardGroupBy : meta.statusField
   const activeCardGroupBy = [meta.clientField, meta.statusField].includes(vc.cardGroupBy) ? vc.cardGroupBy : meta.clientField
@@ -993,6 +1021,7 @@ export default function SharedView() {
                 groupByField={activeCardGroupBy}
                 groupSort={vc.cardGroupSort || 'count-desc'}
                 recordSort={vc.cardRecordSort || 'project-asc'}
+                allExpanded={allExpanded}
               />
             )}
             {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} />}

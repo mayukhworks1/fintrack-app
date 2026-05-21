@@ -126,6 +126,10 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     if isinstance(show_client_accents, bool):
         clean["showClientAccents"] = show_client_accents
 
+    all_expanded = view_config.get("allExpanded")
+    if isinstance(all_expanded, bool):
+        clean["allExpanded"] = all_expanded
+
     return clean or None
 
 
