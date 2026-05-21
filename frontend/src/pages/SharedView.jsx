@@ -348,64 +348,146 @@ function CardView({
   )
 }
 
+// Column width config — controls how much space each field gets in the grid
+const COL_WIDTHS = {
+  'Client':                     '140px',
+  'Project':                    '160px',
+  'Project Name':               '180px',
+  'Status':                     '130px',
+  'Project Status':             '130px',
+  'Payment Status':             '120px',
+  'Short Status':               '200px',
+  'Current Status (Detailed)': '1fr',
+  'Health':                     '100px',
+  'Amount Billed So far':       '120px',
+  'Actual Profit':              '110px',
+  'Profit percentage':          '90px',
+  'Invoice Number':             '140px',
+  'Amount Raised':              '120px',
+  'Amount Received':            '120px',
+  'Raised Date':                '110px',
+  'Cleared Date':               '110px',
+  'Next followup':              '110px',
+  'Last Modified':              '130px',
+}
+
+function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
+  if (col === meta.clientField) return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full truncate"
+      style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexRgba(clr, 0.2) : '#e2e8f0'}` }}>
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: clr }} />
+      <span className="truncate">{f[col] || '—'}</span>
+    </span>
+  )
+  if (col === meta.titleField) return (
+    <span className="text-[13px] font-semibold text-gray-900 block truncate">{f[col] || '—'}</span>
+  )
+  if (col === meta.statusField) return <StatusBadge value={f[col]} />
+  if (col === 'Short Status') return (
+    // Clamp to 2 lines — never dump the full paragraph
+    <span className="text-[12px] text-gray-700 leading-snug block"
+      style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      {f[col] || '—'}
+    </span>
+  )
+  if (col === 'Current Status (Detailed)') return (
+    <span className="text-[11px] text-gray-500 leading-relaxed block"
+      style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      {f[col] || '—'}
+    </span>
+  )
+  if (col === 'Health') return (
+    <span className="text-[12px] font-medium text-gray-700">{f[col] || '—'}</span>
+  )
+  if (['Amount Billed So far', 'Actual Profit', 'Amount Raised', 'Amount Received'].includes(col)) return (
+    <span className="text-[12px] font-semibold tabular-nums text-gray-800">{fmtInr(f[col])}</span>
+  )
+  if (col === 'Profit percentage') return (
+    <span className="text-[12px] font-semibold tabular-nums text-gray-800">{f[col] ? `${Number(f[col]).toFixed(1)}%` : '—'}</span>
+  )
+  if (['Raised Date', 'Cleared Date', 'Next followup'].includes(col)) return (
+    <span className="text-[11px] text-gray-600 whitespace-nowrap">{fmtDate(f[col])}</span>
+  )
+  if (col === 'Last Modified') return (
+    <span className="text-[11px] text-gray-400 whitespace-nowrap">{fmtDate(f.lastModifiedTime || '')}</span>
+  )
+  return <span className="text-[12px] text-gray-700 truncate block">{f[col] || '—'}</span>
+}
+
 function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true }) {
   const meta = RESOURCE_META[resourceType]
   const cols = (columns || meta.defaultColumns).filter(c => meta.columns.includes(c))
+
+  // Build grid template: one column per field + fixed actions column
+  const gridTemplate = [...cols.map(c => COL_WIDTHS[c] || '1fr'), '64px'].join(' ')
+
   return (
-    <div className="overflow-x-auto rounded-2xl" style={{ border: '1px solid #e5e7eb' }}>
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
-            {cols.map(col => <th key={col} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap">{col}</th>)}
-            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
+      {/* Sticky header */}
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 600 }}>
+          {/* Header row */}
+          <div className="grid px-4 py-2.5 gap-3"
+            style={{ gridTemplateColumns: gridTemplate, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            {cols.map(col => (
+              <div key={col} className="text-[10px] font-bold uppercase tracking-widest text-gray-400 truncate">
+                {col}
+              </div>
+            ))}
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">–</div>
+          </div>
+
+          {/* Data rows */}
           {records.map((r, i) => {
             const f = r.fields || {}
             const clr = clientColor(f[meta.clientField] || '')
             return (
-              <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+              <div key={r.id}
+                className="grid px-4 gap-3 group transition-colors"
+                style={{
+                  gridTemplateColumns: gridTemplate,
+                  alignItems: 'center',
+                  minHeight: 52,
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  background: i % 2 === 0 ? '#fff' : '#fafafa',
+                  borderBottom: '1px solid #f1f5f9',
+                  borderLeft: showClientAccents ? `3px solid ${hexRgba(clr, 0.5)}` : '3px solid transparent',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = hexRgba(clr, 0.03) }}
+                onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa' }}
+              >
                 {cols.map(col => (
-                  <td key={col} className="px-4 py-3 align-top">
-                    {col === meta.clientField && (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f8fafc', color: showClientAccents ? clr : '#475569' }}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: clr }} />
-                        {f[col] || '—'}
-                      </span>
-                    )}
-                    {col === meta.titleField && <span className="font-semibold text-gray-900">{f[col] || '—'}</span>}
-                    {col === meta.statusField && <StatusBadge value={f[col]} />}
-                    {col === 'Short Status' && <span className="text-gray-700">{f[col] || '—'}</span>}
-                    {col === 'Current Status (Detailed)' && <span className="text-gray-500 text-xs leading-relaxed line-clamp-2">{f[col] || '—'}</span>}
-                    {col === 'Health' && <span className="text-gray-700">{f[col] || '—'}</span>}
-                    {col === 'Amount Billed So far' && <span className="text-gray-700">{fmtInr(f[col])}</span>}
-                    {col === 'Actual Profit' && <span className="text-gray-700">{fmtInr(f[col])}</span>}
-                    {col === 'Profit percentage' && <span className="text-gray-700">{f[col] ? `${Number(f[col]).toFixed(1)}%` : '—'}</span>}
-                    {col === 'Amount Raised' && <span className="text-gray-700">{fmtInr(f[col])}</span>}
-                    {col === 'Amount Received' && <span className="text-gray-700">{fmtInr(f[col])}</span>}
-                    {col === 'Raised Date' && <span className="text-gray-700 whitespace-nowrap">{fmtDate(f[col])}</span>}
-                    {col === 'Cleared Date' && <span className="text-gray-700 whitespace-nowrap">{fmtDate(f[col])}</span>}
-                    {col === 'Next followup' && <span className="text-gray-700 whitespace-nowrap">{fmtDate(f[col])}</span>}
-                    {col === 'Last Modified' && <span className="text-gray-500 text-xs whitespace-nowrap">{fmtDateTime(f.lastModifiedTime || r.createdTime || '') || '—'}</span>}
-                    {![
-                      meta.clientField, meta.titleField, meta.statusField, 'Short Status', 'Current Status (Detailed)', 'Health', 'Amount Billed So far',
-                      'Actual Profit', 'Profit percentage', 'Amount Raised', 'Amount Received', 'Raised Date', 'Cleared Date', 'Next followup', 'Last Modified',
-                    ].includes(col) && <span className="text-gray-700">{f[col] || '—'}</span>}
-                  </td>
+                  <div key={col} className="min-w-0">
+                    {cellContent(col, f, clr, resourceType, meta, showClientAccents)}
+                  </div>
                 ))}
-                <td className="px-4 py-3 align-top text-right">
-                  <button onClick={() => onDetail(r)} className="p-1 rounded-lg text-gray-400 hover:text-slate-700" title="View details"><Eye size={12} /></button>
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => onDetail(r)}
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#334155'}
+                    onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                    title="View details">
+                    <Eye size={13} />
+                  </button>
                   {canEdit && (
-                    <button onClick={() => onEdit(r)} className="p-1 rounded-lg text-gray-400 hover:text-blue-600" title="Edit"><Pencil size={12} /></button>
+                    <button onClick={() => onEdit(r)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#2563eb'}
+                      onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                      title="Edit">
+                      <Pencil size={13} />
+                    </button>
                   )}
-                </td>
-              </tr>
+                </div>
+              </div>
             )
           })}
-        </tbody>
-      </table>
+        </div>
+      </div>
     </div>
   )
 }
