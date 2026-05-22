@@ -21,7 +21,8 @@ import {
   MapPin, Monitor, Smartphone, Globe, Shield,
   LayoutGrid, List, Columns,
   Bookmark, BookmarkPlus, Trash, SlidersHorizontal,
-  GripVertical, ArrowRight, ChevronRight, TrendingUp,
+  GripVertical, ArrowRight, ChevronRight, TrendingUp, Filter,
+  CheckSquare, Square,
   Receipt, Unlink,
 } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
@@ -1635,6 +1636,9 @@ function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, vi
   const [titleDraft,    setTitleDraft]    = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [scopeEditor,   setScopeEditor]   = useState(null)
+  const [accessFilters, setAccessFilters] = useState({ q: '', event: '' })
+  const [selectedAccessIds, setSelectedAccessIds] = useState([])
+  const [deletingAccesses, setDeletingAccesses] = useState(false)
 
   useEffect(() => { loadViews() }, [])
   useEffect(() => {
@@ -1725,6 +1729,8 @@ function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, vi
   async function loadAccesses(token) {
     if (selectedToken === token) { setSelectedToken(null); return }
     setSelectedToken(token); setLoadingAcc(true)
+    setAccessFilters({ q: '', event: '' })
+    setSelectedAccessIds([])
     try { const r = await api.sharedViews.accesses(token); setAccesses(r.accesses || []) } catch {}
     finally { setLoadingAcc(false) }
   }
@@ -1733,6 +1739,51 @@ function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, vi
     navigator.clipboard.writeText(`${window.location.origin}/view/${token}`)
     setCopiedToken(token)
     setTimeout(() => setCopiedToken(t => t === token ? null : t), 2500)
+  }
+
+  const filteredAccesses = useMemo(() => {
+    const q = (accessFilters.q || '').trim().toLowerCase()
+    const event = accessFilters.event || ''
+    return accesses.filter(a => {
+      if (event && String(a.event_type || 'view') !== event) return false
+      if (!q) return true
+      const hay = [
+        a.ip, a.city, a.region, a.country, a.device_label, a.os, a.browser,
+        a.device_type, a.record_id, a.geo_source, a.isp, a.timezone,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }, [accesses, accessFilters])
+
+  const allFilteredSelected = filteredAccesses.length > 0 && filteredAccesses.every(a => selectedAccessIds.includes(a.id))
+
+  function toggleAccessRow(id) {
+    setSelectedAccessIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function toggleSelectAllFiltered() {
+    const ids = filteredAccesses.map(a => a.id).filter(Boolean)
+    if (!ids.length) return
+    setSelectedAccessIds(prev => {
+      const allSelected = ids.every(id => prev.includes(id))
+      return allSelected ? prev.filter(id => !ids.includes(id)) : [...new Set([...prev, ...ids])]
+    })
+  }
+
+  async function deleteSelectedAccessRows() {
+    const ids = selectedAccessIds.filter(Boolean)
+    if (!ids.length || !selectedToken) return
+    setDeletingAccesses(true)
+    try {
+      await api.sharedViews.deleteAccesses(selectedToken, ids)
+      setAccesses(prev => prev.filter(a => !ids.includes(a.id)))
+      setSelectedAccessIds([])
+      showToast(`Deleted ${ids.length} activity record${ids.length !== 1 ? 's' : ''}`, 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to delete activity', 'error')
+    } finally {
+      setDeletingAccesses(false)
+    }
   }
 
   return (
@@ -1988,11 +2039,63 @@ function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, vi
                       : accesses.length === 0
                         ? <p className="text-xs text-center py-5" style={{ color: 'var(--text-3)' }}>No accesses recorded yet</p>
                         : (
-                          <div className="max-h-52 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
-                            {accesses.map((a, i) => (
-                              <div key={i} className="px-4 py-2.5 flex items-start gap-3">
+                          <>
+                            <div className="px-4 py-2.5 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-bold" style={{ color: 'var(--text-2)' }}>
+                                  Events — {filteredAccesses.length}/{accesses.length} entries
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button onClick={toggleSelectAllFiltered} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg"
+                                    style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                                    {allFilteredSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                                    {allFilteredSelected ? 'Unselect all' : 'Select all'}
+                                  </button>
+                                  <button onClick={deleteSelectedAccessRows} disabled={!selectedAccessIds.length || deletingAccesses}
+                                    className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg"
+                                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#ef4444', opacity: (!selectedAccessIds.length || deletingAccesses) ? 0.5 : 1 }}>
+                                    {deletingAccesses ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                    Delete selected
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="relative flex-1">
+                                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
+                                  <input
+                                    value={accessFilters.q}
+                                    onChange={e => setAccessFilters(prev => ({ ...prev, q: e.target.value }))}
+                                    placeholder="Filter by IP, location, device, browser…"
+                                    className="w-full rounded-lg pl-7 pr-2 py-1.5 text-[11px]"
+                                    style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                                  />
+                                </div>
+                                <div className="relative">
+                                  <Filter size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
+                                  <select
+                                    value={accessFilters.event}
+                                    onChange={e => setAccessFilters(prev => ({ ...prev, event: e.target.value }))}
+                                    className="rounded-lg pl-7 pr-7 py-1.5 text-[11px]"
+                                    style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
+                                    <option value="">All events</option>
+                                    <option value="view">View</option>
+                                    <option value="edit">Edit</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="max-h-52 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                            {filteredAccesses.map((a, i) => (
+                              <div key={a.id || i} className="px-4 py-2.5 flex items-start gap-3">
+                                <button onClick={() => toggleAccessRow(a.id)} className="mt-0.5 flex-shrink-0" style={{ color: selectedAccessIds.includes(a.id) ? 'var(--accent)' : 'var(--text-3)' }}>
+                                  {selectedAccessIds.includes(a.id) ? <CheckSquare size={13} /> : <Square size={13} />}
+                                </button>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                                      style={{ background: a.event_type === 'edit' ? 'rgba(59,130,246,0.08)' : 'rgba(16,185,129,0.08)', color: a.event_type === 'edit' ? '#2563eb' : '#059669' }}>
+                                      {String(a.event_type || 'view').toUpperCase()}
+                                    </span>
                                     <span className="text-[11px] font-mono font-semibold" style={{ color: 'var(--text-1)' }}>{a.ip || '—'}</span>
                                     {(a.city || a.region || a.country) && (
                                       <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>
@@ -2019,6 +2122,7 @@ function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, vi
                               </div>
                             ))}
                           </div>
+                          </>
                         )
                     }
                   </div>
