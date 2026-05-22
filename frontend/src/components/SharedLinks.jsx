@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Check, CheckCheck, Clock, Copy, ExternalLink, Eye, Globe, Link2,
   Loader2, MapPin, Monitor, Pencil, Shield, Smartphone, ToggleLeft,
-  ToggleRight, Trash2, X, Share2,
+  ToggleRight, Trash2, X, Share2, Search, Filter, CheckSquare, Square,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
@@ -247,6 +247,9 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
   const [updatingTokens, setUpdatingTokens] = useState(() => new Set())
   const [togglingTokens, setTogglingTokens] = useState(() => new Set())
   const [deletingTokens, setDeletingTokens] = useState(() => new Set())
+  const [accessFiltersByToken, setAccessFiltersByToken] = useState({})
+  const [selectedAccessIdsByToken, setSelectedAccessIdsByToken] = useState({})
+  const [deletingAccessesByToken, setDeletingAccessesByToken] = useState(() => new Set())
 
   useEffect(() => { loadViews() }, [resourceType])
   useEffect(() => {
@@ -340,6 +343,89 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
     }
   }
 
+  function accessFilterState(token) {
+    return accessFiltersByToken[token] || { q: '', event: '' }
+  }
+
+  function setAccessFilter(token, patch) {
+    setAccessFiltersByToken(prev => ({
+      ...prev,
+      [token]: { ...accessFilterState(token), ...patch },
+    }))
+  }
+
+  function selectedAccessIds(token) {
+    return selectedAccessIdsByToken[token] || []
+  }
+
+  function filteredAccesses(token) {
+    const filters = accessFilterState(token)
+    const q = (filters.q || '').trim().toLowerCase()
+    const event = filters.event || ''
+    const accesses = accessesByToken[token] || []
+    return accesses.filter(a => {
+      if (event && String(a.event_type || 'view') !== event) return false
+      if (!q) return true
+      const hay = [
+        a.ip,
+        a.city,
+        a.region,
+        a.country,
+        a.device_label,
+        a.os,
+        a.browser,
+        a.device_type,
+        a.record_id,
+        a.geo_source,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }
+
+  function toggleAccessRow(token, id) {
+    setSelectedAccessIdsByToken(prev => {
+      const next = new Set(prev[token] || [])
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return { ...prev, [token]: [...next] }
+    })
+  }
+
+  function toggleSelectAllFiltered(token) {
+    const filtered = filteredAccesses(token)
+    const filteredIds = filtered.map(a => a.id)
+    const current = new Set(selectedAccessIds(token))
+    const allSelected = filteredIds.length > 0 && filteredIds.every(id => current.has(id))
+    setSelectedAccessIdsByToken(prev => ({
+      ...prev,
+      [token]: allSelected ? (prev[token] || []).filter(id => !filteredIds.includes(id)) : [...new Set([...(prev[token] || []), ...filteredIds])],
+    }))
+  }
+
+  async function deleteSelectedAccesses(token) {
+    const ids = selectedAccessIds(token)
+    if (!ids.length) return
+    if (!confirm(`Delete ${ids.length} selected activity record${ids.length !== 1 ? 's' : ''}?`)) return
+    setDeletingAccessesByToken(tokens => new Set(tokens).add(token))
+    try {
+      await api.sharedViews.deleteAccesses(token, ids)
+      setAccessesByToken(prev => ({
+        ...prev,
+        [token]: (prev[token] || []).filter(a => !ids.includes(a.id)),
+      }))
+      setSelectedAccessIdsByToken(prev => ({ ...prev, [token]: [] }))
+      showToast(`Deleted ${ids.length} activity record${ids.length !== 1 ? 's' : ''}`, 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to delete activity', 'error')
+    } finally {
+      setDeletingAccessesByToken(tokens => {
+        const next = new Set(tokens)
+        next.delete(token)
+        return next
+      })
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
@@ -366,6 +452,10 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
             const deleting = deletingTokens.has(v.token)
             const url = `${window.location.origin}/view/${v.token}`
             const accesses = accessesByToken[v.token] || []
+            const filtered = filteredAccesses(v.token)
+            const selectedIds = selectedAccessIds(v.token)
+            const deletingAccesses = deletingAccessesByToken.has(v.token)
+            const allFilteredSelected = filtered.length > 0 && filtered.every(a => selectedIds.includes(a.id))
             return (
               <div key={v.token}>
                 <div className="rounded-xl p-3 transition-all"
@@ -421,15 +511,59 @@ export function ManageSharedLinksModal({ resourceType = 'status', onClose }) {
                 </div>
                 {selected === v.token && (
                   <div className="ml-3 mt-1 rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-                    <div className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}>
-                      Events — {accesses.length} entries
+                    <div className="px-3 py-2 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-bold" style={{ color: 'var(--text-2)' }}>
+                          Events — {filtered.length}/{accesses.length} entries
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => toggleSelectAllFiltered(v.token)} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg"
+                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                            {allFilteredSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                            {allFilteredSelected ? 'Unselect all' : 'Select all'}
+                          </button>
+                          <button onClick={() => deleteSelectedAccesses(v.token)} disabled={!selectedIds.length || deletingAccesses}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg"
+                            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#ef4444', opacity: (!selectedIds.length || deletingAccesses) ? 0.5 : 1 }}>
+                            {deletingAccesses ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            Delete selected
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
+                          <input
+                            value={accessFilterState(v.token).q}
+                            onChange={e => setAccessFilter(v.token, { q: e.target.value })}
+                            placeholder="Filter by IP, location, device, browser…"
+                            className="w-full rounded-lg pl-7 pr-2 py-1.5 text-[11px]"
+                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                          />
+                        </div>
+                        <div className="relative">
+                          <Filter size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
+                          <select
+                            value={accessFilterState(v.token).event}
+                            onChange={e => setAccessFilter(v.token, { event: e.target.value })}
+                            className="rounded-lg pl-7 pr-7 py-1.5 text-[11px]"
+                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
+                            <option value="">All events</option>
+                            <option value="view">View</option>
+                            <option value="edit">Edit</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
                     {loadingAccessToken === v.token ? <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>
-                    : accesses.length === 0 ? <p className="text-xs text-center py-4" style={{ color: 'var(--text-3)' }}>No entries yet</p>
+                    : filtered.length === 0 ? <p className="text-xs text-center py-4" style={{ color: 'var(--text-3)' }}>No entries match the current filters</p>
                     : (
                       <div className="max-h-56 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
-                        {accesses.map((a, i) => (
-                          <div key={i} className="px-3 py-2 flex items-start gap-3">
+                        {filtered.map((a, i) => (
+                          <div key={a.id || i} className="px-3 py-2 flex items-start gap-3">
+                            <button onClick={() => toggleAccessRow(v.token, a.id)} className="mt-0.5 flex-shrink-0" style={{ color: selectedIds.includes(a.id) ? 'var(--accent)' : 'var(--text-3)' }}>
+                              {selectedIds.includes(a.id) ? <CheckSquare size={13} /> : <Square size={13} />}
+                            </button>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full"

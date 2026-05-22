@@ -315,6 +315,23 @@ class SharedViewService:
             )
         return [_row(r) for r in rows]
 
+    async def delete_accesses(self, token: str, access_ids: list[str]) -> int:
+        pool = get_pool()
+        if not pool or not access_ids:
+            return 0
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                DELETE FROM shared_view_accesses
+                WHERE view_token = $1
+                  AND id = ANY($2::uuid[])
+                RETURNING id
+                """,
+                token,
+                access_ids,
+            )
+        return len(rows)
+
     # ── Public access ─────────────────────────────────────────────────────────
 
     async def get_public_data(self, token: str, request) -> dict:

@@ -59,6 +59,10 @@ class PublicSharedViewUpdate(BaseModel):
     next_followup: Optional[str] = None
 
 
+class SharedViewAccessDelete(BaseModel):
+    access_ids: list[str]
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _ip(request: Request) -> str:
@@ -183,6 +187,19 @@ async def get_shared_view_accesses(
     svc = SharedViewService()
     accesses = await svc.get_accesses(token, limit=limit)
     return {"accesses": accesses, "total": len(accesses)}
+
+
+@router.delete("/api/shared-views/{token}/accesses")
+async def delete_shared_view_accesses(
+    token: str,
+    body: SharedViewAccessDelete,
+    _: str = Depends(require_editor),
+):
+    svc = SharedViewService()
+    if not body.access_ids:
+        raise HTTPException(status_code=400, detail="No access rows selected")
+    deleted = await svc.delete_accesses(token, body.access_ids)
+    return {"deleted": deleted}
 
 
 # ── Public endpoint (NO auth) ──────────────────────────────────────────────────
