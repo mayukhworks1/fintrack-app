@@ -150,6 +150,69 @@ def _append_status_context(context: str, status_records: list[dict]) -> str:
     return context
 
 
+def _is_status_dashboard_request(message: str) -> bool:
+    q = (message or "").strip().lower()
+    if not q:
+        return False
+    asks_dashboard = any(term in q for term in (
+        "dashboard", "pie chart", "donut chart", "chart", "graph", "visual", "distribution",
+    ))
+    asks_status = any(term in q for term in (
+        "status", "statuses", "project status", "all status", "status of projects",
+    ))
+    return asks_dashboard and asks_status
+
+
+async def _build_status_dashboard_payload() -> dict[str, Any]:
+    service = StatusService()
+    try:
+        records = await service._list_from_teable()
+    except Exception:
+        records = await service.list_all()
+
+    counts: dict[str, int] = {}
+    for record in records:
+        fields = record.get("fields", {})
+        status = str(fields.get("Status") or "Not started").strip() or "Not started"
+        counts[status] = counts.get(status, 0) + 1
+
+    total = sum(counts.values())
+    palette = {
+        "Completed": "#10b981",
+        "In progress": "#2563eb",
+        "On Hold": "#f59e0b",
+        "Input Pending": "#f97316",
+        "Not started": "#94a3b8",
+    }
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    series = []
+    for name, value in ordered:
+        pct = round((value / total * 100), 1) if total else 0.0
+        series.append({
+            "name": name,
+            "value": value,
+            "percent": pct,
+            "color": palette.get(name, "#8b5cf6"),
+        })
+
+    leading = ordered[0][0] if ordered else "No status"
+    leading_pct = round((ordered[0][1] / total * 100), 1) if ordered and total else 0.0
+    copy_lines = [
+        "Project Status Distribution",
+        *[f"{item['name']}: {item['value']} project(s) ({item['percent']}%)" for item in series],
+        f"Total projects: {total}",
+    ]
+    return {
+        "eyebrow": "Overview",
+        "title": "Project Status Distribution",
+        "subtitle": "Live Teable status board snapshot",
+        "total": total,
+        "series": series,
+        "insight": f"{leading} is the largest bucket at {leading_pct}% of all tracked projects." if total else "No status records are available right now.",
+        "copyText": "\n".join(copy_lines),
+    }
+
+
 # ── Context builder — PG mirror + Valkey cache ────────────────────────────────
 
 async def _build_context_pg(pool) -> str:
@@ -458,6 +521,17 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             # Fallback: client-provided history (backward compat / no PG)
             history = [{"role": m.role, "content": m.content} for m in body.history]
 
+        if _is_status_dashboard_request(body.message):
+            dashboard = await _build_status_dashboard_payload()
+            resp = {
+                "reply": dashboard["copyText"],
+                "dashboard": dashboard,
+                "model": "deterministic-dashboard",
+            }
+            if session_id:
+                resp["session_id"] = session_id
+            return resp
+
         # ── AI call ───────────────────────────────────────────────────────
         t0 = time.time()
         result = await chat_with_ai(body.message, history, context)
@@ -509,6 +583,10 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
     if not history:
         history = [{"role": m.role, "content": m.content} for m in body.history]
 
+    dashboard_payload = None
+    if _is_status_dashboard_request(body.message):
+        dashboard_payload = await _build_status_dashboard_payload()
+
     async def event_stream():
         started = time.time()
         final_content = ""
@@ -517,6 +595,12 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
         try:
             if session_id:
                 yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
+            if dashboard_payload is not None:
+                final_content = dashboard_payload["copyText"]
+                final_model = "deterministic-dashboard"
+                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': dashboard_payload, 'model_short': final_model})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model})}\n\n"
+                return
             async for event in stream_chat_with_ai(body.message, history, context):
                 if event["type"] == "done":
                     final_content = event["content"]

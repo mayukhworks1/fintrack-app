@@ -321,6 +321,7 @@ export default function Projects() {
           selectedRecords={displayed}
           title={`Projects · ${status || client || 'Current View'}`}
           recordLabel="project"
+          enableLiveMode
           viewConfig={{
             type: 'card',
             filterClient: client || '',
@@ -331,7 +332,18 @@ export default function Projects() {
         />
       )}
       {isEditor && manageModal && (
-        <ManageSharedLinksModal resourceType="projects" onClose={() => setManageModal(false)} />
+        <ManageSharedLinksModal
+          resourceType="projects"
+          recordLabel="project"
+          currentViewConfig={{
+            type: 'card',
+            filterClient: client || '',
+            filterStatus: status || '',
+            search,
+          }}
+          visibleRecords={displayed}
+          onClose={() => setManageModal(false)}
+        />
       )}
     </div>
   )

@@ -6,6 +6,7 @@ import {
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts'
 
 /* ───────── Inline text formatting (bold, strip stray markdown) ───────── */
 function escHtml(s) {
@@ -106,6 +107,74 @@ function AiText({ text }) {
   return <div className="space-y-1.5">{elements}</div>
 }
 
+const DASHBOARD_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#f97316', '#94a3b8', '#ec4899']
+
+function DashboardCard({ dashboard }) {
+  const data = Array.isArray(dashboard?.series) ? dashboard.series : []
+  const total = Number(dashboard?.total || data.reduce((sum, item) => sum + Number(item.value || 0), 0))
+  if (!data.length) return null
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+          {dashboard?.eyebrow || 'Dashboard'}
+        </p>
+        <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
+          {dashboard?.title || 'Portfolio Distribution'}
+        </h3>
+        {dashboard?.subtitle && (
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>{dashboard.subtitle}</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,340px)_1fr] gap-4 items-start">
+        <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2}>
+                  {data.map((entry, index) => (
+                    <Cell key={entry.name || index} fill={entry.color || DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(value) => [`${value}`, 'Projects']} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Total Projects</p>
+            <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-1)' }}>{total}</p>
+          </div>
+          <div className="space-y-2">
+            {data.map((item, index) => (
+              <div key={item.name || index} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: item.color || DASHBOARD_COLORS[index % DASHBOARD_COLORS.length] }} />
+                  <span className="text-sm font-medium truncate" style={{ color: 'var(--text-1)' }}>{item.name}</span>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.value}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{item.percent}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {dashboard?.insight && (
+            <div className="rounded-2xl p-3" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{dashboard.insight}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ───────── Copy-to-clipboard button ───────── */
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false)
@@ -146,6 +215,7 @@ const SUGGESTIONS = [
 
 function Message({ msg }) {
   const isUser = msg.role === 'user'
+  const copyText = msg.dashboard?.copyText || msg.content || ''
   return (
     <div
       className={clsx('flex gap-2 sm:gap-3 mb-4 sm:mb-5 animate-slide-up', isUser && 'flex-row-reverse')}
@@ -182,7 +252,9 @@ function Message({ msg }) {
               </span>
             : isUser
               ? <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-              : <AiText text={msg.content} />
+              : msg.dashboard
+                ? <DashboardCard dashboard={msg.dashboard} />
+                : <AiText text={msg.content} />
           }
         </div>
 
@@ -195,7 +267,7 @@ function Message({ msg }) {
                 {msg.model}
               </span>
             )}
-            <CopyButton text={msg.content} />
+            <CopyButton text={copyText} />
           </div>
         )}
       </div>
@@ -275,6 +347,7 @@ export default function AIAssistant() {
       let buffer = ''
       let finalModel = null
       let finalReply = ''
+      let finalDashboard = null
 
       if (!reader) throw new Error('Streaming is unavailable')
 
@@ -311,7 +384,21 @@ export default function AIAssistant() {
 
           if (event.type === 'delta') {
             finalReply += event.delta || ''
-            applyAssistantState(entry => ({ ...entry, content: finalReply, streaming: true }))
+            applyAssistantState(entry => ({ ...entry, content: finalReply, dashboard: null, streaming: true }))
+            continue
+          }
+
+          if (event.type === 'dashboard' && event.dashboard) {
+            finalDashboard = event.dashboard
+            finalReply = event.dashboard.copyText || event.dashboard.insight || event.dashboard.title || 'Dashboard ready'
+            finalModel = event.model_short || 'deterministic-dashboard'
+            applyAssistantState(entry => ({
+              ...entry,
+              content: finalReply,
+              dashboard: finalDashboard,
+              model: finalModel,
+              streaming: true,
+            }))
             continue
           }
 
@@ -321,6 +408,7 @@ export default function AIAssistant() {
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
+              dashboard: finalDashboard,
               model: finalModel,
               streaming: false,
             }))

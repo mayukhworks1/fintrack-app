@@ -2003,6 +2003,7 @@ export default function Invoices() {
           selectedRecords={records}
           title={`Invoices · ${statusFilter || projectFilter || 'Current View'}`}
           recordLabel="invoice"
+          enableLiveMode
           viewConfig={{
             type: 'list',
             filterProject: projectFilter || '',
@@ -2015,7 +2016,20 @@ export default function Invoices() {
         />
       )}
       {isEditor && manageModal && (
-        <ManageSharedLinksModal resourceType="invoices" onClose={() => setManageModal(false)} />
+        <ManageSharedLinksModal
+          resourceType="invoices"
+          recordLabel="invoice"
+          currentViewConfig={{
+            type: 'list',
+            filterProject: projectFilter || '',
+            filterCategory: categoryFilter || '',
+            filterStatus: statusFilter || '',
+            search,
+            columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup', 'Remark'],
+          }}
+          visibleRecords={records}
+          onClose={() => setManageModal(false)}
+        />
       )}
       <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
     </div>
