@@ -223,8 +223,8 @@ async def upsert_record(
 
         if existing_row is None:
             # ── INSERT ──
-            cols  = ["teable_id", "fields"] + list(typed.keys())
-            vals  = [teable_id, json.dumps(fields, default=str)] + list(typed.values())
+            cols  = ["teable_id", "fields", "deleted_at"] + list(typed.keys())
+            vals  = [teable_id, json.dumps(fields, default=str), None] + list(typed.values())
             phs   = []
             for i, col in enumerate(cols):
                 phs.append(f"${i+1}::jsonb" if col == "fields" else f"${i+1}")
@@ -245,7 +245,7 @@ async def upsert_record(
             return "unchanged"
 
         # ── UPDATE ──
-        set_parts: list[str] = ["synced_at = NOW()"]
+        set_parts: list[str] = ["synced_at = NOW()", "deleted_at = NULL"]
         set_vals:  list      = []
         idx = 1
         set_parts.append(f"fields = ${idx}::jsonb")
@@ -350,11 +350,25 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
                               new_json=None,
                               changed=[],
                               actor=actor)
-        # Tag the mirror row so it's visibly "deleted" without losing history
+        # Tag the mirror row as deleted without losing history
         await conn.execute(
-            f"UPDATE {mirror_table} SET synced_at = NOW() WHERE teable_id = $1",
+            f"UPDATE {mirror_table} SET synced_at = NOW(), deleted_at = NOW() WHERE teable_id = $1",
             teable_id,
         )
+
+
+async def reconcile_missing_records(pool, source: str, mirror_table: str, seen_ids: list[str]) -> int:
+    """Full sync healer: mark rows deleted when they no longer exist in Teable."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT teable_id FROM {mirror_table} WHERE deleted_at IS NULL"
+        )
+    live_ids = {row["teable_id"] for row in rows}
+    seen = set(seen_ids)
+    missing = sorted(live_ids - seen)
+    for teable_id in missing:
+        await mark_deleted(pool, source, mirror_table, teable_id)
+    return len(missing)
 
 
 # ── Teable HTTP helpers ──────────────────────────────────────────────────────
@@ -644,11 +658,16 @@ async def run_sync(incremental: bool = False) -> None:
 
         try:
             stats = await _sync_records(pool, source, mirror_table, records, extractor, since=since)
+            deleted = 0
+            if not incremental:
+                deleted = await reconcile_missing_records(
+                    pool, source, mirror_table, [r.get("id", "") for r in records if r.get("id")]
+                )
             logger.info(
-                "[%s] %s: total=%d created=%d updated=%d unchanged=%d skipped=%d (%dms)",
+                "[%s] %s: total=%d created=%d updated=%d unchanged=%d skipped=%d deleted=%d (%dms)",
                 label, source,
                 stats["total"], stats["created"], stats["updated"],
-                stats["unchanged"], stats.get("skipped", 0), stats["duration_ms"],
+                stats["unchanged"], stats.get("skipped", 0), deleted, stats["duration_ms"],
             )
             await _write_sync_log(
                 pool, source,

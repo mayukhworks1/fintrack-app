@@ -144,7 +144,9 @@ class StatusService:
                 where.append(f"client = ${idx}"); params.append(client); idx += 1
             if project:
                 where.append(f"project = ${idx}"); params.append(project); idx += 1
-            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            where_sql = "WHERE deleted_at IS NULL"
+            if where:
+                where_sql += " AND " + " AND ".join(where)
 
             rows = await pool.fetch(
                 f"SELECT teable_id, fields::text AS fields FROM status_mirror {where_sql} ORDER BY synced_at DESC",
@@ -235,7 +237,7 @@ class StatusService:
         if pool:
             try:
                 row = await pool.fetchrow(
-                    "SELECT teable_id, fields FROM status_mirror WHERE teable_id = $1",
+                    "SELECT teable_id, fields FROM status_mirror WHERE teable_id = $1 AND deleted_at IS NULL",
                     record_id,
                 )
                 if row:

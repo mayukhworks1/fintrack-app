@@ -89,7 +89,9 @@ class InvoiceService:
                 where.append(f"project = ${idx}")
                 params.append(project)
                 idx += 1
-            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            where_sql = "WHERE deleted_at IS NULL"
+            if where:
+                where_sql += " AND " + " AND ".join(where)
             sort_map = {
                 "Raised Date": "raised_date",
                 "Invoice Number": "invoice_number",
@@ -129,7 +131,7 @@ class InvoiceService:
             return None
         try:
             row = await pool.fetchrow(
-                "SELECT teable_id, fields FROM invoices_mirror WHERE teable_id = $1",
+                "SELECT teable_id, fields FROM invoices_mirror WHERE teable_id = $1 AND deleted_at IS NULL",
                 record_id,
             )
             if not row:
@@ -228,7 +230,7 @@ class InvoiceService:
         if not pool:
             return None
         try:
-            rows = await pool.fetch("SELECT fields FROM invoices_mirror")
+            rows = await pool.fetch("SELECT fields FROM invoices_mirror WHERE deleted_at IS NULL")
             records = []
             for row in rows:
                 fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")

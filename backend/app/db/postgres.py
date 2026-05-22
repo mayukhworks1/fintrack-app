@@ -189,6 +189,7 @@ CREATE INDEX IF NOT EXISTS rl_project_idx ON record_links (project_entity_id);
 CREATE TABLE IF NOT EXISTS projects_mirror (
     teable_id     VARCHAR(60)   PRIMARY KEY,
     synced_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    deleted_at    TIMESTAMPTZ,
     fields        JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     project_name  VARCHAR(255),
@@ -207,6 +208,7 @@ CREATE INDEX IF NOT EXISTS pm_client_idx ON projects_mirror (client);
 CREATE TABLE IF NOT EXISTS invoices_mirror (
     teable_id        VARCHAR(60)   PRIMARY KEY,
     synced_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    deleted_at       TIMESTAMPTZ,
     fields           JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     invoice_number   VARCHAR(120),
@@ -325,6 +327,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
 CREATE TABLE IF NOT EXISTS web_invoices_mirror (
     teable_id        VARCHAR(60)   PRIMARY KEY,
     synced_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    deleted_at       TIMESTAMPTZ,
     fields           JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     invoice_number   VARCHAR(120),
@@ -350,6 +353,7 @@ CREATE INDEX IF NOT EXISTS wim_date_idx    ON web_invoices_mirror (raised_date D
 CREATE TABLE IF NOT EXISTS status_mirror (
     teable_id     VARCHAR(60)   PRIMARY KEY,
     synced_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    deleted_at    TIMESTAMPTZ,
     fields        JSONB         NOT NULL DEFAULT '{}'::jsonb,
 
     client        VARCHAR(255),
@@ -362,6 +366,10 @@ CREATE INDEX IF NOT EXISTS stm_client_idx  ON status_mirror (client);
 CREATE INDEX IF NOT EXISTS stm_project_idx ON status_mirror (project);
 CREATE INDEX IF NOT EXISTS stm_synced_idx  ON status_mirror (synced_at DESC);
 ALTER TABLE status_mirror ADD COLUMN IF NOT EXISTS status VARCHAR(100);
+ALTER TABLE projects_mirror ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE invoices_mirror ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE web_invoices_mirror ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE status_mirror ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 -- ── Shared Views (manager share links with access tracking) ──────────────────
 CREATE TABLE IF NOT EXISTS shared_views (

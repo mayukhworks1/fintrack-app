@@ -73,7 +73,9 @@ class TeableService:
                 params.append(client)
                 idx += 1
 
-            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            where_sql = "WHERE deleted_at IS NULL"
+            if where:
+                where_sql += " AND " + " AND ".join(where)
             sort_map = {
                 "Amount Billed So far": "amount_billed",
                 "Profit percentage": "profit_pct",
@@ -192,7 +194,7 @@ class TeableService:
         if not pool:
             return None
         try:
-            rows = await pool.fetch("SELECT fields FROM projects_mirror")
+            rows = await pool.fetch("SELECT fields FROM projects_mirror WHERE deleted_at IS NULL")
             records = []
             for row in rows:
                 fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
@@ -247,7 +249,7 @@ class TeableService:
         if pool:
             try:
                 row = await pool.fetchrow(
-                    "SELECT teable_id, fields FROM projects_mirror WHERE teable_id = $1",
+                    "SELECT teable_id, fields FROM projects_mirror WHERE teable_id = $1 AND deleted_at IS NULL",
                     record_id,
                 )
                 if row:
