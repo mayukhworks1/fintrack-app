@@ -323,11 +323,15 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{label}</p>
           {currencyMatch ? (
             <div
-              className="mt-2 flex items-baseline gap-1 font-bold tracking-tight leading-none min-w-0"
+              className="mt-2 inline-flex items-end gap-1 font-bold tracking-tight min-w-0"
               style={{ color: accent || 'var(--text-1)' }}>
               <span
                 className="flex-shrink-0"
-                style={{ fontSize: compact ? '1rem' : '1.15rem' }}>
+                style={{
+                  fontSize: compact ? '0.95rem' : '1.05rem',
+                  lineHeight: 1,
+                  transform: 'translateY(-1px)',
+                }}>
                 {currencyMatch[1]}
               </span>
               <span
@@ -335,6 +339,7 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
                 style={{
                   fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.45rem, 1.95vw, 2.05rem)',
                   whiteSpace: 'nowrap',
+                  lineHeight: 1,
                 }}>
                 {currencyMatch[2]}
               </span>
