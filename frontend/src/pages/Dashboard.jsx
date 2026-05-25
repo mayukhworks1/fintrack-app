@@ -139,6 +139,29 @@ function useGreeting() {
   }, [])
 }
 
+const EXECUTIVE_VARS = {
+  '--bg-base': '#090b10',
+  '--bg-layer': '#0e1118',
+  '--card-bg': '#141820',
+  '--card-border': 'rgba(255,255,255,0.08)',
+  '--card-shadow': '0 24px 60px rgba(0,0,0,0.32)',
+  '--card-shadow-hover': '0 28px 70px rgba(0,0,0,0.4)',
+  '--bg-input': '#10141d',
+  '--text-1': '#f4f7fb',
+  '--text-2': '#c0c8d6',
+  '--text-3': '#7f8a9c',
+  '--accent': '#7d95ff',
+  '--accent-dim': 'rgba(125,149,255,0.12)',
+  '--accent-soft': 'rgba(125,149,255,0.22)',
+  '--fin-positive': '#84e254',
+  '--fin-pos-bg': 'rgba(132,226,84,0.12)',
+  '--fin-warning': '#f3b45d',
+  '--fin-warn-bg': 'rgba(243,180,93,0.13)',
+  '--fin-negative': '#ff7d80',
+  '--fin-neg-bg': 'rgba(255,125,128,0.13)',
+  '--border': 'rgba(255,255,255,0.08)',
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
@@ -162,51 +185,136 @@ export default function Dashboard() {
   const maxBilled = s ? Math.max(...Object.values(s.client_billed || {}).map(Number), 1) : 1
   const atRisk    = s?.at_risk || []
   const healthOk  = countHealthy(s?.by_health)
+  const statusEntries = Object.entries(s?.by_status || {})
+  const healthiestPct = (s?.total_projects ?? 0) > 0 ? (healthOk / s.total_projects) * 100 : 0
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 animate-fade-in">
+    <div
+      className="p-4 sm:p-6 space-y-6 animate-fade-in rounded-[28px]"
+      style={{
+        ...EXECUTIVE_VARS,
+        background: 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 22%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)',
+      }}
+    >
 
       {/* Header */}
-      <div className="space-y-1">
-        {/* Top row: date + actions */}
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold tabular-nums truncate"
-            style={{ color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            <span className="hidden sm:inline">
+      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold tabular-nums tracking-[0.22em] uppercase"
+              style={{ color: 'var(--accent)' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </span>
-            <span className="sm:hidden">
-              {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-            </span>
-          </p>
-          <div className="flex gap-2 flex-shrink-0">
-            <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.04em', lineHeight: 1.05 }}>
+              {greeting}, Mayukh
+            </h1>
+            <p className="text-sm sm:text-base max-w-2xl" style={{ color: 'var(--text-3)' }}>
+              Executive overview of portfolio health, project cashflow, and operational pressure points.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={refresh}
+              disabled={loading}
+              aria-label="Refresh"
+              className="inline-flex items-center gap-2 rounded-2xl px-3.5 py-2 text-sm font-medium"
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-2)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
               <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+              Refresh
             </button>
             {isEditor && (
-              <button onClick={() => navigate('/projects/new')} className="btn-primary">
+              <button
+                onClick={() => navigate('/projects/new')}
+                className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                style={{ background: 'linear-gradient(135deg, #4d74ff 0%, #6f8fff 100%)', color: '#fff', boxShadow: '0 12px 28px rgba(77,116,255,0.28)' }}
+              >
                 <Plus size={14} aria-hidden="true" />
-                <span className="hidden sm:inline">New Project</span>
-                <span className="sm:hidden">New</span>
+                New Project
               </button>
             )}
           </div>
         </div>
-        {/* Greeting — full width, no wrapping pressure */}
-        <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
-          {greeting} <span role="img" aria-label="wave">👋</span>
-        </h1>
-        <p className="text-sm flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
-          Portfolio overview
-          {lastUpdated && (
-            <span className="flex items-center gap-1.5">
-              · <SyncDot syncing={syncing} />
-              <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
-                {syncing ? 'syncing…' : updatedLabel}
-              </span>
-            </span>
-          )}
-        </p>
+
+        <div className="mt-6 grid grid-cols-1 xl:grid-cols-[1.8fr_1fr] gap-4">
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
+                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
+                  {inr(s?.total_profit)}
+                </h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-3)' }}>
+                  Net profit from <span style={{ color: 'var(--text-2)' }}>{inr(s?.total_billed)}</span> billed across {s?.total_projects ?? 0} active portfolio entries.
+                </p>
+              </div>
+              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: 'rgba(132,226,84,0.08)', border: '1px solid rgba(132,226,84,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
+                <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
+                  {healthOk}/{s?.total_projects ?? 0}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatPct(healthiestPct, 1)} portfolio health coverage</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Revenue', value: inr(s?.total_billed), tone: 'var(--text-1)' },
+                { label: 'Margin', value: formatPct(margin, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
+                { label: 'Cost load', value: formatPct(costRatio, 1), tone: 'var(--fin-warning)' },
+                { label: 'At risk', value: `${atRisk.length}`, tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
+                  <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Command center</p>
+                <h2 className="text-2xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>What needs action</h2>
+              </div>
+              {lastUpdated && (
+                <div className="text-right">
+                  <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync</p>
+                  <p className="text-xs mt-1 flex items-center gap-1.5 justify-end" style={{ color: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
+                    <SyncDot syncing={syncing} />
+                    {syncing ? 'syncing…' : updatedLabel}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
+                <p className="text-base font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
+                  {s?.best_project?.name || 'No project performance signal yet'}
+                </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                  {s?.best_project?.name
+                    ? `${formatPct(s.best_project.pct, 2)} margin currently leading the portfolio.`
+                    : 'As project financials settle in, this space will surface the strongest performer.'}
+                </p>
+              </div>
+              <div className="rounded-2xl p-4" style={{ background: 'rgba(255,125,128,0.06)', border: '1px solid rgba(255,125,128,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
+                <p className="text-base font-semibold mt-2" style={{ color: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' }}>
+                  {atRisk.length ? `${atRisk.length} project${atRisk.length === 1 ? '' : 's'} need review` : 'No critical portfolio blockers'}
+                </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                  {atRisk.length
+                    ? `${atRisk[0]?.name || 'Top issue'} is currently the first portfolio escalation.`
+                    : 'All tracked projects are profitable or outside critical health thresholds.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Error */}
@@ -347,10 +455,10 @@ export default function Dashboard() {
       </section>
 
       {/* ── Status chips ── */}
-      {s?.by_status && Object.keys(s.by_status).length > 0 && (
+      {statusEntries.length > 0 && (
         <section aria-label="Projects by status">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {Object.entries(s.by_status).map(([status, count]) => {
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3">
+            {statusEntries.map(([status, count]) => {
               const accent = status.includes('Active')    ? 'var(--fin-positive)'
                            : status.includes('Completed') ? '#60a5fa'
                            : status.includes('Hold')      ? 'var(--fin-warning)'
@@ -375,7 +483,10 @@ export default function Dashboard() {
       {/* ── Top projects ── */}
       <section aria-label="Top projects by billing">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="section-title">Top Projects by Revenue</h2>
+          <div>
+            <h2 className="section-title">Top Projects by Revenue</h2>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Existing project cards remain available, now presented inside the executive canvas.</p>
+          </div>
           <button onClick={() => navigate('/projects')}
             className="text-xs font-medium flex items-center gap-1 transition-opacity hover:opacity-70"
             style={{ color: 'var(--accent)' }}>

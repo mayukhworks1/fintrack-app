@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 
-/* ── Brand icon — matches favicon.svg exactly ── */
+/* ── Brand icon — minimal fin/track monogram ── */
 function BrandIcon({ size = 28 }) {
   return (
     <svg
@@ -20,19 +20,27 @@ function BrandIcon({ size = 28 }) {
       style={{ flexShrink: 0 }}
     >
       <defs>
-        <linearGradient id="ft-bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2563EB" />
-          <stop offset="1" stopColor="#7C3AED" />
+        <linearGradient id="ft-bg" x1="3" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#1A2140" />
+          <stop offset="1" stopColor="#0A0F1E" />
+        </linearGradient>
+        <linearGradient id="ft-accent" x1="9" y1="7" x2="24" y2="23" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#7D95FF" />
+          <stop offset="1" stopColor="#8CE35A" />
         </linearGradient>
       </defs>
-      <rect width="32" height="32" rx="7" fill="url(#ft-bg)" />
-      <rect x="4"    y="22" width="5" height="5"  rx="1.5" fill="white" opacity="0.45" />
-      <rect x="13.5" y="16" width="5" height="11" rx="1.5" fill="white" opacity="0.70" />
-      <rect x="23"   y="10" width="5" height="17" rx="1.5" fill="white" opacity="0.95" />
-      <polyline points="6.5,22 16,16 25.5,10"
-        stroke="white" strokeWidth="2.5" fill="none"
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-      <circle cx="25.5" cy="10" r="2.5" fill="white" />
+      <rect width="32" height="32" rx="9" fill="url(#ft-bg)" />
+      <path
+        d="M10 7.5C10 6.67 10.67 6 11.5 6H22C22.83 6 23.5 6.67 23.5 7.5C23.5 8.33 22.83 9 22 9H13V13H20.25C21.08 13 21.75 13.67 21.75 14.5C21.75 15.33 21.08 16 20.25 16H13V24.5C13 25.33 12.33 26 11.5 26C10.67 26 10 25.33 10 24.5V7.5Z"
+        fill="white"
+      />
+      <path
+        d="M17.25 18.5L22.75 13"
+        stroke="url(#ft-accent)"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+      />
+      <circle cx="23.25" cy="12.5" r="2.3" fill="url(#ft-accent)" />
     </svg>
   )
 }
