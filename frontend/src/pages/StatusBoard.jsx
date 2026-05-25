@@ -171,6 +171,20 @@ const CARD_RECORD_SORT_OPTIONS = [
   { value: 'status-asc', label: 'Status A-Z' },
 ]
 
+const EXECUTIVE_VARS = {
+  '--bg-base': '#090b10',
+  '--bg-layer': '#0e1118',
+  '--card-bg': '#141820',
+  '--card-border': 'rgba(255,255,255,0.08)',
+  '--card-shadow': '0 24px 60px rgba(0,0,0,0.32)',
+  '--card-shadow-hover': '0 28px 70px rgba(0,0,0,0.4)',
+  '--bg-input': '#10141d',
+  '--text-1': '#f4f7fb',
+  '--text-2': '#c0c8d6',
+  '--text-3': '#7f8a9c',
+  '--border': 'rgba(255,255,255,0.08)',
+}
+
 function fmtDate(iso) {
   if (!iso) return ''
   try { return new Date(iso).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) } catch { return iso }
@@ -216,10 +230,10 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
         onClick={() => onFilterStatus('')}
         className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
         style={{
-          background: !filterStatus ? 'var(--accent)' : 'var(--card-bg)',
-          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+          background: !filterStatus ? 'linear-gradient(135deg, rgba(125,149,255,0.24), rgba(125,149,255,0.12))' : 'rgba(255,255,255,0.03)',
+          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid rgba(255,255,255,0.08)',
           color: !filterStatus ? '#fff' : 'var(--text-2)',
-          boxShadow: !filterStatus ? '0 2px 8px rgba(37,99,235,0.25)' : 'none',
+          boxShadow: !filterStatus ? '0 14px 30px rgba(77,116,255,0.18)' : 'none',
         }}
       >
         <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? '#fff' : 'var(--text-1)' }}>{total}</span>
@@ -236,9 +250,9 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
             onClick={() => onFilterStatus(active ? '' : s)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
             style={{
-              background: active ? sc.bg : 'var(--card-bg)',
-              border: active ? `1.5px solid ${sc.border}` : '1px solid var(--border)',
-              boxShadow: active ? `0 2px 8px ${sc.bg}` : 'none',
+              background: active ? sc.bg : 'rgba(255,255,255,0.03)',
+              border: active ? `1.5px solid ${sc.border}` : '1px solid rgba(255,255,255,0.08)',
+              boxShadow: active ? `0 12px 24px ${sc.bg}` : 'none',
             }}
           >
             <span className="text-lg font-bold tabular-nums leading-none" style={{ color: sc.color }}>{cnt}</span>
@@ -2734,7 +2748,20 @@ export default function StatusBoard() {
   const theme = resolveTheme(themeId)
   const compact = density === 'compact'
   const boardIsDraggable = boardGroupBy === 'Status'
+  const statusCounts = useMemo(
+    () => statusOptions.map(status => ({
+      status,
+      count: recordsForView.filter(r => (r.fields?.['Status'] || 'Not started') === status).length,
+    })),
+    [recordsForView, statusOptions]
+  )
+  const topStatusSignal = useMemo(() => {
+    const activeCounts = statusCounts.filter(item => item.count > 0)
+    if (!activeCounts.length) return null
+    return [...activeCounts].sort((a, b) => b.count - a.count)[0]
+  }, [statusCounts])
   const boardVars = useMemo(() => ({
+    ...EXECUTIVE_VARS,
     '--accent': theme.accent,
     '--accent-dim': theme.accentDim,
     '--accent-soft': theme.accentSoft,
@@ -2892,23 +2919,33 @@ export default function StatusBoard() {
       <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 pb-28">
 
         {/* ── Page header ── */}
-        <div className="rounded-[26px] border p-4 sm:p-5 space-y-4" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+        <div
+          className="rounded-[30px] border p-4 sm:p-5 space-y-5"
+          style={{
+            background: 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)',
+            borderColor: 'rgba(255,255,255,0.06)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.26)',
+          }}
+        >
           <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-12 h-12 rounded-[18px] flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+                style={{ background: 'rgba(125,149,255,0.16)', border: '1px solid rgba(125,149,255,0.24)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
                 <Activity size={19} style={{ color: 'var(--accent)' }} />
               </div>
               <div className="min-w-0">
-                <h1 className="text-[28px] sm:text-[30px] font-bold leading-[0.95] tracking-[-0.03em]" style={{ color: 'var(--text-1)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] mb-2" style={{ color: 'var(--accent)' }}>
+                  Portfolio command board
+                </p>
+                <h1 className="text-[32px] sm:text-[36px] font-semibold leading-[0.95] tracking-[-0.04em]" style={{ color: 'var(--text-1)' }}>
                   Status Board
                 </h1>
-                <p className="text-sm mt-2 leading-6" style={{ color: 'var(--text-3)' }}>
+                <p className="text-sm mt-3 leading-6 max-w-2xl" style={{ color: 'var(--text-3)' }}>
                   {loading
-                    ? 'Loading status data…'
+                    ? 'Loading current status distribution and project signals…'
                     : error
-                      ? 'Status sync unavailable'
-                      : `${records.length} projects · ${allClients.length} clients`}
+                      ? 'Status sync unavailable right now'
+                      : `Track delivery momentum, blockers, and client-facing project movement across ${records.length} projects and ${allClients.length} clients.`}
                   {hasSelection ? <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>· {selectedIds.size} selected</span> : null}
                 </p>
               </div>
@@ -3077,6 +3114,39 @@ export default function StatusBoard() {
               </div>
             </div>
           </div>
+
+          {!loading && !error && records.length > 0 && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
+                <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{records.length}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{allClients.length} distinct clients</p>
+              </div>
+              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
+                <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{filtered.length}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{advancedConditions.length ? `${advancedConditions.length} advanced rule${advancedConditions.length !== 1 ? 's' : ''}` : 'No advanced rules'}</p>
+              </div>
+              <div className="rounded-[24px] p-4" style={{ background: 'rgba(132,226,84,0.08)', border: '1px solid rgba(132,226,84,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
+                <p className="text-lg font-semibold mt-2" style={{ color: 'var(--fin-positive)' }}>{topStatusSignal?.status || 'No active statuses'}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{topStatusSignal ? `${topStatusSignal.count} project${topStatusSignal.count === 1 ? '' : 's'} currently in this state` : 'Waiting for live status records'}</p>
+              </div>
+              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
+                <p className="text-lg font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
+                  {viewType === 'card' ? 'Client cards' : viewType === 'list' ? 'Operational list' : 'Kanban board'}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                  {viewType === 'card'
+                    ? `${cardGroupBy} grouping · ${cardRecordSort.replace('-', ' ')}`
+                    : viewType === 'list'
+                      ? `${listColumns.length} visible column${listColumns.length === 1 ? '' : 's'}`
+                      : `${boardGroupBy} grouping${boardIsDraggable ? ' · drag enabled' : ' · drag disabled'}`}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Status Dashboard ── */}
@@ -3085,6 +3155,7 @@ export default function StatusBoard() {
         )}
 
         {/* ── Filter bar ── */}
+        <div className="rounded-[24px] p-3 sm:p-4" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -3115,6 +3186,10 @@ export default function StatusBoard() {
               {hasSelection && selectedIds.size === filtered.length ? 'Deselect all' : 'Select all'}
             </button>
           )}
+        </div>
+        <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
+          Search by project, client, headline, or detail. Use advanced filters when you need a narrower operational slice.
+        </p>
         </div>
 
         {showAdvancedFilters && (
@@ -3294,7 +3369,7 @@ export default function StatusBoard() {
 
         {/* ══ LIST VIEW ══ */}
         {!loading && !error && filtered.length > 0 && viewType === 'list' && (
-          <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--card-bg)', boxShadow: '0 12px 28px rgba(15,23,42,0.05)' }}>
+          <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', boxShadow: '0 18px 40px rgba(0,0,0,0.24)' }}>
             <div className="overflow-x-auto">
               <div className="min-w-full">
                 <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em]"
