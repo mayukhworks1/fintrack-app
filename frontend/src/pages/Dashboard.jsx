@@ -217,7 +217,7 @@ export default function Dashboard() {
 
   return (
     <div
-      className="p-4 sm:p-6 space-y-6 animate-fade-in rounded-[28px]"
+      className="p-4 sm:p-5 space-y-5 animate-fade-in rounded-[28px]"
       style={{
         ...executiveVars,
         background: dark
@@ -227,17 +227,17 @@ export default function Dashboard() {
     >
 
       {/* Header */}
-      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+      <div className="rounded-[28px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold tabular-nums tracking-[0.22em] uppercase"
               style={{ color: 'var(--accent)' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
-            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.04em', lineHeight: 1.05 }}>
+            <h1 className="text-[2rem] sm:text-[2.5rem] font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em', lineHeight: 1 }}>
               {greeting}, Mayukh
             </h1>
-            <p className="text-sm sm:text-base max-w-2xl" style={{ color: 'var(--text-3)' }}>
+            <p className="text-sm max-w-xl" style={{ color: 'var(--text-3)' }}>
               Executive overview of portfolio health, project cashflow, and operational pressure points.
             </p>
           </div>
@@ -246,7 +246,7 @@ export default function Dashboard() {
               onClick={refresh}
               disabled={loading}
               aria-label="Refresh"
-              className="inline-flex items-center gap-2 rounded-2xl px-3.5 py-2 text-sm font-medium"
+              className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium"
               style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-2)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
               <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
@@ -255,7 +255,7 @@ export default function Dashboard() {
             {isEditor && (
               <button
                 onClick={() => navigate('/projects/new')}
-                className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold"
                 style={{ background: 'linear-gradient(135deg, #4d74ff 0%, #6f8fff 100%)', color: '#fff', boxShadow: '0 12px 28px rgba(77,116,255,0.28)' }}
               >
                 <Plus size={14} aria-hidden="true" />
@@ -265,21 +265,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 xl:grid-cols-[1.8fr_1fr] gap-4">
+        <div className="mt-4 grid grid-cols-1 xl:grid-cols-[1.9fr_0.95fr] gap-4">
           <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
-            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
-                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
+                <h2 className="text-[2.35rem] sm:text-[3rem] font-semibold mt-2 tabular-nums leading-none" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
                   {inr(s?.total_profit)}
                 </h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-3)' }}>
+                <p className="text-sm mt-2 max-w-xl" style={{ color: 'var(--text-3)' }}>
                   Net profit from <span style={{ color: 'var(--text-2)' }}>{inr(s?.total_billed)}</span> billed across {s?.total_projects ?? 0} active portfolio entries.
                 </p>
               </div>
-              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
+              <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
                 <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
-                <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
+                <p className="text-[1.9rem] font-semibold mt-1 tabular-nums leading-none" style={{ color: 'var(--fin-positive)' }}>
                   {healthOk}/{s?.total_projects ?? 0}
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatPct(healthiestPct, 1)} portfolio health coverage</p>
@@ -295,7 +295,7 @@ export default function Dashboard() {
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                   <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
-                  <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
+                  <p className="text-lg sm:text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
                 </div>
               ))}
             </div>
@@ -305,7 +305,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Command center</p>
-                <h2 className="text-2xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>What needs action</h2>
+                <h2 className="text-xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>What needs action</h2>
               </div>
               {lastUpdated && (
                 <div className="text-right">
