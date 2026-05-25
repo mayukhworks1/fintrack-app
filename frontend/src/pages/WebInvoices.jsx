@@ -8,7 +8,8 @@ import {
   IndianRupee, TrendingUp, Percent, CalendarClock, Receipt,
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
   ChevronLeft, ChevronRight, Briefcase, Repeat2,
-  Users, HelpCircle, Mail, BookOpen, X as XIcon
+  Users, HelpCircle, Mail, BookOpen, X as XIcon,
+  LayoutDashboard, Activity, ArrowRight, ShieldAlert
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -301,6 +302,73 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
         </p>
         <p className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--text-3)' }}>{label}</p>
         {sub && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact = false }) {
+  return (
+    <div
+      className="rounded-2xl p-4 sm:p-5 transition-shadow"
+      style={{
+        background: tone,
+        border: '1px solid color-mix(in srgb, var(--card-border) 78%, transparent)',
+        boxShadow: '0 16px 40px rgba(15,23,42,0.06)',
+      }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{label}</p>
+          <p
+            className="mt-2 font-bold tracking-tight"
+            style={{
+              color: accent || 'var(--text-1)',
+              fontSize: compact ? 'clamp(1.15rem, 2vw, 1.7rem)' : 'clamp(1.45rem, 3vw, 2.7rem)',
+            }}>
+            {value}
+          </p>
+          {sub && <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{sub}</p>}
+        </div>
+        {Icon && (
+          <div
+            className="flex items-center justify-center flex-shrink-0 rounded-2xl"
+            style={{
+              width: compact ? 40 : 48,
+              height: compact ? 40 : 48,
+              background: 'rgba(255,255,255,0.78)',
+              color: accent || 'var(--accent)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+            }}>
+            <Icon size={compact ? 18 : 21} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DashboardSignal({ eyebrow, title, body, icon: Icon, tone = 'var(--bg-layer)', accent = 'var(--accent)' }) {
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{
+        background: tone,
+        border: '1px solid color-mix(in srgb, var(--card-border) 82%, transparent)',
+        boxShadow: '0 14px 32px rgba(15,23,42,0.05)',
+      }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{eyebrow}</p>
+          <p className="mt-2 text-lg font-bold leading-tight" style={{ color: 'var(--text-1)' }}>{title}</p>
+          {body && <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>}
+        </div>
+        {Icon && (
+          <div
+            className="flex items-center justify-center flex-shrink-0 rounded-2xl"
+            style={{ width: 42, height: 42, background: 'rgba(255,255,255,0.76)', color: accent }}>
+            <Icon size={18} />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1020,7 +1088,7 @@ function HelpModal({ open, onClose }) {
               <Globe size={14} /> TheWorks Web Tracker
             </h3>
             <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              Your all-in-one billing and project management hub. Track invoices, manage retainer clients, and monitor project health — all synced live to Teable. Use the sidebar to switch between <strong style={{ color: 'var(--text-1)' }}>Invoices</strong>, <strong style={{ color: 'var(--text-1)' }}>Retainers</strong>, and <strong style={{ color: 'var(--text-1)' }}>Projects</strong> (admin only).
+              Your all-in-one billing and project management hub. Start in the new <strong style={{ color: 'var(--text-1)' }}>Dashboard</strong> for a live billing command view, then move into <strong style={{ color: 'var(--text-1)' }}>Invoices</strong>, <strong style={{ color: 'var(--text-1)' }}>Retainers</strong>, and <strong style={{ color: 'var(--text-1)' }}>Projects</strong> (admin only) as needed. Everything stays synced live to Teable.
             </p>
           </section>
 
@@ -1212,6 +1280,7 @@ function MobileHeader({ onHelp, onLogout }) {
 /* ── Mobile-only bottom navigation bar ── */
 function MobileBottomNav({ workspace, setWorkspace, isAll }) {
   const navItems = [
+    { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { value: 'invoices',  label: 'Invoices',  icon: FileText },
     { value: 'retainers', label: 'Retainers', icon: Repeat2 },
     ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
@@ -1249,6 +1318,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
   const { dark, toggle } = useTheme()
 
   const navItems = [
+    { value: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
     { value: 'invoices',   label: 'Invoices',   icon: FileText },
     { value: 'retainers',  label: 'Retainers',  icon: Repeat2 },
     ...(isAll ? [
@@ -1332,9 +1402,10 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
 export default function WebInvoices() {
   const toast = useToast()
   const { isAll, logout } = useAuth()
+  const { dark } = useTheme()
   const [sidebarOpen,    setSidebarOpen]    = useState(true)
   const [helpOpen,       setHelpOpen]       = useState(false)
-  const [workspace,      setWorkspace]      = useState('invoices')
+  const [workspace,      setWorkspace]      = useState('dashboard')
   const [selectedRetainer, setSelectedRetainer] = useState('')
   const [statusFilter,   setStatusFilter]   = useState('')
   const [projectFilter,  setProjectFilter]  = useState('')
@@ -1586,6 +1657,69 @@ export default function WebInvoices() {
   }, [retainerGroups, selectedRetainer])
 
   const selectedRetainerGroup = retainerGroups.find(g => g.project === selectedRetainer) || null
+  const dashboardStyles = useMemo(() => (
+    dark
+      ? {
+          shell: 'linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(17,24,39,0.96) 58%, rgba(20,38,33,0.92) 100%)',
+          panel: 'rgba(15,23,42,0.76)',
+          panelSoft: 'rgba(30,41,59,0.68)',
+          accentPanel: 'rgba(15,118,110,0.16)',
+          warnPanel: 'rgba(120,53,15,0.18)',
+          line: 'rgba(148,163,184,0.16)',
+          glow: '0 30px 60px rgba(2,6,23,0.34)',
+        }
+      : {
+          shell: 'linear-gradient(135deg, rgba(238,244,255,0.96) 0%, rgba(255,255,255,0.98) 52%, rgba(237,248,241,0.98) 100%)',
+          panel: 'rgba(255,255,255,0.92)',
+          panelSoft: 'rgba(248,250,252,0.92)',
+          accentPanel: 'rgba(16,185,129,0.08)',
+          warnPanel: 'rgba(245,158,11,0.10)',
+          line: 'rgba(148,163,184,0.18)',
+          glow: '0 28px 60px rgba(15,23,42,0.08)',
+        }
+  ), [dark])
+
+  const visibleClientCount = useMemo(() => (
+    new Set(records.map(r => String(r.fields?.['Project'] || '').trim()).filter(Boolean)).size
+  ), [records])
+
+  const upcomingFollowups = useMemo(() => (
+    [...records]
+      .filter(r => r.fields?.['Next followup'])
+      .sort((a, b) => {
+        const da = parseIsoDate(a.fields?.['Next followup'])?.getTime() || 0
+        const db = parseIsoDate(b.fields?.['Next followup'])?.getTime() || 0
+        return da - db
+      })
+      .slice(0, 5)
+  ), [records])
+
+  const latestInvoices = useMemo(() => sortByRaisedDateDesc(records).slice(0, 6), [records])
+  const topOutstandingProject = useMemo(() => {
+    return projectSummaryCards
+      .slice()
+      .sort((a, b) => {
+        const aOut = Object.values(a.metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.outstanding || 0), 0)
+        const bOut = Object.values(b.metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.outstanding || 0), 0)
+        return bOut - aOut
+      })[0] || null
+  }, [projectSummaryCards])
+
+  const dashboardStatusRows = useMemo(() => {
+    const byStatus = s?.by_status || {}
+    const total = Object.values(byStatus).reduce((sum, count) => sum + Number(count || 0), 0) || 1
+    return Object.entries(byStatus)
+      .map(([status, count]) => {
+        const meta = STATUS_META[status] || {}
+        return {
+          status,
+          count,
+          pct: Math.round((Number(count || 0) / total) * 100),
+          color: meta.color || 'var(--accent)',
+        }
+      })
+      .sort((a, b) => Number(b.count) - Number(a.count))
+  }, [s])
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -1716,6 +1850,377 @@ export default function WebInvoices() {
         <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 animate-fade-in">
 
           {/* ── Invoices header ── */}
+          {workspace === 'dashboard' && (
+          <section
+            className="rounded-[28px] p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6"
+            style={{
+              background: dashboardStyles.shell,
+              border: `1px solid ${dashboardStyles.line}`,
+              boxShadow: dashboardStyles.glow,
+            }}>
+            <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3 mb-4">
+                  <div
+                    className="flex items-center justify-center rounded-[22px] flex-shrink-0"
+                    style={{
+                      width: 58,
+                      height: 58,
+                      background: dark ? 'rgba(79,70,229,0.16)' : 'rgba(99,102,241,0.12)',
+                      border: `1px solid ${dashboardStyles.line}`,
+                    }}>
+                    <LayoutDashboard size={24} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em]" style={{ color: dark ? 'rgba(191,219,254,0.78)' : 'var(--accent)' }}>
+                      Billing Command Deck
+                    </p>
+                    <h1 className="text-2xl sm:text-4xl font-bold tracking-tight mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                      Web Invoice Dashboard
+                    </h1>
+                  </div>
+                </div>
+                <p className="max-w-3xl text-sm sm:text-lg leading-relaxed" style={{ color: dark ? 'rgba(226,232,240,0.82)' : 'var(--text-2)' }}>
+                  Track cash movement, retainer coverage, overdue pressure, and project billing signals from one place.
+                  Use the workspace rail to dive into invoices, retainers, and linked web projects without losing the live Teable connection.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                <button onClick={() => setWorkspace('invoices')} className="btn-ghost">
+                  <FileText size={14} />Open invoices
+                </button>
+                <button onClick={() => setWorkspace('retainers')} className="btn-ghost">
+                  <Repeat2 size={14} />Retainers
+                </button>
+                {isAll && (
+                  <button onClick={() => setWorkspace('projects')} className="btn-ghost">
+                    <Briefcase size={14} />Projects
+                  </button>
+                )}
+                <button onClick={refresh} disabled={loading} className="btn-ghost">
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
+                </button>
+                <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-primary">
+                  <ExternalLink size={14} />Raise externally
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.9fr] gap-4">
+              <div
+                className="rounded-[26px] p-4 sm:p-5 lg:p-6"
+                style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <DashboardMetric
+                    label="Total raised"
+                    value={sumLoading && !s ? '—' : fmt(s?.total_raised)}
+                    sub={`${allRecords.length} invoices across all workspaces`}
+                    icon={IndianRupee}
+                    tone={dark ? 'rgba(30,41,59,0.68)' : 'rgba(255,255,255,0.92)'}
+                    accent={dark ? '#f8fafc' : 'var(--text-1)'}
+                  />
+                  <DashboardMetric
+                    label="Collected"
+                    value={sumLoading && !s ? '—' : fmt(s?.total_received)}
+                    sub={`${(s?.collection_rate ?? 0).toFixed(1)}% collection rate`}
+                    icon={TrendingUp}
+                    tone={dashboardStyles.accentPanel}
+                    accent="var(--fin-positive)"
+                    compact
+                  />
+                  <DashboardMetric
+                    label="Outstanding"
+                    value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)}
+                    sub={`${overdue.length} invoice${overdue.length === 1 ? '' : 's'} beyond 30 days`}
+                    icon={AlertOctagon}
+                    tone={dashboardStyles.warnPanel}
+                    accent={Number(s?.total_outstanding || 0) > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)'}
+                    compact
+                  />
+                  <DashboardMetric
+                    label="Retainer coverage"
+                    value={`${retainerGroups.length}`}
+                    sub={`${selectedRetainerGroup?.currentMonthRaised ? 'Current month covered' : 'Review current month gaps'}`}
+                    icon={Repeat2}
+                    tone={dark ? 'rgba(15,23,42,0.55)' : 'rgba(247,250,255,0.94)'}
+                    accent={dark ? '#c4b5fd' : '#4f46e5'}
+                    compact
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <DashboardSignal
+                  eyebrow="Main signal"
+                  title={topOutstandingProject ? topOutstandingProject.project : 'No project pressure'}
+                  body={topOutstandingProject
+                    ? `${fmt(Object.values(topOutstandingProject.metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.outstanding || 0), 0))} currently open across ${topOutstandingProject.metrics?.count || 0} invoices.`
+                    : 'No outstanding balance is currently visible in the filtered portfolio.'}
+                  icon={Activity}
+                  tone={dashboardStyles.accentPanel}
+                  accent="var(--fin-positive)"
+                />
+                <DashboardSignal
+                  eyebrow="Visible scope"
+                  title={`${records.length} live invoices · ${visibleClientCount} projects`}
+                  body={hasFilters ? 'Dashboard is currently respecting active invoice filters.' : 'No extra filters applied. This is your full live billing picture.'}
+                  icon={Users}
+                  tone={dashboardStyles.panelSoft}
+                  accent="var(--accent)"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.95fr] gap-4">
+              <div
+                className="rounded-[26px] p-4 sm:p-5"
+                style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Status distribution</p>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Collection pulse</h2>
+                  </div>
+                  <button onClick={() => setWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+                    Open invoice table <ArrowRight size={12} />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {dashboardStatusRows.map(row => (
+                    <div key={row.status} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: row.color }} />
+                          <span className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{row.status}</span>
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
+                          {row.count} · {row.pct}%
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: dark ? 'rgba(51,65,85,0.85)' : 'rgba(226,232,240,0.85)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${row.pct}%`, background: row.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {projectSummaryCards.length > 0 && (
+                  <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${dashboardStyles.line}` }}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>Project pulse</p>
+                        <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Highest invoice-bearing projects in the current scope.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {projectSummaryCards.slice(0, 4).map(({ project, metrics }) => (
+                        <button
+                          key={project}
+                          type="button"
+                          onClick={() => { setProjectFilter(project); setWorkspace('invoices') }}
+                          className="rounded-2xl p-4 text-left transition-all"
+                          style={{
+                            background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.85)',
+                            border: `1px solid ${dashboardStyles.line}`,
+                          }}>
+                          <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{project}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{metrics?.count || 0} invoices · click to filter</p>
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Raised</p>
+                              <p className="text-xs font-semibold tabular-nums mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                                {fmt(Object.values(metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.raised || 0), 0))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Collected</p>
+                              <p className="text-xs font-semibold tabular-nums mt-1" style={{ color: 'var(--fin-positive)' }}>
+                                {fmt(Object.values(metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.received || 0), 0))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Open</p>
+                              <p className="text-xs font-semibold tabular-nums mt-1" style={{ color: 'var(--fin-warning)' }}>
+                                {fmt(Object.values(metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.outstanding || 0), 0))}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div
+                  className="rounded-[26px] p-4 sm:p-5"
+                  style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Attention queue</p>
+                      <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Upcoming follow-ups</h2>
+                    </div>
+                    <ShieldAlert size={18} style={{ color: 'var(--fin-warning)' }} />
+                  </div>
+                  <div className="space-y-2">
+                    {upcomingFollowups.length === 0
+                      ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>No follow-up dates are set in the current scope.</p>
+                      : upcomingFollowups.map(record => {
+                          const f = record.fields || {}
+                          return (
+                            <button
+                              key={record.id}
+                              type="button"
+                              onClick={() => { setWorkspace('invoices'); openView(record) }}
+                              className="w-full text-left rounded-2xl p-3 transition-all"
+                              style={{
+                                background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                                border: `1px solid ${dashboardStyles.line}`,
+                              }}>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                                    {f['Project'] || 'Unnamed project'}
+                                  </p>
+                                  <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                    {f['Invoice Number'] || 'Invoice number pending'} · {f['Raised By'] || 'Unassigned'}
+                                  </p>
+                                </div>
+                                <span className="text-xs font-semibold tabular-nums flex-shrink-0" style={{ color: 'var(--fin-warning)' }}>
+                                  {fmtDate(f['Next followup'])}
+                                </span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[26px] p-4 sm:p-5"
+                  style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Retainer desk</p>
+                      <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Coverage snapshot</h2>
+                    </div>
+                    <button onClick={() => setWorkspace('retainers')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                      Open retainers
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {retainerGroups.slice(0, 4).map(group => (
+                      <button
+                        key={group.project}
+                        type="button"
+                        onClick={() => { setSelectedRetainer(group.project); setWorkspace('retainers') }}
+                        className="w-full rounded-2xl p-3 text-left"
+                        style={{
+                          background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                          border: `1px solid ${dashboardStyles.line}`,
+                        }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{group.project}</p>
+                            <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                              {fmt(group.amount)} · next due {monthLabel(group.nextDueMonth)}
+                            </p>
+                          </div>
+                          <MonthStatusPill status={group.monthStatus} />
+                        </div>
+                      </button>
+                    ))}
+                    {retainerGroups.length === 0 && (
+                      <p className="text-sm" style={{ color: 'var(--text-3)' }}>No retainer templates available yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.95fr] gap-4">
+              <div
+                className="rounded-[26px] p-4 sm:p-5"
+                style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Latest movement</p>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Newest invoices</h2>
+                  </div>
+                  <button onClick={() => setWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                    Open all
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {latestInvoices.map(record => {
+                    const f = record.fields || {}
+                    const cur = f['Currency'] || 'RS'
+                    return (
+                      <button
+                        key={record.id}
+                        type="button"
+                        onClick={() => { setWorkspace('invoices'); openView(record) }}
+                        className="w-full rounded-2xl p-3 text-left transition-all"
+                        style={{
+                          background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                          border: `1px solid ${dashboardStyles.line}`,
+                        }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                              {f['Project'] || 'Unnamed project'}
+                            </p>
+                            <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                              {f['Invoice Number'] || 'Invoice number pending'} · {f['Category'] || 'Uncategorised'}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-semibold tabular-nums" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{fmtCurrency(f['Amount Raised'], cur)}</p>
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{fmtDate(f['Raised Date'])}</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {latestInvoices.length === 0 && (
+                    <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices available yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className="rounded-[26px] p-4 sm:p-5"
+                style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Operating notes</p>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>How to use this desk</h2>
+                  </div>
+                  <BookOpen size={18} style={{ color: 'var(--accent)' }} />
+                </div>
+                <div className="space-y-3">
+                  {[
+                    ['Invoices', 'Track pending, overdue, and fully collected billing records with live filters and file previews.'],
+                    ['Retainers', 'Raise externally in Zoho, then record the final invoice details internally for month-by-month continuity.'],
+                    ['Projects', isAll ? 'Open the admin project workspace for linked project health, cashflow, and invoice association.' : 'Project workspace is only available to admin access.'],
+                  ].map(([title, body]) => (
+                    <div
+                      key={title}
+                      className="rounded-2xl p-3"
+                      style={{
+                        background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                        border: `1px solid ${dashboardStyles.line}`,
+                      }}>
+                      <p className="text-sm font-semibold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{title}</p>
+                      <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+          )}
+
           {workspace === 'invoices' && (
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1763,7 +2268,7 @@ export default function WebInvoices() {
 
 
           {/* Invoice KPIs, status chips, overdue — only on invoices / retainers tabs */}
-          {workspace !== 'projects' && (
+          {(workspace === 'invoices' || workspace === 'retainers') && (
             <>
               {/* ── RS Primary KPIs ── */}
               <section aria-label="Invoice metrics (₹)" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
