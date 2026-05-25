@@ -320,10 +320,13 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{label}</p>
           <p
-            className="mt-2 font-bold tracking-tight leading-none"
+            className="mt-2 font-bold tracking-tight leading-none tabular-nums"
             style={{
               color: accent || 'var(--text-1)',
-              fontSize: compact ? 'clamp(1.05rem, 1.4vw, 1.45rem)' : 'clamp(1.35rem, 2.2vw, 2.2rem)',
+              fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.15rem, 1.7vw, 1.9rem)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}>
             {value}
           </p>
