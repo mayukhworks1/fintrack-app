@@ -308,6 +308,8 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
 }
 
 function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact = false }) {
+  const display = value == null ? '—' : String(value)
+  const currencyMatch = display.match(/^([^\d-]+)([\d,.\-]+)$/)
   return (
     <div
       className="rounded-2xl p-4 transition-shadow min-w-0"
@@ -319,17 +321,35 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{label}</p>
-          <p
-            className="mt-2 font-bold tracking-tight leading-none tabular-nums"
-            style={{
-              color: accent || 'var(--text-1)',
-              fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.15rem, 1.7vw, 1.9rem)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-            {value}
-          </p>
+          {currencyMatch ? (
+            <div
+              className="mt-2 flex items-baseline gap-1 font-bold tracking-tight leading-none min-w-0"
+              style={{ color: accent || 'var(--text-1)' }}>
+              <span
+                className="flex-shrink-0"
+                style={{ fontSize: compact ? '1rem' : '1.15rem' }}>
+                {currencyMatch[1]}
+              </span>
+              <span
+                className="tabular-nums min-w-0"
+                style={{
+                  fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.45rem, 1.95vw, 2.05rem)',
+                  whiteSpace: 'nowrap',
+                }}>
+                {currencyMatch[2]}
+              </span>
+            </div>
+          ) : (
+            <p
+              className="mt-2 font-bold tracking-tight leading-none tabular-nums"
+              style={{
+                color: accent || 'var(--text-1)',
+                fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.15rem, 1.7vw, 1.9rem)',
+                whiteSpace: 'nowrap',
+              }}>
+              {display}
+            </p>
+          )}
           {sub && <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{sub}</p>}
         </div>
         {Icon && (
