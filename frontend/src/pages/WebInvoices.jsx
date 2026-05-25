@@ -1942,7 +1942,7 @@ export default function WebInvoices() {
                     label="Total raised"
                     value={sumLoading && !s ? '—' : fmt(s?.total_raised)}
                     sub={`${allRecords.length} invoices across all workspaces`}
-                    icon={Receipt}
+                    icon={null}
                     tone={dark ? 'rgba(30,41,59,0.68)' : 'rgba(255,255,255,0.92)'}
                     accent={dark ? '#f8fafc' : 'var(--text-1)'}
                   />
