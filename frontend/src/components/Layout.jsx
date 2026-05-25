@@ -138,7 +138,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
               collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'
             }`}
             style={({ isActive }) => isActive
-              ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)' }
+              ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(47,91,255,0.06)' }
               : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
             }
           >
@@ -180,7 +180,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
                 collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'
               }`}
               style={({ isActive }) => isActive
-                ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)' }
+                ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(47,91,255,0.06)' }
                 : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
               }
             >
@@ -306,7 +306,7 @@ export default function Layout({ children }) {
   const sidebarW = collapsed ? 56 : 224
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="main-app-theme flex h-screen overflow-hidden">
 
       {/* ── Skip to content ── */}
       <a
@@ -325,6 +325,7 @@ export default function Layout({ children }) {
           background: 'var(--sidebar-bg)',
           borderRight: '1px solid var(--sidebar-border)',
           transition: 'width 0.2s ease',
+          boxShadow: '0 0 0 1px rgba(15,23,42,0.01)',
         }}
         aria-label="Sidebar navigation"
       >
@@ -349,7 +350,7 @@ export default function Layout({ children }) {
           background: 'var(--sidebar-bg)',
           borderRight: '1px solid var(--sidebar-border)',
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-          boxShadow: drawerOpen ? '4px 0 24px rgba(0,0,0,0.14)' : 'none',
+          boxShadow: drawerOpen ? '8px 0 28px rgba(15,23,42,0.10)' : 'none',
         }}
         aria-label="Mobile navigation"
         aria-hidden={!drawerOpen}
@@ -368,8 +369,8 @@ export default function Layout({ children }) {
           style={{
             background: 'var(--sidebar-bg)',
             borderBottom: '1px solid var(--sidebar-border)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
             paddingTop: 'max(0.625rem, env(safe-area-inset-top))',
           }}
         >
@@ -437,7 +438,7 @@ function MobileBottomNav() {
         background: 'var(--sidebar-bg)',
         borderTop: '1px solid var(--sidebar-border)',
         paddingBottom: 'env(safe-area-inset-bottom)',
-        boxShadow: '0 -4px 20px rgba(15,23,42,0.06)',
+        boxShadow: '0 -6px 24px rgba(15,23,42,0.05)',
       }}
     >
       {primary.map(({ to, label, icon: Icon, end }) => (
