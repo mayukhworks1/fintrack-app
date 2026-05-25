@@ -1852,64 +1852,64 @@ export default function WebInvoices() {
           {/* ── Invoices header ── */}
           {workspace === 'dashboard' && (
           <section
-            className="rounded-[28px] p-4 sm:p-5 lg:p-6 space-y-4 sm:space-y-5"
+            className="rounded-[28px] p-4 sm:p-5 lg:p-6 space-y-4"
             style={{
               background: dashboardStyles.shell,
               border: `1px solid ${dashboardStyles.line}`,
               boxShadow: dashboardStyles.glow,
             }}>
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.15fr)_auto] gap-4 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4 items-start">
               <div className="min-w-0">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-3 mb-2">
                   <div
                     className="flex items-center justify-center rounded-[22px] flex-shrink-0"
                     style={{
-                      width: 52,
-                      height: 52,
+                      width: 46,
+                      height: 46,
                       background: dark ? 'rgba(79,70,229,0.16)' : 'rgba(99,102,241,0.12)',
                       border: `1px solid ${dashboardStyles.line}`,
                     }}>
-                    <LayoutDashboard size={22} style={{ color: 'var(--accent)' }} />
+                    <LayoutDashboard size={20} style={{ color: 'var(--accent)' }} />
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.28em]" style={{ color: dark ? 'rgba(191,219,254,0.78)' : 'var(--accent)' }}>
                       Billing Command Deck
                     </p>
-                    <h1 className="text-2xl lg:text-[2.6rem] font-bold tracking-tight mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
-                      Web Invoice Dashboard
+                    <h1 className="text-[1.9rem] sm:text-[2.2rem] lg:text-[2.45rem] font-bold tracking-tight mt-0.5 leading-none" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                      Billing Dashboard
                     </h1>
                   </div>
                 </div>
-                <p className="max-w-2xl text-sm sm:text-base leading-relaxed" style={{ color: dark ? 'rgba(226,232,240,0.82)' : 'var(--text-2)' }}>
-                  Track cash movement, retainer coverage, overdue pressure, and project billing signals from one place.
+                <p className="max-w-xl text-sm leading-relaxed" style={{ color: dark ? 'rgba(226,232,240,0.82)' : 'var(--text-2)' }}>
+                  Cash movement, overdue pressure, retainers, and project billing signals in one live Teable-backed workspace.
                 </p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
-                <button onClick={() => setWorkspace('invoices')} className="btn-ghost justify-center">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 w-full xl:w-auto">
+                <button onClick={() => setWorkspace('invoices')} className="btn-ghost justify-center whitespace-nowrap">
                   <FileText size={14} />Open invoices
                 </button>
-                <button onClick={() => setWorkspace('retainers')} className="btn-ghost justify-center">
+                <button onClick={() => setWorkspace('retainers')} className="btn-ghost justify-center whitespace-nowrap">
                   <Repeat2 size={14} />Retainers
                 </button>
                 {isAll && (
-                  <button onClick={() => setWorkspace('projects')} className="btn-ghost justify-center">
+                  <button onClick={() => setWorkspace('projects')} className="btn-ghost justify-center whitespace-nowrap">
                     <Briefcase size={14} />Projects
                   </button>
                 )}
-                <button onClick={refresh} disabled={loading} className="btn-ghost justify-center">
+                <button onClick={refresh} disabled={loading} className="btn-ghost justify-center whitespace-nowrap">
                   <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
                 </button>
-                <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-primary justify-center">
+                <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-primary justify-center whitespace-nowrap">
                   <ExternalLink size={14} />Raise externally
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)] gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.9fr)] gap-4">
               <div
                 className="rounded-[26px] p-4 sm:p-5"
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 2xl:grid-cols-4 gap-3">
                   <DashboardMetric
                     label="Total raised"
                     value={sumLoading && !s ? '—' : fmt(s?.total_raised)}
@@ -1948,7 +1948,7 @@ export default function WebInvoices() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <DashboardSignal
                   eyebrow="Main signal"
                   title={topOutstandingProject ? topOutstandingProject.project : 'No project pressure'}
@@ -2010,7 +2010,7 @@ export default function WebInvoices() {
                         <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Highest invoice-bearing projects in the current scope.</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3">
                       {projectSummaryCards.slice(0, 4).map(({ project, metrics }) => (
                         <button
                           key={project}
@@ -2050,7 +2050,7 @@ export default function WebInvoices() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 2xl:grid-cols-1 gap-4">
                 <div
                   className="rounded-[26px] p-4 sm:p-5"
                   style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
@@ -2137,7 +2137,7 @@ export default function WebInvoices() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.95fr)] gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)] gap-4">
               <div
                 className="rounded-[26px] p-4 sm:p-5"
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
