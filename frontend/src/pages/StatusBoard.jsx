@@ -28,6 +28,7 @@ import {
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useTheme } from '../context/ThemeContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import InvoicePicklist from '../components/InvoicePicklist'
 import { formatInr } from '../utils/format'
@@ -171,7 +172,7 @@ const CARD_RECORD_SORT_OPTIONS = [
   { value: 'status-asc', label: 'Status A-Z' },
 ]
 
-const EXECUTIVE_VARS = {
+const EXECUTIVE_VARS_DARK = {
   '--bg-base': '#090b10',
   '--bg-layer': '#0e1118',
   '--card-bg': '#141820',
@@ -183,6 +184,20 @@ const EXECUTIVE_VARS = {
   '--text-2': '#c0c8d6',
   '--text-3': '#7f8a9c',
   '--border': 'rgba(255,255,255,0.08)',
+}
+
+const EXECUTIVE_VARS_LIGHT = {
+  '--bg-base': '#f5f7fb',
+  '--bg-layer': '#fbfcff',
+  '--card-bg': '#ffffff',
+  '--card-border': 'rgba(15,23,42,0.08)',
+  '--card-shadow': '0 24px 60px rgba(15,23,42,0.08)',
+  '--card-shadow-hover': '0 28px 70px rgba(15,23,42,0.12)',
+  '--bg-input': '#f5f7fb',
+  '--text-1': '#152033',
+  '--text-2': '#536175',
+  '--text-3': '#8b97aa',
+  '--border': 'rgba(15,23,42,0.08)',
 }
 
 function fmtDate(iso) {
@@ -2486,6 +2501,7 @@ function AppearancePanel({
 export default function StatusBoard() {
   const { isEditor } = useAuth()
   const { showToast } = useToast()
+  const { dark } = useTheme()
 
   // ── Core data ──────────────────────────────────────────────────────────────
   const [records,     setRecords]     = useState([])
@@ -2760,12 +2776,13 @@ export default function StatusBoard() {
     if (!activeCounts.length) return null
     return [...activeCounts].sort((a, b) => b.count - a.count)[0]
   }, [statusCounts])
+  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
   const boardVars = useMemo(() => ({
-    ...EXECUTIVE_VARS,
+    ...executiveVars,
     '--accent': theme.accent,
     '--accent-dim': theme.accentDim,
     '--accent-soft': theme.accentSoft,
-  }), [theme])
+  }), [theme, executiveVars])
 
   // Opens detail panel and immediately shows invoice picklist
   function openInvoicePanel(record) {
@@ -2922,15 +2939,17 @@ export default function StatusBoard() {
         <div
           className="rounded-[30px] border p-4 sm:p-5 space-y-5"
           style={{
-            background: 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)',
-            borderColor: 'rgba(255,255,255,0.06)',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.26)',
+            background: dark
+              ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)'
+              : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.94) 100%)',
+            borderColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)',
+            boxShadow: dark ? '0 24px 60px rgba(0,0,0,0.26)' : '0 24px 60px rgba(15,23,42,0.08)',
           }}
         >
           <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-12 h-12 rounded-[18px] flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(125,149,255,0.16)', border: '1px solid rgba(125,149,255,0.24)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+                style={{ background: dark ? 'rgba(125,149,255,0.16)' : 'rgba(75,103,255,0.10)', border: dark ? '1px solid rgba(125,149,255,0.24)' : '1px solid rgba(75,103,255,0.14)', boxShadow: dark ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'inset 0 1px 0 rgba(255,255,255,0.8)' }}>
                 <Activity size={19} style={{ color: 'var(--accent)' }} />
               </div>
               <div className="min-w-0">
@@ -3117,22 +3136,22 @@ export default function StatusBoard() {
 
           {!loading && !error && records.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{records.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{allClients.length} distinct clients</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{filtered.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{advancedConditions.length ? `${advancedConditions.length} advanced rule${advancedConditions.length !== 1 ? 's' : ''}` : 'No advanced rules'}</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'rgba(132,226,84,0.08)', border: '1px solid rgba(132,226,84,0.12)' }}>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--fin-positive)' }}>{topStatusSignal?.status || 'No active statuses'}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{topStatusSignal ? `${topStatusSignal.count} project${topStatusSignal.count === 1 ? '' : 's'} currently in this state` : 'Waiting for live status records'}</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {viewType === 'card' ? 'Client cards' : viewType === 'list' ? 'Operational list' : 'Kanban board'}
@@ -3155,7 +3174,7 @@ export default function StatusBoard() {
         )}
 
         {/* ── Filter bar ── */}
-        <div className="rounded-[24px] p-3 sm:p-4" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="rounded-[24px] p-3 sm:p-4" style={{ background: dark ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -3369,7 +3388,7 @@ export default function StatusBoard() {
 
         {/* ══ LIST VIEW ══ */}
         {!loading && !error && filtered.length > 0 && viewType === 'list' && (
-          <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', boxShadow: '0 18px 40px rgba(0,0,0,0.24)' }}>
+          <div className="rounded-[24px] overflow-hidden" style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)', background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.94)', boxShadow: dark ? '0 18px 40px rgba(0,0,0,0.24)' : '0 18px 40px rgba(15,23,42,0.08)' }}>
             <div className="overflow-x-auto">
               <div className="min-w-full">
                 <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em]"

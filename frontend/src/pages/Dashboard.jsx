@@ -10,6 +10,7 @@ import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { formatInr as inr, formatPct } from '../utils/format'
+import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
 
 /* Count projects whose health does NOT contain 🔴 */
@@ -139,7 +140,7 @@ function useGreeting() {
   }, [])
 }
 
-const EXECUTIVE_VARS = {
+const EXECUTIVE_VARS_DARK = {
   '--bg-base': '#090b10',
   '--bg-layer': '#0e1118',
   '--card-bg': '#141820',
@@ -162,10 +163,34 @@ const EXECUTIVE_VARS = {
   '--border': 'rgba(255,255,255,0.08)',
 }
 
+const EXECUTIVE_VARS_LIGHT = {
+  '--bg-base': '#f5f7fb',
+  '--bg-layer': '#fbfcff',
+  '--card-bg': '#ffffff',
+  '--card-border': 'rgba(15,23,42,0.08)',
+  '--card-shadow': '0 24px 60px rgba(15,23,42,0.08)',
+  '--card-shadow-hover': '0 28px 70px rgba(15,23,42,0.12)',
+  '--bg-input': '#f5f7fb',
+  '--text-1': '#152033',
+  '--text-2': '#536175',
+  '--text-3': '#8b97aa',
+  '--accent': '#4b67ff',
+  '--accent-dim': 'rgba(75,103,255,0.10)',
+  '--accent-soft': 'rgba(75,103,255,0.18)',
+  '--fin-positive': '#16915f',
+  '--fin-pos-bg': 'rgba(22,145,95,0.10)',
+  '--fin-warning': '#ca7f14',
+  '--fin-warn-bg': 'rgba(202,127,20,0.10)',
+  '--fin-negative': '#d85f58',
+  '--fin-neg-bg': 'rgba(216,95,88,0.10)',
+  '--border': 'rgba(15,23,42,0.08)',
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
   const { isEditor } = useAuth()
+  const { dark } = useTheme()
 
   const fetchAll = useCallback(() =>
     Promise.all([
@@ -188,17 +213,21 @@ export default function Dashboard() {
   const statusEntries = Object.entries(s?.by_status || {})
   const healthiestPct = (s?.total_projects ?? 0) > 0 ? (healthOk / s.total_projects) * 100 : 0
 
+  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
+
   return (
     <div
       className="p-4 sm:p-6 space-y-6 animate-fade-in rounded-[28px]"
       style={{
-        ...EXECUTIVE_VARS,
-        background: 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 22%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)',
+        ...executiveVars,
+        background: dark
+          ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 22%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)'
+          : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 20%), radial-gradient(circle at top right, rgba(22,145,95,0.06), transparent 18%), linear-gradient(180deg, #f8faff 0%, #f4f7fb 100%)',
       }}
     >
 
       {/* Header */}
-      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold tabular-nums tracking-[0.22em] uppercase"
@@ -237,7 +266,7 @@ export default function Dashboard() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 xl:grid-cols-[1.8fr_1fr] gap-4">
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
@@ -248,7 +277,7 @@ export default function Dashboard() {
                   Net profit from <span style={{ color: 'var(--text-2)' }}>{inr(s?.total_billed)}</span> billed across {s?.total_projects ?? 0} active portfolio entries.
                 </p>
               </div>
-              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: 'rgba(132,226,84,0.08)', border: '1px solid rgba(132,226,84,0.12)' }}>
+              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
                 <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
                 <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
                   {healthOk}/{s?.total_projects ?? 0}
@@ -264,7 +293,7 @@ export default function Dashboard() {
                 { label: 'Cost load', value: formatPct(costRatio, 1), tone: 'var(--fin-warning)' },
                 { label: 'At risk', value: `${atRisk.length}`, tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                   <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
                 </div>
@@ -272,7 +301,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Command center</p>
@@ -290,7 +319,7 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-5 space-y-3">
-              <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
                 <p className="text-base font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {s?.best_project?.name || 'No project performance signal yet'}
@@ -301,7 +330,7 @@ export default function Dashboard() {
                     : 'As project financials settle in, this space will surface the strongest performer.'}
                 </p>
               </div>
-              <div className="rounded-2xl p-4" style={{ background: 'rgba(255,125,128,0.06)', border: '1px solid rgba(255,125,128,0.12)' }}>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
                 <p className="text-base font-semibold mt-2" style={{ color: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' }}>
                   {atRisk.length ? `${atRisk.length} project${atRisk.length === 1 ? '' : 's'} need review` : 'No critical portfolio blockers'}
