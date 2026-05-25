@@ -307,7 +307,7 @@ function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   )
 }
 
-function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact = false }) {
+function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact = false, iconSlot = true }) {
   const display = value == null ? '—' : String(value)
   const currencyMatch = display.match(/^([^\d-]+)([\d,.\-]+)$/)
   return (
@@ -357,7 +357,7 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
           )}
           {sub && <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{sub}</p>}
         </div>
-        {Icon && (
+        {iconSlot && Icon && (
           <div
             className="flex items-center justify-center flex-shrink-0 rounded-2xl"
             style={{
@@ -1943,6 +1943,7 @@ export default function WebInvoices() {
                     value={sumLoading && !s ? '—' : fmt(s?.total_raised)}
                     sub={`${allRecords.length} invoices across all workspaces`}
                     icon={null}
+                    iconSlot={false}
                     tone={dark ? 'rgba(30,41,59,0.68)' : 'rgba(255,255,255,0.92)'}
                     accent={dark ? '#f8fafc' : 'var(--text-1)'}
                   />

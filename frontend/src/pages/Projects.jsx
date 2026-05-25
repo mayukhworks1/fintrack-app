@@ -1,12 +1,14 @@
 import { useCallback, useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal } from 'lucide-react'
+import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal, FolderKanban, Activity, IndianRupee, Link2, ArrowRight, AlertTriangle } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
+import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
+import { formatInr, formatPct } from '../utils/format'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -76,6 +78,8 @@ export default function Projects() {
 
   const { data: _data, loading, error, refresh, lastUpdated, syncing } =
     useAutoRefresh(fetchProjects, 5_000)
+  const fetchSummary = useCallback(() => api.projects.summary(), [])
+  const { data: summary } = useAutoRefresh(fetchSummary, 10_000)
   const records = _data ?? []
   const updatedLabel = useRelativeTime(lastUpdated)
 
@@ -108,6 +112,17 @@ export default function Projects() {
 
   const displayed = searchResults ?? records
   const activeFilters = [status && `Status: ${status}`, client && `Client: ${client}`].filter(Boolean)
+  const visibleCount = displayed.length
+  const topClients = Object.entries(summary?.by_client || {})
+    .sort(([, a], [, b]) => Number(b) - Number(a))
+    .slice(0, 4)
+  const atRisk = (summary?.at_risk || []).slice(0, 4)
+  const margin = Number(summary?.total_billed || 0) > 0
+    ? (Number(summary?.total_profit || 0) / Number(summary?.total_billed || 1)) * 100
+    : 0
+  const healthCoverage = Number(summary?.total_projects || 0) > 0
+    ? (((summary?.healthy_projects || 0) / Number(summary?.total_projects || 1)) * 100)
+    : 0
 
   const setFilter = (key, val) => {
     const p = new URLSearchParams(searchParams)
@@ -118,55 +133,77 @@ export default function Projects() {
   const clearSearch = () => { setSearch(''); setSearchResults(null); searchInputRef.current?.focus() }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 animate-fade-in">
+    <ExecutiveShell>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)' }}>Projects</h1>
-          <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
-            {displayed.length} project{displayed.length !== 1 ? 's' : ''}
+      <ExecutiveHero
+        eyebrow="Projects Control Center"
+        title="Projects"
+        description="Track portfolio health, profit coverage, linked invoices, and delivery risk from one unified project workspace."
+        icon={FolderKanban}
+        meta={
+          <div className="flex flex-wrap items-center gap-2">
+            <ExecutiveChip accent>{visibleCount} visible project{visibleCount !== 1 ? 's' : ''}</ExecutiveChip>
             {lastUpdated && (
-              <span className="flex items-center gap-1.5">
-                · <SyncDot syncing={syncing} />
-                <span style={{ color: syncing ? 'var(--fin-warning)' : 'var(--text-3)' }}>
-                  {syncing ? 'syncing…' : `live · ${updatedLabel}`}
-                </span>
-              </span>
+              <ExecutiveChip>
+                <SyncDot syncing={syncing} /> {syncing ? 'syncing…' : `live · ${updatedLabel}`}
+              </ExecutiveChip>
             )}
-          </p>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          {isEditor && (
-            <>
-              <button onClick={() => setShareModal(true)}
-                className="px-3 py-2 rounded-xl text-sm font-semibold"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
-                Share View
-              </button>
-              <button onClick={() => setManageModal(true)}
-                className="px-3 py-2 rounded-xl text-sm font-semibold"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
-                Links
-              </button>
-            </>
-          )}
-          <button onClick={refresh} disabled={loading} aria-label="Refresh"
-            className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-            style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'transparent' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <RefreshCw size={15} className={clsx(loading && 'animate-spin')} />
-          </button>
-          {isEditor && (
-            <button onClick={() => navigate('/projects/new')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold"
-              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-              <Plus size={15} aria-hidden="true" /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
+            {activeFilters.length > 0 && <ExecutiveChip>{activeFilters.length} active filter{activeFilters.length !== 1 ? 's' : ''}</ExecutiveChip>}
+          </div>
+        }
+        actions={
+          <>
+            {isEditor && (
+              <>
+                <button onClick={() => setShareModal(true)} className="btn-ghost">
+                  Share View
+                </button>
+                <button onClick={() => setManageModal(true)} className="btn-ghost">
+                  Links
+                </button>
+              </>
+            )}
+            <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-ghost">
+              <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+              Refresh
             </button>
-          )}
-        </div>
-      </div>
+            {isEditor && (
+              <button onClick={() => navigate('/projects/new')} className="btn-primary">
+                <Plus size={14} /> New Project
+              </button>
+            )}
+          </>
+        }
+      >
+        <ExecutiveStatGrid className="mt-5">
+          <ExecutiveStatCard
+            label="Portfolio health"
+            value={`${summary?.healthy_projects || 0}/${summary?.total_projects || visibleCount}`}
+            sub={`${formatPct(healthCoverage, 1)} of tracked projects outside critical health bands`}
+            accent="positive"
+            icon={Activity}
+          />
+          <ExecutiveStatCard
+            label="Cashflow summary"
+            value={summary ? formatInr(summary.total_billed || 0) : '—'}
+            sub={summary ? `${formatInr(summary.total_profit || 0)} profit · ${formatPct(margin, 2)} margin` : 'Loading billing health'}
+            icon={IndianRupee}
+          />
+          <ExecutiveStatCard
+            label="Linked invoices"
+            value={records.reduce((sum, row) => sum + Number(row.association?.related_counts?.project?.invoices || 0), 0)}
+            sub="Cross-module invoice associations visible on project cards"
+            icon={Link2}
+          />
+          <ExecutiveStatCard
+            label="At-risk now"
+            value={summary?.at_risk?.length || 0}
+            sub={summary?.at_risk?.length ? `${summary.at_risk[0]?.name || 'Highest pressure project'} needs review` : 'No negative-margin projects flagged'}
+            accent={(summary?.at_risk?.length || 0) > 0 ? 'warning' : 'positive'}
+            icon={AlertTriangle}
+          />
+        </ExecutiveStatGrid>
+      </ExecutiveHero>
 
       {/* Error */}
       {error && (
@@ -177,11 +214,22 @@ export default function Projects() {
         </div>
       )}
 
-      {/* Search + filter bar */}
-      <div className="space-y-2">
-        <div className="flex gap-2" role="search">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_360px] gap-4">
+        <ExecutivePanel
+          title="Delivery and finance lens"
+          subtitle="Search, filter, and sort projects with the same control rhythm used across the main app."
+          action={
+            activeFilters.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {activeFilters.map(f => <ExecutiveChip key={f} accent>{f}</ExecutiveChip>)}
+              </div>
+            )
+          }
+        >
+          <div className="space-y-3">
+            <ExecutiveFilterBar role="search">
           {/* Search */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ color: 'var(--text-3)' }} aria-hidden="true" />
             <input
@@ -217,7 +265,7 @@ export default function Projects() {
           <button
             onClick={() => setShowFilters(f => !f)}
             aria-label="Toggle filters" aria-expanded={showFilters}
-            className="flex items-center gap-1.5 px-3 rounded-xl text-sm transition-all"
+            className="flex items-center gap-1.5 px-3 rounded-xl text-sm transition-all min-h-[42px]"
             style={{
               background: showFilters || activeFilters.length ? 'var(--accent-dim)' : 'var(--bg-input)',
               border: `1px solid ${showFilters || activeFilters.length ? 'rgba(37,99,235,0.25)' : 'var(--border)'}`,
@@ -230,7 +278,7 @@ export default function Projects() {
                 style={{ background: 'var(--accent)', color: '#fff' }}>{activeFilters.length}</span>
             )}
           </button>
-        </div>
+            </ExecutiveFilterBar>
 
         {/* Expanded filter row */}
         {showFilters && (
@@ -261,26 +309,58 @@ export default function Projects() {
             )}
           </div>
         )}
-
-        {/* Active filter chips */}
-        {activeFilters.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {activeFilters.map(f => (
-              <span key={f} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--fin-positive)' }}>
-                {f}
-              </span>
-            ))}
           </div>
-        )}
+        </ExecutivePanel>
+
+        <ExecutivePanel
+          title="Signals to review"
+          subtitle="Top clients, current at-risk pressure, and revenue movement."
+        >
+          {topClients.length > 0 ? (
+            <ExecutiveMetricList
+              items={topClients.map(([name, count]) => ({
+                label: name,
+                sub: `${count} project${count === 1 ? '' : 's'} active in the current summary`,
+                value: count,
+              }))}
+            />
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No client distribution available yet.</p>
+          )}
+          {atRisk.length > 0 && (
+            <div className="mt-4 space-y-2 rounded-2xl p-3" style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--fin-warning)' }}>Pressure points</p>
+              {atRisk.map(project => (
+                <button
+                  key={project.name}
+                  onClick={() => setSearch(project.name)}
+                  className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left"
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project.name}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{project.client || 'Portfolio project'} · {project.status || project.health}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--fin-warning)' }}>
+                    Open
+                    <ArrowRight size={12} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </ExecutivePanel>
       </div>
 
       {/* Grid */}
       {loading && !records.length ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Loading projects">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
+        <ExecutivePanel title="Project stream" subtitle="Loading current portfolio view…">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Loading projects">
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        </ExecutivePanel>
       ) : displayed.length === 0 ? (
+        <ExecutivePanel title="Project stream" subtitle="No projects are visible in the current scope.">
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
             style={{ background: 'var(--bg-input)' }}>
@@ -309,10 +389,13 @@ export default function Projects() {
             )}
           </div>
         </div>
+        </ExecutivePanel>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
-        </div>
+        <ExecutivePanel title="Project stream" subtitle="Live project cards with linked invoice and status context.">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
+          </div>
+        </ExecutivePanel>
       )}
 
       {isEditor && shareModal && (
@@ -345,7 +428,7 @@ export default function Projects() {
           onClose={() => setManageModal(false)}
         />
       )}
-    </div>
+    </ExecutiveShell>
   )
 }
 

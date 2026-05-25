@@ -117,6 +117,15 @@ const REPORT_MODES = [
   },
 ]
 
+const REPORT_TEMPLATES = [
+  { id: 'board-pack', label: 'Board Pack', mode: 'board-pack', note: 'Full executive pack across revenue, risk, and delivery.' },
+  { id: 'founder-weekly', label: 'Founder Weekly', mode: 'board-pack', note: 'Cash, pressure points, and leadership-ready weekly summary.' },
+  { id: 'collections-report', label: 'Collections', mode: 'board-pack', note: 'Pending invoices, aging pressure, and receivables follow-up.' },
+  { id: 'project-health-review', label: 'Project Health', mode: 'board-pack', note: 'Margin pressure, delivery health, and projects needing review.' },
+  { id: 'client-billing-summary', label: 'Client Billing', mode: 'board-pack', note: 'Top billed clients and portfolio concentration.' },
+  { id: 'status-board-summary', label: 'Status Board', mode: 'status-briefing', note: 'Current status-board movement and delivery state.' },
+]
+
 /* ── Main Report page ────────────────────────────────────────────────────── */
 export default function Report() {
   const [reportMode, setReportMode] = useState('board-pack')
@@ -134,6 +143,7 @@ export default function Report() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [activeHistoryId, setActiveHistoryId] = useState('')
   const [deletingHistoryId, setDeletingHistoryId] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('board-pack')
   const abortRef = useRef(null)
 
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -164,6 +174,8 @@ export default function Report() {
     setCachedAt('')
     setIsEmpty(false)
     setActiveHistoryId('')
+    const defaultTemplate = REPORT_TEMPLATES.find(t => t.mode === mode)?.id || 'board-pack'
+    setSelectedTemplate(defaultTemplate)
   }
 
   const generate = async ({ force = false } = {}) => {
@@ -186,7 +198,7 @@ export default function Report() {
         setFromCache(false)
         setCachedAt('')
       } else {
-        resp = await api.ai.report({ signal: ctrl.signal, force })
+        resp = await api.ai.report({ signal: ctrl.signal, force, template: selectedTemplate })
         setFromCache(!!resp.from_cache)
         setCachedAt(resp.cached_at || '')
       }
@@ -196,6 +208,7 @@ export default function Report() {
       setDuration(resp.duration_ms || 0)
       setIsEmpty(!!resp.empty)
       setActiveHistoryId(resp.history_id || '')
+      setSelectedTemplate(resp.metadata?.template || selectedTemplate)
       if (resp.history_id) loadHistory()
     } catch (e) {
       if (e.name === 'AbortError') setError('Report generation cancelled.')
@@ -251,6 +264,7 @@ export default function Report() {
       setIsEmpty(false)
       setActiveHistoryId(id)
       setReportMode(resp.report_type === 'status-briefing' ? 'status-briefing' : 'board-pack')
+      setSelectedTemplate(resp.metadata?.template || (resp.report_type === 'status-briefing' ? 'status-board-summary' : 'board-pack'))
     } catch (e) {
       setError('Failed to open report history: ' + e.message)
     } finally {
@@ -297,6 +311,7 @@ export default function Report() {
   })()
 
   const currentMode = REPORT_MODES.find(m => m.id === reportMode)
+  const visibleTemplates = REPORT_TEMPLATES.filter(template => template.mode === reportMode)
   const metricCards = reportMode === 'status-briefing'
     ? [
         { label: 'Status Rows', value: reportMeta.statuses ?? '—' },
@@ -370,6 +385,27 @@ export default function Report() {
               <Icon size={14} style={{ color: active ? 'var(--accent)' : 'var(--text-3)' }} />
               <span className="hidden xs:inline">{mode.label}</span>
               <span className="inline xs:hidden">{mode.label.split(' ')[0]}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {visibleTemplates.map(template => {
+          const active = selectedTemplate === template.id
+          return (
+            <button
+              key={template.id}
+              onClick={() => setSelectedTemplate(template.id)}
+              className="card text-left transition-all"
+              style={{
+                borderColor: active ? 'var(--accent)' : 'var(--card-border)',
+                boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--card-shadow)',
+                background: active ? 'var(--accent-dim)' : 'var(--card-bg)',
+              }}
+            >
+              <p className="text-sm font-semibold" style={{ color: active ? 'var(--accent)' : 'var(--text-1)' }}>{template.label}</p>
+              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-3)' }}>{template.note}</p>
             </button>
           )
         })}

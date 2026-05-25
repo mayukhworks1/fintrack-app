@@ -213,6 +213,19 @@ const SUGGESTIONS = [
   'Show me the worst performing project',
 ]
 
+const RESPONSE_MODES = [
+  { id: 'brief', label: 'Brief', instruction: 'Respond briefly in 4-6 concise bullets with only the most important decisions or findings.' },
+  { id: 'detailed', label: 'Detailed', instruction: 'Respond with clear sections, context, supporting detail, and next-step recommendations.' },
+  { id: 'board', label: 'Board report', instruction: 'Respond like an executive board note with headings, business summary, pressure points, and action items.' },
+]
+
+const TASK_CHIPS = [
+  'Show me an overdue collections dashboard',
+  'Summarize at-risk projects',
+  'Prepare a weekly founder report',
+  'Make a pie chart dashboard of all project statuses',
+]
+
 function Message({ msg }) {
   const isUser = msg.role === 'user'
   const copyText = msg.dashboard?.copyText || msg.content || ''
@@ -300,6 +313,7 @@ export default function AIAssistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  const [responseMode, setResponseMode] = useState('brief')
   const [sessionId, setSessionId] = useState(() => {
     try { return localStorage.getItem(SESSION_KEY) || '' } catch { return '' }
   })
@@ -328,6 +342,8 @@ export default function AIAssistant() {
   const send = async (text) => {
     const msg = (text || input).trim()
     if (!msg || loading) return
+    const modeMeta = RESPONSE_MODES.find(mode => mode.id === responseMode) || RESPONSE_MODES[0]
+    const aiPrompt = `${modeMeta.instruction}\n\nUser request: ${msg}`
     setInput('')
     const priorHistory = history
     const assistantIndex = priorHistory.length + 1
@@ -338,7 +354,7 @@ export default function AIAssistant() {
     abortRef.current = ctrl
 
     try {
-      const res = await api.ai.chatStream(msg, sessionId ? [] : priorHistory, {
+      const res = await api.ai.chatStream(aiPrompt, sessionId ? [] : priorHistory, {
         signal: ctrl.signal,
         sessionId,
       })
@@ -495,7 +511,7 @@ export default function AIAssistant() {
             <div className="flex items-center gap-1.5">
               <Database size={9} style={{ color: 'var(--accent)' }} />
               <p className="text-[10px] sm:text-xs truncate" style={{ color: 'var(--text-3)' }}>
-                Fast mirror-backed context · multi-model fallback
+                Task-oriented assistant · dashboards, summaries, and board-ready responses
               </p>
             </div>
           </div>
@@ -511,6 +527,23 @@ export default function AIAssistant() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5"
         role="log" aria-label="Chat messages" aria-live="polite">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {RESPONSE_MODES.map(mode => {
+            const active = responseMode === mode.id
+            return (
+              <button
+                key={mode.id}
+                onClick={() => setResponseMode(mode.id)}
+                className="rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+                style={active
+                  ? { background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }
+                  : { background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}
+              >
+                {mode.label}
+              </button>
+            )
+          })}
+        </div>
         {history.map((msg, i) => <Message key={i} msg={msg} />)}
         {showSuggestions && !loading && (
           <div className="mt-2">
@@ -518,6 +551,14 @@ export default function AIAssistant() {
               <Sparkles size={11} style={{ color: 'var(--accent)' }} /> Try asking:
             </p>
             <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested questions">
+              {TASK_CHIPS.map((s) => (
+                <button key={s} role="listitem" onClick={() => send(s)} disabled={loading}
+                  className="text-xs px-3 py-1.5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed text-left"
+                  style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}
+                  aria-label={s}>
+                  {s}
+                </button>
+              ))}
               {visibleSuggestions.map((s) => (
                 <button key={s} role="listitem" onClick={() => send(s)} disabled={loading}
                   className="text-xs px-3 py-1.5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed text-left"

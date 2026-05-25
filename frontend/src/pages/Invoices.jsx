@@ -19,6 +19,7 @@ import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import AssociationLinkModal from '../components/AssociationLinkModal'
 import clsx from 'clsx'
+import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Dropdown options are derived live from invoice records — no hardcoded fallbacks
@@ -1014,6 +1015,32 @@ export default function Invoices() {
 
   const s = summary
   const overdue = s?.overdue_invoices || []
+  const agingBuckets = useMemo(() => {
+    const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
+    for (const r of allRecords) {
+      const f = r.fields || {}
+      if (f['Payment Status'] !== 'Pending') continue
+      const aging = effectiveAging(f)
+      if (aging <= 14) buckets['0-14d'] += 1
+      else if (aging <= 30) buckets['15-30d'] += 1
+      else if (aging <= 60) buckets['31-60d'] += 1
+      else buckets['60d+'] += 1
+    }
+    return buckets
+  }, [allRecords])
+  const actionQueue = useMemo(() => {
+    return [...records]
+      .filter(r => {
+        const f = r.fields || {}
+        return f['Payment Status'] === 'Pending' || f['Next followup']
+      })
+      .sort((a, b) => {
+        const ad = new Date(a.fields?.['Next followup'] || a.fields?.['Raised Date'] || 0).getTime() || 0
+        const bd = new Date(b.fields?.['Next followup'] || b.fields?.['Raised Date'] || 0).getTime() || 0
+        return ad - bd
+      })
+      .slice(0, 4)
+  }, [records])
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
 
@@ -1131,57 +1158,54 @@ export default function Invoices() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
+    <ExecutiveShell>
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>
-            Invoices
-          </h1>
-          <p className="text-xs mt-1 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
-            <span className="live-dot" />
-            <span>Live sync · {allRecords.length} invoice{allRecords.length !== 1 ? 's' : ''}</span>
-            {syncing && <span style={{ color: 'var(--fin-warning)' }}>· syncing…</span>}
-          </p>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          {isEditor && workspace === 'invoices' && (
-            <>
-              <button onClick={() => setShareModal(true)} className="btn-ghost">
-                <ExternalLink size={14} />
-                <span className="hidden sm:inline">Share View</span>
-                <span className="sm:hidden">Share</span>
-              </button>
-              <button onClick={() => setManageModal(true)} className="btn-ghost">
-                <Eye size={14} />
-                <span className="hidden sm:inline">Links</span>
-                <span className="sm:hidden">Links</span>
-              </button>
-            </>
-          )}
-          <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
-            <ExternalLink size={14} />
-            <span className="hidden sm:inline">Raise Externally</span>
-            <span className="sm:hidden">Raise</span>
-          </button>
-          <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-          {isEditor && (
-            <button onClick={openNew} className="btn-primary">
-              <Plus size={14} />
-              <span className="hidden sm:inline">New Invoice</span>
-              <span className="sm:hidden">New</span>
+      <ExecutiveHero
+        eyebrow="Receivables Command Deck"
+        title="Invoices"
+        description="Operate collections, aging, retainer billing, and linked project context from a denser finance workspace."
+        icon={Receipt}
+        meta={
+          <div className="flex flex-wrap items-center gap-2">
+            <ExecutiveChip accent>{allRecords.length} live invoice{allRecords.length !== 1 ? 's' : ''}</ExecutiveChip>
+            <ExecutiveChip>{syncing ? 'syncing…' : 'mirror-fast · Teable-backed'}</ExecutiveChip>
+            {hasFilters && <ExecutiveChip>{records.length} in current scope</ExecutiveChip>}
+          </div>
+        }
+        actions={
+          <>
+            {isEditor && workspace === 'invoices' && (
+              <>
+                <button onClick={() => setShareModal(true)} className="btn-ghost"><ExternalLink size={14} />Share View</button>
+                <button onClick={() => setManageModal(true)} className="btn-ghost"><Eye size={14} />Links</button>
+              </>
+            )}
+            <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
+              <ExternalLink size={14} />Raise Externally
             </button>
-          )}
-        </div>
-      </div>
+            <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-ghost">
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
+            </button>
+            {isEditor && (
+              <button onClick={openNew} className="btn-primary"><Plus size={14} />New Invoice</button>
+            )}
+          </>
+        }
+      >
+        <ExecutiveStatGrid className="mt-5">
+          <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : fmt(s?.total_raised)} icon={IndianRupee} />
+          <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : fmt(s?.total_received)} sub={s ? `${(s.collection_rate ?? 0).toFixed(1)}% collection rate` : ''} accent="positive" icon={TrendingUp} />
+          <ExecutiveStatCard label="Outstanding" value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)} sub={`${s?.by_status?.Pending || 0} pending invoices`} accent={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'} icon={CalendarClock} />
+          <ExecutiveStatCard label="Action today" value={actionQueue.length} sub={actionQueue[0] ? `${actionQueue[0].fields?.['Project'] || 'Invoice'} needs attention` : 'No follow-up pressure right now'} accent={actionQueue.length ? 'warning' : 'positive'} icon={AlertOctagon} />
+        </ExecutiveStatGrid>
+      </ExecutiveHero>
 
-      {/* ── Workspace switcher ── */}
-      <div className="card" style={{ padding: '0.85rem 1rem' }}>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_340px] gap-4">
+        <ExecutivePanel
+          title="Workspace controls"
+          subtitle="The same command rhythm as Projects and Status, with retainer operations kept in the same finance plane."
+        >
+          <ExecutiveFilterBar>
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               {[['invoices', 'Invoices'], ['retainers', 'Retainers']].map(([value, label]) => (
                 <button key={value} onClick={() => setWorkspace(value)}
@@ -1193,11 +1217,22 @@ export default function Invoices() {
                 </button>
               ))}
             </div>
-          </div>
-          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-            Retainer workflow uses Project as the retainer/client name. Category follows the selected billing type until manually overridden.
-          </span>
-        </div>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+              Retainer workflow uses Project as the client/retainer name and stays linked to the same finance record stream.
+            </span>
+          </ExecutiveFilterBar>
+        </ExecutivePanel>
+
+        <ExecutivePanel title="Aging buckets" subtitle="Quick receivables heat map for the current invoice scope.">
+          <ExecutiveMetricList
+            items={Object.entries(agingBuckets).map(([label, value]) => ({
+              label,
+              sub: 'Pending invoices',
+              value,
+              accent: label === '60d+' ? 'negative' : label === '31-60d' ? 'warning' : undefined,
+            }))}
+          />
+        </ExecutivePanel>
       </div>
 
       {/* ── KPIs ── */}
@@ -1517,7 +1552,7 @@ export default function Invoices() {
       <>
       {/* ── Project Snapshot ── */}
       {projectSummaryCards.length > 0 && (
-        <section className="card space-y-3">
+        <ExecutivePanel title="Project-linked billing" subtitle="Project cards behave as filters and surface raised, received, and open value at a glance.">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Project Snapshot</h2>
@@ -1567,12 +1602,13 @@ export default function Invoices() {
               )
             })}
           </div>
-        </section>
+        </ExecutivePanel>
       )}
 
       {/* ── Filter bar ── */}
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <ExecutivePanel title="Filters and search" subtitle="Owner, overdue band, month, category, docs, and advanced rules follow one unified filter pattern.">
+        <div className="space-y-2">
+        <ExecutiveFilterBar>
           <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -1607,7 +1643,7 @@ export default function Invoices() {
           <span className="text-xs whitespace-nowrap ml-auto" style={{ color: 'var(--text-3)' }}>
             {records.length} result{records.length !== 1 ? 's' : ''}
           </span>
-        </div>
+        </ExecutiveFilterBar>
 
         {showFilters && (
           <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
@@ -1714,6 +1750,7 @@ export default function Invoices() {
           </div>
         )}
       </div>
+      </ExecutivePanel>
 
       {/* ── Error ── */}
       {error && (
@@ -2032,6 +2069,6 @@ export default function Invoices() {
         />
       )}
       <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
-    </div>
+    </ExecutiveShell>
   )
 }

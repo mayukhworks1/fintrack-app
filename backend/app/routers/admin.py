@@ -253,12 +253,20 @@ async def admin_stats(_: str = Depends(require_admin)):
             -- Mirror tables
             (SELECT COUNT(*) FROM projects_mirror)                                    AS projects_total,
             (SELECT MAX(synced_at) FROM projects_mirror)                              AS projects_last_sync,
+            (SELECT COUNT(*) FROM projects_mirror WHERE deleted_at IS NOT NULL)       AS projects_deleted,
+            (SELECT COUNT(*) FROM projects_mirror WHERE deleted_at IS NULL AND synced_at < NOW() - INTERVAL '10 minutes') AS projects_stale,
             (SELECT COUNT(*) FROM invoices_mirror)                                    AS invoices_total,
             (SELECT MAX(synced_at) FROM invoices_mirror)                              AS invoices_last_sync,
+            (SELECT COUNT(*) FROM invoices_mirror WHERE deleted_at IS NOT NULL)       AS invoices_deleted,
+            (SELECT COUNT(*) FROM invoices_mirror WHERE deleted_at IS NULL AND synced_at < NOW() - INTERVAL '10 minutes') AS invoices_stale,
             (SELECT COUNT(*) FROM web_invoices_mirror)                                AS web_invoices_total,
             (SELECT MAX(synced_at) FROM web_invoices_mirror)                          AS web_invoices_last_sync,
+            (SELECT COUNT(*) FROM web_invoices_mirror WHERE deleted_at IS NOT NULL)   AS web_invoices_deleted,
+            (SELECT COUNT(*) FROM web_invoices_mirror WHERE deleted_at IS NULL AND synced_at < NOW() - INTERVAL '10 minutes') AS web_invoices_stale,
             (SELECT COUNT(*) FROM status_mirror)                                  AS status_total,
             (SELECT MAX(synced_at) FROM status_mirror)                            AS status_last_sync,
+            (SELECT COUNT(*) FROM status_mirror WHERE deleted_at IS NOT NULL)      AS status_deleted,
+            (SELECT COUNT(*) FROM status_mirror WHERE deleted_at IS NULL AND synced_at < NOW() - INTERVAL '10 minutes') AS status_stale,
 
             -- Combined invoice totals (for overview)
             (SELECT COUNT(*) FROM invoices_mirror    WHERE payment_status ILIKE '%paid%')     AS invoices_paid,
@@ -267,6 +275,13 @@ async def admin_stats(_: str = Depends(require_admin)):
             -- Change history
             (SELECT COUNT(*) FROM record_history)                                                                  AS history_total,
             (SELECT COUNT(*) FROM record_history WHERE recorded_at > NOW() - INTERVAL '24h')                       AS history_24h,
+
+            -- Shared links
+            (SELECT COUNT(*) FROM shared_views)                                                                     AS shared_links_total,
+            (SELECT COUNT(*) FROM shared_views WHERE is_active = TRUE)                                              AS shared_links_active,
+            (SELECT COUNT(*) FROM shared_views WHERE access_mode = 'edit')                                          AS shared_links_edit,
+            (SELECT COUNT(*) FROM shared_view_accesses WHERE accessed_at > NOW() - INTERVAL '24h')                 AS shared_link_accesses_24h,
+            (SELECT COUNT(*) FROM shared_view_accesses WHERE event_type = 'edit' AND accessed_at > NOW() - INTERVAL '24h') AS shared_link_edits_24h,
 
             -- Last sync run
             (SELECT synced_at FROM sync_log ORDER BY id DESC LIMIT 1)                           AS last_sync_at,

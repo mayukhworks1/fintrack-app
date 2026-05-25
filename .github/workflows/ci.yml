@@ -56,3 +56,6 @@ jobs:
 
       - name: Validate backend imports
         run: python -c "from app.main import app; print(app.title, app.version)"
+
+      - name: Compile critical backend modules
+        run: python -m py_compile app/routers/*.py app/services/*.py app/db/*.py

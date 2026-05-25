@@ -292,6 +292,82 @@ function OverviewTab() {
           </div>
         </div>
       </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          Truth Contract
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="card space-y-2" style={{ borderLeft: '3px solid var(--accent)' }}>
+            <div className="flex items-center gap-2">
+              <Globe size={14} style={{ color: 'var(--accent)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Teable is source of truth</p>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              Primary operational state should always match Teable. Any discrepancy should be treated as a sync defect, not a product state.
+            </p>
+          </div>
+          <div className="card space-y-2" style={{ borderLeft: '3px solid #16a34a' }}>
+            <div className="flex items-center gap-2">
+              <Database size={14} style={{ color: '#16a34a' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>PostgreSQL is mirror and history</p>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              PG exists for analytics, associations, audit trails, report history, and faster app reads. Mirror freshness is tracked here, not assumed.
+            </p>
+          </div>
+          <div className="card space-y-2" style={{ borderLeft: '3px solid #d97706' }}>
+            <div className="flex items-center gap-2">
+              <Zap size={14} style={{ color: '#d97706' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Valkey is cache only</p>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              Cached responses should improve speed only. If a record looks wrong after refresh, use Sync Log and History to diagnose the mirror path.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          Mirror Sanity
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {[
+            ['Projects', data.projects_total, data.projects_stale, data.projects_deleted, data.projects_last_sync],
+            ['Invoices', data.invoices_total, data.invoices_stale, data.invoices_deleted, data.invoices_last_sync],
+            ['Web invoices', data.web_invoices_total, data.web_invoices_stale, data.web_invoices_deleted, data.web_invoices_last_sync],
+            ['Status', data.status_total, data.status_stale, data.status_deleted, data.status_last_sync],
+          ].map(([label, total, stale, deleted, lastSync]) => (
+            <div key={label} className="card space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{label}</p>
+                {(Number(stale) || 0) > 0 ? <Badge color="amber">{fmt(stale)} stale</Badge> : <Badge color="green">Fresh</Badge>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge color="blue">{fmt(total)} total</Badge>
+                <Badge color={(Number(deleted) || 0) > 0 ? 'red' : 'default'}>{fmt(deleted)} deleted</Badge>
+              </div>
+              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {lastSync ? `Last sync ${relTime(lastSync)}` : 'No sync seen yet'}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          Shared Link Activity
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatBox label="Links Total" value={data.shared_links_total} />
+          <StatBox label="Links Active" value={data.shared_links_active} color="#16a34a" accent="#16a34a" />
+          <StatBox label="Editable Links" value={data.shared_links_edit} color="#d97706" accent="#d97706" />
+          <StatBox label="Opens (24h)" value={data.shared_link_accesses_24h} sub="All shared modules" />
+          <StatBox label="Edits (24h)" value={data.shared_link_edits_24h} sub="Public link mutations" color="#2563eb" accent="#2563eb" />
+        </div>
+      </section>
     </div>
   )
 }

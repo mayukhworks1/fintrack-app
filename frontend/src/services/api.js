@@ -232,7 +232,10 @@ export const api = {
         timeout: AI_TIMEOUT_MS,
       }),
     report:   (opts = {}) => {
-      const qs = opts.force ? '?force=true' : ''
+      const q = new URLSearchParams()
+      if (opts.force) q.set('force', 'true')
+      if (opts.template) q.set('template', opts.template)
+      const qs = q.toString() ? `?${q.toString()}` : ''
       return request(`/api/ai/report${qs}`, { signal: opts.signal, timeout: AI_TIMEOUT_MS })
     },
     statusBriefing: (opts = {}) =>

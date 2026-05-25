@@ -23,7 +23,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from ..services.teable import TeableService
@@ -150,17 +150,31 @@ def _append_status_context(context: str, status_records: list[dict]) -> str:
     return context
 
 
-def _is_status_dashboard_request(message: str) -> bool:
+def _detect_dashboard_request(message: str) -> str | None:
     q = (message or "").strip().lower()
     if not q:
-        return False
+        return None
     asks_dashboard = any(term in q for term in (
         "dashboard", "pie chart", "donut chart", "chart", "graph", "visual", "distribution",
     ))
+    if not asks_dashboard:
+        return None
     asks_status = any(term in q for term in (
         "status", "statuses", "project status", "all status", "status of projects",
     ))
-    return asks_dashboard and asks_status
+    asks_collections = any(term in q for term in (
+        "collection", "collections", "receivable", "receivables", "overdue", "pending invoice", "aging",
+    ))
+    asks_risk = any(term in q for term in (
+        "at risk", "at-risk", "risk", "blocker", "blockers",
+    ))
+    if asks_collections:
+        return "collections"
+    if asks_risk:
+        return "risk"
+    if asks_status:
+        return "status"
+    return None
 
 
 async def _build_status_dashboard_payload() -> dict[str, Any]:
@@ -210,6 +224,91 @@ async def _build_status_dashboard_payload() -> dict[str, Any]:
         "series": series,
         "insight": f"{leading} is the largest bucket at {leading_pct}% of all tracked projects." if total else "No status records are available right now.",
         "copyText": "\n".join(copy_lines),
+    }
+
+
+async def _build_collections_dashboard_payload() -> dict[str, Any]:
+    service = InvoiceService()
+    summary = await service.get_summary_from_pg()
+    if summary is None:
+      summary = await service.get_summary()
+    records_result = await service.list_invoices_from_pg(limit=500, order_by="Raised Date", order="desc")
+    if records_result is None:
+      records_result = await service.list_invoices(limit=500, order_by="Raised Date", order="desc")
+    records = records_result.get("records", [])
+
+    buckets = {"0-14d": 0, "15-30d": 0, "31-60d": 0, "60d+": 0}
+    pending_amount = 0.0
+    for record in records:
+        fields = record.get("fields", {})
+        if str(fields.get("Payment Status") or "").strip() != "Pending":
+            continue
+        pending_amount += float(fields.get("Outstanding Amount") or fields.get("Amount Raised") or 0)
+        aging = int(float(fields.get("Agening (Days)") or 0))
+        if aging <= 14:
+            buckets["0-14d"] += 1
+        elif aging <= 30:
+            buckets["15-30d"] += 1
+        elif aging <= 60:
+            buckets["31-60d"] += 1
+        else:
+            buckets["60d+"] += 1
+
+    series = [
+        {"name": label, "value": count, "percent": round((count / max(sum(buckets.values()), 1)) * 100, 1), "color": color}
+        for (label, count), color in zip(buckets.items(), ["#16a34a", "#f59e0b", "#f97316", "#ef4444"])
+        if count > 0
+    ]
+    top_overdue = (summary.get("overdue_invoices") or [None])[0]
+    insight = (
+        f"Largest collection pressure sits in {top_overdue.get('project', 'the overdue queue')} at ₹{float(top_overdue.get('amount') or 0):,.0f}."
+        if top_overdue
+        else "No pending invoice pressure is visible right now."
+    )
+    return {
+        "eyebrow": "Collections",
+        "title": "Receivables Pressure Dashboard",
+        "subtitle": "Pending invoice aging distribution from the live invoice tracker",
+        "total": int(summary.get("pending_invoices") or 0),
+        "series": series or [{"name": "Clear", "value": 1, "percent": 100, "color": "#10b981"}],
+        "insight": insight,
+        "copyText": "\n".join([
+            "Receivables Pressure Dashboard",
+            *[f"{item['name']}: {item['value']} invoice(s) ({item['percent']}%)" for item in series],
+            f"Pending invoices: {int(summary.get('pending_invoices') or 0)}",
+            f"Pending outstanding: ₹{pending_amount:,.0f}",
+        ]),
+    }
+
+
+async def _build_risk_dashboard_payload() -> dict[str, Any]:
+    service = TeableService()
+    summary = await service.get_summary_from_pg()
+    if summary is None:
+        summary = await service.get_summary()
+    at_risk = summary.get("at_risk") or []
+    total = len(at_risk)
+    series = []
+    for item in at_risk[:6]:
+        pct = float(item.get("pct") or 0)
+        series.append({
+            "name": item.get("name") or item.get("client") or "Project",
+            "value": abs(round(pct, 2)) or 0.1,
+            "percent": round((abs(pct) / max(sum(abs(float(x.get('pct') or 0)) for x in at_risk[:6]), 0.1)) * 100, 1),
+            "color": "#ef4444" if pct < 0 else "#f59e0b",
+        })
+    return {
+        "eyebrow": "Risk",
+        "title": "At-risk Project Dashboard",
+        "subtitle": "Projects currently under financial or delivery pressure",
+        "total": total,
+        "series": series or [{"name": "No critical risk", "value": 1, "percent": 100, "color": "#10b981"}],
+        "insight": at_risk[0]["name"] + " is the highest-priority project to review." if at_risk else "No negative-margin or critical projects are flagged right now.",
+        "copyText": "\n".join([
+            "At-risk Project Dashboard",
+            *[f"{item.get('name','Project')}: {float(item.get('pct') or 0):.2f}% margin" for item in at_risk[:6]],
+            f"At-risk projects: {total}",
+        ]),
     }
 
 
@@ -521,8 +620,13 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             # Fallback: client-provided history (backward compat / no PG)
             history = [{"role": m.role, "content": m.content} for m in body.history]
 
-        if _is_status_dashboard_request(body.message):
-            dashboard = await _build_status_dashboard_payload()
+        dashboard_kind = _detect_dashboard_request(body.message)
+        if dashboard_kind:
+            dashboard = (
+                await _build_status_dashboard_payload() if dashboard_kind == "status"
+                else await _build_collections_dashboard_payload() if dashboard_kind == "collections"
+                else await _build_risk_dashboard_payload()
+            )
             resp = {
                 "reply": dashboard["copyText"],
                 "dashboard": dashboard,
@@ -584,8 +688,13 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
         history = [{"role": m.role, "content": m.content} for m in body.history]
 
     dashboard_payload = None
-    if _is_status_dashboard_request(body.message):
-        dashboard_payload = await _build_status_dashboard_payload()
+    dashboard_kind = _detect_dashboard_request(body.message)
+    if dashboard_kind:
+        dashboard_payload = (
+            await _build_status_dashboard_payload() if dashboard_kind == "status"
+            else await _build_collections_dashboard_payload() if dashboard_kind == "collections"
+            else await _build_risk_dashboard_payload()
+        )
 
     async def event_stream():
         started = time.time()
@@ -664,6 +773,15 @@ async def ai_analyze(body: AnalyzeRequest, _role: str = Depends(require_auth)):
 # on sync. Cache aggressively in Valkey so reloads / multi-user views are instant.
 _REPORT_CACHE_KEY = "report:executive"
 _REPORT_TTL       = 600      # 10 min — refreshed sooner if cache_bust("report:") fires on sync
+
+_REPORT_TEMPLATE_TITLES = {
+    "board-pack": "Board Pack",
+    "founder-weekly": "Weekly Founder Report",
+    "collections-report": "Collections Report",
+    "project-health-review": "Project Health Review",
+    "client-billing-summary": "Client Billing Summary",
+    "status-board-summary": "Status Board Summary",
+}
 
 
 def _money_inr(value) -> str:
@@ -1145,10 +1263,123 @@ async def _build_report_payload_teable() -> dict:
     }
 
 
+def _build_template_report(template: str, payload: dict, status_records: list[dict]) -> str:
+    project_summary = payload.get("project_summary") or {}
+    invoice_summary = payload.get("invoice_summary") or {}
+    project_records = payload.get("project_records") or []
+    invoice_records = payload.get("invoice_records") or []
+
+    if template == "collections-report":
+        overdue = invoice_summary.get("overdue_invoices") or []
+        pending = invoice_summary.get("pending_invoices") or []
+        lines = [
+            "Collections Report",
+            "",
+            f"Outstanding amount: ₹{float(invoice_summary.get('total_outstanding') or 0):,.0f}",
+            f"Pending invoices: {int(invoice_summary.get('pending_invoices') or 0)}",
+            f"Collection rate: {float(invoice_summary.get('collection_rate') or 0):.1f}%",
+            "",
+            "Priority queue:",
+        ]
+        if overdue:
+            lines.extend(
+                f"{i + 1}. {row.get('project','Invoice')} · {row.get('invoice_no','—')} · ₹{float(row.get('amount') or 0):,.0f} · {row.get('aging', 0)}d"
+                for i, row in enumerate(overdue[:8])
+            )
+        else:
+            lines.append("1. No overdue invoices are currently visible.")
+        lines += [
+            "",
+            "Recommended actions:",
+            "1. Follow up first on invoices beyond 30 days and any single invoice above ₹50,000.",
+            "2. Confirm the next follow-up owner and target date for every pending item.",
+            "3. Use the invoice workspace aging buckets to clear the oldest pressure first.",
+        ]
+        return "\n".join(lines)
+
+    if template == "project-health-review":
+        at_risk = project_summary.get("at_risk") or []
+        lines = [
+            "Project Health Review",
+            "",
+            f"Tracked projects: {len(project_records)}",
+            f"Healthy projects: {int(project_summary.get('healthy_projects') or 0)}",
+            f"At-risk projects: {len(at_risk)}",
+            "",
+            "Projects needing review:",
+        ]
+        if at_risk:
+            lines.extend(
+                f"{i + 1}. {row.get('name','Project')} · {row.get('client','Client')} · {float(row.get('pct') or 0):.2f}% margin · {row.get('status') or row.get('health') or 'No status'}"
+                for i, row in enumerate(at_risk[:8])
+            )
+        else:
+            lines.append("1. No at-risk projects are currently flagged.")
+        lines += [
+            "",
+            "Review prompts:",
+            "1. Check delivery blockers and cash clearance for the top two pressured projects.",
+            "2. Confirm ownership, next milestone, and client-facing risks.",
+        ]
+        return "\n".join(lines)
+
+    if template == "client-billing-summary":
+        by_client = {}
+        for record in project_records:
+            fields = record.get("fields", {})
+            client = fields.get("Client") or "Unknown"
+            billed = float(fields.get("Amount Billed So far") or 0)
+            profit = float(fields.get("Profit Amount") or 0)
+            stats = by_client.setdefault(client, {"billed": 0.0, "profit": 0.0, "projects": 0})
+            stats["billed"] += billed
+            stats["profit"] += profit
+            stats["projects"] += 1
+        ordered = sorted(by_client.items(), key=lambda item: item[1]["billed"], reverse=True)
+        lines = ["Client Billing Summary", "", "Top clients by billed amount:"]
+        if ordered:
+            lines.extend(
+                f"{i + 1}. {client} · ₹{stats['billed']:,.0f} billed · ₹{stats['profit']:,.0f} profit · {stats['projects']} projects"
+                for i, (client, stats) in enumerate(ordered[:8])
+            )
+        else:
+            lines.append("1. No client billing data is available.")
+        return "\n".join(lines)
+
+    if template == "status-board-summary":
+        by_status = {}
+        for record in status_records:
+            status = str(record.get("fields", {}).get("Status") or "Not started")
+            by_status[status] = by_status.get(status, 0) + 1
+        ordered = sorted(by_status.items(), key=lambda item: (-item[1], item[0]))
+        lines = ["Status Board Summary", "", f"Status rows: {len(status_records)}", "", "By status:"]
+        if ordered:
+            lines.extend(f"{i + 1}. {label}: {count}" for i, (label, count) in enumerate(ordered))
+        else:
+            lines.append("1. No status rows are currently available.")
+        return "\n".join(lines)
+
+    if template == "founder-weekly":
+        return "\n".join([
+            "Weekly Founder Report",
+            "",
+            f"Portfolio billed: ₹{float(project_summary.get('total_billed') or 0):,.0f}",
+            f"Portfolio profit: ₹{float(project_summary.get('total_profit') or 0):,.0f}",
+            f"Outstanding invoices: ₹{float(invoice_summary.get('total_outstanding') or 0):,.0f}",
+            f"At-risk projects: {len(project_summary.get('at_risk') or [])}",
+            "",
+            "Use this report to review cash, execution risk, and client pressure before weekly leadership calls.",
+            "",
+            _build_board_pack_report(project_summary, project_records, invoice_summary, status_records),
+        ])
+
+    return _build_board_pack_report(project_summary, project_records, invoice_summary, status_records)
+
+
 @router.get("/report")
 async def ai_report(
     request: Request,
     force: bool = False,
+    template: str = Query("board-pack"),
     role: str = Depends(require_auth),
 ):
     """
@@ -1183,12 +1414,15 @@ async def ai_report(
         pool = get_pool()
         ip = _client_ip(request)
 
+        template_key = template if template in _REPORT_TEMPLATE_TITLES else "board-pack"
+        cache_key = f"{_REPORT_CACHE_KEY}:{template_key}"
+
         # ── Force regenerate: bypass cache by busting it first ────────────
         if force:
-            cache.bust(_REPORT_CACHE_KEY)
+            cache.bust(cache_key)
             try:
                 from ..db import valkey as vk
-                await vk.cache_bust(_REPORT_CACHE_KEY)
+                await vk.cache_bust(cache_key)
             except Exception:
                 pass
             logger.info("Report cache busted by force=true")
@@ -1224,12 +1458,7 @@ async def ai_report(
                     "empty":       True,
                 }
 
-            report_text = _build_board_pack_report(
-                payload["project_summary"],
-                payload["project_records"],
-                payload.get("invoice_summary"),
-                status_records or [],
-            )
+            report_text = _build_template_report(template_key, payload, status_records or [])
             return {
                 "report":       report_text,
                 "model":        "deterministic",
@@ -1241,18 +1470,19 @@ async def ai_report(
                     "statuses": len(status_records or []),
                     "pending_invoices": len((payload.get("invoice_summary") or {}).get("pending_invoices") or []),
                     "at_risk_projects": len((payload.get("project_summary") or {}).get("at_risk") or []),
+                    "template": template_key,
                 },
             }
 
         # Detect cache hit by checking the in-process store BEFORE invoking
         # get_or_set (which would silently populate).
-        from_cache = cache.get(_REPORT_CACHE_KEY) is not None
+        from_cache = cache.get(cache_key) is not None
         if not from_cache:
             # Could still be a Valkey hit — check there
             try:
                 from ..db import valkey as vk
                 if vk.get_client():
-                    remote = await vk.cache_get(_REPORT_CACHE_KEY)
+                    remote = await vk.cache_get(cache_key)
                     from_cache = remote is not None
             except Exception:
                 pass
@@ -1270,7 +1500,7 @@ async def ai_report(
                 )
 
         cached_result = await cache.get_or_set(
-            key=_REPORT_CACHE_KEY,
+            key=cache_key,
             ttl=_REPORT_TTL,
             loader=_generate,
         )
@@ -1291,7 +1521,7 @@ async def ai_report(
             history_id = await _save_report_history(
                 pool,
                 report_type="board-pack",
-                title="Board Pack",
+                title=_REPORT_TEMPLATE_TITLES.get(template, "Board Pack"),
                 content=cached_result.get("report", ""),
                 model=cached_result.get("model", ""),
                 role=role,
@@ -1306,7 +1536,7 @@ async def ai_report(
     except Exception as e:
         logger.exception("Report generation failed: %s", e, exc_info=True)
         # Bust the cache so a stale/broken entry doesn't block the next attempt
-        cache.bust(_REPORT_CACHE_KEY)
+        cache.bust(cache_key)
         raise HTTPException(status_code=500, detail=str(e))
 
 
