@@ -156,12 +156,12 @@ def _append_status_context(context: str, status_records: list[dict]) -> str:
     return context
 
 
-def _detect_dashboard_request(message: str) -> str | None:
+def _detect_dashboard_request(message: str, history: list[dict] | None = None) -> str | None:
     q = (message or "").strip().lower()
     if not q:
         return None
     asks_dashboard = any(term in q for term in (
-        "dashboard", "pie chart", "donut chart", "chart", "graph", "visual", "distribution",
+        "dashboard", "pie chart", "donut chart", "chart", "graph", "visual", "distribution", "proper visual", "make proper visual",
     ))
     if not asks_dashboard:
         return None
@@ -180,6 +180,16 @@ def _detect_dashboard_request(message: str) -> str | None:
         return "risk"
     if asks_status:
         return "status"
+    if "project" in q or "projects" in q:
+        return "status"
+    if history:
+        recent = " \n".join(str(h.get("content") or "").lower() for h in history[-6:])
+        if "project status distribution" in recent or "status board" in recent:
+            return "status"
+        if "receivables pressure dashboard" in recent or "collections" in recent:
+            return "collections"
+        if "at-risk project dashboard" in recent or "at-risk" in recent:
+            return "risk"
     return None
 
 
@@ -284,6 +294,16 @@ async def _build_status_dashboard_payload() -> dict[str, Any]:
             "color": palette.get(name, "#8b5cf6"),
         })
 
+    detail_rows = []
+    for record in records[:30]:
+        fields = record.get("fields", {})
+        detail_rows.append([
+            str(fields.get("Client") or "Unknown"),
+            str(fields.get("Project") or "Unknown"),
+            str(fields.get("Status") or "Not started"),
+            str(fields.get("Short Status") or fields.get("Current Status (Detailed)") or "—"),
+        ])
+
     leading = ordered[0][0] if ordered else "No status"
     leading_pct = round((ordered[0][1] / total * 100), 1) if ordered and total else 0.0
     copy_lines = [
@@ -306,6 +326,11 @@ async def _build_status_dashboard_payload() -> dict[str, Any]:
         "table": {
             "columns": ["Status", "Projects", "Share %"],
             "rows": [[item["name"], item["value"], item["percent"]] for item in series],
+        },
+        "detailTable": {
+            "title": "Projects by client and current status",
+            "columns": ["Client", "Project", "Status", "Headline"],
+            "rows": detail_rows,
         },
         "insight": f"{leading} is the largest bucket at {leading_pct}% of all tracked projects." if total else "No status records are available right now.",
         "copyText": "\n".join(copy_lines),
@@ -735,7 +760,7 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             # Fallback: client-provided history (backward compat / no PG)
             history = [{"role": m.role, "content": m.content} for m in body.history]
 
-        dashboard_kind = _detect_dashboard_request(user_message)
+        dashboard_kind = _detect_dashboard_request(user_message, history)
         if dashboard_kind:
             dashboard = (
                 await _build_status_dashboard_payload() if dashboard_kind == "status"
@@ -831,7 +856,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
         history = [{"role": m.role, "content": m.content} for m in body.history]
 
     dashboard_payload = None
-    dashboard_kind = _detect_dashboard_request(user_message)
+    dashboard_kind = _detect_dashboard_request(user_message, history)
     if dashboard_kind:
         dashboard_payload = (
             await _build_status_dashboard_payload() if dashboard_kind == "status"

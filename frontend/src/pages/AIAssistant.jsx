@@ -131,6 +131,16 @@ function dashboardToCsv(dashboard) {
   return csvRows.join('\n')
 }
 
+function detailTableToCsv(dashboard) {
+  const table = dashboard?.detailTable
+  if (!table?.columns?.length) return ''
+  const csvRows = [table.columns.join(',')]
+  for (const row of table.rows || []) {
+    csvRows.push((row || []).map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+  }
+  return csvRows.join('\n')
+}
+
 function VerificationBadge({ verification }) {
   if (!verification) return null
   const confidence = String(verification.confidence || 'medium')
@@ -170,6 +180,16 @@ function DashboardActions({ dashboard }) {
         >
           <Download size={10} />
           CSV
+        </button>
+      )}
+      {Array.isArray(dashboard?.detailTable?.rows) && dashboard.detailTable.rows.length > 0 && (
+        <button
+          onClick={() => downloadBlob(`${base}-details.csv`, detailTableToCsv(dashboard), 'text/csv;charset=utf-8')}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+          style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+        >
+          <Download size={10} />
+          Detail CSV
         </button>
       )}
       <button
@@ -260,6 +280,39 @@ function DashboardCard({ dashboard }) {
           {dashboard?.insight && (
             <div className="rounded-2xl p-3" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)' }}>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{dashboard.insight}</p>
+            </div>
+          )}
+          {dashboard?.detailTable?.columns?.length > 0 && (
+            <div className="rounded-2xl p-3 space-y-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                  {dashboard.detailTable.title || 'Detail'}
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr>
+                      {dashboard.detailTable.columns.map((col) => (
+                        <th key={col} className="py-2 pr-3 font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(dashboard.detailTable.rows || []).slice(0, 12).map((row, rowIndex) => (
+                      <tr key={rowIndex} style={{ borderTop: '1px solid var(--border)' }}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={`${rowIndex}-${cellIndex}`} className="py-2 pr-3 align-top" style={{ color: cellIndex === 0 || cellIndex === 1 ? 'var(--text-1)' : 'var(--text-2)' }}>
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           <DashboardActions dashboard={dashboard} />
