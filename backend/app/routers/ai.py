@@ -214,6 +214,22 @@ def _resolve_temperature(mode: str, value: float | None) -> float:
     return float(RESPONSE_MODE_DEFAULTS[mode]["temperature"])
 
 
+def _detect_report_template_request(message: str, history: list[dict] | None = None) -> str | None:
+    q = (message or "").strip().lower()
+    if not q:
+        return None
+    for template, terms in _REPORT_TEMPLATE_KEYWORDS.items():
+        if any(term in q for term in terms):
+            return template
+    if history:
+        recent = " \n".join(str(h.get("content") or "").lower() for h in history[-6:])
+        if "weekly founder report" in recent and any(term in q for term in ("detail", "download", "report", "summary")):
+            return "founder-weekly"
+        if "collections report" in recent and any(term in q for term in ("detail", "download", "report", "summary")):
+            return "collections-report"
+    return None
+
+
 def _should_run_judge(message: str, response_mode: str) -> bool:
     q = (message or "").lower()
     if response_mode == "board":
@@ -260,6 +276,41 @@ def _summary_count(value: Any) -> int:
         return int(value)
     except Exception:
         return 0
+
+
+async def _save_ai_generation(
+    pool,
+    *,
+    session_id: str | None,
+    task_type: str,
+    response_mode: str,
+    model: str,
+    role: str,
+    ip: str,
+    prompt: str,
+    output_text: str,
+    artifact: dict | None = None,
+    verification: dict | None = None,
+    metadata: dict | None = None,
+    duration_ms: int | None = None,
+) -> None:
+    if not pool:
+        return
+    try:
+        await pool.execute(
+            """
+            INSERT INTO ai_generations
+                (session_id, task_type, response_mode, model, role, ip, prompt, output_text, artifact, verification, metadata, duration_ms)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12)
+            """,
+            session_id, task_type, response_mode, model, role, ip, prompt, output_text,
+            json.dumps(artifact or {}),
+            json.dumps(verification or {}),
+            json.dumps(metadata or {}),
+            duration_ms,
+        )
+    except Exception:
+        logging.getLogger("fintrack.ai").debug("Failed to save AI generation", exc_info=True)
 
 
 async def _build_status_dashboard_payload() -> dict[str, Any]:
@@ -780,6 +831,64 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             }
             if session_id:
                 resp["session_id"] = session_id
+            if pool:
+                asyncio.create_task(_save_ai_generation(
+                    pool,
+                    session_id=session_id,
+                    task_type=f"dashboard:{dashboard_kind}",
+                    response_mode=response_mode,
+                    model="deterministic-dashboard",
+                    role=role,
+                    ip=ip,
+                    prompt=user_message,
+                    output_text=dashboard["copyText"],
+                    artifact=dashboard,
+                    verification=resp["verification"],
+                    metadata={"path": "chat", "structured": True},
+                    duration_ms=0,
+                ))
+            return resp
+
+        template = _detect_report_template_request(user_message, history)
+        if template:
+            payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
+            status_service = StatusService()
+            try:
+                status_records = await status_service._list_from_teable()
+            except Exception:
+                status_records = await status_service.list_all()
+            content = _build_template_report(template, payload, status_records)
+            artifact = _build_report_artifact(template, content, payload, status_records)
+            verification = _build_verification_metadata(
+                source="pg-mirror" if pool else "teable-live",
+                task=template,
+                mode=response_mode,
+                confidence="high",
+            )
+            resp = {
+                "reply": content,
+                "artifact": artifact,
+                "model": "deterministic-report",
+                "verification": verification,
+            }
+            if session_id:
+                resp["session_id"] = session_id
+            if pool:
+                asyncio.create_task(_save_ai_generation(
+                    pool,
+                    session_id=session_id,
+                    task_type=f"report:{template}",
+                    response_mode=response_mode,
+                    model="deterministic-report",
+                    role=role,
+                    ip=ip,
+                    prompt=user_message,
+                    output_text=content,
+                    artifact=artifact,
+                    verification=verification,
+                    metadata={"path": "chat", "structured": True},
+                    duration_ms=0,
+                ))
             return resp
 
         # ── AI call ───────────────────────────────────────────────────────
@@ -815,6 +924,20 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
                 result.get("model", ""),
                 result.get("tokens_used"),
                 duration_ms,
+            ))
+            asyncio.create_task(_save_ai_generation(
+                pool,
+                session_id=session_id,
+                task_type="chat",
+                response_mode=response_mode,
+                model=result.get("model_short", ""),
+                role=role,
+                ip=ip,
+                prompt=user_message,
+                output_text=result["content"],
+                verification=verification,
+                metadata={"path": "chat", "structured": False},
+                duration_ms=duration_ms,
             ))
 
         resp = {"reply": result["content"], "model": result["model_short"], "verification": verification}
@@ -863,6 +986,19 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
             else await _build_collections_dashboard_payload() if dashboard_kind == "collections"
             else await _build_risk_dashboard_payload()
         )
+    report_template = None
+    report_artifact = None
+    if dashboard_kind is None:
+        report_template = _detect_report_template_request(user_message, history)
+        if report_template:
+            payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
+            status_service = StatusService()
+            try:
+                status_records = await status_service._list_from_teable()
+            except Exception:
+                status_records = await status_service.list_all()
+            content = _build_template_report(report_template, payload, status_records)
+            report_artifact = _build_report_artifact(report_template, content, payload, status_records)
 
     async def event_stream():
         started = time.time()
@@ -882,6 +1018,18 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                     confidence="high",
                 )
                 yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': dashboard_payload, 'model_short': final_model, 'verification': verification})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
+                return
+            if report_artifact is not None:
+                final_content = report_artifact["copyText"]
+                final_model = "deterministic-report"
+                verification = _build_verification_metadata(
+                    source="pg-mirror" if pool else "teable-live",
+                    task=report_template or "report",
+                    mode=response_mode,
+                    confidence="high",
+                )
+                yield f"data: {json.dumps({'type': 'artifact', 'artifact': report_artifact, 'model_short': final_model, 'verification': verification})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
                 return
             async for event in stream_chat_with_ai(user_message, history, context, response_mode=response_mode, temperature=temperature):
@@ -924,6 +1072,24 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                     final_model,
                     final_tokens,
                     duration_ms,
+                ))
+                task_type = f"dashboard:{dashboard_kind}" if dashboard_payload is not None else f"report:{report_template}" if report_artifact is not None else "chat"
+                artifact = dashboard_payload if dashboard_payload is not None else report_artifact
+                verification = locals().get("verification")
+                asyncio.create_task(_save_ai_generation(
+                    pool,
+                    session_id=session_id,
+                    task_type=task_type,
+                    response_mode=response_mode,
+                    model=final_model,
+                    role=role,
+                    ip=ip,
+                    prompt=user_message,
+                    output_text=final_content,
+                    artifact=artifact,
+                    verification=verification if isinstance(verification, dict) else None,
+                    metadata={"path": "chat-stream", "structured": bool(artifact)},
+                    duration_ms=duration_ms,
                 ))
 
     return StreamingResponse(
@@ -976,6 +1142,14 @@ _REPORT_TEMPLATE_TITLES = {
     "project-health-review": "Project Health Review",
     "client-billing-summary": "Client Billing Summary",
     "status-board-summary": "Status Board Summary",
+}
+
+_REPORT_TEMPLATE_KEYWORDS = {
+    "founder-weekly": ("founder report", "weekly founder", "weekly board", "weekly summary"),
+    "collections-report": ("collections report", "overdue collections", "receivables report", "aging report"),
+    "project-health-review": ("project health", "health review", "at-risk projects", "delivery review"),
+    "client-billing-summary": ("client billing", "billing summary", "client summary", "client revenue"),
+    "status-board-summary": ("status board summary", "status summary", "delivery summary", "status report"),
 }
 
 
@@ -1568,6 +1742,45 @@ def _build_template_report(template: str, payload: dict, status_records: list[di
         ])
 
     return _build_board_pack_report(project_summary, project_records, invoice_summary, status_records)
+
+
+def _build_report_artifact(template: str, content: str, payload: dict, status_records: list[dict]) -> dict[str, Any]:
+    project_summary = payload.get("project_summary") or {}
+    invoice_summary = payload.get("invoice_summary") or {}
+    title = _REPORT_TEMPLATE_TITLES.get(template, "AI Report")
+    kpis: list[dict[str, Any]] = []
+    if template in {"board-pack", "founder-weekly"}:
+        kpis = [
+            {"label": "Portfolio billed", "value": _money_inr(project_summary.get("total_billed"))},
+            {"label": "Portfolio profit", "value": _money_inr(project_summary.get("total_profit"))},
+            {"label": "Outstanding", "value": _money_inr((invoice_summary or {}).get("total_outstanding"))},
+            {"label": "At-risk projects", "value": len(project_summary.get("at_risk") or [])},
+        ]
+    elif template == "collections-report":
+        kpis = [
+            {"label": "Pending invoices", "value": _summary_count((invoice_summary or {}).get("pending_invoices"))},
+            {"label": "Outstanding", "value": _money_inr((invoice_summary or {}).get("total_outstanding"))},
+            {"label": "Collection rate", "value": f"{_safe_num((invoice_summary or {}).get('collection_rate')):.1f}%"},
+        ]
+    elif template == "project-health-review":
+        kpis = [
+            {"label": "Tracked projects", "value": len(payload.get("project_records") or [])},
+            {"label": "At-risk", "value": len(project_summary.get("at_risk") or [])},
+            {"label": "Statuses", "value": len(status_records or [])},
+        ]
+    elif template == "status-board-summary":
+        kpis = [{"label": "Status rows", "value": len(status_records or [])}]
+
+    return {
+        "artifactType": "report",
+        "kind": template,
+        "title": title,
+        "subtitle": "Structured AI report artifact",
+        "content": content,
+        "copyText": content,
+        "downloadName": template,
+        "kpis": kpis,
+    }
 
 
 @router.get("/report")

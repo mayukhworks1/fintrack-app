@@ -204,6 +204,60 @@ function DashboardActions({ dashboard }) {
   )
 }
 
+function ArtifactCard({ artifact }) {
+  if (!artifact) return null
+  const copyText = artifact.copyText || artifact.content || artifact.title || 'Artifact'
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+          {artifact.artifactType === 'report' ? 'Report Artifact' : 'Artifact'}
+        </p>
+        <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
+          {artifact.title || 'Structured output'}
+        </h3>
+        {artifact.subtitle && (
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>{artifact.subtitle}</p>
+        )}
+      </div>
+      {Array.isArray(artifact.kpis) && artifact.kpis.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {artifact.kpis.map((kpi, index) => (
+            <div key={`${kpi.label}-${index}`} className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{kpi.label}</p>
+              <p className="text-xl font-bold mt-1" style={{ color: 'var(--text-1)' }}>{kpi.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {artifact.content && (
+        <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <AiText text={artifact.content} />
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <CopyButton text={copyText} />
+        <button
+          onClick={() => downloadBlob(`${artifact.downloadName || 'artifact'}.txt`, copyText)}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+          style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+        >
+          <Download size={10} />
+          TXT
+        </button>
+        <button
+          onClick={() => downloadBlob(`${artifact.downloadName || 'artifact'}.json`, JSON.stringify(artifact, null, 2), 'application/json;charset=utf-8')}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+          style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+        >
+          <Download size={10} />
+          JSON
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function DashboardCard({ dashboard }) {
   const data = Array.isArray(dashboard?.series) ? dashboard.series : []
   const total = Number(dashboard?.total || data.reduce((sum, item) => sum + Number(item.value || 0), 0))
@@ -381,7 +435,7 @@ const TASK_CHIPS = [
 
 function Message({ msg }) {
   const isUser = msg.role === 'user'
-  const copyText = msg.dashboard?.copyText || msg.content || ''
+  const copyText = msg.dashboard?.copyText || msg.artifact?.copyText || msg.content || ''
   return (
     <div
       className={clsx('flex gap-2 sm:gap-3 mb-4 sm:mb-5 animate-slide-up', isUser && 'flex-row-reverse')}
@@ -420,6 +474,8 @@ function Message({ msg }) {
               ? <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
               : msg.dashboard
                 ? <DashboardCard dashboard={msg.dashboard} />
+                : msg.artifact
+                  ? <ArtifactCard artifact={msg.artifact} />
                 : <AiText text={msg.content} />
           }
         </div>
@@ -434,7 +490,7 @@ function Message({ msg }) {
               </span>
             )}
             <VerificationBadge verification={msg.verification} />
-            {!msg.dashboard && <CopyButton text={copyText} />}
+            {!msg.dashboard && !msg.artifact && <CopyButton text={copyText} />}
           </div>
         )}
       </div>
@@ -521,6 +577,7 @@ export default function AIAssistant() {
       let finalModel = null
       let finalReply = ''
       let finalDashboard = null
+      let finalArtifact = null
       let finalVerification = null
 
       if (!reader) throw new Error('Streaming is unavailable')
@@ -562,8 +619,26 @@ export default function AIAssistant() {
             continue
           }
 
+          if (event.type === 'artifact' && event.artifact) {
+            finalArtifact = event.artifact
+            finalReply = event.artifact.copyText || event.artifact.content || event.artifact.title || 'Artifact ready'
+            finalModel = event.model_short || 'deterministic-report'
+            finalVerification = event.verification || null
+            applyAssistantState(entry => ({
+              ...entry,
+              content: finalReply,
+              artifact: finalArtifact,
+              dashboard: null,
+              model: finalModel,
+              verification: finalVerification,
+              streaming: true,
+            }))
+            continue
+          }
+
           if (event.type === 'dashboard' && event.dashboard) {
             finalDashboard = event.dashboard
+            finalArtifact = null
             finalReply = event.dashboard.copyText || event.dashboard.insight || event.dashboard.title || 'Dashboard ready'
             finalModel = event.model_short || 'deterministic-dashboard'
             finalVerification = event.verification || null
@@ -586,6 +661,7 @@ export default function AIAssistant() {
               ...entry,
               content: finalReply,
               dashboard: finalDashboard,
+              artifact: finalArtifact,
               model: finalModel,
               verification: finalVerification,
               streaming: false,

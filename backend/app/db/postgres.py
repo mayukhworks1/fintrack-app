@@ -7,6 +7,7 @@ Tables created on first startup:
   chat_sessions    — AI assistant conversation groups
   chat_messages    — individual AI chat turns
   report_history   — generated AI/board reports for replay and audit
+  ai_generations   — structured AI chat/report/dashboard artifacts for audit
   client_entities  — canonical client identities across modules
   project_entities — canonical project/engagement identities across modules
   record_links     — links mirrored/source records to canonical entities
@@ -140,6 +141,27 @@ CREATE TABLE IF NOT EXISTS report_history (
 );
 CREATE INDEX IF NOT EXISTS rpt_created_idx ON report_history (created_at DESC);
 CREATE INDEX IF NOT EXISTS rpt_type_idx    ON report_history (report_type, created_at DESC);
+
+-- ── AI generation audit ───────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS ai_generations (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    session_id    UUID,
+    task_type     VARCHAR(40)  NOT NULL,
+    response_mode VARCHAR(20),
+    model         VARCHAR(120),
+    role          VARCHAR(20),
+    ip            VARCHAR(45),
+    prompt        TEXT         NOT NULL,
+    output_text   TEXT,
+    artifact      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    verification  JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    metadata      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    duration_ms   INTEGER
+);
+CREATE INDEX IF NOT EXISTS aig_created_idx ON ai_generations (created_at DESC);
+CREATE INDEX IF NOT EXISTS aig_task_idx    ON ai_generations (task_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS aig_session_idx ON ai_generations (session_id, created_at DESC);
 
 -- ── Cross-module association layer ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS client_entities (
