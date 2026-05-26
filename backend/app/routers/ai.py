@@ -30,7 +30,7 @@ from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.status import StatusService
 from ..services.openrouter import (
-    chat_with_ai, autofill_project, analyze_project, generate_report,
+    chat_with_ai, chat_with_ai_tuned, judge_answer, autofill_project, analyze_project, generate_report,
     generate_status_briefing,
     _format_records_context,
     format_chat_records_context,
@@ -46,6 +46,12 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 # ── Context cache ─────────────────────────────────────────────────────────────
 _CONTEXT_CACHE_KEY = "chat:context"
 _CONTEXT_TTL       = 300   # 5 minutes; busted on sync
+
+RESPONSE_MODE_DEFAULTS = {
+    "brief": {"temperature": 0.28},
+    "detailed": {"temperature": 0.35},
+    "board": {"temperature": 0.22},
+}
 
 
 def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
@@ -177,6 +183,59 @@ def _detect_dashboard_request(message: str) -> str | None:
     return None
 
 
+def _normalize_chat_message(message: str) -> str:
+    text = (message or "").strip()
+    if "\n\nUser request:" in text:
+        return text.split("\n\nUser request:", 1)[1].strip()
+    return text
+
+
+def _resolve_response_mode(value: str | None) -> str:
+    value = (value or "brief").strip().lower()
+    return value if value in RESPONSE_MODE_DEFAULTS else "brief"
+
+
+def _resolve_temperature(mode: str, value: float | None) -> float:
+    if value is not None:
+        try:
+            return max(0.0, min(float(value), 1.0))
+        except Exception:
+            pass
+    return float(RESPONSE_MODE_DEFAULTS[mode]["temperature"])
+
+
+def _should_run_judge(message: str, response_mode: str) -> bool:
+    q = (message or "").lower()
+    if response_mode == "board":
+        return True
+    judge_terms = (
+        "summary", "summarize", "compare", "highest", "lowest", "best", "worst",
+        "risk", "blocker", "overdue", "dashboard", "report", "founder", "collections",
+    )
+    return any(term in q for term in judge_terms)
+
+
+def _build_verification_metadata(
+    *,
+    source: str,
+    task: str,
+    mode: str,
+    confidence: str = "high",
+    issues: list[str] | None = None,
+    judge_model: str | None = None,
+    corrected: bool = False,
+) -> dict[str, Any]:
+    return {
+        "source": source,
+        "task": task,
+        "mode": mode,
+        "confidence": confidence,
+        "issues": issues or [],
+        "judge_model": judge_model,
+        "corrected": corrected,
+    }
+
+
 async def _build_status_dashboard_payload() -> dict[str, Any]:
     service = StatusService()
     try:
@@ -217,24 +276,37 @@ async def _build_status_dashboard_payload() -> dict[str, Any]:
         f"Total projects: {total}",
     ]
     return {
+        "kind": "status-distribution",
+        "chartType": "pie",
         "eyebrow": "Overview",
         "title": "Project Status Distribution",
         "subtitle": "Live Teable status board snapshot",
         "total": total,
         "series": series,
+        "kpis": [
+            {"label": "Tracked projects", "value": total},
+            {"label": "Largest bucket", "value": leading},
+        ],
+        "table": {
+            "columns": ["Status", "Projects", "Share %"],
+            "rows": [[item["name"], item["value"], item["percent"]] for item in series],
+        },
         "insight": f"{leading} is the largest bucket at {leading_pct}% of all tracked projects." if total else "No status records are available right now.",
         "copyText": "\n".join(copy_lines),
+        "downloadName": "status-dashboard",
     }
 
 
 async def _build_collections_dashboard_payload() -> dict[str, Any]:
     service = InvoiceService()
-    summary = await service.get_summary_from_pg()
-    if summary is None:
-      summary = await service.get_summary()
-    records_result = await service.list_invoices_from_pg(limit=500, order_by="Raised Date", order="desc")
-    if records_result is None:
-      records_result = await service.list_invoices(limit=500, order_by="Raised Date", order="desc")
+    try:
+        summary = await service.get_summary()
+        records_result = await service.list_invoices(limit=500, order_by="Raised Date", order="desc")
+    except Exception:
+        summary = await service.get_summary_from_pg()
+        records_result = await service.list_invoices_from_pg(limit=500, order_by="Raised Date", order="desc")
+    summary = summary or {}
+    records_result = records_result or {"records": []}
     records = records_result.get("records", [])
 
     buckets = {"0-14d": 0, "15-30d": 0, "31-60d": 0, "60d+": 0}
@@ -266,11 +338,21 @@ async def _build_collections_dashboard_payload() -> dict[str, Any]:
         else "No pending invoice pressure is visible right now."
     )
     return {
+        "kind": "collections-pressure",
+        "chartType": "bar",
         "eyebrow": "Collections",
         "title": "Receivables Pressure Dashboard",
         "subtitle": "Pending invoice aging distribution from the live invoice tracker",
         "total": int(summary.get("pending_invoices") or 0),
         "series": series or [{"name": "Clear", "value": 1, "percent": 100, "color": "#10b981"}],
+        "kpis": [
+            {"label": "Pending invoices", "value": int(summary.get("pending_invoices") or 0)},
+            {"label": "Pending outstanding", "value": f"₹{pending_amount:,.0f}"},
+        ],
+        "table": {
+            "columns": ["Bucket", "Invoices", "Share %"],
+            "rows": [[item["name"], item["value"], item["percent"]] for item in (series or [{"name": "Clear", "value": 1, "percent": 100}])],
+        },
         "insight": insight,
         "copyText": "\n".join([
             "Receivables Pressure Dashboard",
@@ -278,14 +360,17 @@ async def _build_collections_dashboard_payload() -> dict[str, Any]:
             f"Pending invoices: {int(summary.get('pending_invoices') or 0)}",
             f"Pending outstanding: ₹{pending_amount:,.0f}",
         ]),
+        "downloadName": "collections-dashboard",
     }
 
 
 async def _build_risk_dashboard_payload() -> dict[str, Any]:
     service = TeableService()
-    summary = await service.get_summary_from_pg()
-    if summary is None:
+    try:
         summary = await service.get_summary()
+    except Exception:
+        summary = await service.get_summary_from_pg()
+    summary = summary or {}
     at_risk = summary.get("at_risk") or []
     total = len(at_risk)
     series = []
@@ -298,17 +383,28 @@ async def _build_risk_dashboard_payload() -> dict[str, Any]:
             "color": "#ef4444" if pct < 0 else "#f59e0b",
         })
     return {
+        "kind": "risk-dashboard",
+        "chartType": "bar",
         "eyebrow": "Risk",
         "title": "At-risk Project Dashboard",
         "subtitle": "Projects currently under financial or delivery pressure",
         "total": total,
         "series": series or [{"name": "No critical risk", "value": 1, "percent": 100, "color": "#10b981"}],
+        "kpis": [
+            {"label": "At-risk projects", "value": total},
+            {"label": "Top review item", "value": (at_risk[0]["name"] if at_risk else "None")},
+        ],
+        "table": {
+            "columns": ["Project", "Weight", "Share %"],
+            "rows": [[item["name"], item["value"], item["percent"]] for item in (series or [{"name": "No critical risk", "value": 1, "percent": 100}])],
+        },
         "insight": at_risk[0]["name"] + " is the highest-priority project to review." if at_risk else "No negative-margin or critical projects are flagged right now.",
         "copyText": "\n".join([
             "At-risk Project Dashboard",
             *[f"{item.get('name','Project')}: {float(item.get('pct') or 0):.2f}% margin" for item in at_risk[:6]],
             f"At-risk projects: {total}",
         ]),
+        "downloadName": "risk-dashboard",
     }
 
 
@@ -601,6 +697,9 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
     try:
         pool       = get_pool()
         session_id = body.session_id
+        user_message = _normalize_chat_message(body.message)
+        response_mode = _resolve_response_mode(body.response_mode)
+        temperature = _resolve_temperature(response_mode, body.temperature)
 
         # ── Context: PG mirror + Valkey cache (fast) ──────────────────────
         if pool:
@@ -620,7 +719,7 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             # Fallback: client-provided history (backward compat / no PG)
             history = [{"role": m.role, "content": m.content} for m in body.history]
 
-        dashboard_kind = _detect_dashboard_request(body.message)
+        dashboard_kind = _detect_dashboard_request(user_message)
         if dashboard_kind:
             dashboard = (
                 await _build_status_dashboard_payload() if dashboard_kind == "status"
@@ -631,6 +730,12 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
                 "reply": dashboard["copyText"],
                 "dashboard": dashboard,
                 "model": "deterministic-dashboard",
+                "verification": _build_verification_metadata(
+                    source="teable-live",
+                    task=dashboard_kind,
+                    mode=response_mode,
+                    confidence="high",
+                ),
             }
             if session_id:
                 resp["session_id"] = session_id
@@ -638,21 +743,40 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
 
         # ── AI call ───────────────────────────────────────────────────────
         t0 = time.time()
-        result = await chat_with_ai(body.message, history, context)
+        result = await chat_with_ai_tuned(user_message, history, context, response_mode=response_mode, temperature=temperature)
+        verification = _build_verification_metadata(
+            source="pg-mirror" if pool else "teable-live",
+            task="chat",
+            mode=response_mode,
+            confidence="medium",
+        )
+        if _should_run_judge(user_message, response_mode):
+            judged = await judge_answer(user_message, result["content"], context)
+            if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
+                result["content"] = judged["corrected_answer"]
+            verification = _build_verification_metadata(
+                source="pg-mirror" if pool else "teable-live",
+                task="chat",
+                mode=response_mode,
+                confidence=str(judged.get("confidence") or "medium"),
+                issues=list(judged.get("issues") or []),
+                judge_model=judged.get("model"),
+                corrected=bool(judged.get("corrected_answer")) and judged.get("verdict") == "soft-fail",
+            )
         duration_ms = int((time.time() - t0) * 1000)
 
         # ── Persist turn (fire-and-forget) ────────────────────────────────
         if pool and session_id:
             asyncio.create_task(_save_messages(
                 pool, session_id,
-                body.message,
+                user_message,
                 result["content"],
                 result.get("model", ""),
                 result.get("tokens_used"),
                 duration_ms,
             ))
 
-        resp = {"reply": result["content"], "model": result["model_short"]}
+        resp = {"reply": result["content"], "model": result["model_short"], "verification": verification}
         if session_id:
             resp["session_id"] = session_id
         return resp
@@ -675,6 +799,9 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
 
     pool = get_pool()
     session_id = body.session_id
+    user_message = _normalize_chat_message(body.message)
+    response_mode = _resolve_response_mode(body.response_mode)
+    temperature = _resolve_temperature(response_mode, body.temperature)
     if pool:
         context = await _build_context_pg(pool)
         session_id = await _ensure_session(pool, session_id, role, request)
@@ -688,7 +815,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
         history = [{"role": m.role, "content": m.content} for m in body.history]
 
     dashboard_payload = None
-    dashboard_kind = _detect_dashboard_request(body.message)
+    dashboard_kind = _detect_dashboard_request(user_message)
     if dashboard_kind:
         dashboard_payload = (
             await _build_status_dashboard_payload() if dashboard_kind == "status"
@@ -707,14 +834,41 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
             if dashboard_payload is not None:
                 final_content = dashboard_payload["copyText"]
                 final_model = "deterministic-dashboard"
-                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': dashboard_payload, 'model_short': final_model})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model})}\n\n"
+                verification = _build_verification_metadata(
+                    source="teable-live",
+                    task=dashboard_kind or "dashboard",
+                    mode=response_mode,
+                    confidence="high",
+                )
+                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': dashboard_payload, 'model_short': final_model, 'verification': verification})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
                 return
-            async for event in stream_chat_with_ai(body.message, history, context):
+            async for event in stream_chat_with_ai(user_message, history, context, response_mode=response_mode, temperature=temperature):
                 if event["type"] == "done":
                     final_content = event["content"]
                     final_model = event["model"]
                     final_tokens = event.get("tokens_used")
+                    verification = _build_verification_metadata(
+                        source="pg-mirror" if pool else "teable-live",
+                        task="chat",
+                        mode=response_mode,
+                        confidence="medium",
+                    )
+                    if _should_run_judge(user_message, response_mode):
+                        judged = await judge_answer(user_message, final_content, context)
+                        if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
+                            final_content = judged["corrected_answer"]
+                        verification = _build_verification_metadata(
+                            source="pg-mirror" if pool else "teable-live",
+                            task="chat",
+                            mode=response_mode,
+                            confidence=str(judged.get("confidence") or "medium"),
+                            issues=list(judged.get("issues") or []),
+                            judge_model=judged.get("model"),
+                            corrected=bool(judged.get("corrected_answer")) and judged.get("verdict") == "soft-fail",
+                        )
+                        event["content"] = final_content
+                    event["verification"] = verification
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
@@ -724,7 +878,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                 duration_ms = int((time.time() - started) * 1000)
                 asyncio.create_task(_save_messages(
                     pool, session_id,
-                    body.message,
+                    user_message,
                     final_content,
                     final_model,
                     final_tokens,

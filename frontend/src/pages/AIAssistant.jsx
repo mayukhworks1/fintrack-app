@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Send, Bot, User, Sparkles, Trash2, Database,
-  AlertCircle, ChevronDown, Copy, Check, Square,
+  AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts'
 
 /* ───────── Inline text formatting (bold, strip stray markdown) ───────── */
 function escHtml(s) {
@@ -109,6 +109,81 @@ function AiText({ text }) {
 
 const DASHBOARD_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#f97316', '#94a3b8', '#ec4899']
 
+function downloadBlob(filename, content, type = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function dashboardToCsv(dashboard) {
+  const rows = dashboard?.table?.rows || []
+  const columns = dashboard?.table?.columns || []
+  const csvRows = [columns.join(',')]
+  for (const row of rows) {
+    csvRows.push((row || []).map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+  }
+  return csvRows.join('\n')
+}
+
+function VerificationBadge({ verification }) {
+  if (!verification) return null
+  const confidence = String(verification.confidence || 'medium')
+  const tone = confidence === 'high'
+    ? { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.22)', text: 'var(--fin-positive)' }
+    : confidence === 'low'
+      ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.2)', text: 'var(--fin-negative)' }
+      : { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.22)', text: 'var(--fin-warning)' }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+      style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text }}>
+      <ShieldCheck size={10} />
+      {verification.corrected ? 'Verified + corrected' : `Verified ${confidence}`}
+    </span>
+  )
+}
+
+function DashboardActions({ dashboard }) {
+  if (!dashboard) return null
+  const base = dashboard.downloadName || 'dashboard'
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <CopyButton text={dashboard.copyText || dashboard.title || 'Dashboard'} />
+      <button
+        onClick={() => downloadBlob(`${base}.txt`, dashboard.copyText || dashboard.title || 'Dashboard')}
+        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+        style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+      >
+        <Download size={10} />
+        TXT
+      </button>
+      {Array.isArray(dashboard?.table?.rows) && dashboard.table.rows.length > 0 && (
+        <button
+          onClick={() => downloadBlob(`${base}.csv`, dashboardToCsv(dashboard), 'text/csv;charset=utf-8')}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+          style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+        >
+          <Download size={10} />
+          CSV
+        </button>
+      )}
+      <button
+        onClick={() => downloadBlob(`${base}.json`, JSON.stringify(dashboard, null, 2), 'application/json;charset=utf-8')}
+        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
+        style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+      >
+        <Download size={10} />
+        JSON
+      </button>
+    </div>
+  )
+}
+
 function DashboardCard({ dashboard }) {
   const data = Array.isArray(dashboard?.series) ? dashboard.series : []
   const total = Number(dashboard?.total || data.reduce((sum, item) => sum + Number(item.value || 0), 0))
@@ -131,23 +206,41 @@ function DashboardCard({ dashboard }) {
         <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
           <div style={{ width: '100%', height: 260 }}>
             <ResponsiveContainer>
-              <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2}>
-                  {data.map((entry, index) => (
-                    <Cell key={entry.name || index} fill={entry.color || DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip formatter={(value) => [`${value}`, 'Projects']} />
-                <Legend />
-              </PieChart>
+              {dashboard?.chartType === 'bar' ? (
+                <BarChart data={data} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
+                  <XAxis dataKey="name" hide />
+                  <YAxis allowDecimals={false} stroke="var(--text-3)" fontSize={11} />
+                  <RechartsTooltip formatter={(value) => [`${value}`, 'Value']} />
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                    {data.map((entry, index) => (
+                      <Cell key={entry.name || index} fill={entry.color || DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              ) : (
+                <PieChart>
+                  <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2}>
+                    {data.map((entry, index) => (
+                      <Cell key={entry.name || index} fill={entry.color || DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => [`${value}`, 'Projects']} />
+                  <Legend />
+                </PieChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Total Projects</p>
-            <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-1)' }}>{total}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {(dashboard?.kpis?.length ? dashboard.kpis : [{ label: 'Total', value: total }]).map((kpi, index) => (
+              <div key={`${kpi.label}-${index}`} className="rounded-2xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{kpi.label}</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: 'var(--text-1)' }}>{kpi.value}</p>
+              </div>
+            ))}
           </div>
           <div className="space-y-2">
             {data.map((item, index) => (
@@ -169,6 +262,7 @@ function DashboardCard({ dashboard }) {
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{dashboard.insight}</p>
             </div>
           )}
+          <DashboardActions dashboard={dashboard} />
         </div>
       </div>
     </div>
@@ -217,6 +311,12 @@ const RESPONSE_MODES = [
   { id: 'brief', label: 'Brief', instruction: 'Respond briefly in 4-6 concise bullets with only the most important decisions or findings.' },
   { id: 'detailed', label: 'Detailed', instruction: 'Respond with clear sections, context, supporting detail, and next-step recommendations.' },
   { id: 'board', label: 'Board report', instruction: 'Respond like an executive board note with headings, business summary, pressure points, and action items.' },
+]
+
+const QUALITY_PROFILES = [
+  { id: 'fast', label: 'Fast', temperature: 0.45, note: 'Lower latency' },
+  { id: 'balanced', label: 'Balanced', temperature: 0.32, note: 'Best default' },
+  { id: 'precise', label: 'Precise', temperature: 0.18, note: 'More grounded' },
 ]
 
 const TASK_CHIPS = [
@@ -280,7 +380,8 @@ function Message({ msg }) {
                 {msg.model}
               </span>
             )}
-            <CopyButton text={copyText} />
+            <VerificationBadge verification={msg.verification} />
+            {!msg.dashboard && <CopyButton text={copyText} />}
           </div>
         )}
       </div>
@@ -314,6 +415,7 @@ export default function AIAssistant() {
   const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [responseMode, setResponseMode] = useState('brief')
+  const [qualityProfile, setQualityProfile] = useState('balanced')
   const [sessionId, setSessionId] = useState(() => {
     try { return localStorage.getItem(SESSION_KEY) || '' } catch { return '' }
   })
@@ -343,7 +445,7 @@ export default function AIAssistant() {
     const msg = (text || input).trim()
     if (!msg || loading) return
     const modeMeta = RESPONSE_MODES.find(mode => mode.id === responseMode) || RESPONSE_MODES[0]
-    const aiPrompt = `${modeMeta.instruction}\n\nUser request: ${msg}`
+    const qualityMeta = QUALITY_PROFILES.find(profile => profile.id === qualityProfile) || QUALITY_PROFILES[1]
     setInput('')
     const priorHistory = history
     const assistantIndex = priorHistory.length + 1
@@ -354,9 +456,11 @@ export default function AIAssistant() {
     abortRef.current = ctrl
 
     try {
-      const res = await api.ai.chatStream(aiPrompt, sessionId ? [] : priorHistory, {
+      const res = await api.ai.chatStream(msg, sessionId ? [] : priorHistory, {
         signal: ctrl.signal,
         sessionId,
+        responseMode: modeMeta.id,
+        temperature: qualityMeta.temperature,
       })
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
@@ -364,6 +468,7 @@ export default function AIAssistant() {
       let finalModel = null
       let finalReply = ''
       let finalDashboard = null
+      let finalVerification = null
 
       if (!reader) throw new Error('Streaming is unavailable')
 
@@ -408,11 +513,13 @@ export default function AIAssistant() {
             finalDashboard = event.dashboard
             finalReply = event.dashboard.copyText || event.dashboard.insight || event.dashboard.title || 'Dashboard ready'
             finalModel = event.model_short || 'deterministic-dashboard'
+            finalVerification = event.verification || null
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
               dashboard: finalDashboard,
               model: finalModel,
+              verification: finalVerification,
               streaming: true,
             }))
             continue
@@ -421,11 +528,13 @@ export default function AIAssistant() {
           if (event.type === 'done') {
             finalReply = event.content || finalReply
             finalModel = event.model_short || null
+            finalVerification = event.verification || finalVerification
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
               dashboard: finalDashboard,
               model: finalModel,
+              verification: finalVerification,
               streaming: false,
             }))
             continue
@@ -511,7 +620,7 @@ export default function AIAssistant() {
             <div className="flex items-center gap-1.5">
               <Database size={9} style={{ color: 'var(--accent)' }} />
               <p className="text-[10px] sm:text-xs truncate" style={{ color: 'var(--text-3)' }}>
-                Task-oriented assistant · dashboards, summaries, and board-ready responses
+                Task-oriented assistant · verified dashboards, summaries, and board-ready responses
               </p>
             </div>
           </div>
@@ -540,6 +649,23 @@ export default function AIAssistant() {
                   : { background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}
               >
                 {mode.label}
+              </button>
+            )
+          })}
+          <div className="w-px h-5 mx-1" style={{ background: 'var(--border)' }} />
+          {QUALITY_PROFILES.map(profile => {
+            const active = qualityProfile === profile.id
+            return (
+              <button
+                key={profile.id}
+                onClick={() => setQualityProfile(profile.id)}
+                className="rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+                style={active
+                  ? { background: 'rgba(16,185,129,0.12)', color: 'var(--fin-positive)', border: '1px solid rgba(16,185,129,0.22)' }
+                  : { background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}
+                title={profile.note}
+              >
+                {profile.label}
               </button>
             )
           })}

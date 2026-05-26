@@ -186,7 +186,13 @@ export const api = {
     chat:     (message, history = [], opts = {}) =>
       request('/api/ai/chat', {
         method: 'POST',
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({
+          message,
+          history,
+          session_id: opts.sessionId || null,
+          response_mode: opts.responseMode || 'brief',
+          temperature: typeof opts.temperature === 'number' ? opts.temperature : null,
+        }),
         signal: opts.signal,
         timeout: AI_TIMEOUT_MS,
       }),
@@ -208,6 +214,8 @@ export const api = {
           message,
           history,
           session_id: opts.sessionId || null,
+          response_mode: opts.responseMode || 'brief',
+          temperature: typeof opts.temperature === 'number' ? opts.temperature : null,
         }),
         signal: opts.signal,
       })

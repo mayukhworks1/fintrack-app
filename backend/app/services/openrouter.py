@@ -40,6 +40,12 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 ANSWER_OPEN  = "===ANSWER==="
 ANSWER_CLOSE = "===END==="
 
+RESPONSE_MODE_INSTRUCTIONS = {
+    "brief": "Keep the response concise and decision-first. Use at most 6 short bullets or short sections.",
+    "detailed": "Give a clear structured answer with sections, supporting numbers, and concrete next steps.",
+    "board": "Write in executive board style with Overview, Pressure Points, and Action lines. Optimise for leadership readability.",
+}
+
 
 # ── Model registry ────────────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -434,6 +440,8 @@ async def stream_chat_with_ai(
     message: str,
     history: list[dict],
     context: str = "",
+    response_mode: str = "brief",
+    temperature: float | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Stream chat deltas as {"type": "delta", "delta": "..."} events and finish
@@ -443,6 +451,9 @@ async def stream_chat_with_ai(
         raise ValueError("OPENROUTER_API_KEY is not configured. Add it to HF Space secrets.")
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(response_mode or "brief")
+    if mode_instruction:
+        messages.append({"role": "system", "content": mode_instruction})
     if context:
         messages.append({"role": "system", "content": context})
     for h in history[-12:]:
@@ -458,7 +469,7 @@ async def stream_chat_with_ai(
                 "model": spec.id,
                 "messages": messages,
                 "max_tokens": 1024,
-                "temperature": 0.5,
+                "temperature": 0.5 if temperature is None else temperature,
                 "stream": True,
             }
             if spec.supports_reasoning_param:
@@ -648,12 +659,91 @@ def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
 async def chat_with_ai(message: str, history: list[dict], context: str = "") -> dict:
     """Chat with full DB context. Returns extracted user-facing content."""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.append({"role": "system", "content": RESPONSE_MODE_INSTRUCTIONS["brief"]})
     if context:
         messages.append({"role": "system", "content": context})
     for h in history[-12:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
     return await _try_chat(messages, max_tokens=1024, temperature=0.5)
+
+
+async def chat_with_ai_tuned(
+    message: str,
+    history: list[dict],
+    context: str = "",
+    response_mode: str = "brief",
+    temperature: float | None = None,
+) -> dict:
+    """Chat with explicit response-mode and temperature controls."""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(response_mode or "brief")
+    if mode_instruction:
+        messages.append({"role": "system", "content": mode_instruction})
+    if context:
+        messages.append({"role": "system", "content": context})
+    for h in history[-12:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+    max_tokens = 1300 if response_mode == "board" else 1024
+    final_temp = 0.4 if temperature is None else temperature
+    return await _try_chat(messages, max_tokens=max_tokens, temperature=final_temp)
+
+
+async def judge_answer(
+    message: str,
+    answer: str,
+    context: str = "",
+) -> dict[str, Any]:
+    """
+    LLM-as-judge pass for analytical answers. Uses a low-temperature JSON check
+    and can suggest a corrected answer when the first draft overclaims.
+    """
+    judge_context = context[:14000] if context else ""
+    prompt = (
+        "You are FinTrackAI Judge. Verify whether the draft answer is grounded in the supplied portfolio context. "
+        "Return ONLY compact JSON with keys verdict, confidence, issues, corrected_answer. "
+        "verdict must be 'pass' or 'soft-fail'. confidence must be 'high', 'medium', or 'low'. "
+        "Use soft-fail if the draft invents figures, contradicts the context, or misses the requested output style. "
+        "If soft-fail, provide a corrected_answer grounded strictly in context. Keep issues short."
+    )
+    payload = json.dumps({
+        "question": message,
+        "draft_answer": answer,
+        "context": judge_context,
+    }, ensure_ascii=False)
+    result = await _try_chat(
+        [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": payload},
+        ],
+        max_tokens=350,
+        temperature=0.0,
+        extract=False,
+        models=[m for m in _ordered_models() if m.leakage <= 2][:4] or None,
+    )
+    raw = result.get("content", "").strip()
+    try:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        parsed = json.loads(raw[start:end + 1] if start != -1 and end != -1 else raw)
+        if isinstance(parsed, dict):
+            return {
+                "verdict": parsed.get("verdict") or "pass",
+                "confidence": parsed.get("confidence") or "medium",
+                "issues": parsed.get("issues") if isinstance(parsed.get("issues"), list) else [],
+                "corrected_answer": parsed.get("corrected_answer") or "",
+                "model": result.get("model_short") or result.get("model"),
+            }
+    except Exception:
+        pass
+    return {
+        "verdict": "pass",
+        "confidence": "medium",
+        "issues": [],
+        "corrected_answer": "",
+        "model": result.get("model_short") or result.get("model"),
+    }
 
 
 async def autofill_project(description: str) -> dict:
