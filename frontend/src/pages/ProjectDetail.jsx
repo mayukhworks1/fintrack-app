@@ -276,12 +276,37 @@ export default function ProjectDetail() {
   }
 
   const f = record?.fields || {}
+  const assoc = record?.association
   const profitPct  = Number(f['Profit percentage'] || 0)
   const clientName = f['Client'] || ''
   const projectName = f['Project Name'] || 'Untitled Project'
   const projectStatus = f['Project Status'] || ''
   const clrHex = clientColor(clientName)
   const sc = statusStyle(projectStatus)
+  const openStatusBoard = () => {
+    const cfg = {
+      type: 'card',
+      filterClient: clientName || '',
+      filterStatus: '',
+      search: projectName || '',
+      columns: ['Client', 'Project', 'Status', 'Short Status'],
+      boardGroupBy: 'Status',
+      cardGroupBy: 'Client',
+      cardGroupSort: 'count-desc',
+      cardRecordSort: 'project-asc',
+      advancedConditions: [],
+      theme: 'cobalt',
+      density: 'comfortable',
+      showDashboard: true,
+      showClientAccents: true,
+    }
+    navigate(`/status?v=${encodeURIComponent(btoa(JSON.stringify(cfg)))}`)
+  }
+  const openInvoicesWorkspace = () => {
+    const params = new URLSearchParams()
+    if (projectName) params.set('project', projectName)
+    navigate(`/invoices?${params.toString()}`)
+  }
 
   // ── New / Edit form ────────────────────────────────────────────────────
   if (editing) {
@@ -448,6 +473,24 @@ export default function ProjectDetail() {
                 </span>
               )}
             </div>
+            {assoc?.project?.name && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={openStatusBoard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)', background: 'var(--accent-dim)' }}>
+                  <Activity size={11} /> View linked status
+                </button>
+                <button onClick={openInvoicesWorkspace}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
+                  <Receipt size={11} /> View linked invoices
+                </button>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                  style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}>
+                  {assoc?.related_counts?.project?.status || 0} status · {assoc?.related_counts?.project?.invoices || 0} invoice
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Activity, Plus, Pencil, Trash2, X, Check,
   ChevronDown, ChevronUp, RefreshCw, Search,
@@ -289,7 +290,9 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
 // Detail Panel — slide-in from right
 // ─────────────────────────────────────────────────────────────────────────────
 function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice = false }) {
+  const navigate = useNavigate()
   const f = record?.fields || {}
+  const assoc = record?.association
   const client  = f['Client']  || ''
   const project = f['Project'] || ''
   const status  = f['Status']  || ''
@@ -299,6 +302,18 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
   const clrHex  = clientColor(client)
   const sc      = statusStyle(status)
   const toast   = useToast()
+  const related = assoc?.related_counts?.project || {}
+  const openProjects = () => {
+    const params = new URLSearchParams()
+    if (assoc?.client?.name || client) params.set('client', assoc?.client?.name || client)
+    if (assoc?.project?.name || project) params.set('q', assoc?.project?.name || project)
+    navigate(`/projects?${params.toString()}`)
+  }
+  const openInvoices = () => {
+    const params = new URLSearchParams()
+    if (assoc?.project?.name || project) params.set('project', assoc?.project?.name || project)
+    navigate(`/invoices?${params.toString()}`)
+  }
 
   // ── Linked invoices state ──────────────────────────────────────────────
   const [linkedInvoices,  setLinkedInvoices]  = useState([])
@@ -602,6 +617,21 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Project</p>
                     <p style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
                   </div>
+                  {assoc?.project?.name && (
+                    <div className="pt-1 space-y-2">
+                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>
+                        {related.invoices || 0} invoice · {related.projects || 0} project record
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
+                          Open projects
+                        </button>
+                        <button onClick={openInvoices} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
+                          Open invoices
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

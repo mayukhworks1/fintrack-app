@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
@@ -320,6 +321,7 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…', comp
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
 function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }) {
   if (!invoice) return null
+  const navigate = useNavigate()
   const f = invoice.fields || {}
   const assoc = invoice.association
   const related = assoc?.related_counts?.project || {}
@@ -327,6 +329,31 @@ function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
   const outstanding = Number(f['Outstanding Amount'] || 0)
+  const openProjects = () => {
+    const params = new URLSearchParams()
+    if (assoc?.client?.name) params.set('client', assoc.client.name)
+    if (assoc?.project?.name) params.set('q', assoc.project.name)
+    navigate(`/projects?${params.toString()}`)
+  }
+  const openStatus = () => {
+    const cfg = {
+      type: 'card',
+      filterClient: assoc?.client?.name || '',
+      filterStatus: '',
+      search: assoc?.project?.name || f['Project'] || '',
+      columns: ['Client', 'Project', 'Status', 'Short Status'],
+      boardGroupBy: 'Status',
+      cardGroupBy: 'Client',
+      cardGroupSort: 'count-desc',
+      cardRecordSort: 'project-asc',
+      advancedConditions: [],
+      theme: 'cobalt',
+      density: 'comfortable',
+      showDashboard: true,
+      showClientAccents: true,
+    }
+    navigate(`/status?v=${encodeURIComponent(btoa(JSON.stringify(cfg)))}`)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in">
@@ -396,6 +423,14 @@ function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }
                 <p><strong style={{ color: 'var(--text-1)' }}>Project:</strong> {assoc.project.name}</p>
                 {assoc.client?.name && <p><strong style={{ color: 'var(--text-1)' }}>Client:</strong> {assoc.client.name}</p>}
                 <p>{related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>
+                  Open projects
+                </button>
+                <button onClick={openStatus} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>
+                  Open status board
+                </button>
               </div>
             </div>
           )}
@@ -803,19 +838,23 @@ function SkeletonRow() {
 
 /* ── Main page ────────────────────────────────────────────────────────────── */
 export default function Invoices() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { isEditor } = useAuth()
   const toast = useToast()
+  const initialStatus = searchParams.get('status') || ''
+  const initialProject = searchParams.get('project') || ''
+  const initialQuery = searchParams.get('q') || ''
   const [workspace,       setWorkspace]       = useState('invoices')
   const [selectedRetainer,setSelectedRetainer]= useState('')
   const [retainerMonth,   setRetainerMonth]   = useState(currentMonthKey())
   const [billingFilter,   setBillingFilter]   = useState('all')
   const [retainerActionBusy, setRetainerActionBusy] = useState('')
-  const [statusFilter,   setStatusFilter]   = useState('')
-  const [projectFilter,  setProjectFilter]  = useState('')
+  const [statusFilter,   setStatusFilter]   = useState(initialStatus)
+  const [projectFilter,  setProjectFilter]  = useState(initialProject)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
   const [monthFilter,    setMonthFilter]    = useState('')
-  const [search,         setSearch]         = useState('')
+  const [search,         setSearch]         = useState(initialQuery)
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
@@ -828,6 +867,17 @@ export default function Invoices() {
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
   const [associationRecord, setAssociationRecord] = useState(null)
+
+  useEffect(() => { setStatusFilter(searchParams.get('status') || '') }, [searchParams])
+  useEffect(() => { setProjectFilter(searchParams.get('project') || '') }, [searchParams])
+  useEffect(() => { setSearch(searchParams.get('q') || '') }, [searchParams])
+
+  const updateFilterParam = useCallback((key, value) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   /* ── Fetch summary ── */
   const fetchSummary = useCallback(() => api.invoices.summary(), [])
@@ -1263,7 +1313,11 @@ export default function Invoices() {
             const amount = s?.by_status_amounts?.[status]
             return (
               <button key={status}
-                onClick={() => setStatusFilter(active ? '' : status)}
+                onClick={() => {
+                  const next = active ? '' : status
+                  setStatusFilter(next)
+                  updateFilterParam('status', next)
+                }}
                 className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
                 style={{
                   borderColor: active ? m.color : 'var(--card-border)',
@@ -1559,7 +1613,7 @@ export default function Invoices() {
               <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Click any project card to filter the invoice list.</p>
             </div>
             {projectFilter && (
-              <button onClick={() => setProjectFilter('')}
+              <button onClick={() => { setProjectFilter(''); updateFilterParam('project', '') }}
                 className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
                 <X size={11} />Clear project filter
               </button>
@@ -1570,7 +1624,11 @@ export default function Invoices() {
               const active = projectFilter === project
               return (
                 <button key={project} type="button"
-                  onClick={() => setProjectFilter(active ? '' : project)}
+                  onClick={() => {
+                    const next = active ? '' : project
+                    setProjectFilter(next)
+                    updateFilterParam('project', next)
+                  }}
                   className="rounded-xl p-4 text-left transition-all"
                   style={{
                     background: active ? 'var(--accent-dim)' : 'var(--bg-layer)',
@@ -1611,7 +1669,10 @@ export default function Invoices() {
         <ExecutiveFilterBar>
           <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)}
+            <input value={search} onChange={e => {
+              setSearch(e.target.value)
+              updateFilterParam('q', e.target.value.trim())
+            }}
               placeholder="Search invoice #, project, description…"
               className="input pl-8 py-1.5 text-xs" />
           </div>
@@ -1625,7 +1686,9 @@ export default function Invoices() {
           {hasFilters && (
             <button onClick={() => {
               setStatusFilter('')
+              updateFilterParam('status', '')
               setProjectFilter('')
+              updateFilterParam('project', '')
               setCategoryFilter('')
               setRaisedByFilter('')
               setMonthFilter('')
@@ -1634,6 +1697,7 @@ export default function Invoices() {
               setHasDocsOnly(false)
               setFollowupDueOnly(false)
               setSearch('')
+              updateFilterParam('q', '')
               setFilterConditions([])
             }}
               className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
@@ -1663,7 +1727,10 @@ export default function Invoices() {
             {/* Project — server-side */}
             <FilterSelect
               value={projectFilter}
-              onChange={setProjectFilter}
+              onChange={(value) => {
+                setProjectFilter(value)
+                updateFilterParam('project', value)
+              }}
               options={projectOptions}
               placeholder="All projects"
               icon={User}

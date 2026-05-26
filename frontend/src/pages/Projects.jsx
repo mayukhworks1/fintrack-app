@@ -57,8 +57,9 @@ export default function Projects() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { isEditor } = useAuth()
+  const query = searchParams.get('q') || ''
 
-  const [search, setSearch]           = useState('')
+  const [search, setSearch]           = useState(query)
   const [searching, setSearching]     = useState(false)
   const [searchResults, setSearchResults] = useState(null)
   const [sortBy, setSortBy]           = useState('Amount Billed So far')
@@ -70,6 +71,10 @@ export default function Projects() {
 
   const status = searchParams.get('status') || ''
   const client = searchParams.get('client') || ''
+
+  useEffect(() => {
+    setSearch(query)
+  }, [query])
 
   const fetchProjects = useCallback(() =>
     api.projects.list({ status: status || undefined, client: client || undefined, order_by: sortBy })
@@ -128,6 +133,14 @@ export default function Projects() {
     const p = new URLSearchParams(searchParams)
     if (val) p.set(key, val); else p.delete(key)
     setSearchParams(p)
+  }
+
+  const setSearchQuery = (val) => {
+    setSearch(val)
+    const p = new URLSearchParams(searchParams)
+    if (val.trim()) p.set('q', val)
+    else p.delete('q')
+    setSearchParams(p, { replace: true })
   }
 
   const clearSearch = () => { setSearch(''); setSearchResults(null); searchInputRef.current?.focus() }
@@ -238,7 +251,7 @@ export default function Projects() {
               style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
               placeholder="Search projects…"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               aria-label="Search projects"
               autoComplete="off"
             />
