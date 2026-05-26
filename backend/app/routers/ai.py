@@ -236,6 +236,22 @@ def _build_verification_metadata(
     }
 
 
+def _summary_count(value: Any) -> int:
+    """Accept either a count or a list-like summary field and return a safe int."""
+    if value is None:
+        return 0
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, tuple) or isinstance(value, set):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
 async def _build_status_dashboard_payload() -> dict[str, Any]:
     service = StatusService()
     try:
@@ -343,10 +359,10 @@ async def _build_collections_dashboard_payload() -> dict[str, Any]:
         "eyebrow": "Collections",
         "title": "Receivables Pressure Dashboard",
         "subtitle": "Pending invoice aging distribution from the live invoice tracker",
-        "total": int(summary.get("pending_invoices") or 0),
+        "total": _summary_count(summary.get("pending_invoices")),
         "series": series or [{"name": "Clear", "value": 1, "percent": 100, "color": "#10b981"}],
         "kpis": [
-            {"label": "Pending invoices", "value": int(summary.get("pending_invoices") or 0)},
+            {"label": "Pending invoices", "value": _summary_count(summary.get("pending_invoices"))},
             {"label": "Pending outstanding", "value": f"₹{pending_amount:,.0f}"},
         ],
         "table": {
@@ -357,7 +373,7 @@ async def _build_collections_dashboard_payload() -> dict[str, Any]:
         "copyText": "\n".join([
             "Receivables Pressure Dashboard",
             *[f"{item['name']}: {item['value']} invoice(s) ({item['percent']}%)" for item in series],
-            f"Pending invoices: {int(summary.get('pending_invoices') or 0)}",
+            f"Pending invoices: {_summary_count(summary.get('pending_invoices'))}",
             f"Pending outstanding: ₹{pending_amount:,.0f}",
         ]),
         "downloadName": "collections-dashboard",
@@ -1430,7 +1446,7 @@ def _build_template_report(template: str, payload: dict, status_records: list[di
             "Collections Report",
             "",
             f"Outstanding amount: ₹{float(invoice_summary.get('total_outstanding') or 0):,.0f}",
-            f"Pending invoices: {int(invoice_summary.get('pending_invoices') or 0)}",
+            f"Pending invoices: {_summary_count(invoice_summary.get('pending_invoices'))}",
             f"Collection rate: {float(invoice_summary.get('collection_rate') or 0):.1f}%",
             "",
             "Priority queue:",
