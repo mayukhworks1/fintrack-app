@@ -53,6 +53,11 @@ RESPONSE_MODE_DEFAULTS = {
     "board": {"temperature": 0.22},
 }
 
+STRUCTURED_SOURCE_PRIORITY = {
+    "dashboard": "teable-live",
+    "report": "pg-mirror",
+}
+
 
 def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
     """Build concise invoice context string for the AI."""
@@ -500,6 +505,122 @@ async def _build_risk_dashboard_payload() -> dict[str, Any]:
     }
 
 
+DASHBOARD_BUILDERS = {
+    "status": _build_status_dashboard_payload,
+    "collections": _build_collections_dashboard_payload,
+    "risk": _build_risk_dashboard_payload,
+}
+
+
+def _structured_task_source(task_kind: str, pool) -> str:
+    preferred = STRUCTURED_SOURCE_PRIORITY.get(task_kind, "teable-live")
+    if preferred == "pg-mirror" and not pool:
+        return "teable-live"
+    return preferred
+
+
+async def _build_report_template_artifact(template: str, pool) -> tuple[str, dict[str, Any]]:
+    payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
+    status_service = StatusService()
+    try:
+        status_records = await status_service._list_from_teable()
+    except Exception:
+        status_records = await status_service.list_all()
+    content = _build_template_report(template, payload, status_records)
+    artifact = _build_report_artifact(template, content, payload, status_records)
+    return content, artifact
+
+
+def _plan_structured_task(message: str, history: list[dict] | None = None) -> dict[str, str] | None:
+    dashboard_kind = _detect_dashboard_request(message, history)
+    if dashboard_kind:
+        return {"task_kind": "dashboard", "task_key": dashboard_kind}
+    report_template = _detect_report_template_request(message, history)
+    if report_template:
+        return {"task_kind": "report", "task_key": report_template}
+    return None
+
+
+async def _execute_structured_task(
+    plan: dict[str, str],
+    *,
+    pool,
+    response_mode: str,
+    role: str,
+    ip: str,
+    session_id: str | None,
+    prompt: str,
+    persist_path: str,
+    persist_generation: bool = True,
+) -> dict[str, Any]:
+    task_kind = plan["task_kind"]
+    task_key = plan["task_key"]
+    source = _structured_task_source(task_kind, pool)
+
+    if task_kind == "dashboard":
+        builder = DASHBOARD_BUILDERS[task_key]
+        dashboard = await builder()
+        payload_key = "dashboard"
+        payload_value = dashboard
+        reply = dashboard["copyText"]
+        model = "deterministic-dashboard"
+        verification = _build_verification_metadata(
+            source=source,
+            task=task_key,
+            mode=response_mode,
+            confidence="high",
+        )
+        task_type = f"dashboard:{task_key}"
+    else:
+        reply, artifact = await _build_report_template_artifact(task_key, pool)
+        payload_key = "artifact"
+        payload_value = artifact
+        model = "deterministic-report"
+        verification = _build_verification_metadata(
+            source=source,
+            task=task_key,
+            mode=response_mode,
+            confidence="high",
+        )
+        task_type = f"report:{task_key}"
+
+    response = {
+        "reply": reply,
+        payload_key: payload_value,
+        "model": model,
+        "verification": verification,
+    }
+    if session_id:
+        response["session_id"] = session_id
+
+    if pool and persist_generation:
+        asyncio.create_task(_save_ai_generation(
+            pool,
+            session_id=session_id,
+            task_type=task_type,
+            response_mode=response_mode,
+            model=model,
+            role=role,
+            ip=ip,
+            prompt=prompt,
+            output_text=reply,
+            artifact=payload_value,
+            verification=verification,
+            metadata={"path": persist_path, "structured": True, "task_kind": task_kind},
+            duration_ms=0,
+        ))
+
+    return {
+        "response": response,
+        "reply": reply,
+        "artifact": payload_value,
+        "verification": verification,
+        "model": model,
+        "task_kind": task_kind,
+        "task_key": task_key,
+    }
+
+
 # ── Context builder — PG mirror + Valkey cache ────────────────────────────────
 
 async def _build_context_pg(pool) -> str:
@@ -811,85 +932,20 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             # Fallback: client-provided history (backward compat / no PG)
             history = [{"role": m.role, "content": m.content} for m in body.history]
 
-        dashboard_kind = _detect_dashboard_request(user_message, history)
-        if dashboard_kind:
-            dashboard = (
-                await _build_status_dashboard_payload() if dashboard_kind == "status"
-                else await _build_collections_dashboard_payload() if dashboard_kind == "collections"
-                else await _build_risk_dashboard_payload()
+        structured_plan = _plan_structured_task(user_message, history)
+        if structured_plan:
+            structured = await _execute_structured_task(
+                structured_plan,
+                pool=pool,
+                response_mode=response_mode,
+                role=role,
+                ip=ip,
+                session_id=session_id,
+                prompt=user_message,
+                persist_path="chat",
+                persist_generation=True,
             )
-            resp = {
-                "reply": dashboard["copyText"],
-                "dashboard": dashboard,
-                "model": "deterministic-dashboard",
-                "verification": _build_verification_metadata(
-                    source="teable-live",
-                    task=dashboard_kind,
-                    mode=response_mode,
-                    confidence="high",
-                ),
-            }
-            if session_id:
-                resp["session_id"] = session_id
-            if pool:
-                asyncio.create_task(_save_ai_generation(
-                    pool,
-                    session_id=session_id,
-                    task_type=f"dashboard:{dashboard_kind}",
-                    response_mode=response_mode,
-                    model="deterministic-dashboard",
-                    role=role,
-                    ip=ip,
-                    prompt=user_message,
-                    output_text=dashboard["copyText"],
-                    artifact=dashboard,
-                    verification=resp["verification"],
-                    metadata={"path": "chat", "structured": True},
-                    duration_ms=0,
-                ))
-            return resp
-
-        template = _detect_report_template_request(user_message, history)
-        if template:
-            payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
-            status_service = StatusService()
-            try:
-                status_records = await status_service._list_from_teable()
-            except Exception:
-                status_records = await status_service.list_all()
-            content = _build_template_report(template, payload, status_records)
-            artifact = _build_report_artifact(template, content, payload, status_records)
-            verification = _build_verification_metadata(
-                source="pg-mirror" if pool else "teable-live",
-                task=template,
-                mode=response_mode,
-                confidence="high",
-            )
-            resp = {
-                "reply": content,
-                "artifact": artifact,
-                "model": "deterministic-report",
-                "verification": verification,
-            }
-            if session_id:
-                resp["session_id"] = session_id
-            if pool:
-                asyncio.create_task(_save_ai_generation(
-                    pool,
-                    session_id=session_id,
-                    task_type=f"report:{template}",
-                    response_mode=response_mode,
-                    model="deterministic-report",
-                    role=role,
-                    ip=ip,
-                    prompt=user_message,
-                    output_text=content,
-                    artifact=artifact,
-                    verification=verification,
-                    metadata={"path": "chat", "structured": True},
-                    duration_ms=0,
-                ))
-            return resp
+            return structured["response"]
 
         # ── AI call ───────────────────────────────────────────────────────
         t0 = time.time()
@@ -978,27 +1034,20 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
     if not history:
         history = [{"role": m.role, "content": m.content} for m in body.history]
 
-    dashboard_payload = None
-    dashboard_kind = _detect_dashboard_request(user_message, history)
-    if dashboard_kind:
-        dashboard_payload = (
-            await _build_status_dashboard_payload() if dashboard_kind == "status"
-            else await _build_collections_dashboard_payload() if dashboard_kind == "collections"
-            else await _build_risk_dashboard_payload()
+    structured_plan = _plan_structured_task(user_message, history)
+    structured = None
+    if structured_plan:
+        structured = await _execute_structured_task(
+            structured_plan,
+            pool=pool,
+            response_mode=response_mode,
+            role=role,
+            ip=ip,
+            session_id=session_id,
+            prompt=user_message,
+            persist_path="chat-stream",
+            persist_generation=False,
         )
-    report_template = None
-    report_artifact = None
-    if dashboard_kind is None:
-        report_template = _detect_report_template_request(user_message, history)
-        if report_template:
-            payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
-            status_service = StatusService()
-            try:
-                status_records = await status_service._list_from_teable()
-            except Exception:
-                status_records = await status_service.list_all()
-            content = _build_template_report(report_template, payload, status_records)
-            report_artifact = _build_report_artifact(report_template, content, payload, status_records)
 
     async def event_stream():
         started = time.time()
@@ -1008,28 +1057,18 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
         try:
             if session_id:
                 yield f"data: {json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
-            if dashboard_payload is not None:
-                final_content = dashboard_payload["copyText"]
-                final_model = "deterministic-dashboard"
-                verification = _build_verification_metadata(
-                    source="teable-live",
-                    task=dashboard_kind or "dashboard",
-                    mode=response_mode,
-                    confidence="high",
-                )
-                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': dashboard_payload, 'model_short': final_model, 'verification': verification})}\n\n"
+            if structured is not None and structured["task_kind"] == "dashboard":
+                final_content = structured["reply"]
+                final_model = structured["model"]
+                verification = structured["verification"]
+                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': structured['artifact'], 'model_short': final_model, 'verification': verification})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
                 return
-            if report_artifact is not None:
-                final_content = report_artifact["copyText"]
-                final_model = "deterministic-report"
-                verification = _build_verification_metadata(
-                    source="pg-mirror" if pool else "teable-live",
-                    task=report_template or "report",
-                    mode=response_mode,
-                    confidence="high",
-                )
-                yield f"data: {json.dumps({'type': 'artifact', 'artifact': report_artifact, 'model_short': final_model, 'verification': verification})}\n\n"
+            if structured is not None and structured["task_kind"] == "report":
+                final_content = structured["reply"]
+                final_model = structured["model"]
+                verification = structured["verification"]
+                yield f"data: {json.dumps({'type': 'artifact', 'artifact': structured['artifact'], 'model_short': final_model, 'verification': verification})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
                 return
             async for event in stream_chat_with_ai(user_message, history, context, response_mode=response_mode, temperature=temperature):
@@ -1073,8 +1112,12 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                     final_tokens,
                     duration_ms,
                 ))
-                task_type = f"dashboard:{dashboard_kind}" if dashboard_payload is not None else f"report:{report_template}" if report_artifact is not None else "chat"
-                artifact = dashboard_payload if dashboard_payload is not None else report_artifact
+                task_type = (
+                    f"{structured['task_kind']}:{structured['task_key']}"
+                    if structured is not None
+                    else "chat"
+                )
+                artifact = structured["artifact"] if structured is not None else None
                 verification = locals().get("verification")
                 asyncio.create_task(_save_ai_generation(
                     pool,
