@@ -277,6 +277,10 @@ export default function ProjectDetail() {
 
   const f = record?.fields || {}
   const assoc = record?.association
+  const insight = assoc?.insights?.project
+  const invoiceInsight = insight?.invoice_summary || {}
+  const statusInsight = insight?.status_summary || {}
+  const signal = insight?.signal
   const profitPct  = Number(f['Profit percentage'] || 0)
   const clientName = f['Client'] || ''
   const projectName = f['Project Name'] || 'Untitled Project'
@@ -489,6 +493,16 @@ export default function ProjectDetail() {
                   style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}>
                   {assoc?.related_counts?.project?.status || 0} status · {assoc?.related_counts?.project?.invoices || 0} invoice
                 </span>
+                {signal?.title && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                    style={{
+                      background: signal.severity === 'danger' ? 'var(--fin-neg-bg)' : signal.severity === 'warning' ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)',
+                      border: `1px solid ${signal.severity === 'danger' ? 'var(--fin-neg-border)' : signal.severity === 'warning' ? 'var(--fin-warn-border)' : 'var(--fin-pos-border)'}`,
+                      color: signal.severity === 'danger' ? 'var(--fin-negative)' : signal.severity === 'warning' ? 'var(--fin-warning)' : 'var(--fin-positive)',
+                    }}>
+                    {signal.title}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -515,6 +529,24 @@ export default function ProjectDetail() {
               style={{ color: 'var(--text-3)' }}>
               <BarChart2 size={12} /> Project Details
             </h2>
+            {signal?.detail && (
+              <div className="rounded-xl p-3 mb-5"
+                style={{
+                  background: signal.severity === 'danger' ? 'var(--fin-neg-bg)' : signal.severity === 'warning' ? 'var(--fin-warn-bg)' : 'var(--accent-dim)',
+                  border: `1px solid ${signal.severity === 'danger' ? 'var(--fin-neg-border)' : signal.severity === 'warning' ? 'var(--fin-warn-border)' : 'var(--accent-soft)'}`,
+                }}>
+                <p className="text-xs font-semibold mb-1"
+                  style={{ color: signal.severity === 'danger' ? 'var(--fin-negative)' : signal.severity === 'warning' ? 'var(--fin-warning)' : 'var(--accent)' }}>
+                  Linked operational signal
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-1)' }}>{signal.detail}</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-2)' }}>
+                  <span>{Number(invoiceInsight.pending_count || 0)} pending invoice</span>
+                  <span>{formatInr(invoiceInsight.outstanding_total || 0)} open</span>
+                  <span>{Number(statusInsight.blocked_count || 0)} blocked status</span>
+                </div>
+              </div>
+            )}
             <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
               <Field label="Client"          value={f['Client']} />
               <Field label="Project Name"    value={f['Project Name']} />

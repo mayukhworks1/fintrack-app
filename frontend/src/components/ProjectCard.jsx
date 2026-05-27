@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, Link2 } from 'lucide-react'
+import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, Link2, AlertTriangle, Activity, ReceiptText } from 'lucide-react'
 import { formatInr, formatPct } from '../utils/format'
-import clsx from 'clsx'
 
 function StatusBadge({ status }) {
   if (!status) return null
@@ -11,23 +10,23 @@ function StatusBadge({ status }) {
   return <span className="badge-cancelled">{status}</span>
 }
 
-function HealthBar({ health, profitPct }) {
-  if (!health) return null
-  const isGood    = health.includes('🟢')
-  const isWarning = health.includes('🟡')
-  const color  = isGood ? 'var(--fin-positive)' : isWarning ? 'var(--fin-warning)' : 'var(--fin-negative)'
-  const width  = Math.min(Math.max((profitPct / 40) * 100, 5), 100)
-  const label  = health.replace(/^\p{Emoji}\s*/u, '') || health
+function SignalBadge({ signal, override }) {
+  const severity = override || signal?.severity || 'muted'
+  const palette = severity === 'danger'
+    ? { color: 'var(--fin-negative)', bg: 'var(--fin-neg-bg)', border: 'var(--fin-neg-border)' }
+    : severity === 'warning'
+      ? { color: 'var(--fin-warning)', bg: 'var(--fin-warn-bg)', border: 'var(--fin-warn-border)' }
+      : severity === 'positive'
+        ? { color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)' }
+        : { color: 'var(--text-2)', bg: 'var(--bg-input)', border: 'var(--border)' }
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium" style={{ color }}>● {label}</span>
-      </div>
-      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-        <div className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${width}%`, background: color }} />
-      </div>
-    </div>
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold"
+      style={{ color: palette.color, background: palette.bg, border: `1px solid ${palette.border}` }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: palette.color }} />
+      {signal?.title || 'Linked context'}
+    </span>
   )
 }
 
@@ -36,11 +35,34 @@ export default function ProjectCard({ record }) {
   const f          = record?.fields || {}
   const assoc      = record?.association
   const related    = assoc?.related_counts?.project || {}
+  const insight    = assoc?.insights?.project
+  const invoiceSummary = insight?.invoice_summary || {}
+  const statusSummary = insight?.status_summary || {}
   const profitPct  = parseFloat(f['Profit percentage'] || 0)
   const billed     = parseFloat(f['Amount Billed So far'] || 0)
   const target     = parseFloat(f['Target Revenue'] || 0)
   const targetPct  = target > 0 ? Math.min((billed / target) * 100, 100) : 0
   const isProfit   = profitPct >= 0
+  const outstanding = Number(invoiceSummary.outstanding_total || 0)
+  const blockedCount = Number(statusSummary.blocked_count || 0)
+  const pendingCount = Number(invoiceSummary.pending_count || 0)
+  const overdueCount = Number(invoiceSummary.overdue_count || 0)
+  const latestHeadline = statusSummary.latest_headline || statusSummary.latest_detail || ''
+  const negativeMargin = profitPct < 0
+  const primarySignal = negativeMargin
+    ? {
+        severity: 'danger',
+        title: 'Negative margin',
+        detail: `${formatPct(profitPct, 2)} margin on ${formatInr(billed)} billed so far.`,
+      }
+    : insight?.signal
+  const SignalIcon = negativeMargin
+    ? AlertTriangle
+    : blockedCount > 0
+      ? Activity
+      : outstanding > 0
+        ? ReceiptText
+        : Activity
 
   return (
     <article
@@ -71,9 +93,38 @@ export default function ProjectCard({ record }) {
         </div>
       </div>
 
-      {/* Health */}
-      <div className="mb-4">
-        <HealthBar health={f['Health']} profitPct={profitPct} />
+      {/* Primary signal */}
+      <div className="mb-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <SignalBadge signal={primarySignal} override={primarySignal?.severity} />
+          {SignalIcon && (
+            <SignalIcon size={13} style={{ color: primarySignal?.severity === 'danger' ? 'var(--fin-negative)' : primarySignal?.severity === 'warning' ? 'var(--fin-warning)' : 'var(--text-3)' }} />
+          )}
+        </div>
+        <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>
+          {primarySignal?.detail || latestHeadline || f['Health'] || 'No linked delivery or billing context yet.'}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Open</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-1)' }}>
+            {formatInr(outstanding)}
+          </p>
+        </div>
+        <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Aging</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: overdueCount > 0 ? 'var(--fin-negative)' : pendingCount > 0 ? 'var(--fin-warning)' : 'var(--text-1)' }}>
+            {overdueCount > 0 ? `${overdueCount} overdue` : `${pendingCount} pending`}
+          </p>
+        </div>
+        <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Blocked</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: blockedCount > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
+            {blockedCount}
+          </p>
+        </div>
       </div>
 
       {/* Meta */}
@@ -112,12 +163,20 @@ export default function ProjectCard({ record }) {
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>Profit</p>
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>
+            {statusSummary.latest_status ? 'Latest status' : 'Margin'}
+          </p>
+          {statusSummary.latest_status ? (
+            <p className="font-bold text-sm max-w-[140px] truncate" style={{ color: 'var(--text-1)' }}>
+              {statusSummary.latest_status}
+            </p>
+          ) : (
           <p className="font-bold text-sm flex items-center gap-1 tabular-nums"
             style={{ color: isProfit ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
             {isProfit ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {formatPct(profitPct, 2)}
           </p>
+          )}
         </div>
       </div>
     </article>

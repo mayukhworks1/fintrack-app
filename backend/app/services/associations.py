@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from ..db.postgres import get_pool
@@ -68,13 +69,14 @@ class AssociationService:
         # by fuzzy name-matching and running on every list fetch.
         links = await self._load_links(source, record_ids)
         counts = await self._load_related_counts(links.values())
+        insights = await self._load_project_insights(links.values())
 
         hydrated = []
         for record in records:
             link = links.get(str(record.get("id") or ""))
             association = None
             if link:
-                association = self._serialize_link(link, counts)
+                association = self._serialize_link(link, counts, insights)
             hydrated.append(self._with_association(record, association))
         return hydrated
 
@@ -89,7 +91,8 @@ class AssociationService:
         if not link:
             return {"association": None}
         counts = await self._load_related_counts([link])
-        return {"association": self._serialize_link(link, counts)}
+        insights = await self._load_project_insights([link])
+        return {"association": self._serialize_link(link, counts, insights)}
 
     async def search_entities(self, query: str, limit: int = 10) -> dict[str, Any]:
         q = normalize_name(query)
@@ -619,7 +622,241 @@ class AssociationService:
 
         return counts
 
-    def _serialize_link(self, row: dict[str, Any], counts: dict[str, dict[str, int]]) -> dict[str, Any]:
+    async def _load_project_insights(self, links: Any) -> dict[str, dict[str, Any]]:
+        pool = get_pool()
+        if not pool:
+            return {}
+
+        link_rows = list(links)
+        project_ids = {str(row["project_entity_id"]) for row in link_rows if row.get("project_entity_id")}
+        if not project_ids:
+            return {}
+
+        async with pool.acquire() as conn:
+            invoice_rows, status_rows = await conn.fetch(
+                """
+                SELECT
+                    rl.project_entity_id::text AS project_key,
+                    rl.source_table,
+                    COALESCE(im.invoice_number, wm.invoice_number) AS invoice_number,
+                    COALESCE(im.project, wm.project) AS project_name,
+                    COALESCE(im.payment_status, wm.payment_status) AS payment_status,
+                    COALESCE(im.amount_raised, wm.amount_raised, 0) AS amount_raised,
+                    COALESCE(im.amount_received, wm.amount_received, 0) AS amount_received,
+                    COALESCE(im.raised_date, wm.raised_date) AS raised_date,
+                    COALESCE(im.fields, wm.fields, '{}'::jsonb) AS fields
+                FROM record_links rl
+                LEFT JOIN invoices_mirror im
+                    ON rl.source_table = 'invoices'
+                   AND rl.teable_id = im.teable_id
+                   AND im.deleted_at IS NULL
+                LEFT JOIN web_invoices_mirror wm
+                    ON rl.source_table = 'web_invoices'
+                   AND rl.teable_id = wm.teable_id
+                   AND wm.deleted_at IS NULL
+                WHERE rl.project_entity_id = ANY($1::uuid[])
+                  AND rl.source_table IN ('invoices', 'web_invoices')
+                """,
+                list(project_ids),
+            ), await conn.fetch(
+                """
+                SELECT
+                    rl.project_entity_id::text AS project_key,
+                    sm.status,
+                    sm.short_status,
+                    sm.detail_status,
+                    sm.modified_time,
+                    sm.client,
+                    sm.project
+                FROM record_links rl
+                JOIN status_mirror sm
+                  ON rl.source_table = 'status'
+                 AND rl.teable_id = sm.teable_id
+                 AND sm.deleted_at IS NULL
+                WHERE rl.project_entity_id = ANY($1::uuid[])
+                ORDER BY sm.modified_time DESC NULLS LAST, sm.synced_at DESC NULLS LAST
+                """,
+                list(project_ids),
+            )
+
+        grouped_invoices: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in invoice_rows:
+            grouped_invoices[row["project_key"]].append(dict(row))
+
+        grouped_status: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in status_rows:
+            grouped_status[row["project_key"]].append(dict(row))
+
+        return {
+            project_id: self._build_project_insight(
+                grouped_invoices.get(project_id, []),
+                grouped_status.get(project_id, []),
+            )
+            for project_id in project_ids
+        }
+
+    def _build_project_insight(
+        self,
+        invoice_rows: list[dict[str, Any]],
+        status_rows: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).date()
+        invoice_summary = {
+            "total_count": 0,
+            "open_count": 0,
+            "pending_count": 0,
+            "paid_count": 0,
+            "overdue_count": 0,
+            "outstanding_total": 0.0,
+            "raised_total": 0.0,
+            "received_total": 0.0,
+            "oldest_aging_days": 0,
+            "next_followup": None,
+            "top_exposure": None,
+        }
+        status_summary = {
+            "total_count": len(status_rows),
+            "blocked_count": 0,
+            "latest_status": None,
+            "latest_headline": None,
+            "latest_detail": None,
+            "latest_modified": None,
+        }
+
+        for row in invoice_rows:
+            fields = row.get("fields") or {}
+            status = str(row.get("payment_status") or fields.get("Payment Status") or "Unknown").strip()
+            raised = float(row.get("amount_raised") or 0)
+            received = float(row.get("amount_received") or 0)
+            outstanding = float(fields.get("Outstanding Amount") or max(raised - received, 0))
+            raised_date = row.get("raised_date")
+            if isinstance(raised_date, datetime):
+                raised_date = raised_date.date()
+            aging_days = 0
+            if isinstance(raised_date, date):
+                aging_days = max((now - raised_date).days, 0)
+
+            invoice_summary["total_count"] += 1
+            invoice_summary["raised_total"] += raised
+            invoice_summary["received_total"] += received
+            invoice_summary["outstanding_total"] += outstanding
+            if status == "Paid":
+                invoice_summary["paid_count"] += 1
+            elif status != "Cancelled":
+                invoice_summary["open_count"] += 1
+                if outstanding > 0 or status == "Pending":
+                    invoice_summary["pending_count"] += 1
+                    invoice_summary["oldest_aging_days"] = max(invoice_summary["oldest_aging_days"], aging_days)
+                    if aging_days > 30:
+                        invoice_summary["overdue_count"] += 1
+                    current_top = invoice_summary["top_exposure"]
+                    if not current_top or outstanding > current_top["outstanding"]:
+                        invoice_summary["top_exposure"] = {
+                            "invoice_number": row.get("invoice_number"),
+                            "project": row.get("project_name"),
+                            "outstanding": round(outstanding, 2),
+                            "status": status,
+                            "aging_days": aging_days,
+                        }
+                    next_followup = fields.get("Next followup")
+                    if next_followup and (
+                        not invoice_summary["next_followup"]
+                        or str(next_followup) < str(invoice_summary["next_followup"])
+                    ):
+                        invoice_summary["next_followup"] = next_followup
+
+        invoice_summary["outstanding_total"] = round(invoice_summary["outstanding_total"], 2)
+        invoice_summary["raised_total"] = round(invoice_summary["raised_total"], 2)
+        invoice_summary["received_total"] = round(invoice_summary["received_total"], 2)
+
+        for idx, row in enumerate(status_rows):
+            status = str(row.get("status") or "Unknown").strip()
+            if status in {"On Hold", "Input Pending"}:
+                status_summary["blocked_count"] += 1
+            if idx == 0:
+                status_summary["latest_status"] = status or None
+                status_summary["latest_headline"] = (row.get("short_status") or "").strip() or None
+                status_summary["latest_detail"] = (row.get("detail_status") or "").strip() or None
+                status_summary["latest_modified"] = (
+                    row.get("modified_time").isoformat() if row.get("modified_time") else None
+                )
+
+        signal = self._build_project_signal(invoice_summary, status_summary)
+        return {
+            "invoice_summary": invoice_summary,
+            "status_summary": status_summary,
+            "signal": signal,
+        }
+
+    def _build_project_signal(
+        self,
+        invoice_summary: dict[str, Any],
+        status_summary: dict[str, Any],
+    ) -> dict[str, str]:
+        outstanding = float(invoice_summary.get("outstanding_total") or 0)
+        overdue = int(invoice_summary.get("overdue_count") or 0)
+        pending = int(invoice_summary.get("pending_count") or 0)
+        blocked = int(status_summary.get("blocked_count") or 0)
+        latest_status = status_summary.get("latest_status") or ""
+        latest_headline = status_summary.get("latest_headline") or ""
+
+        if blocked > 0:
+            return {
+                "kind": "delivery-blocked",
+                "severity": "warning",
+                "title": "Delivery blocked",
+                "detail": latest_headline or f"{blocked} linked status update(s) are waiting on hold or input.",
+            }
+        if overdue > 0:
+            return {
+                "kind": "collections-pressure",
+                "severity": "danger",
+                "title": "Collections pressure",
+                "detail": f"₹{outstanding:,.0f} is open across {overdue} overdue invoice(s).",
+            }
+        if pending > 0 and latest_status == "Completed":
+            return {
+                "kind": "delivered-awaiting-collection",
+                "severity": "warning",
+                "title": "Delivered, awaiting collection",
+                "detail": f"Delivery is marked complete but ₹{outstanding:,.0f} is still open.",
+            }
+        if pending > 0:
+            return {
+                "kind": "collection-open",
+                "severity": "warning",
+                "title": "Collection open",
+                "detail": f"₹{outstanding:,.0f} is still outstanding across {pending} invoice(s).",
+            }
+        if latest_status == "Completed":
+            return {
+                "kind": "completed-and-cleared",
+                "severity": "positive",
+                "title": "Delivered and cleared",
+                "detail": "Linked delivery status is complete and no invoice exposure remains open.",
+            }
+        if latest_status in {"In progress", "Not started"}:
+            return {
+                "kind": "delivery-in-motion",
+                "severity": "positive",
+                "title": "Delivery in motion",
+                "detail": latest_headline or "Execution is moving without linked collection pressure.",
+            }
+        if status_summary.get("total_count") or invoice_summary.get("total_count"):
+            return {
+                "kind": "steady",
+                "severity": "muted",
+                "title": "Linked context available",
+                "detail": latest_headline or "Review linked invoices and status updates for the latest context.",
+            }
+        return {
+            "kind": "needs-linking",
+            "severity": "muted",
+            "title": "Needs linked context",
+            "detail": "No linked invoices or status updates are attached to this project yet.",
+        }
+
+    def _serialize_link(self, row: dict[str, Any], counts: dict[str, dict[str, int]], insights: dict[str, dict[str, Any]]) -> dict[str, Any]:
         client_id = str(row["client_entity_id"]) if row.get("client_entity_id") else None
         project_id = str(row["project_entity_id"]) if row.get("project_entity_id") else None
         project_counts = counts.get(f"project:{project_id}", {}) if project_id else {}
@@ -640,6 +877,9 @@ class AssociationService:
             "related_counts": {
                 "project": project_counts,
                 "client": client_counts,
+            },
+            "insights": {
+                "project": insights.get(project_id) if project_id else None,
             },
         }
 

@@ -108,6 +108,24 @@ AI_TASK_REGISTRY: dict[str, dict[str, Any]] = {
         "artifact_type": "report",
         "source_preference": "pg-mirror",
     },
+    "analysis:collections-action-plan": {
+        "family": "analysis",
+        "label": "Collections Action Plan",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "analysis:project-diagnosis": {
+        "family": "analysis",
+        "label": "Project Diagnosis",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "analysis:client-billing-brief": {
+        "family": "analysis",
+        "label": "Client Billing Brief",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
     "chat": {
         "family": "chat",
         "label": "Portfolio Q&A",
@@ -290,6 +308,24 @@ def _detect_report_template_request(message: str, history: list[dict] | None = N
             return "founder-weekly"
         if "collections report" in recent and any(term in q for term in ("detail", "download", "report", "summary")):
             return "collections-report"
+    return None
+
+
+def _detect_analysis_task_request(message: str, history: list[dict] | None = None) -> str | None:
+    q = (message or "").strip().lower()
+    if not q:
+        return None
+    for task, terms in _ANALYSIS_TASK_KEYWORDS.items():
+        if any(term in q for term in terms):
+            return task
+    if history:
+        recent = " \n".join(str(h.get("content") or "").lower() for h in history[-6:])
+        if "collections action plan" in recent and any(term in q for term in ("show details", "make proper plan", "give me plan")):
+            return "collections-action-plan"
+        if "project diagnosis" in recent and any(term in q for term in ("show details", "make proper plan", "what next")):
+            return "project-diagnosis"
+        if "client billing brief" in recent and any(term in q for term in ("show details", "expand", "summarize")):
+            return "client-billing-brief"
     return None
 
 
@@ -614,6 +650,130 @@ async def _build_report_template_artifact(template: str, pool) -> tuple[str, dic
     return content, artifact
 
 
+async def _build_analysis_artifact(task: str, pool) -> tuple[str, dict[str, Any]]:
+    payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
+    project_summary = payload.get("project_summary") or {}
+    invoice_summary = payload.get("invoice_summary") or {}
+    project_records = payload.get("project_records") or []
+
+    if task == "collections-action-plan":
+        overdue = invoice_summary.get("overdue_invoices") or []
+        pending = invoice_summary.get("pending_invoices") or []
+        lines = [
+            "Collections Action Plan",
+            "",
+            f"Outstanding amount: {_money_inr(invoice_summary.get('total_outstanding'))}",
+            f"Pending invoices: {_summary_count(pending)}",
+            f"Overdue priority items: {len(overdue)}",
+            "",
+            "Immediate priorities:",
+        ]
+        if overdue:
+            for idx, row in enumerate(overdue[:6], 1):
+                lines.append(
+                    f"{idx}. {row.get('project', 'Invoice')} · {row.get('invoice_no', '—')} · "
+                    f"{_money_inr(row.get('amount'))} · Aging {int(_safe_num(row.get('aging')))}d · "
+                    f"Next follow-up: {row.get('followup') or 'not set'}."
+                )
+        else:
+            lines.append("1. No overdue invoices are currently visible.")
+        lines += [
+            "",
+            "Recommended next steps:",
+            "1. Lock an owner and next follow-up date for every overdue invoice first.",
+            "2. Escalate high-value delivered invoices that remain open after the next follow-up cycle.",
+            "3. Use the invoice workspace aging filters to close the oldest exposure before adding new billing pressure.",
+        ]
+        content = "\n".join(lines)
+        artifact = {
+            "artifactType": "report",
+            "kind": task,
+            "title": "Collections Action Plan",
+            "subtitle": "Deterministic receivables action artifact",
+            "content": content,
+            "copyText": content,
+            "downloadName": task,
+            "kpis": [
+                {"label": "Outstanding", "value": _money_inr(invoice_summary.get("total_outstanding"))},
+                {"label": "Pending", "value": _summary_count(pending)},
+                {"label": "Overdue", "value": len(overdue)},
+            ],
+        }
+        return content, artifact
+
+    if task == "client-billing-brief":
+        by_client = []
+        for client, billed in (project_summary.get("client_billed") or {}).items():
+            profit = _safe_num((project_summary.get("client_profit") or {}).get(client))
+            margin = (profit / billed * 100) if billed else 0
+            by_client.append((client, billed, profit, margin))
+        by_client.sort(key=lambda row: row[1], reverse=True)
+        lines = ["Client Billing Brief", "", "Top client billing signals:"]
+        if by_client:
+            lines.extend(
+                f"{i + 1}. {client} · Billed {_money_inr(billed)} · Profit {_money_inr(profit)} · Margin {margin:.1f}%"
+                for i, (client, billed, profit, margin) in enumerate(by_client[:8])
+            )
+        else:
+            lines.append("1. No client billing data is available.")
+        content = "\n".join(lines)
+        artifact = {
+            "artifactType": "report",
+            "kind": task,
+            "title": "Client Billing Brief",
+            "subtitle": "Top client revenue and margin snapshot",
+            "content": content,
+            "copyText": content,
+            "downloadName": task,
+            "kpis": [
+                {"label": "Clients", "value": len(by_client)},
+                {"label": "Top billed", "value": _money_inr(by_client[0][1] if by_client else 0)},
+                {"label": "Portfolio billed", "value": _money_inr(project_summary.get("total_billed"))},
+            ],
+        }
+        return content, artifact
+
+    at_risk = project_summary.get("at_risk") or []
+    lines = [
+        "Project Diagnosis",
+        "",
+        f"Tracked projects: {len(project_records)}",
+        f"At-risk projects: {len(at_risk)}",
+        "",
+        "First projects to review:",
+    ]
+    if at_risk:
+        lines.extend(
+            f"{i + 1}. {row.get('name', 'Project')} · Margin {float(row.get('pct') or 0):.2f}% · {row.get('status') or row.get('health') or 'No status'}"
+            for i, row in enumerate(at_risk[:8])
+        )
+    else:
+        lines.append("1. No red-health or negative-margin projects are currently flagged.")
+    lines += [
+        "",
+        "Operator questions:",
+        "1. Which projects are delivered but still uncollected?",
+        "2. Which projects are blocked by client input or hold states?",
+        "3. Which projects need owner review because margin and delivery signals disagree?",
+    ]
+    content = "\n".join(lines)
+    artifact = {
+        "artifactType": "report",
+        "kind": task,
+        "title": "Project Diagnosis",
+        "subtitle": "Portfolio review artifact for delivery and commercial pressure",
+        "content": content,
+        "copyText": content,
+        "downloadName": task,
+        "kpis": [
+            {"label": "Tracked", "value": len(project_records)},
+            {"label": "At-risk", "value": len(at_risk)},
+            {"label": "Avg margin", "value": f"{_safe_num(project_summary.get('avg_profit_pct')):.1f}%"},
+        ],
+    }
+    return content, artifact
+
+
 def _plan_structured_task(message: str, history: list[dict] | None = None) -> dict[str, str] | None:
     dashboard_kind = _detect_dashboard_request(message, history)
     if dashboard_kind:
@@ -621,6 +781,9 @@ def _plan_structured_task(message: str, history: list[dict] | None = None) -> di
     report_template = _detect_report_template_request(message, history)
     if report_template:
         return {"task_kind": "report", "task_key": report_template}
+    analysis_task = _detect_analysis_task_request(message, history)
+    if analysis_task:
+        return {"task_kind": "analysis", "task_key": analysis_task}
     return None
 
 
@@ -654,6 +817,18 @@ async def _execute_structured_task(
             confidence="high",
         )
         task_type = f"dashboard:{task_key}"
+    elif task_kind == "analysis":
+        reply, artifact = await _build_analysis_artifact(task_key, pool)
+        payload_key = "artifact"
+        payload_value = artifact
+        model = "deterministic-analysis"
+        verification = _build_verification_metadata(
+            source=source,
+            task=task_key,
+            mode=response_mode,
+            confidence="high",
+        )
+        task_type = f"analysis:{task_key}"
     else:
         reply, artifact = await _build_report_template_artifact(task_key, pool)
         payload_key = "artifact"
@@ -1312,6 +1487,21 @@ _REPORT_TEMPLATE_KEYWORDS = {
     "project-health-review": ("project health", "health review", "at-risk projects", "delivery review"),
     "client-billing-summary": ("client billing", "billing summary", "client summary", "client revenue"),
     "status-board-summary": ("status board summary", "status summary", "delivery summary", "status report"),
+}
+
+_ANALYSIS_TASK_KEYWORDS = {
+    "collections-action-plan": (
+        "action plan for collections", "collections action plan", "overdue action plan",
+        "who needs follow up", "receivables action plan", "follow up plan for invoices",
+    ),
+    "project-diagnosis": (
+        "diagnose projects", "project diagnosis", "which projects need attention",
+        "where are we blocked", "project action plan", "delivery diagnosis",
+    ),
+    "client-billing-brief": (
+        "client billing brief", "client billing overview", "top billing clients",
+        "which clients pay us", "client receivables brief",
+    ),
 }
 
 

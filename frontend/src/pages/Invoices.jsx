@@ -325,6 +325,8 @@ function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }
   const f = invoice.fields || {}
   const assoc = invoice.association
   const related = assoc?.related_counts?.project || {}
+  const insight = assoc?.insights?.project
+  const signal = insight?.signal
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
@@ -423,6 +425,9 @@ function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }
                 <p><strong style={{ color: 'var(--text-1)' }}>Project:</strong> {assoc.project.name}</p>
                 {assoc.client?.name && <p><strong style={{ color: 'var(--text-1)' }}>Client:</strong> {assoc.client.name}</p>}
                 <p>{related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}</p>
+                {signal?.detail && (
+                  <p><strong style={{ color: 'var(--text-1)' }}>{signal.title}:</strong> {signal.detail}</p>
+                )}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>

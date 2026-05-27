@@ -204,6 +204,25 @@ export default function Dashboard() {
 
   const s      = data?.summary
   const recent = data?.records || []
+  const recentSignals = recent
+    .map((record) => {
+      const insight = record.association?.insights?.project
+      const profit = Number(record.fields?.['Profit percentage'] || 0)
+      const severityRank = profit < 0
+        ? 3
+        : insight?.signal?.severity === 'danger'
+          ? 3
+          : insight?.signal?.severity === 'warning'
+            ? 2
+            : 1
+      return { record, insight, severityRank, profit }
+    })
+    .sort((a, b) => b.severityRank - a.severityRank || a.profit - b.profit)
+  const leadSignal = recentSignals[0]
+  const leadRecord = leadSignal?.record
+  const leadInsight = leadSignal?.insight
+  const blockedRecent = recent.filter(r => Number(r.association?.insights?.project?.status_summary?.blocked_count || 0) > 0).length
+  const outstandingRecent = recent.reduce((sum, r) => sum + Number(r.association?.insights?.project?.invoice_summary?.outstanding_total || 0), 0)
 
   const margin    = s?.total_billed > 0 ? (s.total_profit / s.total_billed) * 100 : 0
   const costRatio = s?.total_billed > 0 ? (s.total_cost   / s.total_billed) * 100 : 0
@@ -322,23 +341,27 @@ export default function Dashboard() {
               <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
                 <p className="text-base font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
-                  {s?.best_project?.name || 'No project performance signal yet'}
+                  {leadRecord ? `${leadRecord.fields?.['Client'] || 'Unknown'} / ${leadRecord.fields?.['Project Name'] || 'Project'}` : 'No project performance signal yet'}
                 </p>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-                  {s?.best_project?.name
-                    ? `${formatPct(s.best_project.pct, 2)} margin currently leading the portfolio.`
+                  {leadSignal
+                    ? (leadSignal.profit < 0
+                      ? `${formatPct(leadSignal.profit, 2)} margin currently needs intervention.`
+                      : leadInsight?.signal?.detail || 'Linked delivery and billing context is available for review.')
                     : 'As project financials settle in, this space will surface the strongest performer.'}
                 </p>
               </div>
               <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
-                <p className="text-base font-semibold mt-2" style={{ color: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' }}>
-                  {atRisk.length ? `${atRisk.length} project${atRisk.length === 1 ? '' : 's'} need review` : 'No critical portfolio blockers'}
+                <p className="text-base font-semibold mt-2" style={{ color: blockedRecent || outstandingRecent > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
+                  {blockedRecent || outstandingRecent > 0
+                    ? `${blockedRecent} blocked · ${inr(outstandingRecent)} open`
+                    : 'No critical portfolio blockers'}
                 </p>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-                  {atRisk.length
-                    ? `${atRisk[0]?.name || 'Top issue'} is currently the first portfolio escalation.`
-                    : 'All tracked projects are profitable or outside critical health thresholds.'}
+                  {blockedRecent || outstandingRecent > 0
+                    ? 'Combines blocked delivery statuses with open receivable exposure on the visible control set.'
+                    : 'No blocked linked statuses and no open receivable pressure in the visible control set.'}
                 </p>
               </div>
             </div>

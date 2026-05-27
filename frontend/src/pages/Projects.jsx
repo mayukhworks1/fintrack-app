@@ -121,13 +121,36 @@ export default function Projects() {
   const topClients = Object.entries(summary?.by_client || {})
     .sort(([, a], [, b]) => Number(b) - Number(a))
     .slice(0, 4)
-  const atRisk = (summary?.at_risk || []).slice(0, 4)
+  const actionQueue = [...displayed]
+    .map((row) => {
+      const insight = row.association?.insights?.project
+      const severity = row.fields?.['Profit percentage'] < 0 ? 'danger' : (insight?.signal?.severity || 'muted')
+      const rank = severity === 'danger' ? 3 : severity === 'warning' ? 2 : severity === 'positive' ? 1 : 0
+      return { row, insight, rank }
+    })
+    .filter(item => item.rank > 0)
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, 4)
   const margin = Number(summary?.total_billed || 0) > 0
     ? (Number(summary?.total_profit || 0) / Number(summary?.total_billed || 1)) * 100
     : 0
-  const healthCoverage = Number(summary?.total_projects || 0) > 0
-    ? (((summary?.healthy_projects || 0) / Number(summary?.total_projects || 1)) * 100)
-    : 0
+  const visibleInsights = displayed.map(row => row.association?.insights?.project).filter(Boolean)
+  const projectsNeedingAction = displayed.filter((row) => {
+    const insight = row.association?.insights?.project
+    const severity = insight?.signal?.severity
+    const profit = Number(row.fields?.['Profit percentage'] || 0)
+    return severity === 'danger' || severity === 'warning' || profit < 0
+  })
+  const blockedProjects = displayed.filter((row) => Number(row.association?.insights?.project?.status_summary?.blocked_count || 0) > 0)
+  const outstandingTotal = displayed.reduce((sum, row) => sum + Number(row.association?.insights?.project?.invoice_summary?.outstanding_total || 0), 0)
+  const blindSpots = displayed.filter((row) => {
+    const insight = row.association?.insights?.project
+    const statuses = Number(insight?.status_summary?.total_count || 0)
+    const invoices = Number(insight?.invoice_summary?.total_count || 0)
+    return !statuses && !invoices
+  })
+  const highestExposure = [...displayed]
+    .sort((a, b) => Number(b.association?.insights?.project?.invoice_summary?.outstanding_total || 0) - Number(a.association?.insights?.project?.invoice_summary?.outstanding_total || 0))[0]
 
   const setFilter = (key, val) => {
     const p = new URLSearchParams(searchParams)
@@ -190,11 +213,13 @@ export default function Projects() {
       >
         <ExecutiveStatGrid className="mt-5">
           <ExecutiveStatCard
-            label="Portfolio health"
-            value={`${summary?.healthy_projects || 0}/${summary?.total_projects || visibleCount}`}
-            sub={`${formatPct(healthCoverage, 1)} of tracked projects outside critical health bands`}
-            accent="positive"
-            icon={Activity}
+            label="Needs action"
+            value={projectsNeedingAction.length}
+            sub={projectsNeedingAction.length
+              ? `${projectsNeedingAction[0]?.fields?.['Project Name'] || 'Top project'} is the first review candidate`
+              : 'No urgent collections or delivery blockers in the visible scope'}
+            accent={projectsNeedingAction.length ? 'warning' : 'positive'}
+            icon={AlertTriangle}
           />
           <ExecutiveStatCard
             label="Cashflow summary"
@@ -203,17 +228,22 @@ export default function Projects() {
             icon={IndianRupee}
           />
           <ExecutiveStatCard
-            label="Linked invoices"
-            value={records.reduce((sum, row) => sum + Number(row.association?.related_counts?.project?.invoices || 0), 0)}
-            sub="Cross-module invoice associations visible on project cards"
+            label="Open receivables"
+            value={formatInr(outstandingTotal)}
+            sub={highestExposure
+              ? `${highestExposure.fields?.['Project Name'] || 'Highest exposure'} carries the biggest linked open amount`
+              : 'No linked invoice exposure visible in this scope'}
+            accent={outstandingTotal > 0 ? 'warning' : 'positive'}
             icon={Link2}
           />
           <ExecutiveStatCard
-            label="At-risk now"
-            value={summary?.at_risk?.length || 0}
-            sub={summary?.at_risk?.length ? `${summary.at_risk[0]?.name || 'Highest pressure project'} needs review` : 'No negative-margin projects flagged'}
-            accent={(summary?.at_risk?.length || 0) > 0 ? 'warning' : 'positive'}
-            icon={AlertTriangle}
+            label="Delivery blockers"
+            value={blockedProjects.length}
+            sub={blindSpots.length
+              ? `${blindSpots.length} project${blindSpots.length !== 1 ? 's' : ''} still missing linked status or invoice context`
+              : 'Linked portfolio context is available on the visible projects'}
+            accent={blockedProjects.length ? 'warning' : 'positive'}
+            icon={Activity}
           />
         </ExecutiveStatGrid>
       </ExecutiveHero>
@@ -329,33 +359,33 @@ export default function Projects() {
           title="Signals to review"
           subtitle="Top clients, current at-risk pressure, and revenue movement."
         >
-          {topClients.length > 0 ? (
+          {actionQueue.length > 0 ? (
             <ExecutiveMetricList
-              items={topClients.map(([name, count]) => ({
-                label: name,
-                sub: `${count} project${count === 1 ? '' : 's'} active in the current summary`,
-                value: count,
+              items={actionQueue.map(({ row, insight }) => ({
+                label: row.fields?.['Project Name'] || 'Project',
+                sub: insight?.signal?.detail || row.fields?.['Health'] || 'Review linked delivery and billing context',
+                value: insight?.signal?.title || 'Review',
               }))}
             />
           ) : (
-            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No client distribution available yet.</p>
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No urgent delivery or collections pressure is visible right now.</p>
           )}
-          {atRisk.length > 0 && (
+          {topClients.length > 0 && (
             <div className="mt-4 space-y-2 rounded-2xl p-3" style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)' }}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--fin-warning)' }}>Pressure points</p>
-              {atRisk.map(project => (
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--fin-warning)' }}>Client concentration</p>
+              {topClients.map(([name, count]) => (
                 <button
-                  key={project.name}
-                  onClick={() => setSearch(project.name)}
+                  key={name}
+                  onClick={() => setSearchQuery(name)}
                   className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left"
                   style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project.name}</p>
-                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{project.client || 'Portfolio project'} · {project.status || project.health}</p>
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{name}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{count} active project{count === 1 ? '' : 's'} in the current scope</p>
                   </div>
                   <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--fin-warning)' }}>
-                    Open
+                    Filter
                     <ArrowRight size={12} />
                   </span>
                 </button>

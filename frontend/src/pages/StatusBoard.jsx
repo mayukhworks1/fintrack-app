@@ -303,6 +303,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
   const sc      = statusStyle(status)
   const toast   = useToast()
   const related = assoc?.related_counts?.project || {}
+  const insight = assoc?.insights?.project
   const openProjects = () => {
     const params = new URLSearchParams()
     if (assoc?.client?.name || client) params.set('client', assoc?.client?.name || client)
@@ -622,6 +623,11 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                       <p className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>
                         {related.invoices || 0} invoice · {related.projects || 0} project record
                       </p>
+                      {insight?.signal?.detail && (
+                        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                          <strong style={{ color: 'var(--text-1)' }}>{insight.signal.title}:</strong> {insight.signal.detail}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
                           Open projects
