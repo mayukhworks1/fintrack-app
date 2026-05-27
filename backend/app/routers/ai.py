@@ -29,6 +29,7 @@ from fastapi.responses import StreamingResponse
 from ..services.teable import TeableService
 from ..services.invoice import InvoiceService
 from ..services.status import StatusService
+from ..services.ai_retrieval import build_retrieval_pack
 from ..services.openrouter import (
     chat_with_ai, chat_with_ai_tuned, judge_answer, autofill_project, analyze_project, generate_report,
     generate_status_briefing,
@@ -947,21 +948,27 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             )
             return structured["response"]
 
+        # ── Grounded retrieval layer for general chat ────────────────────
+        retrieval = await build_retrieval_pack(pool, user_message, history) if pool else {"context_block": "", "summary": {}}
+        grounded_context = context
+        if retrieval.get("context_block"):
+            grounded_context += "\n\n" + retrieval["context_block"]
+
         # ── AI call ───────────────────────────────────────────────────────
         t0 = time.time()
-        result = await chat_with_ai_tuned(user_message, history, context, response_mode=response_mode, temperature=temperature)
+        result = await chat_with_ai_tuned(user_message, history, grounded_context, response_mode=response_mode, temperature=temperature)
         verification = _build_verification_metadata(
-            source="pg-mirror" if pool else "teable-live",
+            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
             task="chat",
             mode=response_mode,
             confidence="medium",
         )
         if _should_run_judge(user_message, response_mode):
-            judged = await judge_answer(user_message, result["content"], context)
+            judged = await judge_answer(user_message, result["content"], grounded_context)
             if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
                 result["content"] = judged["corrected_answer"]
             verification = _build_verification_metadata(
-                source="pg-mirror" if pool else "teable-live",
+                source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
                 task="chat",
                 mode=response_mode,
                 confidence=str(judged.get("confidence") or "medium"),
@@ -992,7 +999,7 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
                 prompt=user_message,
                 output_text=result["content"],
                 verification=verification,
-                metadata={"path": "chat", "structured": False},
+                metadata={"path": "chat", "structured": False, "retrieval": retrieval.get("summary") or {}},
                 duration_ms=duration_ms,
             ))
 
@@ -1049,6 +1056,11 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
             persist_generation=False,
         )
 
+    retrieval = await build_retrieval_pack(pool, user_message, history) if pool else {"context_block": "", "summary": {}}
+    grounded_context = context
+    if retrieval.get("context_block"):
+        grounded_context += "\n\n" + retrieval["context_block"]
+
     async def event_stream():
         started = time.time()
         final_content = ""
@@ -1071,7 +1083,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                 yield f"data: {json.dumps({'type': 'artifact', 'artifact': structured['artifact'], 'model_short': final_model, 'verification': verification})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
                 return
-            async for event in stream_chat_with_ai(user_message, history, context, response_mode=response_mode, temperature=temperature):
+            async for event in stream_chat_with_ai(user_message, history, grounded_context, response_mode=response_mode, temperature=temperature):
                 if event["type"] == "done":
                     final_content = event["content"]
                     final_model = event["model"]
@@ -1083,11 +1095,11 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                         confidence="medium",
                     )
                     if _should_run_judge(user_message, response_mode):
-                        judged = await judge_answer(user_message, final_content, context)
+                        judged = await judge_answer(user_message, final_content, grounded_context)
                         if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
                             final_content = judged["corrected_answer"]
                         verification = _build_verification_metadata(
-                            source="pg-mirror" if pool else "teable-live",
+                            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
                             task="chat",
                             mode=response_mode,
                             confidence=str(judged.get("confidence") or "medium"),
@@ -1131,7 +1143,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                     output_text=final_content,
                     artifact=artifact,
                     verification=verification if isinstance(verification, dict) else None,
-                    metadata={"path": "chat-stream", "structured": bool(artifact)},
+                    metadata={"path": "chat-stream", "structured": bool(artifact), "retrieval": retrieval.get("summary") or {}},
                     duration_ms=duration_ms,
                 ))
 
