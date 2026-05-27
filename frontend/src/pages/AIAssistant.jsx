@@ -258,6 +258,20 @@ function ArtifactCard({ artifact }) {
   )
 }
 
+function PlannerBadge({ planner }) {
+  if (!planner) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+      style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.16)', color: 'var(--accent)' }}
+      title={`${planner.label || planner.task_type} · ${planner.source || 'unknown source'}`}
+    >
+      <Database size={10} />
+      {planner.label || planner.task_type}
+    </span>
+  )
+}
+
 function DashboardCard({ dashboard }) {
   const data = Array.isArray(dashboard?.series) ? dashboard.series : []
   const total = Number(dashboard?.total || data.reduce((sum, item) => sum + Number(item.value || 0), 0))
@@ -489,6 +503,7 @@ function Message({ msg }) {
                 {msg.model}
               </span>
             )}
+            <PlannerBadge planner={msg.planner} />
             <VerificationBadge verification={msg.verification} />
             {!msg.dashboard && !msg.artifact && <CopyButton text={copyText} />}
           </div>
@@ -579,6 +594,7 @@ export default function AIAssistant() {
       let finalDashboard = null
       let finalArtifact = null
       let finalVerification = null
+      let finalPlanner = null
 
       if (!reader) throw new Error('Streaming is unavailable')
 
@@ -624,6 +640,7 @@ export default function AIAssistant() {
             finalReply = event.artifact.copyText || event.artifact.content || event.artifact.title || 'Artifact ready'
             finalModel = event.model_short || 'deterministic-report'
             finalVerification = event.verification || null
+            finalPlanner = event.planner || null
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
@@ -631,6 +648,7 @@ export default function AIAssistant() {
               dashboard: null,
               model: finalModel,
               verification: finalVerification,
+              planner: finalPlanner,
               streaming: true,
             }))
             continue
@@ -642,12 +660,14 @@ export default function AIAssistant() {
             finalReply = event.dashboard.copyText || event.dashboard.insight || event.dashboard.title || 'Dashboard ready'
             finalModel = event.model_short || 'deterministic-dashboard'
             finalVerification = event.verification || null
+            finalPlanner = event.planner || null
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
               dashboard: finalDashboard,
               model: finalModel,
               verification: finalVerification,
+              planner: finalPlanner,
               streaming: true,
             }))
             continue
@@ -657,6 +677,7 @@ export default function AIAssistant() {
             finalReply = event.content || finalReply
             finalModel = event.model_short || null
             finalVerification = event.verification || finalVerification
+            finalPlanner = event.planner || finalPlanner
             applyAssistantState(entry => ({
               ...entry,
               content: finalReply,
@@ -664,6 +685,7 @@ export default function AIAssistant() {
               artifact: finalArtifact,
               model: finalModel,
               verification: finalVerification,
+              planner: finalPlanner,
               streaming: false,
             }))
             continue

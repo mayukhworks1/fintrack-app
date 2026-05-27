@@ -16,6 +16,8 @@ GET /api/admin/audit-log            — paginated request audit log
 GET /api/admin/sessions             — login sessions (active by default)
 GET /api/admin/chat-sessions        — AI conversation sessions
 GET /api/admin/chat-sessions/{id}   — messages in a single session
+GET /api/admin/ai-generations       — AI generation/task runs
+GET /api/admin/ai-generations/{id}  — single generation detail
 GET /api/admin/sync-log             — Teable sync run history
 GET /api/admin/mirror/projects      — projects_mirror table
 GET /api/admin/mirror/invoices      — invoices_mirror table
@@ -615,6 +617,70 @@ async def admin_chat_messages(
         "session":  _row_to_dict(session),
         "messages": [_row_to_dict(m) for m in messages],
     }
+
+
+@router.get("/ai-generations")
+async def admin_ai_generations(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    task_prefix: Optional[str] = Query(None),
+    role: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    _: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    where: list[str] = []
+    params: list = []
+    idx = 1
+
+    if task_prefix:
+        where.append(f"task_type ILIKE ${idx}")
+        params.append(f"{task_prefix}%")
+        idx += 1
+    if role:
+        where.append(f"role = ${idx}")
+        params.append(role)
+        idx += 1
+    if source:
+        where.append(f"verification->>'source' = ${idx}")
+        params.append(source)
+        idx += 1
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM ai_generations {where_sql}", *params)
+    rows = await pool.fetch(
+        f"""
+        SELECT id, created_at, session_id, task_type, response_mode, model, role, ip,
+               LEFT(prompt, 240) AS prompt_preview,
+               LEFT(output_text, 320) AS output_preview,
+               verification, metadata, duration_ms
+        FROM ai_generations
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ${idx} OFFSET ${idx+1}
+        """,
+        *params, limit, offset,
+    )
+    return {"total": total, "limit": limit, "offset": offset, "rows": [_row_to_dict(r) for r in rows]}
+
+
+@router.get("/ai-generations/{generation_id}")
+async def admin_ai_generation_detail(
+    generation_id: str,
+    _: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    row = await pool.fetchrow("SELECT * FROM ai_generations WHERE id = $1", generation_id)
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "AI generation not found"})
+    return {"generation": _row_to_dict(row)}
 
 
 # ── Sync log ──────────────────────────────────────────────────────────────────

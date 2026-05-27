@@ -59,6 +59,63 @@ STRUCTURED_SOURCE_PRIORITY = {
     "report": "pg-mirror",
 }
 
+AI_TASK_REGISTRY: dict[str, dict[str, Any]] = {
+    "dashboard:status": {
+        "family": "dashboard",
+        "label": "Project Status Dashboard",
+        "artifact_type": "dashboard",
+        "source_preference": "teable-live",
+    },
+    "dashboard:collections": {
+        "family": "dashboard",
+        "label": "Receivables Pressure Dashboard",
+        "artifact_type": "dashboard",
+        "source_preference": "teable-live",
+    },
+    "dashboard:risk": {
+        "family": "dashboard",
+        "label": "At-risk Project Dashboard",
+        "artifact_type": "dashboard",
+        "source_preference": "teable-live",
+    },
+    "report:founder-weekly": {
+        "family": "report",
+        "label": "Weekly Founder Report",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "report:collections-report": {
+        "family": "report",
+        "label": "Collections Report",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "report:project-health-review": {
+        "family": "report",
+        "label": "Project Health Review",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "report:client-billing-summary": {
+        "family": "report",
+        "label": "Client Billing Summary",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "report:status-board-summary": {
+        "family": "report",
+        "label": "Status Board Summary",
+        "artifact_type": "report",
+        "source_preference": "pg-mirror",
+    },
+    "chat": {
+        "family": "chat",
+        "label": "Portfolio Q&A",
+        "artifact_type": "text",
+        "source_preference": "hybrid-rag",
+    },
+}
+
 
 def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
     """Build concise invoice context string for the AI."""
@@ -520,6 +577,31 @@ def _structured_task_source(task_kind: str, pool) -> str:
     return preferred
 
 
+def _task_registry_entry(task_type: str) -> dict[str, Any]:
+    return AI_TASK_REGISTRY.get(task_type, AI_TASK_REGISTRY["chat"])
+
+
+def _build_planner_metadata(
+    *,
+    task_type: str,
+    response_mode: str,
+    source: str,
+    retrieval: dict[str, Any] | None = None,
+    structured: bool,
+) -> dict[str, Any]:
+    entry = _task_registry_entry(task_type)
+    return {
+        "task_type": task_type,
+        "family": entry["family"],
+        "label": entry["label"],
+        "artifact_type": entry["artifact_type"],
+        "response_mode": response_mode,
+        "source": source,
+        "structured": structured,
+        "retrieval": retrieval or {},
+    }
+
+
 async def _build_report_template_artifact(template: str, pool) -> tuple[str, dict[str, Any]]:
     payload = await (_build_report_payload_pg(pool) if pool else _build_report_payload_teable())
     status_service = StatusService()
@@ -585,11 +667,20 @@ async def _execute_structured_task(
         )
         task_type = f"report:{task_key}"
 
+    planner = _build_planner_metadata(
+        task_type=task_type,
+        response_mode=response_mode,
+        source=source,
+        retrieval={},
+        structured=True,
+    )
+
     response = {
         "reply": reply,
         payload_key: payload_value,
         "model": model,
         "verification": verification,
+        "planner": planner,
     }
     if session_id:
         response["session_id"] = session_id
@@ -607,7 +698,7 @@ async def _execute_structured_task(
             output_text=reply,
             artifact=payload_value,
             verification=verification,
-            metadata={"path": persist_path, "structured": True, "task_kind": task_kind},
+            metadata={"path": persist_path, "structured": True, "task_kind": task_kind, "planner": planner},
             duration_ms=0,
         ))
 
@@ -619,6 +710,7 @@ async def _execute_structured_task(
         "model": model,
         "task_kind": task_kind,
         "task_key": task_key,
+        "planner": planner,
     }
 
 
@@ -963,6 +1055,13 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
             mode=response_mode,
             confidence="medium",
         )
+        planner = _build_planner_metadata(
+            task_type="chat",
+            response_mode=response_mode,
+            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
+            retrieval=retrieval.get("summary") or {},
+            structured=False,
+        )
         if _should_run_judge(user_message, response_mode):
             judged = await judge_answer(user_message, result["content"], grounded_context)
             if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
@@ -999,11 +1098,11 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
                 prompt=user_message,
                 output_text=result["content"],
                 verification=verification,
-                metadata={"path": "chat", "structured": False, "retrieval": retrieval.get("summary") or {}},
+                metadata={"path": "chat", "structured": False, "retrieval": retrieval.get("summary") or {}, "planner": planner},
                 duration_ms=duration_ms,
             ))
 
-        resp = {"reply": result["content"], "model": result["model_short"], "verification": verification}
+        resp = {"reply": result["content"], "model": result["model_short"], "verification": verification, "planner": planner}
         if session_id:
             resp["session_id"] = session_id
         return resp
@@ -1073,15 +1172,15 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                 final_content = structured["reply"]
                 final_model = structured["model"]
                 verification = structured["verification"]
-                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': structured['artifact'], 'model_short': final_model, 'verification': verification})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
+                yield f"data: {json.dumps({'type': 'dashboard', 'dashboard': structured['artifact'], 'model_short': final_model, 'verification': verification, 'planner': structured['planner']})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification, 'planner': structured['planner']})}\n\n"
                 return
             if structured is not None and structured["task_kind"] == "report":
                 final_content = structured["reply"]
                 final_model = structured["model"]
                 verification = structured["verification"]
-                yield f"data: {json.dumps({'type': 'artifact', 'artifact': structured['artifact'], 'model_short': final_model, 'verification': verification})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification})}\n\n"
+                yield f"data: {json.dumps({'type': 'artifact', 'artifact': structured['artifact'], 'model_short': final_model, 'verification': verification, 'planner': structured['planner']})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'content': final_content, 'model': final_model, 'model_short': final_model, 'verification': verification, 'planner': structured['planner']})}\n\n"
                 return
             async for event in stream_chat_with_ai(user_message, history, grounded_context, response_mode=response_mode, temperature=temperature):
                 if event["type"] == "done":
@@ -1093,6 +1192,13 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                         task="chat",
                         mode=response_mode,
                         confidence="medium",
+                    )
+                    planner = _build_planner_metadata(
+                        task_type="chat",
+                        response_mode=response_mode,
+                        source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
+                        retrieval=retrieval.get("summary") or {},
+                        structured=False,
                     )
                     if _should_run_judge(user_message, response_mode):
                         judged = await judge_answer(user_message, final_content, grounded_context)
@@ -1109,6 +1215,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                         )
                         event["content"] = final_content
                     event["verification"] = verification
+                    event["planner"] = planner
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
@@ -1143,7 +1250,7 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
                     output_text=final_content,
                     artifact=artifact,
                     verification=verification if isinstance(verification, dict) else None,
-                    metadata={"path": "chat-stream", "structured": bool(artifact), "retrieval": retrieval.get("summary") or {}},
+                    metadata={"path": "chat-stream", "structured": bool(artifact), "retrieval": retrieval.get("summary") or {}, "planner": locals().get("planner")},
                     duration_ms=duration_ms,
                 ))
 

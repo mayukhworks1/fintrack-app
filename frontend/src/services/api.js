@@ -436,6 +436,8 @@ export const api = {
     sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => { if (v != null) q.set(k, String(v)) }); return request(`/api/admin/sessions?${q}`) },
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
+    aiGenerations: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/ai-generations?${q}`) },
+    aiGeneration:  (id)         => request(`/api/admin/ai-generations/${id}`),
     syncLog:       (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/sync-log?${q}`) },
     mirrorProjects:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/projects?${q}`) },
     mirrorInvoices:(p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/mirror/invoices?${q}`) },
