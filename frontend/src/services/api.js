@@ -93,6 +93,55 @@ async function request(path, options = {}, retries = 2) {
   return data
 }
 
+async function requestBlob(path, options = {}) {
+  const { signal: externalSignal, timeout, ...rest } = options
+  const controller = new AbortController()
+  const timeoutMs = timeout || TIMEOUT_MS
+  const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
+  let externalAborted = false
+  const onExternalAbort = () => { externalAborted = true; controller.abort('external') }
+  if (externalSignal) {
+    if (externalSignal.aborted) { externalAborted = true; controller.abort('external') }
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+  }
+  try {
+    const token = getAuthToken()
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+    if (!_deviceHint) {
+      try { _deviceHint = await getDeviceHintHeader() } catch {}
+    }
+    const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...authHeader, ...hintHeader, ...rest.headers },
+      signal: controller.signal,
+      ...rest,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err?.error?.message || err?.detail || err?.message || `HTTP ${res.status}`)
+    }
+    const blob = await res.blob()
+    return {
+      blob,
+      filename: res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || null,
+      contentType: res.headers.get('content-type') || blob.type || 'application/octet-stream',
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      if (externalAborted) {
+        const e = new Error('Request cancelled')
+        e.name = 'AbortError'
+        throw e
+      }
+      throw new Error('Request timed out — check your connection')
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+    if (externalSignal) externalSignal.removeEventListener?.('abort', onExternalAbort)
+  }
+}
+
 async function _doRequest(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, ...rest } = options
   const controller = new AbortController()
@@ -448,6 +497,15 @@ export const api = {
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),
     getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),
+    insightConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/insight-configs?${q}`) },
+    insightExports: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/insight-exports?${q}`) },
+  },
+  insights: {
+    listConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/insights/configs?${q}`) },
+    createConfig: (data) => request('/api/insights/configs', { method: 'POST', body: JSON.stringify(data) }),
+    updateConfig: (id, data) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteConfig: (id) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    export: (data, opts = {}) => requestBlob('/api/insights/export', { method: 'POST', body: JSON.stringify(data), signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
   // ── Project ↔ Invoice associations ────────────────────────────────────
   projectInvoices: {

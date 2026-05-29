@@ -18,6 +18,8 @@ GET /api/admin/chat-sessions        — AI conversation sessions
 GET /api/admin/chat-sessions/{id}   — messages in a single session
 GET /api/admin/ai-generations       — AI generation/task runs
 GET /api/admin/ai-generations/{id}  — single generation detail
+GET /api/admin/insight-configs      — saved dashboard/report presets
+GET /api/admin/insight-exports      — dashboard/report export audit
 GET /api/admin/sync-log             — Teable sync run history
 GET /api/admin/mirror/projects      — projects_mirror table
 GET /api/admin/mirror/invoices      — invoices_mirror table
@@ -85,6 +87,76 @@ async def admin_shared_link_accesses(
     svc = SharedViewService()
     accesses = await svc.get_accesses(token, limit=limit)
     return {"accesses": accesses, "total": len(accesses)}
+
+
+@router.get("/insight-configs")
+async def admin_insight_configs(
+    page_key: Optional[str] = Query(None),
+    config_kind: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    _: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    where = ["1=1"]
+    params: list = []
+    idx = 1
+    if page_key:
+        where.append(f"page_key = ${idx}")
+        params.append(page_key)
+        idx += 1
+    if config_kind:
+        where.append(f"config_kind = ${idx}")
+        params.append(config_kind)
+        idx += 1
+    params.append(limit)
+    rows = await pool.fetch(
+        f"""
+        SELECT id, created_at, updated_at, page_key, config_kind, title, role, ip, is_active, config
+        FROM insight_configs
+        WHERE {' AND '.join(where)}
+        ORDER BY updated_at DESC
+        LIMIT ${idx}
+        """,
+        *params,
+    )
+    return {"configs": [_row_to_dict(row) for row in rows], "total": len(rows)}
+
+
+@router.get("/insight-exports")
+async def admin_insight_exports(
+    page_key: Optional[str] = Query(None),
+    export_format: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    _: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    where = ["1=1"]
+    params: list = []
+    idx = 1
+    if page_key:
+        where.append(f"page_key = ${idx}")
+        params.append(page_key)
+        idx += 1
+    if export_format:
+        where.append(f"export_format = ${idx}")
+        params.append(export_format)
+        idx += 1
+    params.append(limit)
+    rows = await pool.fetch(
+        f"""
+        SELECT id, created_at, page_key, source_key, export_format, title, role, ip, config_id, column_count, row_count, columns, filters, metadata
+        FROM insight_exports
+        WHERE {' AND '.join(where)}
+        ORDER BY created_at DESC
+        LIMIT ${idx}
+        """,
+        *params,
+    )
+    return {"exports": [_row_to_dict(row) for row in rows], "total": len(rows)}
 
 
 # ── Manual sync trigger ───────────────────────────────────────────────────────

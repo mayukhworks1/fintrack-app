@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -7,6 +7,7 @@ import {
   ArrowRight, Flame, Activity
 } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
+import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { formatInr as inr, formatPct } from '../utils/format'
@@ -186,11 +187,25 @@ const EXECUTIVE_VARS_LIGHT = {
   '--border': 'rgba(15,23,42,0.08)',
 }
 
+const DASHBOARD_WIDGET_CATALOG = [
+  { id: 'portfolio_balance', label: 'Portfolio balance', description: 'Net profit hero with revenue, margin, cost load, and at-risk totals.' },
+  { id: 'command_center', label: 'Command center', description: 'Top signal, sync state, and the current attention load.' },
+  { id: 'kpi_strip', label: 'KPI strip', description: 'Top-level revenue, profit, cost, margin, targets, and project counts.' },
+  { id: 'client_revenue', label: 'Revenue by client', description: 'Client concentration and billed totals at a glance.' },
+  { id: 'needs_attention', label: 'Needs attention', description: 'Projects with negative profit or critical health.' },
+  { id: 'leaders', label: 'Performance leaders', description: 'Top performer and lowest margin cards.' },
+  { id: 'status_mix', label: 'Status mix', description: 'Clickable status counts for the current visible portfolio.' },
+  { id: 'top_projects', label: 'Top projects', description: 'Highest-billed projects with linked context and quick navigation.' },
+]
+
+const DASHBOARD_DEFAULT_WIDGET_IDS = DASHBOARD_WIDGET_CATALOG.map((widget) => widget.id)
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
   const { isEditor } = useAuth()
   const { dark } = useTheme()
+  const [activeWidgetIds, setActiveWidgetIds] = useState(DASHBOARD_DEFAULT_WIDGET_IDS)
 
   const fetchAll = useCallback(() =>
     Promise.all([
@@ -231,6 +246,63 @@ export default function Dashboard() {
   const healthOk  = countHealthy(s?.by_health)
   const statusEntries = Object.entries(s?.by_status || {})
   const healthiestPct = (s?.total_projects ?? 0) > 0 ? (healthOk / s.total_projects) * 100 : 0
+  const visibleWidgets = useMemo(
+    () => new Set(activeWidgetIds.length ? activeWidgetIds : DASHBOARD_DEFAULT_WIDGET_IDS),
+    [activeWidgetIds]
+  )
+  const dashboardSourceOptions = useMemo(() => {
+    const projectColumns = [
+      { key: 'client', label: 'Client' },
+      { key: 'project', label: 'Project' },
+      { key: 'status', label: 'Status' },
+      { key: 'health', label: 'Health' },
+      { key: 'billed', label: 'Billed' },
+      { key: 'profit', label: 'Profit' },
+      { key: 'profit_pct', label: 'Profit %' },
+    ]
+    return [
+      {
+        key: 'top-projects',
+        label: 'Top projects snapshot',
+        columns: projectColumns,
+        defaultColumns: projectColumns.map((col) => col.key),
+        getRows: () => recent.map((record) => ({
+          client: record.fields?.['Client'] || '',
+          project: record.fields?.['Project Name'] || '',
+          status: record.fields?.['Project Status'] || '',
+          health: record.fields?.['Health'] || '',
+          billed: record.fields?.['Amount Billed So far'] || 0,
+          profit: record.fields?.['Actual Profit'] || 0,
+          profit_pct: record.fields?.['Profit percentage'] || 0,
+        })),
+      },
+      {
+        key: 'status-summary',
+        label: 'Status mix',
+        columns: [
+          { key: 'status', label: 'Status' },
+          { key: 'projects', label: 'Projects' },
+        ],
+        defaultColumns: ['status', 'projects'],
+        getRows: () => statusEntries.map(([status, projects]) => ({ status, projects })),
+      },
+      {
+        key: 'client-summary',
+        label: 'Client revenue summary',
+        columns: [
+          { key: 'client', label: 'Client' },
+          { key: 'billed', label: 'Billed' },
+          { key: 'profit', label: 'Profit' },
+        ],
+        defaultColumns: ['client', 'billed', 'profit'],
+        getRows: () => Object.entries(s?.client_billed || {}).map(([client, billed]) => ({
+          client,
+          billed,
+          profit: s?.client_profit?.[client] || 0,
+        })),
+      },
+    ]
+  }, [recent, s, statusEntries])
 
   const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
 
@@ -261,6 +333,15 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <InsightWorkbench
+              pageKey="dashboard"
+              pageLabel="Dashboard"
+              widgetCatalog={DASHBOARD_WIDGET_CATALOG}
+              defaultWidgetIds={activeWidgetIds}
+              sourceOptions={dashboardSourceOptions}
+              currentFilters={{ updated_at: lastUpdated || null }}
+              onApplyWidgets={setActiveWidgetIds}
+            />
             <button
               onClick={refresh}
               disabled={loading}
@@ -284,7 +365,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 xl:grid-cols-[1.9fr_0.95fr] gap-4">
+        <div className={clsx('mt-4 grid gap-4', visibleWidgets.has('portfolio_balance') && visibleWidgets.has('command_center') ? 'grid-cols-1 xl:grid-cols-[1.9fr_0.95fr]' : 'grid-cols-1')}>
+          {visibleWidgets.has('portfolio_balance') && (
           <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
               <div>
@@ -319,7 +401,9 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+          )}
 
+          {visibleWidgets.has('command_center') && (
           <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-2">
               <div>
@@ -366,6 +450,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -380,6 +465,7 @@ export default function Dashboard() {
 
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}
+      {visibleWidgets.has('kpi_strip') && (
       <section aria-label="Key metrics">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {loading && !data
@@ -424,11 +510,24 @@ export default function Dashboard() {
           }
         </div>
       </section>
+      )}
 
       {/* ── Middle row ── */}
-      <section aria-label="Portfolio breakdown" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {(visibleWidgets.has('client_revenue') || visibleWidgets.has('needs_attention') || visibleWidgets.has('leaders')) && (
+      <section
+        aria-label="Portfolio breakdown"
+        className={clsx(
+          'grid gap-4',
+          [
+            visibleWidgets.has('client_revenue'),
+            visibleWidgets.has('needs_attention'),
+            visibleWidgets.has('leaders'),
+          ].filter(Boolean).length >= 3 ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'
+        )}
+      >
 
         {/* Client revenue */}
+        {visibleWidgets.has('client_revenue') && (
         <div className="card">
           <h2 className="section-title mb-4">Revenue by Client</h2>
           {loading && !data
@@ -444,8 +543,10 @@ export default function Dashboard() {
               </div>
           }
         </div>
+        )}
 
         {/* Needs attention */}
+        {visibleWidgets.has('needs_attention') && (
         <div className="card">
           <h2 className="section-title mb-1">Needs Attention</h2>
           <p className="text-xs mb-4" style={{ color: 'var(--text-3)' }}>Negative profit or critical health</p>
@@ -462,8 +563,10 @@ export default function Dashboard() {
               : <div>{atRisk.map((p, i) => <RiskRow key={i} project={p} />)}</div>
           }
         </div>
+        )}
 
         {/* Best & worst */}
+        {visibleWidgets.has('leaders') && (
         <div className="card flex flex-col gap-4">
           {/* Top performer */}
           <div>
@@ -504,10 +607,12 @@ export default function Dashboard() {
             }
           </div>
         </div>
+        )}
       </section>
+      )}
 
       {/* ── Status chips ── */}
-      {statusEntries.length > 0 && (
+      {visibleWidgets.has('status_mix') && statusEntries.length > 0 && (
         <section aria-label="Projects by status">
           <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3">
             {statusEntries.map(([status, count]) => {
@@ -533,6 +638,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Top projects ── */}
+      {visibleWidgets.has('top_projects') && (
       <section aria-label="Top projects by billing">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -563,6 +669,7 @@ export default function Dashboard() {
               </div>
         }
       </section>
+      )}
     </div>
   )
 }

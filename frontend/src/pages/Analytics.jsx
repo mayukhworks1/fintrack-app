@@ -10,6 +10,7 @@ import {
   Users, Layers, Zap, ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { formatInr as inr, formatPct, formatInt } from '../utils/format'
@@ -103,6 +104,19 @@ const EXECUTIVE_VARS_LIGHT = {
   '--fin-neg-border': 'rgba(216,95,88,0.14)',
   '--border': 'rgba(15,23,42,0.08)',
 }
+
+const ANALYTICS_WIDGET_CATALOG = [
+  { id: 'kpi_strip', label: 'Analytics KPIs', description: 'Revenue, collections, outstanding, DSO, and margin at the top.' },
+  { id: 'insights', label: 'AI-style insights', description: 'Concentration, overdue, forecast, and strongest signal cards.' },
+  { id: 'cashflow', label: 'Cash flow timeline', description: 'Raised vs collected month by month.' },
+  { id: 'aging', label: 'Receivables aging', description: 'Pending invoice value by age bucket.' },
+  { id: 'top_pending', label: 'Top pending invoices', description: 'Oldest pending invoices that need follow-up first.' },
+  { id: 'status_breakdown', label: 'Invoice status mix', description: 'Status distribution by amount raised.' },
+  { id: 'client_concentration', label: 'Client concentration', description: 'Revenue distribution across clients.' },
+  { id: 'project_profitability', label: 'Project profitability', description: 'Project-level revenue, cost, profit, and outstanding exposure.' },
+]
+
+const ANALYTICS_DEFAULT_WIDGET_IDS = ANALYTICS_WIDGET_CATALOG.map((widget) => widget.id)
 
 /* ── Components ──────────────────────────────────────────────────────── */
 function SyncDot({ syncing }) {
@@ -224,6 +238,7 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
 /* ── Page ────────────────────────────────────────────────────────────── */
 export default function Analytics() {
   const [period, setPeriod] = useState('all')
+  const [activeWidgetIds, setActiveWidgetIds] = useState(ANALYTICS_DEFAULT_WIDGET_IDS)
   const { dark } = useTheme()
 
   const fetchAll = useCallback(() =>
@@ -541,6 +556,67 @@ export default function Analytics() {
     labelStyle: { color: dark ? '#f4f7fb' : '#152033', fontWeight: 700 },
     itemStyle: { color: dark ? '#c0c8d6' : '#536175' },
   }
+  const visibleWidgets = useMemo(
+    () => new Set(activeWidgetIds.length ? activeWidgetIds : ANALYTICS_DEFAULT_WIDGET_IDS),
+    [activeWidgetIds]
+  )
+  const analyticsSourceOptions = useMemo(() => {
+    const invoiceColumns = [
+      { key: 'invoice_number', label: 'Invoice #' },
+      { key: 'project', label: 'Project' },
+      { key: 'status', label: 'Status' },
+      { key: 'raised_date', label: 'Raised Date' },
+      { key: 'cleared_date', label: 'Cleared Date' },
+      { key: 'amount_raised', label: 'Amount Raised' },
+      { key: 'received', label: 'Received' },
+      { key: 'aging_days', label: 'Aging Days' },
+    ]
+    return [
+      {
+        key: 'period-invoices',
+        label: 'Invoices in current period',
+        columns: invoiceColumns,
+        defaultColumns: invoiceColumns.map((col) => col.key),
+        getRows: () => invoices.map((record) => ({
+          invoice_number: record.fields?.['Invoice Number'] || '',
+          project: record.fields?.['Project'] || '',
+          status: record.fields?.['Payment Status'] || '',
+          raised_date: record.fields?.['Raised Date'] || '',
+          cleared_date: record.fields?.['Cleared Date'] || '',
+          amount_raised: record.fields?.['Amount Raised'] || 0,
+          received: record.fields?.['Amount Received'] || 0,
+          aging_days: record.fields?.['Agening (Days)'] || 0,
+        })),
+      },
+      {
+        key: 'cashflow-months',
+        label: 'Cash flow by month',
+        columns: [
+          { key: 'label', label: 'Month' },
+          { key: 'raised', label: 'Raised' },
+          { key: 'collected', label: 'Collected' },
+        ],
+        defaultColumns: ['label', 'raised', 'collected'],
+        getRows: () => cashflow,
+      },
+      {
+        key: 'project-profitability',
+        label: 'Project profitability matrix',
+        columns: [
+          { key: 'name', label: 'Project' },
+          { key: 'status', label: 'Status' },
+          { key: 'billed', label: 'Revenue' },
+          { key: 'cost', label: 'Cost' },
+          { key: 'profit', label: 'Profit' },
+          { key: 'margin', label: 'Margin %' },
+          { key: 'invoiced', label: 'Invoiced' },
+          { key: 'outstanding', label: 'Outstanding' },
+        ],
+        defaultColumns: ['name', 'status', 'billed', 'profit', 'margin', 'outstanding'],
+        getRows: () => projMatrix,
+      },
+    ]
+  }, [cashflow, invoices, projMatrix])
 
   if (loading && !data) return (
     <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
@@ -608,6 +684,15 @@ export default function Analytics() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <InsightWorkbench
+              pageKey="analytics"
+              pageLabel="Analytics"
+              widgetCatalog={ANALYTICS_WIDGET_CATALOG}
+              defaultWidgetIds={activeWidgetIds}
+              sourceOptions={analyticsSourceOptions}
+              currentFilters={{ period, invoice_count: invoices.length }}
+              onApplyWidgets={setActiveWidgetIds}
+            />
             <div className="inline-flex items-center p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {PERIODS.map(p => (
                 <button key={p.id}
@@ -701,6 +786,7 @@ export default function Analytics() {
       )}
 
       {/* ── KPI strip — 5 cards with sparklines ── */}
+      {visibleWidgets.has('kpi_strip') && (
       <section aria-label="Key analytics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         <KpiCard tone={0} icon={IndianRupee}
           label="Revenue (period)"
@@ -729,15 +815,17 @@ export default function Analytics() {
           accent={margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative'}
           sub={inr(ps?.total_profit) + ' on ' + inr(ps?.total_billed)} />
       </section>
+      )}
 
       {/* ── Smart insights ── */}
-      {insights.length > 0 && (
+      {visibleWidgets.has('insights') && insights.length > 0 && (
         <section aria-label="Insights" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {insights.map((i, idx) => <InsightCard key={idx} {...i} />)}
         </section>
       )}
 
       {/* ── Cash flow timeline ── */}
+      {visibleWidgets.has('cashflow') && (
       <ChartCard
         title="Cash Flow"
         sub="Monthly raised vs collected (last 12 months)"
@@ -778,10 +866,13 @@ export default function Analytics() {
           </ResponsiveContainer>
         )}
       </ChartCard>
+      )}
 
       {/* ── Row: Aging + Top pending ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {(visibleWidgets.has('aging') || visibleWidgets.has('top_pending')) && (
+      <div className={clsx('grid gap-4', visibleWidgets.has('aging') && visibleWidgets.has('top_pending') ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')}>
 
+        {visibleWidgets.has('aging') && (
         <ChartCard title="Receivables Aging" sub="Pending invoice value by age (overall)">
           {aging.every(a => a.amount === 0) ? (
             <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
@@ -814,7 +905,9 @@ export default function Analytics() {
             </div>
           )}
         </ChartCard>
+        )}
 
+        {visibleWidgets.has('top_pending') && (
         <ChartCard
           title="Top Pending Invoices"
           sub="Oldest first — needs follow-up"
@@ -853,9 +946,12 @@ export default function Analytics() {
             </div>
           )}
         </ChartCard>
+        )}
       </div>
+      )}
 
       {/* ── Invoice status pie ── */}
+      {visibleWidgets.has('status_breakdown') && (
       <ChartCard title="Invoice Status" sub="By total amount raised (this period)">
         {statusBreakdown.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoices in selected period</div>
@@ -876,9 +972,10 @@ export default function Analytics() {
           </ResponsiveContainer>
         )}
       </ChartCard>
+      )}
 
       {/* ── Client concentration row ── */}
-      {clientConc.length > 1 && (
+      {visibleWidgets.has('client_concentration') && clientConc.length > 1 && (
         <ChartCard title="Client Concentration" sub="Revenue distribution — diversification check">
           <div className="space-y-2.5">
             {clientConc.map((c, i) => {
@@ -911,6 +1008,7 @@ export default function Analytics() {
       )}
 
       {/* ── Project profitability matrix ── */}
+      {visibleWidgets.has('project_profitability') && (
       <ChartCard title="Project Profitability" sub="Revenue, cost, profit & invoiced amounts (overall)">
         {projMatrix.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No project data</div>
@@ -959,6 +1057,7 @@ export default function Analytics() {
           </div>
         )}
       </ChartCard>
+      )}
     </div>
   )
 }

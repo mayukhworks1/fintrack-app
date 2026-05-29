@@ -8,6 +8,8 @@ Tables created on first startup:
   chat_messages    — individual AI chat turns
   report_history   — generated AI/board reports for replay and audit
   ai_generations   — structured AI chat/report/dashboard artifacts for audit
+  insight_configs  — saved custom dashboard/report presets
+  insight_exports  — export audit trail for dashboard/report downloads
   client_entities  — canonical client identities across modules
   project_entities — canonical project/engagement identities across modules
   record_links     — links mirrored/source records to canonical entities
@@ -162,6 +164,41 @@ CREATE TABLE IF NOT EXISTS ai_generations (
 CREATE INDEX IF NOT EXISTS aig_created_idx ON ai_generations (created_at DESC);
 CREATE INDEX IF NOT EXISTS aig_task_idx    ON ai_generations (task_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS aig_session_idx ON ai_generations (session_id, created_at DESC);
+
+-- ── Custom insight presets + export audit ────────────────────────────────
+CREATE TABLE IF NOT EXISTS insight_configs (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    page_key      VARCHAR(40)  NOT NULL,
+    config_kind   VARCHAR(20)  NOT NULL DEFAULT 'dashboard',
+    title         VARCHAR(255) NOT NULL,
+    role          VARCHAR(20),
+    ip            VARCHAR(45),
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    config        JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS ic_page_idx  ON insight_configs (page_key, config_kind, updated_at DESC);
+CREATE INDEX IF NOT EXISTS ic_role_idx  ON insight_configs (role, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS insight_exports (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    page_key      VARCHAR(40)  NOT NULL,
+    source_key    VARCHAR(40)  NOT NULL,
+    export_format VARCHAR(20)  NOT NULL,
+    title         VARCHAR(255) NOT NULL,
+    role          VARCHAR(20),
+    ip            VARCHAR(45),
+    config_id     UUID         REFERENCES insight_configs(id) ON DELETE SET NULL,
+    column_count  INTEGER      NOT NULL DEFAULT 0,
+    row_count     INTEGER      NOT NULL DEFAULT 0,
+    columns       JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    filters       JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    metadata      JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS ie_page_idx   ON insight_exports (page_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS ie_format_idx ON insight_exports (export_format, created_at DESC);
 
 -- ── Cross-module association layer ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS client_entities (
