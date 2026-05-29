@@ -1388,6 +1388,27 @@ export default function Invoices() {
         </ExecutiveStatGrid>
       </ExecutiveHero>
 
+      <section aria-label="Invoice metrics" className="workspace-kpi-grid">
+        <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)} icon={IndianRupee} />
+        <KpiCard tone={1} label="Incl. GST" value={sumLoading && !s ? null : fmt(s?.total_with_tax)} icon={Receipt} />
+        <KpiCard tone={2} label="Collected" value={sumLoading && !s ? null : fmt(s?.total_received)} icon={TrendingUp} semantic="positive" />
+        <KpiCard
+          tone={3}
+          label="Outstanding"
+          value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
+          icon={CalendarClock}
+          semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
+          sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_status?.Pending || 0} pending` : 'Fully collected'}
+        />
+        <KpiCard
+          tone={4}
+          label="Collection Rate"
+          value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
+          icon={Percent}
+          semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'}
+        />
+      </section>
+
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_340px] gap-4">
         <ExecutivePanel
           title="Workspace controls"
@@ -1524,24 +1545,6 @@ export default function Invoices() {
           </div>
         </ExecutivePanel>
       </div>
-
-      {/* ── KPIs ── */}
-      <section aria-label="Invoice metrics" className="workspace-kpi-grid">
-        <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
-        <KpiCard tone={1} label="Incl. GST"    value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
-        <KpiCard tone={2} label="Collected"    value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
-        <KpiCard tone={3} label="Outstanding"
-          value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
-          icon={CalendarClock}
-          semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
-          sub={(s?.total_outstanding || 0) > 0
-            ? `${s?.by_status?.Pending || 0} pending`
-            : 'Fully collected'} />
-        <KpiCard tone={4} label="Collection Rate"
-          value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
-          icon={Percent}
-          semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
-      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <ExecutivePanel
