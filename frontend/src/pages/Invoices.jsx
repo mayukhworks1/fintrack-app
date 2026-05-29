@@ -1291,7 +1291,7 @@ export default function Invoices() {
       </div>
 
       {/* ── KPIs ── */}
-      <section aria-label="Invoice metrics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+      <section aria-label="Invoice metrics" className="workspace-kpi-grid">
         <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
         <KpiCard tone={1} label="Incl. GST"    value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
         <KpiCard tone={2} label="Collected"    value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
@@ -1310,7 +1310,7 @@ export default function Invoices() {
 
       {/* ── Status chips — click to filter, shows count + total amount ── */}
       {s?.by_status && Object.keys(s.by_status).length > 0 && (
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <section className="status-card-grid">
           {Object.entries(s.by_status).map(([status, count]) => {
             const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
             const Icon = m.icon
@@ -1671,18 +1671,19 @@ export default function Invoices() {
       {/* ── Filter bar ── */}
       <ExecutivePanel title="Filters and search" subtitle="Owner, overdue band, month, category, docs, and advanced rules follow one unified filter pattern.">
         <div className="space-y-2">
-        <ExecutiveFilterBar>
-          <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
+        <ExecutiveFilterBar className="executive-filter-bar-toolbar">
+          <div className="executive-search relative flex-1 min-w-[140px] sm:min-w-[220px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input value={search} onChange={e => {
               setSearch(e.target.value)
               updateFilterParam('q', e.target.value.trim())
             }}
               placeholder="Search invoice #, project, description…"
-              className="input pl-8 py-1.5 text-xs" />
+              className="input pl-8 py-1.5 text-xs"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-1)' }} />
           </div>
           <button onClick={() => setShowFilters(f => !f)} aria-expanded={showFilters}
-            className={clsx('btn-icon flex items-center gap-1.5 px-3', showFilters && 'border-opacity-60')}
+            className={clsx('btn-icon flex items-center justify-center gap-1.5 px-3', showFilters && 'border-opacity-60')}
             style={{ borderColor: hasFilters ? 'var(--accent)' : undefined }}>
             <Filter size={13} />
             <span className="text-xs">Filters</span>
@@ -1709,14 +1710,11 @@ export default function Invoices() {
               <X size={11} />Clear
             </button>
           )}
-          <span className="text-xs whitespace-nowrap ml-auto" style={{ color: 'var(--text-3)' }}>
-            {records.length} result{records.length !== 1 ? 's' : ''}
-          </span>
+          <ExecutiveChip accent>{records.length} result{records.length !== 1 ? 's' : ''}</ExecutiveChip>
         </ExecutiveFilterBar>
 
         {showFilters && (
-          <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
-            style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+          <div className="filter-expanded-panel flex flex-wrap gap-2 animate-slide-down">
             {/* Billing type */}
             <div className="inline-flex items-center p-0.5 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               {[['all','All'],['project','Projects'],['retainer','Retainers']].map(([v, l]) => (
@@ -1836,7 +1834,7 @@ export default function Invoices() {
       )}
 
       {/* ── Mobile card list (sm-down) ── */}
-      <div className="md:hidden space-y-2.5">
+      <div className="invoice-mobile-stack md:hidden">
         {loading && !listData
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="card animate-pulse">
@@ -1857,22 +1855,24 @@ export default function Invoices() {
                 const allFiles = [...refs, ...pdfs]
                 return (
                   <button key={r.id} onClick={() => openView(r)}
-                    className="card-hover w-full text-left animate-slide-up"
-                    style={{ padding: '0.875rem 1rem' }}>
+                    className="invoice-mobile-card w-full text-left animate-slide-up">
                     {/* Top: invoice # + status */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0 flex-1">
-                        <p className="font-mono text-[12px] font-bold truncate" style={{ color: 'var(--text-1)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>
+                          Invoice
+                        </p>
+                        <p className="font-mono text-[13px] font-bold truncate mt-1" style={{ color: 'var(--text-1)' }}>
                           {f['Invoice Number'] || '—'}
                         </p>
-                        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
+                        <p className="text-[11px] truncate mt-1" style={{ color: 'var(--text-3)' }}>
                           {f['Project'] || '—'} {f['Category'] ? `· ${f['Category']}` : ''}
                         </p>
                       </div>
                       <StatusPill status={f['Payment Status']} />
                     </div>
                     {f['Raised By'] && (
-                      <div className="flex items-center gap-1 mt-1">
+                      <div className="invoice-mobile-meta mt-1">
                         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-3)' }}>
                           <User size={8} />{f['Raised By']}
                         </span>
@@ -1880,26 +1880,24 @@ export default function Invoices() {
                       </div>
                     )}
                     {/* Middle: amounts */}
-                    <div className="flex items-end justify-between gap-3 mb-2">
+                    <div className="invoice-mobile-summary my-3">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Amount</p>
-                        <p className="font-bold tabular-nums text-base" style={{ color: 'var(--text-1)' }}>
+                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Amount</p>
+                        <p className="font-bold tabular-nums text-base mt-1" style={{ color: 'var(--text-1)' }}>
                           {fmt(f['Amount Raised'])}
                         </p>
                       </div>
-                      {outstanding > 0 && (
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Outstanding</p>
-                          <p className="font-bold tabular-nums text-sm" style={{ color: 'var(--fin-warning)' }}>
-                            {fmt(outstanding)}
-                          </p>
-                        </div>
-                      )}
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Outstanding</p>
+                        <p className="font-bold tabular-nums text-sm mt-1" style={{ color: outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>
+                          {outstanding > 0 ? fmt(outstanding) : 'Clear'}
+                        </p>
+                      </div>
                     </div>
                     {/* Bottom: meta */}
-                    <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    <div className="invoice-mobile-foot">
                       <span className="tabular-nums">{fmtDate(f['Raised Date'])}</span>
-                      <div className="flex items-center gap-2">
+                      <div className="invoice-mobile-foot-right">
                         {f['Next followup'] && (
                           <span className="flex items-center gap-0.5 tabular-nums" style={{ color: 'var(--fin-warning)' }}>
                             <CalendarClock size={9} />{fmtDate(f['Next followup'])}
@@ -1918,7 +1916,7 @@ export default function Invoices() {
       </div>
 
       {/* ── Desktop table (md+) ── */}
-      <div className="hidden md:block card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
+      <div className="data-table-shell hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full" style={{ minWidth: 1200 }}>
             <thead>

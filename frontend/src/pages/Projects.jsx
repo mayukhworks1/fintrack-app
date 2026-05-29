@@ -7,7 +7,7 @@ import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
-import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
+import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import { formatInr, formatPct } from '../utils/format'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
@@ -45,7 +45,7 @@ function SelectFilter({ value, onChange, label, children }) {
     <select
       value={value} onChange={e => onChange(e.target.value)}
       aria-label={label}
-      className="rounded-xl px-3 py-2.5 text-sm outline-none"
+      className="w-full rounded-xl px-3 py-2.5 text-sm outline-none sm:min-w-[11rem]"
       style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
     >
       {children}
@@ -257,7 +257,7 @@ export default function Projects() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_360px] gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)] gap-4">
         <ExecutivePanel
           title="Delivery and finance lens"
           subtitle="Search, filter, and sort projects with the same control rhythm used across the main app."
@@ -270,20 +270,20 @@ export default function Projects() {
           }
         >
           <div className="space-y-3">
-            <ExecutiveFilterBar role="search">
+            <ExecutiveFilterBar role="search" className="executive-filter-bar-toolbar">
           {/* Search */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="executive-search relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ color: 'var(--text-3)' }} aria-hidden="true" />
             <input
               ref={searchInputRef}
               className="w-full rounded-xl pl-9 pr-16 py-2.5 text-sm outline-none transition-all"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
               placeholder="Search projects…"
               value={search}
               onChange={e => setSearchQuery(e.target.value)}
               aria-label="Search projects"
               autoComplete="off"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-1)' }}
             />
             {/* Right side of search */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -308,7 +308,7 @@ export default function Projects() {
           <button
             onClick={() => setShowFilters(f => !f)}
             aria-label="Toggle filters" aria-expanded={showFilters}
-            className="flex items-center gap-1.5 px-3 rounded-xl text-sm transition-all min-h-[42px]"
+            className="flex items-center justify-center gap-1.5 px-3 rounded-xl text-sm transition-all min-h-[42px]"
             style={{
               background: showFilters || activeFilters.length ? 'var(--accent-dim)' : 'var(--bg-input)',
               border: `1px solid ${showFilters || activeFilters.length ? 'rgba(37,99,235,0.25)' : 'var(--border)'}`,
@@ -325,8 +325,7 @@ export default function Projects() {
 
         {/* Expanded filter row */}
         {showFilters && (
-          <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-up"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <div className="project-filter-grid filter-expanded-panel animate-slide-up">
             <SelectFilter value={status} onChange={v => setFilter('status', v)} label="Filter by status">
               <option value="">All statuses</option>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -344,7 +343,7 @@ export default function Projects() {
             {(status || client) && (
               <button
                 onClick={() => { setSearchParams({}); setShowFilters(false) }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all sm:min-w-[11rem]"
                 style={{ color: 'var(--fin-negative)', border: '1px solid var(--fin-neg-border)', background: 'var(--fin-neg-bg)' }}
                 aria-label="Clear all filters">
                 <X size={13} aria-hidden="true" /> Clear filters
@@ -360,13 +359,26 @@ export default function Projects() {
           subtitle="Top clients, current at-risk pressure, and revenue movement."
         >
           {actionQueue.length > 0 ? (
-            <ExecutiveMetricList
-              items={actionQueue.map(({ row, insight }) => ({
-                label: row.fields?.['Project Name'] || 'Project',
-                sub: insight?.signal?.detail || row.fields?.['Health'] || 'Review linked delivery and billing context',
-                value: insight?.signal?.title || 'Review',
-              }))}
-            />
+            <div className="signal-list">
+              {actionQueue.map(({ row, insight }, index) => (
+                <button
+                  key={row.id}
+                  onClick={() => navigate(`/projects/${row.id}`)}
+                  className="signal-list-row text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="signal-list-kicker">Priority {index + 1}</p>
+                      <p className="signal-list-title truncate">{row.fields?.['Project Name'] || 'Project'}</p>
+                    </div>
+                    <ExecutiveChip accent>{insight?.signal?.title || 'Review'}</ExecutiveChip>
+                  </div>
+                  <p className="signal-list-copy">
+                    {insight?.signal?.detail || row.fields?.['Health'] || 'Review linked delivery and billing context'}
+                  </p>
+                </button>
+              ))}
+            </div>
           ) : (
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>No urgent delivery or collections pressure is visible right now.</p>
           )}
@@ -398,7 +410,7 @@ export default function Projects() {
       {/* Grid */}
       {loading && !records.length ? (
         <ExecutivePanel title="Project stream" subtitle="Loading current portfolio view…">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Loading projects">
+          <div className="project-stream-grid" aria-label="Loading projects">
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         </ExecutivePanel>
@@ -435,7 +447,7 @@ export default function Projects() {
         </ExecutivePanel>
       ) : (
         <ExecutivePanel title="Project stream" subtitle="Live project cards with linked invoice and status context.">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="project-stream-grid">
             {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
           </div>
         </ExecutivePanel>
