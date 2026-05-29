@@ -83,9 +83,49 @@ function defaultOpForType(type) {
 
 // ─── Core filter logic ────────────────────────────────────────────────────────
 
+function normalizeTextValue(rawVal) {
+  if (rawVal == null) return ''
+  if (Array.isArray(rawVal)) return rawVal.map(normalizeTextValue).filter(Boolean).join(' · ')
+  if (rawVal instanceof Date) return Number.isNaN(rawVal.getTime()) ? '' : rawVal.toISOString()
+  if (typeof rawVal === 'object') {
+    try {
+      return Object.values(rawVal).map(normalizeTextValue).filter(Boolean).join(' · ')
+    } catch {
+      return ''
+    }
+  }
+  if (typeof rawVal === 'boolean') return rawVal ? 'true' : 'false'
+  return String(rawVal).trim()
+}
+
+function normalizeNumberValue(rawVal) {
+  if (rawVal == null || rawVal === '') return null
+  if (typeof rawVal === 'number') return Number.isFinite(rawVal) ? rawVal : null
+  if (typeof rawVal === 'boolean') return rawVal ? 1 : 0
+  const text = normalizeTextValue(rawVal).replace(/[^0-9.\-]/g, '')
+  if (!text) return null
+  const num = Number(text)
+  return Number.isFinite(num) ? num : null
+}
+
+function normalizeDateValue(rawVal) {
+  if (rawVal == null || rawVal === '') return ''
+  if (rawVal instanceof Date) {
+    return Number.isNaN(rawVal.getTime()) ? '' : rawVal.toISOString().slice(0, 10)
+  }
+  const text = normalizeTextValue(rawVal)
+  if (!text) return ''
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) {
+    const direct = text.slice(0, 10)
+    return /^\d{4}-\d{2}-\d{2}$/.test(direct) ? direct : ''
+  }
+  return parsed.toISOString().slice(0, 10)
+}
+
 function matchCondition(rawVal, op, condValue) {
-  const fv = String(rawVal ?? '').trim()
-  const cv = String(condValue ?? '').trim()
+  const fv = normalizeTextValue(rawVal)
+  const cv = normalizeTextValue(condValue)
   switch (op) {
     case 'is':           return fv.toLowerCase() === cv.toLowerCase()
     case 'is_not':       return fv.toLowerCase() !== cv.toLowerCase()
@@ -95,16 +135,56 @@ function matchCondition(rawVal, op, condValue) {
     case 'ends_with':    return fv.toLowerCase().endsWith(cv.toLowerCase())
     case 'is_empty':     return fv === ''
     case 'is_not_empty': return fv !== ''
-    case 'eq':           return Number(fv) === Number(cv)
-    case 'neq':          return Number(fv) !== Number(cv)
-    case 'gt':           return Number(fv) > Number(cv)
-    case 'gte':          return Number(fv) >= Number(cv)
-    case 'lt':           return Number(fv) < Number(cv)
-    case 'lte':          return Number(fv) <= Number(cv)
-    case 'date_is':      return fv.slice(0, 10) === cv
-    case 'date_is_not':  return fv.slice(0, 10) !== cv
-    case 'date_before':  return cv !== '' && fv.slice(0, 10) < cv
-    case 'date_after':   return cv !== '' && fv.slice(0, 10) > cv
+    case 'eq': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left === right : false
+    }
+    case 'neq': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left !== right : false
+    }
+    case 'gt': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left > right : false
+    }
+    case 'gte': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left >= right : false
+    }
+    case 'lt': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left < right : false
+    }
+    case 'lte': {
+      const left = normalizeNumberValue(rawVal)
+      const right = normalizeNumberValue(condValue)
+      return left != null && right != null ? left <= right : false
+    }
+    case 'date_is': {
+      const left = normalizeDateValue(rawVal)
+      const right = normalizeDateValue(condValue)
+      return left !== '' && right !== '' ? left === right : false
+    }
+    case 'date_is_not': {
+      const left = normalizeDateValue(rawVal)
+      const right = normalizeDateValue(condValue)
+      return left !== '' && right !== '' ? left !== right : false
+    }
+    case 'date_before': {
+      const left = normalizeDateValue(rawVal)
+      const right = normalizeDateValue(condValue)
+      return left !== '' && right !== '' ? left < right : false
+    }
+    case 'date_after': {
+      const left = normalizeDateValue(rawVal)
+      const right = normalizeDateValue(condValue)
+      return left !== '' && right !== '' ? left > right : false
+    }
     default:             return true
   }
 }
@@ -511,7 +591,16 @@ export function FilterBuilder({
       const vals = new Set()
       for (const rec of records) {
         const v = getFieldValue ? getFieldValue(rec)?.[field.key] : rec[field.key]
-        if (v != null && v !== '') vals.add(String(v))
+        if (Array.isArray(v)) {
+          v.map(normalizeTextValue).filter(Boolean).forEach(item => vals.add(item))
+          continue
+        }
+        const normalized = field.type === 'date'
+          ? normalizeDateValue(v)
+          : field.type === 'number'
+            ? (normalizeNumberValue(v) != null ? String(normalizeNumberValue(v)) : '')
+            : normalizeTextValue(v)
+        if (normalized) vals.add(normalized)
       }
       map[field.key] = [...vals].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
     }

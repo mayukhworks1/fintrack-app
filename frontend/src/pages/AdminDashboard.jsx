@@ -16,7 +16,7 @@
  *   History    — field-level change log
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   LayoutDashboard, ScrollText, Users, MessageSquareText,
   RefreshCw, Database, FileText, Clock, LogOut,
@@ -25,7 +25,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, History,
   ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle,
   Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
-  SlidersHorizontal, Calendar, Terminal
+  SlidersHorizontal, Calendar, Terminal, Download
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -55,6 +55,39 @@ function relTime(v) {
     if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`
     return `${Math.round(diff / 86400000)}d ago`
   } catch { return v }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function exportAdminDataset({
+  pageKey,
+  title,
+  format,
+  columns,
+  rows,
+  filters = {},
+  metadata = {},
+}) {
+  const res = await api.insights.export({
+    page_key: pageKey,
+    source_key: `admin:${pageKey}`,
+    title,
+    export_format: format,
+    columns: columns.map((col) => col.label),
+    rows: rows.map((row) => columns.map((col) => row[col.key] ?? '')),
+    filters,
+    metadata,
+  })
+  downloadBlob(res.blob, res.filename || `${title}.${format === 'pdf' ? 'pdf' : 'xls'}`)
 }
 
 function Badge({ children, color = 'default' }) {
@@ -694,6 +727,54 @@ function AuditLogTab() {
 
   useEffect(() => { load() }, [load])
 
+  const filteredRows = useMemo(
+    () => applyConditions(data?.rows || [], filterConditions, r => r),
+    [data?.rows, filterConditions]
+  )
+
+  async function handleExport(format) {
+    const columns = [
+      { key: 'ts', label: 'Time' },
+      { key: 'role', label: 'Role' },
+      { key: 'method', label: 'Method' },
+      { key: 'path', label: 'Path' },
+      { key: 'status', label: 'Status' },
+      { key: 'duration_ms', label: 'Duration (ms)' },
+      { key: 'ip', label: 'IP' },
+      { key: 'country', label: 'Country' },
+      { key: 'city', label: 'City' },
+      { key: 'device', label: 'Device' },
+      { key: 'os', label: 'OS' },
+      { key: 'browser', label: 'Browser' },
+      { key: 'isp', label: 'ISP' },
+      { key: 'request_id', label: 'Request ID' },
+    ]
+    await exportAdminDataset({
+      pageKey: 'admin-audit-log',
+      title: 'Admin Audit Log',
+      format,
+      columns,
+      rows: filteredRows,
+      filters: {
+        role: filterRole,
+        method: filterMethod,
+        status: filterStatus,
+        ip: filterIp,
+        path: filterPath,
+        country: filterCountry,
+        city: filterCity,
+        isp: filterIsp,
+        device: filterDevice,
+        browser: filterBrowser,
+        os: filterOs,
+        from: filterFrom,
+        to: filterTo,
+        conditions: filterConditions,
+      },
+      metadata: { row_count: filteredRows.length },
+    })
+  }
+
   const doPurge = async ({ days, hours } = {}) => {
     setPurging(true); setPurgeRes(null)
     try {
@@ -735,6 +816,12 @@ function AuditLogTab() {
         <div className="flex flex-wrap gap-2 items-center">
           <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
             <RefreshCw size={11} /> Refresh
+          </button>
+          <button onClick={() => handleExport('excel')} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <Download size={11} /> Excel
+          </button>
+          <button onClick={() => handleExport('pdf')} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <Download size={11} /> PDF
           </button>
           <button onClick={() => setShowAdv(v => !v)}
             className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
@@ -801,6 +888,14 @@ function AuditLogTab() {
               { key: 'os',      label: 'OS',      type: 'text' },
               { key: 'device',  label: 'Device',  type: 'text' },
               { key: 'status',  label: 'Status',  type: 'number' },
+              { key: 'duration_ms', label: 'Duration (ms)', type: 'number' },
+              { key: 'body_size', label: 'Body Size', type: 'number' },
+              { key: 'resp_size', label: 'Response Size', type: 'number' },
+              { key: 'request_id', label: 'Request ID', type: 'text' },
+              { key: 'referer', label: 'Referer', type: 'text' },
+              { key: 'timezone', label: 'Timezone', type: 'text' },
+              { key: 'token_hint', label: 'Token Hint', type: 'text' },
+              { key: 'ts', label: 'Time', type: 'date' },
             ]}
             records={data?.rows || []}
             getFieldValue={r => r}
@@ -813,7 +908,8 @@ function AuditLogTab() {
         {/* ── Stats bar ─────────────────────────────────────────────────── */}
         {data && (
           <div className="flex gap-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            <span><b style={{ color: 'var(--text-1)' }}>{data.total.toLocaleString()}</b> matching rows</span>
+            <span><b style={{ color: 'var(--text-1)' }}>{filteredRows.length.toLocaleString()}</b> filtered rows</span>
+            <span>{data.total.toLocaleString()} total rows</span>
             <span>showing {Math.min(offset + 1, data.total)}–{Math.min(offset + limit, data.total)}</span>
           </div>
         )}
@@ -823,13 +919,10 @@ function AuditLogTab() {
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {/* Mobile card view */}
-          {(() => {
-            const filteredRows = applyConditions(data?.rows || [], filterConditions, r => r)
-            return filteredRows
-          })().length === 0 ? <Empty /> : (
+          {filteredRows.length === 0 ? <Empty /> : (
             <>
               <div className="md:hidden space-y-1.5">
-                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
+                {filteredRows.map(row => (
                   <div key={`m-${row.id}`}>
                     <div
                       className="rounded-xl border cursor-pointer p-3"
@@ -900,7 +993,7 @@ function AuditLogTab() {
                 </tr>
               </thead>
               <tbody>
-                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
+                {filteredRows.map(row => (
                     <>
                       <tr key={row.id}
                         className="border-b transition-colors cursor-pointer"
@@ -2177,6 +2270,43 @@ function HistoryTab() {
   useEffect(() => { load() }, [load])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
+  const filteredRows = useMemo(
+    () => applyConditions(data?.rows || [], filterConditions, r => r),
+    [data?.rows, filterConditions]
+  )
+
+  async function handleExport(format) {
+    const columns = [
+      { key: 'recorded_at', label: 'Recorded At' },
+      { key: 'source_table', label: 'Source Table' },
+      { key: 'teable_id', label: 'Record ID' },
+      { key: 'change_type', label: 'Change Type' },
+      { key: 'change_source', label: 'Origin' },
+      { key: 'actor_role', label: 'Actor Role' },
+      { key: 'actor_country', label: 'Country' },
+      { key: 'actor_city', label: 'City' },
+      { key: 'actor_ip', label: 'IP' },
+      { key: 'actor_device_label', label: 'Device Label' },
+      { key: 'actor_browser', label: 'Browser' },
+      { key: 'actor_os', label: 'OS' },
+      { key: 'changed_fields', label: 'Changed Fields' },
+    ]
+    await exportAdminDataset({
+      pageKey: 'admin-history',
+      title: 'Admin Change History',
+      format,
+      columns,
+      rows: filteredRows.map((row) => ({
+        ...row,
+        changed_fields: Array.isArray(row.changed_fields) ? row.changed_fields.join(', ') : row.changed_fields,
+      })),
+      filters: {
+        source_table: filterSrc,
+        conditions: filterConditions,
+      },
+      metadata: { row_count: filteredRows.length },
+    })
+  }
 
   return (
     <div className="space-y-3">
@@ -2191,9 +2321,15 @@ function HistoryTab() {
         <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>
+        <button onClick={() => handleExport('excel')} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
+          <Download size={11} /> Excel
+        </button>
+        <button onClick={() => handleExport('pdf')} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
+          <Download size={11} /> PDF
+        </button>
         {data && (
           <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>
-            {data.total.toLocaleString()} changes
+            {filteredRows.length.toLocaleString()} / {data.total.toLocaleString()} changes
           </span>
         )}
       </div>
@@ -2215,6 +2351,7 @@ function HistoryTab() {
           { key: 'actor_device',         label: 'Form Factor',     type: 'text' },
           { key: 'actor_gpu',            label: 'GPU',             type: 'text' },
           { key: 'actor_timezone',       label: 'Timezone',        type: 'text' },
+          { key: 'recorded_at',          label: 'Recorded At',     type: 'date' },
         ]}
         records={data?.rows || []}
         getFieldValue={r => r}
@@ -2224,11 +2361,11 @@ function HistoryTab() {
       />
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
-          {applyConditions(data?.rows || [], filterConditions, r => r).length === 0
+          {filteredRows.length === 0
             ? <Empty label="No change history yet" />
             : (
               <div className="space-y-1">
-                {applyConditions(data?.rows || [], filterConditions, r => r).map(row => (
+                {filteredRows.map(row => (
                   <div key={row.id} className="rounded-xl border overflow-hidden"
                     style={{ borderColor: 'var(--border)' }}>
                     <button
@@ -2890,6 +3027,24 @@ function InsightsTab() {
 
   useEffect(() => { load() }, [load])
 
+  const dashboardCounts = useMemo(() => {
+    const byPage = configs.reduce((acc, row) => {
+      acc[row.page_key] = (acc[row.page_key] || 0) + 1
+      return acc
+    }, {})
+    const byFormat = exports.reduce((acc, row) => {
+      acc[row.export_format] = (acc[row.export_format] || 0) + 1
+      return acc
+    }, {})
+    return {
+      configsTotal: configs.length,
+      exportsTotal: exports.length,
+      dashboardPages: Object.keys(byPage).length,
+      excelExports: byFormat.excel || 0,
+      pdfExports: byFormat.pdf || 0,
+    }
+  }, [configs, exports])
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
@@ -2909,6 +3064,14 @@ function InsightsTab() {
         <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
           Tracks saved custom dashboards and every export generated from Dashboard and Analytics.
         </p>
+      </div>
+
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        <StatBox label="Saved dashboards" value={dashboardCounts.configsTotal} sub="Active custom insight presets" color="#2563eb" accent="#2563eb" />
+        <StatBox label="Export events" value={dashboardCounts.exportsTotal} sub="All tracked downloads" color="#16a34a" accent="#16a34a" />
+        <StatBox label="Pages customized" value={dashboardCounts.dashboardPages} sub="Dashboard + Analytics adoption" color="#7c3aed" accent="#7c3aed" />
+        <StatBox label="Excel exports" value={dashboardCounts.excelExports} sub="Spreadsheet downloads" color="#0d9488" accent="#0d9488" />
+        <StatBox label="PDF exports" value={dashboardCounts.pdfExports} sub="Portable report downloads" color="#d97706" accent="#d97706" />
       </div>
 
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
