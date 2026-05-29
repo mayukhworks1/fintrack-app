@@ -176,6 +176,17 @@ function classifyAgingBand(days) {
   return '60d+'
 }
 
+function dateOnlyValue(value) {
+  if (!value) return ''
+  return String(value).slice(0, 10)
+}
+
+function endOfMonthIso(key) {
+  const [year, month] = key.split('-').map(Number)
+  const d = new Date(year, month, 0)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function StatusPill({ status }) {
   if (!status) return <span style={{ color: 'var(--text-3)' }}>—</span>
   const m = STATUS_META[status] || { color: 'var(--text-3)', bg: 'var(--glass-bg)', border: 'var(--glass-border)' }
@@ -868,6 +879,9 @@ export default function Invoices() {
   const [raisedByFilter, setRaisedByFilter] = useState('')
   const [monthFilter,    setMonthFilter]    = useState('')
   const [agingBandFilter,setAgingBandFilter]= useState('')
+  const [dateFieldFilter,setDateFieldFilter]= useState('Raised Date')
+  const [dateFrom,       setDateFrom]       = useState('')
+  const [dateTo,         setDateTo]         = useState('')
   const [search,         setSearch]         = useState(initialQuery)
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
@@ -1061,6 +1075,12 @@ export default function Invoices() {
       if (categoryFilter && f['Category'] !== categoryFilter) return false
       if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
       if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
+      if (dateFrom || dateTo) {
+        const candidate = dateOnlyValue(f[dateFieldFilter])
+        if (!candidate) return false
+        if (dateFrom && candidate < dateFrom) return false
+        if (dateTo && candidate > dateTo) return false
+      }
       if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
       if (followupDueOnly) {
         const raw = f['Next followup']
@@ -1092,6 +1112,9 @@ export default function Invoices() {
     agingBandFilter,
     billingFilter,
     categoryFilter,
+    dateFieldFilter,
+    dateFrom,
+    dateTo,
     deferredSearch,
     followupDueOnly,
     hasDocsOnly,
@@ -1153,7 +1176,7 @@ export default function Invoices() {
       .slice(0, 5)
   }, [records, todayIso])
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
 
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
@@ -1161,6 +1184,30 @@ export default function Invoices() {
       .slice(0, 8)
     return entries.map(([project, metrics]) => ({ project, metrics }))
   }, [s])
+  const raisedTimeline = useMemo(() => {
+    const buckets = new Map()
+    for (const record of scopedRecords) {
+      const key = monthKey(record.fields?.['Raised Date'])
+      if (!key) continue
+      const current = buckets.get(key) || { key, count: 0, amount: 0 }
+      current.count += 1
+      current.amount += Number(record.fields?.['Amount Raised'] || 0)
+      buckets.set(key, current)
+    }
+    return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
+  }, [scopedRecords])
+  const clearedTimeline = useMemo(() => {
+    const buckets = new Map()
+    for (const record of scopedRecords) {
+      const key = monthKey(record.fields?.['Cleared Date'])
+      if (!key) continue
+      const current = buckets.get(key) || { key, count: 0, amount: 0 }
+      current.count += 1
+      current.amount += Number(record.fields?.['Amount Received'] || record.fields?.['Amount Raised'] || 0)
+      buckets.set(key, current)
+    }
+    return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
+  }, [scopedRecords])
   const followupsDueCount = useMemo(
     () => records.filter((r) => {
       const raw = r.fields?.['Next followup']
@@ -1177,6 +1224,12 @@ export default function Invoices() {
     () => records.reduce((sum, r) => sum + Number(r.fields?.['Outstanding Amount'] || 0), 0),
     [records]
   )
+  const applyMonthDrilldown = useCallback((field, key) => {
+    setDateFieldFilter(field)
+    setDateFrom(`${key}-01`)
+    setDateTo(endOfMonthIso(key))
+    setMonthFilter(field === 'Raised Date' ? key : '')
+  }, [])
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -1489,6 +1542,60 @@ export default function Invoices() {
           icon={Percent}
           semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
       </section>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ExecutivePanel
+          title="Raised by month"
+          subtitle="Click a month to drill the workspace into invoices raised in that exact month-year."
+          action={<ExecutiveChip accent>{raisedTimeline.length} month{raisedTimeline.length !== 1 ? 's' : ''}</ExecutiveChip>}
+        >
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {raisedTimeline.length === 0 ? (
+              <div className="rounded-xl px-3 py-3 text-xs" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)', color: 'var(--text-3)' }}>
+                No raised-date distribution is available in the current scope.
+              </div>
+            ) : raisedTimeline.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => applyMonthDrilldown('Raised Date', entry.key)}
+                className="rounded-2xl p-3 text-left transition-all"
+                style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}
+              >
+                <p className="label">{monthLabel(entry.key)}</p>
+                <p className="text-base font-bold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{fmt(entry.amount)}</p>
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{entry.count} raised invoice{entry.count !== 1 ? 's' : ''}</p>
+              </button>
+            ))}
+          </div>
+        </ExecutivePanel>
+
+        <ExecutivePanel
+          title="Cleared by month"
+          subtitle="Click a month to isolate invoices cleared in that month-year and inspect actual collections."
+          action={<ExecutiveChip accent>{clearedTimeline.length} month{clearedTimeline.length !== 1 ? 's' : ''}</ExecutiveChip>}
+        >
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {clearedTimeline.length === 0 ? (
+              <div className="rounded-xl px-3 py-3 text-xs" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)', color: 'var(--text-3)' }}>
+                No cleared-date distribution is available in the current scope.
+              </div>
+            ) : clearedTimeline.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => applyMonthDrilldown('Cleared Date', entry.key)}
+                className="rounded-2xl p-3 text-left transition-all"
+                style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}
+              >
+                <p className="label">{monthLabel(entry.key)}</p>
+                <p className="text-base font-bold mt-2 tabular-nums" style={{ color: 'var(--fin-positive)' }}>{fmt(entry.amount)}</p>
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{entry.count} cleared invoice{entry.count !== 1 ? 's' : ''}</p>
+              </button>
+            ))}
+          </div>
+        </ExecutivePanel>
+      </div>
 
       {/* ── Status chips — click to filter, shows count + total amount ── */}
       {s?.by_status && Object.keys(s.by_status).length > 0 && (
@@ -1879,6 +1986,9 @@ export default function Invoices() {
               setCategoryFilter('')
               setRaisedByFilter('')
               setMonthFilter('')
+              setDateFieldFilter('Raised Date')
+              setDateFrom('')
+              setDateTo('')
               setAgingBandFilter('')
               setBillingFilter('all')
               setOverdueOnly(false)
@@ -1928,6 +2038,24 @@ export default function Invoices() {
               icon={CalendarDays}
               width={150}
             />
+            <FilterSelect
+              value={dateFieldFilter}
+              onChange={setDateFieldFilter}
+              options={[
+                { value: 'Raised Date', label: 'Raised Date' },
+                { value: 'Cleared Date', label: 'Cleared Date' },
+                { value: 'Next followup', label: 'Next Follow-up' },
+              ]}
+              placeholder="Date field"
+              icon={CalendarDays}
+              width={160}
+              clearable={false}
+            />
+            <div className="inline-flex items-center gap-2 rounded-xl px-2.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-transparent text-xs outline-none min-w-[124px]" style={{ color: 'var(--text-2)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>to</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-transparent text-xs outline-none min-w-[124px]" style={{ color: 'var(--text-2)' }} />
+            </div>
             <FilterSelect
               value={agingBandFilter}
               onChange={setAgingBandFilter}
