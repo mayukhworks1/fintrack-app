@@ -661,7 +661,9 @@ function PurgeModal({ onConfirm, onCancel, purging, result }) {
 function AuditLogTab() {
   // ── Data state ─────────────────────────────────────────────────────────────
   const [data, setData]         = useState(null)
+  const [fullRows, setFullRows] = useState(null)
   const [loading, setLoading]   = useState(true)
+  const [fullLoading, setFullLoading] = useState(false)
   const [error, setError]       = useState(null)
   const [offset, setOffset]     = useState(0)
   const [expanded, setExp]      = useState(null)
@@ -702,43 +704,55 @@ function AuditLogTab() {
 
   const basicFilters = [filterStatus]
 
+  const buildAuditParams = useCallback((take, skip) => ({
+    limit: take,
+    offset: skip,
+    roles:      filterRole.length   ? filterRole.join(',')   : undefined,
+    methods:    filterMethod.length ? filterMethod.join(',') : undefined,
+    devices:    filterDevice.length ? filterDevice.join(',') : undefined,
+    status:     filterStatus  || undefined,
+    status_min: statusMin     || undefined,
+    status_max: statusMax     || undefined,
+    ip:         filterIp      || undefined,
+    path:       filterPath    || undefined,
+    country:    filterCountry || undefined,
+    city:       filterCity    || undefined,
+    isp:        filterIsp     || undefined,
+    browser:    filterBrowser || undefined,
+    os:         filterOs      || undefined,
+    from_ts:    filterFrom    || undefined,
+    to_ts:      filterTo      || undefined,
+  }), [filterRole, filterMethod, filterDevice, filterStatus, statusMin, statusMax, filterIp, filterPath, filterCountry, filterCity, filterIsp, filterBrowser, filterOs, filterFrom, filterTo])
+
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const full = await fetchAdminAllPages(
-        ({ limit: take, offset: skip }) => api.admin.auditLog({
-          limit: take,
-          offset: skip,
-          roles:      filterRole.length   ? filterRole.join(',')   : undefined,
-          methods:    filterMethod.length ? filterMethod.join(',') : undefined,
-          devices:    filterDevice.length ? filterDevice.join(',') : undefined,
-          status:     filterStatus  || undefined,
-          status_min: statusMin     || undefined,
-          status_max: statusMax     || undefined,
-          ip:         filterIp      || undefined,
-          path:       filterPath    || undefined,
-          country:    filterCountry || undefined,
-          city:       filterCity    || undefined,
-          isp:        filterIsp     || undefined,
-          browser:    filterBrowser || undefined,
-          os:         filterOs      || undefined,
-          from_ts:    filterFrom    || undefined,
-          to_ts:      filterTo      || undefined,
-        }),
-        { pageSize: 500 }
-      )
-      setData(full)
+      setData(await api.admin.auditLog(buildAuditParams(limit, offset)))
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [filterRole, filterMethod, filterStatus,
-      statusMin, statusMax, filterIp, filterPath, filterCountry,
-      filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
-      filterFrom, filterTo])
+  }, [buildAuditParams, limit, offset])
+
+  const ensureFullRows = useCallback(async () => {
+    if (fullRows) return fullRows
+    setFullLoading(true)
+    try {
+      const full = await fetchAdminAllPages(
+        ({ limit: take, offset: skip }) => api.admin.auditLog(buildAuditParams(Math.min(take, 500), skip)),
+        { pageSize: 500 }
+      )
+      setFullRows(full.rows)
+      return full.rows
+    } finally {
+      setFullLoading(false)
+    }
+  }, [fullRows, buildAuditParams])
 
   const resetFilters = () => {
     setRole([]); setMeth([]); setStat(''); setIp(''); setPath('')
     setCountry(''); setCity(''); setIsp(''); setDevice([]); setBrowser('')
     setOs(''); setFrom(''); setTo(''); setStMin(''); setStMax('')
+    setFilterConditions([])
+    setFullRows(null)
     setOffset(0)
   }
 
@@ -747,18 +761,26 @@ function AuditLogTab() {
     filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
     filterFrom, filterTo, filterConditions, limit])
 
+  useEffect(() => { setFullRows(null) }, [buildAuditParams])
+
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (filterConditions.length > 0) ensureFullRows().catch((e) => setError(e.message || 'Failed to hydrate full dataset'))
+  }, [filterConditions, ensureFullRows])
+
+  const sourceRows = filterConditions.length > 0 ? (fullRows || data?.rows || []) : (data?.rows || [])
   const filteredRows = useMemo(
-    () => applyConditions(data?.rows || [], filterConditions, r => r),
-    [data?.rows, filterConditions]
+    () => applyConditions(sourceRows, filterConditions, r => r),
+    [sourceRows, filterConditions]
   )
   const displayRows = useMemo(
-    () => filteredRows.slice(offset, offset + limit),
-    [filteredRows, offset, limit]
+    () => (filterConditions.length > 0 ? filteredRows.slice(offset, offset + limit) : filteredRows),
+    [filteredRows, offset, limit, filterConditions]
   )
 
   async function handleExport(format) {
+    const exportRows = applyConditions(await ensureFullRows(), filterConditions, r => r)
     const columns = [
       { key: 'ts', label: 'Time' },
       { key: 'role', label: 'Role' },
@@ -780,7 +802,7 @@ function AuditLogTab() {
       title: 'Admin Audit Log',
       format,
       columns,
-      rows: filteredRows,
+      rows: exportRows,
       filters: {
         role: filterRole,
         method: filterMethod,
@@ -797,7 +819,7 @@ function AuditLogTab() {
         to: filterTo,
         conditions: filterConditions,
       },
-      metadata: { row_count: filteredRows.length },
+      metadata: { row_count: exportRows.length },
     })
   }
 
@@ -840,7 +862,7 @@ function AuditLogTab() {
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+          <button onClick={() => { setFullRows(null); load() }} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
             <RefreshCw size={11} /> Refresh
           </button>
           <button onClick={() => handleExport('excel')} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
@@ -923,7 +945,7 @@ function AuditLogTab() {
               { key: 'token_hint', label: 'Token Hint', type: 'text' },
               { key: 'ts', label: 'Time', type: 'date' },
             ]}
-            records={data?.rows || []}
+            records={fullRows || data?.rows || []}
             getFieldValue={r => r}
             conditions={filterConditions}
             onChange={setFilterConditions}
@@ -936,6 +958,7 @@ function AuditLogTab() {
           <div className="flex gap-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
             <span><b style={{ color: 'var(--text-1)' }}>{filteredRows.length.toLocaleString()}</b> filtered rows</span>
             <span>{data.total.toLocaleString()} total rows</span>
+            {fullLoading && <span>hydrating full dataset…</span>}
             <span>showing {filteredRows.length ? offset + 1 : 0}–{Math.min(offset + displayRows.length, filteredRows.length)}</span>
           </div>
         )}
@@ -1195,7 +1218,7 @@ function AuditLogTab() {
           </div>
             </>
           )}
-          <Pager total={filteredRows.length} limit={limit} offset={offset} onPage={setOffset} />
+          <Pager total={filterConditions.length > 0 ? filteredRows.length : (data?.total || 0)} limit={limit} offset={offset} onPage={setOffset} />
         </>
       )}
     </div>
@@ -2277,7 +2300,9 @@ function DetailKV({ k, v, mono = false }) {
 
 function HistoryTab() {
   const [data, setData]       = useState(null)
+  const [fullRows, setFullRows] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [fullLoading, setFullLoading] = useState(false)
   const [error, setError]     = useState(null)
   const [offset, setOffset]   = useState(0)
   const [expanded, setExp]    = useState(null)
@@ -2285,37 +2310,56 @@ function HistoryTab() {
   const [filterConditions, setFilterConditions] = useState([])
   const limit = 50
 
+  const buildHistoryParams = useCallback((take, skip) => ({
+    limit: Math.min(take, 500),
+    offset: skip,
+    source_table: filterSrc || undefined,
+  }), [filterSrc])
+
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const full = await fetchAdminAllPages(
-        ({ limit: take, offset: skip }) => api.admin.recordHistory({
-          limit: Math.min(take, 500),
-          offset: skip,
-          source_table: filterSrc || undefined,
-        }),
-        { pageSize: 500 }
-      )
-      setData(full)
+      setData(await api.admin.recordHistory(buildHistoryParams(limit, offset)))
     }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [filterSrc])
+  }, [buildHistoryParams, limit, offset])
+
+  const ensureFullRows = useCallback(async () => {
+    if (fullRows) return fullRows
+    setFullLoading(true)
+    try {
+      const full = await fetchAdminAllPages(
+        ({ limit: take, offset: skip }) => api.admin.recordHistory(buildHistoryParams(take, skip)),
+        { pageSize: 500 }
+      )
+      setFullRows(full.rows)
+      return full.rows
+    } finally {
+      setFullLoading(false)
+    }
+  }, [fullRows, buildHistoryParams])
 
   useEffect(() => { setOffset(0) }, [filterSrc, filterConditions])
+  useEffect(() => { setFullRows(null) }, [buildHistoryParams])
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (filterConditions.length > 0) ensureFullRows().catch((e) => setError(e.message || 'Failed to hydrate full dataset'))
+  }, [filterConditions, ensureFullRows])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
+  const sourceRows = filterConditions.length > 0 ? (fullRows || data?.rows || []) : (data?.rows || [])
   const filteredRows = useMemo(
-    () => applyConditions(data?.rows || [], filterConditions, r => r),
-    [data?.rows, filterConditions]
+    () => applyConditions(sourceRows, filterConditions, r => r),
+    [sourceRows, filterConditions]
   )
   const displayRows = useMemo(
-    () => filteredRows.slice(offset, offset + limit),
-    [filteredRows, offset, limit]
+    () => (filterConditions.length > 0 ? filteredRows.slice(offset, offset + limit) : filteredRows),
+    [filteredRows, offset, limit, filterConditions]
   )
 
   async function handleExport(format) {
+    const exportRows = applyConditions(await ensureFullRows(), filterConditions, r => r)
     const columns = [
       { key: 'recorded_at', label: 'Recorded At' },
       { key: 'source_table', label: 'Source Table' },
@@ -2336,7 +2380,7 @@ function HistoryTab() {
       title: 'Admin Change History',
       format,
       columns,
-      rows: filteredRows.map((row) => ({
+      rows: exportRows.map((row) => ({
         ...row,
         changed_fields: Array.isArray(row.changed_fields) ? row.changed_fields.join(', ') : row.changed_fields,
       })),
@@ -2344,7 +2388,7 @@ function HistoryTab() {
         source_table: filterSrc,
         conditions: filterConditions,
       },
-      metadata: { row_count: filteredRows.length },
+      metadata: { row_count: exportRows.length },
     })
   }
 
@@ -2358,7 +2402,7 @@ function HistoryTab() {
           placeholder="All sources"
           width={150}
         />
-        <button onClick={load} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
+        <button onClick={() => { setFullRows(null); load() }} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
           <RefreshCw size={11} /> Refresh
         </button>
         <button onClick={() => handleExport('excel')} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1">
@@ -2393,7 +2437,7 @@ function HistoryTab() {
           { key: 'actor_timezone',       label: 'Timezone',        type: 'text' },
           { key: 'recorded_at',          label: 'Recorded At',     type: 'date' },
         ]}
-        records={data?.rows || []}
+        records={fullRows || data?.rows || []}
         getFieldValue={r => r}
         conditions={filterConditions}
         onChange={setFilterConditions}
@@ -2401,6 +2445,9 @@ function HistoryTab() {
       />
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
+          {fullLoading && (
+            <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>Hydrating full history for condition filters…</div>
+          )}
           {filteredRows.length === 0
             ? <Empty label="No change history yet" />
             : (
@@ -2567,7 +2614,7 @@ function HistoryTab() {
                 ))}
               </div>
             )}
-          <Pager total={filteredRows.length} limit={limit} offset={offset} onPage={setOffset} />
+          <Pager total={filterConditions.length > 0 ? filteredRows.length : (data?.total || 0)} limit={limit} offset={offset} onPage={setOffset} />
         </>
       )}
     </div>
