@@ -304,41 +304,6 @@ function AttachCard({ a, onPreview }) {
   return <a href={a.url} target="_blank" rel="noopener noreferrer" {...sharedProps}>{content}</a>
 }
 
-/* ── KPI card — horizontal layout with colored icon tile ──────────────────── */
-const KPI_TILE_PALETTE = [
-  { bg: 'var(--kpi-1-bg)', fg: 'var(--kpi-1-fg)' },
-  { bg: 'var(--kpi-2-bg)', fg: 'var(--kpi-2-fg)' },
-  { bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
-  { bg: 'var(--kpi-4-bg)', fg: 'var(--kpi-4-fg)' },
-  { bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
-]
-function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
-  const palette = KPI_TILE_PALETTE[tone % KPI_TILE_PALETTE.length]
-  const color =
-    semantic === 'positive' ? 'var(--fin-positive)' :
-    semantic === 'warning'  ? 'var(--fin-warning)'  :
-    semantic === 'negative' ? 'var(--fin-negative)' :
-    'var(--text-1)'
-  return (
-    <div className="card flex items-center gap-3 animate-scale-in">
-      {Icon && (
-        <div className="flex items-center justify-center flex-shrink-0"
-          style={{ width: 38, height: 38, borderRadius: 8, background: palette.bg, color: palette.fg }}>
-          <Icon size={17} aria-hidden="true" />
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="display-num tabular-nums break-words leading-tight"
-          style={{ color, fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)', wordBreak: 'break-word' }}>
-          {value ?? '—'}
-        </p>
-        <p className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--text-3)' }}>{label}</p>
-        {sub && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  )
-}
-
 /* ── Select wrapper ──────────────────────────────────────────────────────── */
 function SelectInput({ value, onChange, options, placeholder = 'Select…', compact = false }) {
   return (
@@ -611,9 +576,9 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
         amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
         amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
-        raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : undefined,
-        cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
-        next_followup:   form.next_followup   ? `${form.next_followup}T00:00:00.000Z` : undefined,
+        raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : (isEdit ? null : undefined),
+        cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : (isEdit ? null : undefined),
+        next_followup:   form.next_followup   ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
       }
       if (isEdit) await api.invoices.update(invoice.id, payload)
       else        await api.invoices.create(payload)
@@ -824,7 +789,20 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
             <Field label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></Field>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Next Followup"><input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} /></Field>
+            <Field label="Next Followup">
+              <div className="flex items-center gap-2">
+                <input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} />
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, next_followup: '' }))}
+                  className="btn-ghost flex-shrink-0"
+                  style={{ fontSize: '0.75rem', padding: '0.55rem 0.75rem' }}
+                  title="Clear follow-up date"
+                >
+                  <RotateCcw size={12} />Clear
+                </button>
+              </div>
+            </Field>
           </div>
           <Field label="Remark">
             <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
@@ -868,7 +846,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
 function SkeletonRow() {
   return (
     <tr aria-hidden="true" className="tbl-row">
-      {[80, 100, 90, 72, 72, 80, 100, 90, 90, 72, 72, 48, 64, 56, 60].map((w, i) => (
+      {[32, 80, 100, 90, 72, 72, 80, 100, 90, 90, 72, 72, 48, 64, 56, 60].map((w, i) => (
         <td key={i} className="tbl-cell">
           <div className="skeleton h-3 rounded" style={{ width: w }} />
         </td>
@@ -1147,7 +1125,6 @@ export default function Invoices() {
   )
 
   const s = summary
-  const overdue = s?.overdue_invoices || []
   const agingBuckets = useMemo(() => {
     const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
     for (const r of scopedRecords) {
@@ -1157,41 +1134,7 @@ export default function Invoices() {
     }
     return buckets
   }, [scopedRecords])
-  const actionQueue = useMemo(() => {
-    return [...records]
-      .map((record) => {
-        const f = record.fields || {}
-        const outstandingAmount = Number(f['Outstanding Amount'] || 0)
-        const agingDays = effectiveAging(f)
-        const followupRaw = f['Next followup'] ? String(f['Next followup']).slice(0, 10) : ''
-        const hasDueFollowup = Boolean(followupRaw) && followupRaw <= todayIso
-        let priority = 0
-        let title = ''
-        let note = ''
-        if (f['Payment Status'] === 'Pending' && agingDays > 30) {
-          priority = agingDays > 60 ? 5 : 4
-          title = agingDays > 60 ? 'Critical overdue collection' : 'Overdue collection'
-          note = `${agingDays} days aging · ${fmt(outstandingAmount)} still open`
-        } else if (hasDueFollowup) {
-          priority = followupRaw < todayIso ? 3 : 2
-          title = followupRaw < todayIso ? 'Follow-up overdue' : 'Follow-up due today'
-          note = `${f['Project'] || f['Invoice Number'] || 'Invoice'} needs owner follow-up`
-        } else if (f['Payment Status'] === 'Pending' && outstandingAmount > 0) {
-          priority = 1
-          title = 'Open receivable'
-          note = `${fmt(outstandingAmount)} awaiting collection`
-        } else {
-          return null
-        }
-        return { record, priority, title, note, agingDays, outstandingAmount }
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        if (b.priority !== a.priority) return b.priority - a.priority
-        return b.outstandingAmount - a.outstandingAmount
-      })
-      .slice(0, 5)
-  }, [records, todayIso])
+  const overdue = s?.overdue_invoices || []
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
 
@@ -1434,45 +1377,23 @@ export default function Invoices() {
       >
         <ExecutiveStatGrid className="mt-5">
           <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : fmt(s?.total_raised)} icon={IndianRupee} />
-          <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : fmt(s?.total_received)} sub={s ? `${(s.collection_rate ?? 0).toFixed(1)}% collection rate` : ''} accent="positive" icon={TrendingUp} />
+          <ExecutiveStatCard label="Incl. GST" value={sumLoading && !s ? '—' : fmt(s?.total_with_tax)} icon={Receipt} />
+          <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : fmt(s?.total_received)} sub={s ? `${s?.by_status?.Paid || 0} paid invoices` : ''} accent="positive" icon={TrendingUp} />
           <ExecutiveStatCard label="Outstanding" value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)} sub={`${s?.by_status?.Pending || 0} pending invoices`} accent={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'} icon={CalendarClock} />
           <ExecutiveStatCard
-            label="Action today"
-            value={actionQueue.length}
-            sub={actionQueue[0]
-              ? `${actionQueue[0].title} · ${actionQueue[0].record.fields?.['Project'] || actionQueue[0].record.fields?.['Invoice Number'] || 'Invoice'}`
-              : 'No urgent collections or follow-ups right now'}
-            accent={actionQueue.length ? 'warning' : 'positive'}
-            icon={AlertOctagon}
+            label="Collection rate"
+            value={sumLoading && !s ? '—' : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
+            sub={s ? `${s?.active_invoices || 0} active invoices in scope` : ''}
+            accent={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'}
+            icon={Percent}
           />
         </ExecutiveStatGrid>
       </ExecutiveHero>
 
-      <section aria-label="Invoice metrics" className="workspace-kpi-grid">
-        <KpiCard tone={0} label="Total Raised" value={sumLoading && !s ? null : fmt(s?.total_raised)} icon={IndianRupee} />
-        <KpiCard tone={1} label="Incl. GST" value={sumLoading && !s ? null : fmt(s?.total_with_tax)} icon={Receipt} />
-        <KpiCard tone={2} label="Collected" value={sumLoading && !s ? null : fmt(s?.total_received)} icon={TrendingUp} semantic="positive" />
-        <KpiCard
-          tone={3}
-          label="Outstanding"
-          value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
-          icon={CalendarClock}
-          semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
-          sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_status?.Pending || 0} pending` : 'Fully collected'}
-        />
-        <KpiCard
-          tone={4}
-          label="Collection Rate"
-          value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
-          icon={Percent}
-          semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'}
-        />
-      </section>
-
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_340px] gap-4">
         <ExecutivePanel
           title="Workspace controls"
-          subtitle="Switch billing mode, jump into high-pressure queues, and keep the current scope focused on actual collections work."
+          subtitle="Switch billing mode, tighten the scope, and keep the current receivables picture focused on real collections work."
         >
           <ExecutiveFilterBar className="mb-3">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
@@ -1521,55 +1442,22 @@ export default function Invoices() {
               <FileText size={12} />Docs attached
             </button>
           </ExecutiveFilterBar>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <p className="label">Open in scope</p>
-                  <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(currentScopeOutstanding)}</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{pendingCount} pending invoices currently visible</p>
-                </div>
-                <div>
-                  <p className="label">Follow-up load</p>
-                  <p className="text-lg font-bold tabular-nums" style={{ color: followupsDueCount ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{followupsDueCount}</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Due today or already overdue</p>
-                </div>
-                <div>
-                  <p className="label">Missing proof/docs</p>
-                  <p className="text-lg font-bold tabular-nums" style={{ color: missingDocsCount ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{missingDocsCount}</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Invoices without PDF or payment reference</p>
-                </div>
+          <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="label">Open in scope</p>
+                <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(currentScopeOutstanding)}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{pendingCount} pending invoices currently visible</p>
               </div>
-            </div>
-            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <p className="label">Immediate action queue</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Concrete follow-up items, not a generic count.</p>
-                </div>
-                <ExecutiveChip accent>{actionQueue.length} live</ExecutiveChip>
+              <div>
+                <p className="label">Follow-up load</p>
+                <p className="text-lg font-bold tabular-nums" style={{ color: followupsDueCount ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{followupsDueCount}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Due today or already overdue</p>
               </div>
-              <div className="space-y-2">
-                {actionQueue.length === 0 ? (
-                  <div className="rounded-xl px-3 py-3 text-xs" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', color: 'var(--text-3)' }}>
-                    Nothing critical in the current scope. Use filters to inspect a tighter invoice segment.
-                  </div>
-                ) : actionQueue.slice(0, 3).map((item) => (
-                  <div key={item.record.id} className="rounded-xl px-3 py-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{item.title}</p>
-                        <p className="text-[11px] truncate mt-1" style={{ color: 'var(--text-3)' }}>
-                          {item.record.fields?.['Invoice Number'] || 'Invoice'} · {item.record.fields?.['Project'] || 'Unassigned project'}
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--fin-warning)' }}>
-                        {fmt(item.outstandingAmount)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] mt-2" style={{ color: 'var(--text-2)' }}>{item.note}</p>
-                  </div>
-                ))}
+              <div>
+                <p className="label">Missing proof/docs</p>
+                <p className="text-lg font-bold tabular-nums" style={{ color: missingDocsCount ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{missingDocsCount}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Invoices without PDF or payment reference</p>
               </div>
             </div>
           </div>
@@ -2301,6 +2189,7 @@ export default function Invoices() {
           <table className="w-full" style={{ minWidth: 1200 }}>
             <thead>
               <tr>
+                <th className="tbl-head" style={{ width: 56 }}>#</th>
                 <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
                 <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
                 <th className="tbl-head"><SortLabel col="Category">Category</SortLabel></th>
@@ -2322,7 +2211,7 @@ export default function Invoices() {
               {loading && !listData
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : records.length === 0
-                  ? <tr><td colSpan={15} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
+                  ? <tr><td colSpan={16} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
                       <div className="flex flex-col items-center gap-2">
                         <Receipt size={28} style={{ opacity: 0.3 }} />
                         <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
@@ -2331,7 +2220,7 @@ export default function Invoices() {
                         </p>
                       </div>
                     </td></tr>
-                  : records.map(r => {
+                  : records.map((r, rowIndex) => {
                       const f = r.fields || {}
                       const assoc = r.association
                       const related = assoc?.related_counts?.project || {}
@@ -2341,10 +2230,33 @@ export default function Invoices() {
                       const allFiles = [...refs, ...pdfs]
 
                       return (
-                        <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }}
+                        <tr
+                          key={r.id}
+                          className="tbl-row"
+                          style={{
+                            cursor: 'pointer',
+                            background: rowIndex % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(244,247,252,0.86)',
+                            transition: 'transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease',
+                          }}
                           onClick={() => openView(r)}
-                          onMouseEnter={e => e.currentTarget.style.borderLeft = '2px solid var(--accent)'}
-                          onMouseLeave={e => e.currentTarget.style.borderLeft = ''}>
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderLeft = '2px solid var(--accent)'
+                            e.currentTarget.style.background = 'rgba(236, 242, 255, 0.92)'
+                            e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 24px rgba(15,23,42,0.06)'
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderLeft = ''
+                            e.currentTarget.style.background = rowIndex % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(244,247,252,0.86)'
+                            e.currentTarget.style.boxShadow = ''
+                            e.currentTarget.style.transform = ''
+                          }}>
+
+                          <td className="tbl-cell">
+                            <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
+                              {rowIndex + 1}
+                            </span>
+                          </td>
 
                           <td className="tbl-cell">
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
@@ -2353,7 +2265,12 @@ export default function Invoices() {
                           </td>
                           <td className="tbl-cell">
                             <div className="min-w-0">
-                              <span className="text-xs font-medium block truncate" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
+                              <span className="text-xs font-semibold block truncate" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
+                              {f['Description'] && (
+                                <span className="block text-[11px] mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                  {f['Description']}
+                                </span>
+                              )}
                               {assoc?.project?.name && (
                                 <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>

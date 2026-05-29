@@ -4,7 +4,7 @@ GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
-from typing import Optional
+from typing import Optional, Iterable
 from pydantic import BaseModel
 from ..services.invoice import InvoiceService
 from ..services.associations import AssociationService
@@ -47,7 +47,7 @@ class InvoiceFields(BaseModel):
     remark:           Optional[str]   = None
     next_followup:    Optional[str]   = None   # ISO 8601
 
-    def to_teable_fields(self) -> dict:
+    def to_teable_fields(self, include_null_fields: Iterable[str] | None = None) -> dict:
         m = {
             "Invoice Number":  self.invoice_number,
             "Project":         self.project,
@@ -64,7 +64,11 @@ class InvoiceFields(BaseModel):
             "Remark":          self.remark,
             "Next followup":   self.next_followup,
         }
-        return {k: v for k, v in m.items() if v is not None}
+        allow_null = set(include_null_fields or [])
+        return {
+            k: v for k, v in m.items()
+            if v is not None or k in allow_null
+        }
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -148,7 +152,7 @@ async def update_invoice(
     role: str = Depends(require_editor),
 ):
     try:
-        fields = body.to_teable_fields()
+        fields = body.to_teable_fields(include_null_fields={"Raised Date", "Cleared Date", "Next followup"})
         _validate_paid_invoice(fields)
         try:
             await record_user_attribution(request, role, record_id)

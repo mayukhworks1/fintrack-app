@@ -330,7 +330,10 @@ class InvoiceService:
     # ── Update invoice ────────────────────────────────────────────────────
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
         url = f"{self._record_url}/{record_id}"
-        body = {"fieldKeyType": "name", "record": {"fields": _clean_fields(fields)}}
+        body = {
+            "fieldKeyType": "name",
+            "record": {"fields": _clean_fields(fields, allow_null_fields={"Raised Date", "Cleared Date", "Next followup"})},
+        }
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
@@ -360,8 +363,9 @@ class InvoiceService:
 # ── Strip read-only / None fields before write ─────────────────────────────
 _READ_ONLY = {"Days To Clear", "Speed", "Agening (Days)", "Outstanding Amount"}
 
-def _clean_fields(fields: dict) -> dict:
+def _clean_fields(fields: dict, allow_null_fields: set[str] | None = None) -> dict:
+    allow_null = allow_null_fields or set()
     return {
         k: v for k, v in fields.items()
-        if k not in _READ_ONLY and v is not None and v != ""
+        if k not in _READ_ONLY and ((v is not None and v != "") or (k in allow_null and v is None))
     }
