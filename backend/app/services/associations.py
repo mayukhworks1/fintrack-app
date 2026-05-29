@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -14,6 +15,8 @@ SOURCE_CONFIG = {
     "invoices": {"client_field": None, "project_field": "Project"},
     "web_invoices": {"client_field": None, "project_field": "Project"},
 }
+
+logger = logging.getLogger("fintrack.associations")
 
 
 def normalize_name(value: Any) -> str:
@@ -68,8 +71,16 @@ class AssociationService:
         # Auto-linking removed: _auto_link_missing() was creating incorrect links
         # by fuzzy name-matching and running on every list fetch.
         links = await self._load_links(source, record_ids)
-        counts = await self._load_related_counts(links.values())
-        insights = await self._load_project_insights(links.values())
+        try:
+            counts = await self._load_related_counts(links.values())
+        except Exception:
+            logger.exception("Association related-count load failed for %s", source)
+            counts = {}
+        try:
+            insights = await self._load_project_insights(links.values())
+        except Exception:
+            logger.exception("Association project-insight load failed for %s", source)
+            insights = {}
 
         hydrated = []
         for record in records:
@@ -90,8 +101,16 @@ class AssociationService:
         link = links.get(teable_id)
         if not link:
             return {"association": None}
-        counts = await self._load_related_counts([link])
-        insights = await self._load_project_insights([link])
+        try:
+            counts = await self._load_related_counts([link])
+        except Exception:
+            logger.exception("Association related-count load failed for single %s:%s", source, teable_id)
+            counts = {}
+        try:
+            insights = await self._load_project_insights([link])
+        except Exception:
+            logger.exception("Association project-insight load failed for single %s:%s", source, teable_id)
+            insights = {}
         return {"association": self._serialize_link(link, counts, insights)}
 
     async def search_entities(self, query: str, limit: int = 10) -> dict[str, Any]:
@@ -633,7 +652,7 @@ class AssociationService:
             return {}
 
         async with pool.acquire() as conn:
-            invoice_rows, status_rows = await conn.fetch(
+            invoice_rows = await conn.fetch(
                 """
                 SELECT
                     rl.project_entity_id::text AS project_key,
@@ -658,7 +677,8 @@ class AssociationService:
                   AND rl.source_table IN ('invoices', 'web_invoices')
                 """,
                 list(project_ids),
-            ), await conn.fetch(
+            )
+            status_rows = await conn.fetch(
                 """
                 SELECT
                     rl.project_entity_id::text AS project_key,
