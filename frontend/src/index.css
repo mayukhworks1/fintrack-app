@@ -60,6 +60,10 @@
   /* Row selected highlight */
   --row-selected:     #eff6ff;
   --row-hover:        #f6f8fb;
+  --table-row-even:   rgba(255,255,255,0.74);
+  --table-row-odd:    rgba(244,247,252,0.86);
+  --table-row-hover:  rgba(236,242,255,0.92);
+  --table-row-shadow: inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 24px rgba(15,23,42,0.06);
 
   /* Financial semantic — muted & professional */
   --fin-positive:     #0a6b37;
@@ -139,6 +143,10 @@
   --accent-soft:      #dbe6ff;
   --row-selected:     #eff4ff;
   --row-hover:        #fafcff;
+  --table-row-even:   rgba(255,255,255,0.78);
+  --table-row-odd:    rgba(244,247,252,0.92);
+  --table-row-hover:  rgba(236,242,255,0.95);
+  --table-row-shadow: inset 0 1px 0 rgba(255,255,255,0.62), 0 10px 24px rgba(15,23,42,0.06);
   --fin-positive:     #1b9a66;
   --fin-pos-bg:       #ecf8f2;
   --fin-pos-border:   #c9ead9;
@@ -192,6 +200,10 @@ html.dark .main-app-theme {
   --accent-soft:      rgba(92,132,255,0.24);
   --row-selected:     rgba(92,132,255,0.10);
   --row-hover:        rgba(255,255,255,0.03);
+  --table-row-even:   rgba(16,25,39,0.72);
+  --table-row-odd:    rgba(12,20,32,0.9);
+  --table-row-hover:  rgba(25,38,58,0.98);
+  --table-row-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 14px 30px rgba(0,0,0,0.22);
   --fin-positive:     #4cc790;
   --fin-pos-bg:       rgba(76,199,144,0.10);
   --fin-pos-border:   rgba(76,199,144,0.22);
@@ -246,6 +258,10 @@ html.dark .main-app-theme {
   --accent-soft:      rgba(74,158,255,0.16);
   --row-selected:     rgba(74,158,255,0.08);
   --row-hover:        rgba(255,255,255,0.025);
+  --table-row-even:   rgba(13,21,37,0.78);
+  --table-row-odd:    rgba(10,16,28,0.94);
+  --table-row-hover:  rgba(22,33,51,0.98);
+  --table-row-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 14px 30px rgba(0,0,0,0.24);
   --fin-positive:     #34d399;
   --fin-pos-bg:       rgba(52,211,153,0.08);
   --fin-pos-border:   rgba(52,211,153,0.20);

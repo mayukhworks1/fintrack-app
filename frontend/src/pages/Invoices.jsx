@@ -2235,19 +2235,19 @@ export default function Invoices() {
                           className="tbl-row"
                           style={{
                             cursor: 'pointer',
-                            background: rowIndex % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(244,247,252,0.86)',
+                            background: rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
                             transition: 'transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease',
                           }}
                           onClick={() => openView(r)}
                           onMouseEnter={e => {
                             e.currentTarget.style.borderLeft = '2px solid var(--accent)'
-                            e.currentTarget.style.background = 'rgba(236, 242, 255, 0.92)'
-                            e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 24px rgba(15,23,42,0.06)'
+                            e.currentTarget.style.background = 'var(--table-row-hover)'
+                            e.currentTarget.style.boxShadow = 'var(--table-row-shadow)'
                             e.currentTarget.style.transform = 'translateY(-1px)'
                           }}
                           onMouseLeave={e => {
                             e.currentTarget.style.borderLeft = ''
-                            e.currentTarget.style.background = rowIndex % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(244,247,252,0.86)'
+                            e.currentTarget.style.background = rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)'
                             e.currentTarget.style.boxShadow = ''
                             e.currentTarget.style.transform = ''
                           }}>
