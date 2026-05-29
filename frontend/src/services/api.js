@@ -49,11 +49,12 @@ async function _dedupedFetch(method, path, runner, externalSignal) {
   return promise
 }
 
-// ── Client-side memory cache (stale-while-revalidate pattern) ─────────────
-// GET responses are cached in-memory for 45 s. Navigating back to a page
-// returns data instantly from this cache without any network round-trip.
-// Call clientCacheBust(prefix) immediately before any load() that follows
-// a mutation so the next GET fetches fresh data from the server.
+// ── Client-side memory cache (disabled) ───────────────────────────────────
+// The in-memory GET cache made manual refresh and polling look broken
+// across Dashboard / Analytics / Invoices / Admin because repeated reads
+// were often served from memory instead of the backend. Keep the bust API
+// for compatibility, but route live GETs to the network while still
+// coalescing identical concurrent requests via the inflight map above.
 const _clientCache = new Map()  // path → { data, ts }
 const _CLIENT_TTL  = 45_000     // 45 s
 
@@ -78,18 +79,9 @@ async function request(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
 
-  // Client-side memory cache — instant return for recent GETs
-  if (method === 'GET' && !externalSignal) {
-    const hit = _ccGet(path)
-    if (hit !== null) return hit
-  }
-
   // Coalesce identical concurrent GETs across the app
   const data = await _dedupedFetch(method, path, () =>
     _doRequest(path, options, retries), externalSignal)
-
-  // Store successful GET results for fast revisit
-  if (method === 'GET' && !externalSignal && data != null) _ccSet(path, data)
   return data
 }
 

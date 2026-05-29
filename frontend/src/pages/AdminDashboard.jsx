@@ -90,6 +90,23 @@ async function exportAdminDataset({
   downloadBlob(res.blob, res.filename || `${title}.${format === 'pdf' ? 'pdf' : 'xls'}`)
 }
 
+async function fetchAdminAllPages(fetchPage, { pageSize = 500, maxPages = 100 } = {}) {
+  let offset = 0
+  let total = 0
+  const rows = []
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const res = await fetchPage({ limit: pageSize, offset })
+    const chunk = Array.isArray(res?.rows) ? res.rows : []
+    total = Number(res?.total || 0)
+    rows.push(...chunk)
+    if (!chunk.length || rows.length >= total || chunk.length < pageSize) break
+    offset += pageSize
+  }
+
+  return { rows, total: total || rows.length }
+}
+
 function Badge({ children, color = 'default' }) {
   const colors = {
     default:  { bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
@@ -688,27 +705,32 @@ function AuditLogTab() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      setData(await api.admin.auditLog({
-        limit, offset,
-        roles:      filterRole.length   ? filterRole.join(',')   : undefined,
-        methods:    filterMethod.length ? filterMethod.join(',') : undefined,
-        devices:    filterDevice.length ? filterDevice.join(',') : undefined,
-        status:     filterStatus  || undefined,
-        status_min: statusMin     || undefined,
-        status_max: statusMax     || undefined,
-        ip:         filterIp      || undefined,
-        path:       filterPath    || undefined,
-        country:    filterCountry || undefined,
-        city:       filterCity    || undefined,
-        isp:        filterIsp     || undefined,
-        browser:    filterBrowser || undefined,
-        os:         filterOs      || undefined,
-        from_ts:    filterFrom    || undefined,
-        to_ts:      filterTo      || undefined,
-      }))
+      const full = await fetchAdminAllPages(
+        ({ limit: take, offset: skip }) => api.admin.auditLog({
+          limit: take,
+          offset: skip,
+          roles:      filterRole.length   ? filterRole.join(',')   : undefined,
+          methods:    filterMethod.length ? filterMethod.join(',') : undefined,
+          devices:    filterDevice.length ? filterDevice.join(',') : undefined,
+          status:     filterStatus  || undefined,
+          status_min: statusMin     || undefined,
+          status_max: statusMax     || undefined,
+          ip:         filterIp      || undefined,
+          path:       filterPath    || undefined,
+          country:    filterCountry || undefined,
+          city:       filterCity    || undefined,
+          isp:        filterIsp     || undefined,
+          browser:    filterBrowser || undefined,
+          os:         filterOs      || undefined,
+          from_ts:    filterFrom    || undefined,
+          to_ts:      filterTo      || undefined,
+        }),
+        { pageSize: 500 }
+      )
+      setData(full)
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, limit, filterRole, filterMethod, filterStatus,
+  }, [filterRole, filterMethod, filterStatus,
       statusMin, statusMax, filterIp, filterPath, filterCountry,
       filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
       filterFrom, filterTo])
@@ -723,13 +745,17 @@ function AuditLogTab() {
   useEffect(() => { setOffset(0) }, [filterRole, filterMethod, filterStatus,
     statusMin, statusMax, filterIp, filterPath, filterCountry,
     filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
-    filterFrom, filterTo, limit])
+    filterFrom, filterTo, filterConditions, limit])
 
   useEffect(() => { load() }, [load])
 
   const filteredRows = useMemo(
     () => applyConditions(data?.rows || [], filterConditions, r => r),
     [data?.rows, filterConditions]
+  )
+  const displayRows = useMemo(
+    () => filteredRows.slice(offset, offset + limit),
+    [filteredRows, offset, limit]
   )
 
   async function handleExport(format) {
@@ -910,7 +936,7 @@ function AuditLogTab() {
           <div className="flex gap-4 text-[11px]" style={{ color: 'var(--text-3)' }}>
             <span><b style={{ color: 'var(--text-1)' }}>{filteredRows.length.toLocaleString()}</b> filtered rows</span>
             <span>{data.total.toLocaleString()} total rows</span>
-            <span>showing {Math.min(offset + 1, data.total)}–{Math.min(offset + limit, data.total)}</span>
+            <span>showing {filteredRows.length ? offset + 1 : 0}–{Math.min(offset + displayRows.length, filteredRows.length)}</span>
           </div>
         )}
       </div>
@@ -922,7 +948,7 @@ function AuditLogTab() {
           {filteredRows.length === 0 ? <Empty /> : (
             <>
               <div className="md:hidden space-y-1.5">
-                {filteredRows.map(row => (
+                {displayRows.map(row => (
                   <div key={`m-${row.id}`}>
                     <div
                       className="rounded-xl border cursor-pointer p-3"
@@ -993,7 +1019,7 @@ function AuditLogTab() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map(row => (
+                {displayRows.map(row => (
                     <>
                       <tr key={row.id}
                         className="border-b transition-colors cursor-pointer"
@@ -1169,7 +1195,7 @@ function AuditLogTab() {
           </div>
             </>
           )}
-          <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
+          <Pager total={filteredRows.length} limit={limit} offset={offset} onPage={setOffset} />
         </>
       )}
     </div>
@@ -2261,18 +2287,32 @@ function HistoryTab() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.recordHistory({ limit, offset, source_table: filterSrc || undefined })) }
+    try {
+      const full = await fetchAdminAllPages(
+        ({ limit: take, offset: skip }) => api.admin.recordHistory({
+          limit: Math.min(take, 500),
+          offset: skip,
+          source_table: filterSrc || undefined,
+        }),
+        { pageSize: 500 }
+      )
+      setData(full)
+    }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [offset, filterSrc])
+  }, [filterSrc])
 
-  useEffect(() => { setOffset(0) }, [filterSrc])
+  useEffect(() => { setOffset(0) }, [filterSrc, filterConditions])
   useEffect(() => { load() }, [load])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
   const filteredRows = useMemo(
     () => applyConditions(data?.rows || [], filterConditions, r => r),
     [data?.rows, filterConditions]
+  )
+  const displayRows = useMemo(
+    () => filteredRows.slice(offset, offset + limit),
+    [filteredRows, offset, limit]
   )
 
   async function handleExport(format) {
@@ -2365,7 +2405,7 @@ function HistoryTab() {
             ? <Empty label="No change history yet" />
             : (
               <div className="space-y-1">
-                {filteredRows.map(row => (
+                {displayRows.map(row => (
                   <div key={row.id} className="rounded-xl border overflow-hidden"
                     style={{ borderColor: 'var(--border)' }}>
                     <button
@@ -2527,7 +2567,7 @@ function HistoryTab() {
                 ))}
               </div>
             )}
-          <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
+          <Pager total={filteredRows.length} limit={limit} offset={offset} onPage={setOffset} />
         </>
       )}
     </div>
