@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -166,6 +166,14 @@ const STATUS_META = {
   Paid:      { color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)',  border: 'var(--fin-pos-border)',  icon: CheckCircle2 },
   Pending:   { color: 'var(--fin-warning)',  bg: 'var(--fin-warn-bg)', border: 'var(--fin-warn-border)', icon: Clock },
   Cancelled: { color: 'var(--fin-negative)', bg: 'var(--fin-neg-bg)', border: 'var(--fin-neg-border)',  icon: XCircle },
+}
+
+function classifyAgingBand(days) {
+  const d = Number(days || 0)
+  if (d <= 14) return '0-14d'
+  if (d <= 30) return '15-30d'
+  if (d <= 60) return '31-60d'
+  return '60d+'
 }
 
 function StatusPill({ status }) {
@@ -859,6 +867,7 @@ export default function Invoices() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
   const [monthFilter,    setMonthFilter]    = useState('')
+  const [agingBandFilter,setAgingBandFilter]= useState('')
   const [search,         setSearch]         = useState(initialQuery)
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
@@ -872,6 +881,7 @@ export default function Invoices() {
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
   const [associationRecord, setAssociationRecord] = useState(null)
+  const deferredSearch = useDeferredValue(search)
 
   useEffect(() => { setStatusFilter(searchParams.get('status') || '') }, [searchParams])
   useEffect(() => { setProjectFilter(searchParams.get('project') || '') }, [searchParams])
@@ -879,10 +889,17 @@ export default function Invoices() {
 
   const updateFilterParam = useCallback((key, value) => {
     const next = new URLSearchParams(searchParams)
+    const current = searchParams.get(key) || ''
+    const target = value || ''
+    if (current === target) return
     if (value) next.set(key, value)
     else next.delete(key)
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    updateFilterParam('q', deferredSearch.trim())
+  }, [deferredSearch, updateFilterParam])
 
   /* ── Fetch summary ── */
   const fetchSummary = useCallback(() => api.invoices.summary(), [])
@@ -1035,27 +1052,33 @@ export default function Invoices() {
 
   const todayIso = new Date().toISOString().slice(0, 10)
 
-  const baseRecords = allRecords.filter(r => {
-    const f = r.fields || {}
-    if (billingFilter === 'retainer' && !isRetainerCategory(f['Category'])) return false
-    if (billingFilter === 'project' && isRetainerCategory(f['Category'])) return false
-    if (categoryFilter && f['Category'] !== categoryFilter) return false
-    if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
-    if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    // "Overdue only" = Pending status OR has an outstanding balance
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
-    if (followupDueOnly) {
-      // Show any invoice that has a Next followup date set — past, today, or future.
-      const raw = f['Next followup']
-      if (!raw) return false
-    }
-    if (hasDocsOnly) {
-      const refs = parseAttachments(f['Reference'])
-      const pdfs = parseAttachments(f['Invoice PDF'])
-      if (refs.length + pdfs.length === 0) return false
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase()
+  const scopedRecords = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase()
+    return allRecords.filter((r) => {
+      const f = r.fields || {}
+      if (billingFilter === 'retainer' && !isRetainerCategory(f['Category'])) return false
+      if (billingFilter === 'project' && isRetainerCategory(f['Category'])) return false
+      if (categoryFilter && f['Category'] !== categoryFilter) return false
+      if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
+      if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
+      if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
+      if (followupDueOnly) {
+        const raw = f['Next followup']
+        if (!raw) return false
+        const nextFollowup = String(raw).slice(0, 10)
+        if (nextFollowup > todayIso) return false
+      }
+      if (hasDocsOnly) {
+        const refs = parseAttachments(f['Reference'])
+        const pdfs = parseAttachments(f['Invoice PDF'])
+        if (refs.length + pdfs.length === 0) return false
+      }
+      if (agingBandFilter) {
+        if (f['Payment Status'] !== 'Pending') return false
+        const band = classifyAgingBand(effectiveAging(f))
+        if (band !== agingBandFilter) return false
+      }
+      if (!q) return true
       return (
         (f['Invoice Number'] || '').toLowerCase().includes(q) ||
         (f['Project']        || '').toLowerCase().includes(q) ||
@@ -1063,41 +1086,74 @@ export default function Invoices() {
         (f['Category']       || '').toLowerCase().includes(q) ||
         (f['Milestone']      || '').toLowerCase().includes(q)
       )
-    }
-    return true
-  })
-  const records = applyConditions(baseRecords, filterConditions, r => r.fields ?? {})
+    })
+  }, [
+    allRecords,
+    agingBandFilter,
+    billingFilter,
+    categoryFilter,
+    deferredSearch,
+    followupDueOnly,
+    hasDocsOnly,
+    monthFilter,
+    overdueOnly,
+    raisedByFilter,
+    todayIso,
+  ])
+
+  const records = useMemo(
+    () => applyConditions(scopedRecords, filterConditions, r => r.fields ?? {}),
+    [filterConditions, scopedRecords]
+  )
 
   const s = summary
   const overdue = s?.overdue_invoices || []
   const agingBuckets = useMemo(() => {
     const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
-    for (const r of allRecords) {
+    for (const r of scopedRecords) {
       const f = r.fields || {}
       if (f['Payment Status'] !== 'Pending') continue
-      const aging = effectiveAging(f)
-      if (aging <= 14) buckets['0-14d'] += 1
-      else if (aging <= 30) buckets['15-30d'] += 1
-      else if (aging <= 60) buckets['31-60d'] += 1
-      else buckets['60d+'] += 1
+      buckets[classifyAgingBand(effectiveAging(f))] += 1
     }
     return buckets
-  }, [allRecords])
+  }, [scopedRecords])
   const actionQueue = useMemo(() => {
     return [...records]
-      .filter(r => {
-        const f = r.fields || {}
-        return f['Payment Status'] === 'Pending' || f['Next followup']
+      .map((record) => {
+        const f = record.fields || {}
+        const outstandingAmount = Number(f['Outstanding Amount'] || 0)
+        const agingDays = effectiveAging(f)
+        const followupRaw = f['Next followup'] ? String(f['Next followup']).slice(0, 10) : ''
+        const hasDueFollowup = Boolean(followupRaw) && followupRaw <= todayIso
+        let priority = 0
+        let title = ''
+        let note = ''
+        if (f['Payment Status'] === 'Pending' && agingDays > 30) {
+          priority = agingDays > 60 ? 5 : 4
+          title = agingDays > 60 ? 'Critical overdue collection' : 'Overdue collection'
+          note = `${agingDays} days aging · ${fmt(outstandingAmount)} still open`
+        } else if (hasDueFollowup) {
+          priority = followupRaw < todayIso ? 3 : 2
+          title = followupRaw < todayIso ? 'Follow-up overdue' : 'Follow-up due today'
+          note = `${f['Project'] || f['Invoice Number'] || 'Invoice'} needs owner follow-up`
+        } else if (f['Payment Status'] === 'Pending' && outstandingAmount > 0) {
+          priority = 1
+          title = 'Open receivable'
+          note = `${fmt(outstandingAmount)} awaiting collection`
+        } else {
+          return null
+        }
+        return { record, priority, title, note, agingDays, outstandingAmount }
       })
+      .filter(Boolean)
       .sort((a, b) => {
-        const ad = new Date(a.fields?.['Next followup'] || a.fields?.['Raised Date'] || 0).getTime() || 0
-        const bd = new Date(b.fields?.['Next followup'] || b.fields?.['Raised Date'] || 0).getTime() || 0
-        return ad - bd
+        if (b.priority !== a.priority) return b.priority - a.priority
+        return b.outstandingAmount - a.outstandingAmount
       })
-      .slice(0, 4)
-  }, [records])
+      .slice(0, 5)
+  }, [records, todayIso])
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
+  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
 
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
@@ -1105,6 +1161,22 @@ export default function Invoices() {
       .slice(0, 8)
     return entries.map(([project, metrics]) => ({ project, metrics }))
   }, [s])
+  const followupsDueCount = useMemo(
+    () => records.filter((r) => {
+      const raw = r.fields?.['Next followup']
+      return raw && String(raw).slice(0, 10) <= todayIso
+    }).length,
+    [records, todayIso]
+  )
+  const missingDocsCount = useMemo(
+    () => records.filter((r) => parseAttachments(r.fields?.['Reference']).length + parseAttachments(r.fields?.['Invoice PDF']).length === 0).length,
+    [records]
+  )
+  const pendingCount = s?.by_status?.Pending || 0
+  const currentScopeOutstanding = useMemo(
+    () => records.reduce((sum, r) => sum + Number(r.fields?.['Outstanding Amount'] || 0), 0),
+    [records]
+  )
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -1251,16 +1323,24 @@ export default function Invoices() {
           <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : fmt(s?.total_raised)} icon={IndianRupee} />
           <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : fmt(s?.total_received)} sub={s ? `${(s.collection_rate ?? 0).toFixed(1)}% collection rate` : ''} accent="positive" icon={TrendingUp} />
           <ExecutiveStatCard label="Outstanding" value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)} sub={`${s?.by_status?.Pending || 0} pending invoices`} accent={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'} icon={CalendarClock} />
-          <ExecutiveStatCard label="Action today" value={actionQueue.length} sub={actionQueue[0] ? `${actionQueue[0].fields?.['Project'] || 'Invoice'} needs attention` : 'No follow-up pressure right now'} accent={actionQueue.length ? 'warning' : 'positive'} icon={AlertOctagon} />
+          <ExecutiveStatCard
+            label="Action today"
+            value={actionQueue.length}
+            sub={actionQueue[0]
+              ? `${actionQueue[0].title} · ${actionQueue[0].record.fields?.['Project'] || actionQueue[0].record.fields?.['Invoice Number'] || 'Invoice'}`
+              : 'No urgent collections or follow-ups right now'}
+            accent={actionQueue.length ? 'warning' : 'positive'}
+            icon={AlertOctagon}
+          />
         </ExecutiveStatGrid>
       </ExecutiveHero>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_340px] gap-4">
         <ExecutivePanel
           title="Workspace controls"
-          subtitle="The same command rhythm as Projects and Status, with retainer operations kept in the same finance plane."
+          subtitle="Switch billing mode, jump into high-pressure queues, and keep the current scope focused on actual collections work."
         >
-          <ExecutiveFilterBar>
+          <ExecutiveFilterBar className="mb-3">
             <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
               {[['invoices', 'Invoices'], ['retainers', 'Retainers']].map(([value, label]) => (
                 <button key={value} onClick={() => setWorkspace(value)}
@@ -1272,21 +1352,123 @@ export default function Invoices() {
                 </button>
               ))}
             </div>
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-              Retainer workflow uses Project as the client/retainer name and stays linked to the same finance record stream.
-            </span>
+            <button
+              onClick={() => {
+                setWorkspace('invoices')
+                setFollowupDueOnly(true)
+                setOverdueOnly(false)
+                setAgingBandFilter('')
+              }}
+              className="btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '0.45rem 0.7rem', borderColor: followupDueOnly ? 'var(--accent)' : undefined }}
+            >
+              <CalendarDays size={12} />Follow-ups due
+            </button>
+            <button
+              onClick={() => {
+                setWorkspace('invoices')
+                setOverdueOnly(true)
+                setFollowupDueOnly(false)
+                setAgingBandFilter('31-60d')
+              }}
+              className="btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '0.45rem 0.7rem', borderColor: overdueOnly || agingBandFilter ? 'var(--accent)' : undefined }}
+            >
+              <AlertTriangle size={12} />Collections pressure
+            </button>
+            <button
+              onClick={() => {
+                setWorkspace('invoices')
+                setHasDocsOnly(true)
+              }}
+              className="btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '0.45rem 0.7rem', borderColor: hasDocsOnly ? 'var(--accent)' : undefined }}
+            >
+              <FileText size={12} />Docs attached
+            </button>
           </ExecutiveFilterBar>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="label">Open in scope</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{fmt(currentScopeOutstanding)}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{pendingCount} pending invoices currently visible</p>
+                </div>
+                <div>
+                  <p className="label">Follow-up load</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: followupsDueCount ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{followupsDueCount}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Due today or already overdue</p>
+                </div>
+                <div>
+                  <p className="label">Missing proof/docs</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: missingDocsCount ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{missingDocsCount}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Invoices without PDF or payment reference</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="label">Immediate action queue</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Concrete follow-up items, not a generic count.</p>
+                </div>
+                <ExecutiveChip accent>{actionQueue.length} live</ExecutiveChip>
+              </div>
+              <div className="space-y-2">
+                {actionQueue.length === 0 ? (
+                  <div className="rounded-xl px-3 py-3 text-xs" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', color: 'var(--text-3)' }}>
+                    Nothing critical in the current scope. Use filters to inspect a tighter invoice segment.
+                  </div>
+                ) : actionQueue.slice(0, 3).map((item) => (
+                  <div key={item.record.id} className="rounded-xl px-3 py-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{item.title}</p>
+                        <p className="text-[11px] truncate mt-1" style={{ color: 'var(--text-3)' }}>
+                          {item.record.fields?.['Invoice Number'] || 'Invoice'} · {item.record.fields?.['Project'] || 'Unassigned project'}
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--fin-warning)' }}>
+                        {fmt(item.outstandingAmount)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] mt-2" style={{ color: 'var(--text-2)' }}>{item.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </ExecutivePanel>
 
         <ExecutivePanel title="Aging buckets" subtitle="Quick receivables heat map for the current invoice scope.">
-          <ExecutiveMetricList
-            items={Object.entries(agingBuckets).map(([label, value]) => ({
-              label,
-              sub: 'Pending invoices',
-              value,
-              accent: label === '60d+' ? 'negative' : label === '31-60d' ? 'warning' : undefined,
-            }))}
-          />
+          <div className="space-y-2">
+            {Object.entries(agingBuckets).map(([label, value]) => {
+              const active = agingBandFilter === label
+              const accent = label === '60d+' ? 'negative' : label === '31-60d' ? 'warning' : undefined
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setAgingBandFilter(active ? '' : label)}
+                  className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition-all"
+                  style={{
+                    background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
+                    boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.08)' : 'none',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{label}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Pending invoices</p>
+                  </div>
+                  <span className={clsx('text-sm font-bold tabular-nums', accent === 'warning' && 'executive-stat-warning', accent === 'negative' && 'executive-stat-negative')} style={{ color: accent ? undefined : 'var(--text-1)' }}>
+                    {value}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </ExecutivePanel>
       </div>
 
@@ -1676,7 +1858,6 @@ export default function Invoices() {
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input value={search} onChange={e => {
               setSearch(e.target.value)
-              updateFilterParam('q', e.target.value.trim())
             }}
               placeholder="Search invoice #, project, description…"
               className="input pl-8 py-1.5 text-xs"
@@ -1698,12 +1879,12 @@ export default function Invoices() {
               setCategoryFilter('')
               setRaisedByFilter('')
               setMonthFilter('')
+              setAgingBandFilter('')
               setBillingFilter('all')
               setOverdueOnly(false)
               setHasDocsOnly(false)
               setFollowupDueOnly(false)
               setSearch('')
-              updateFilterParam('q', '')
               setFilterConditions([])
             }}
               className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
@@ -1746,6 +1927,14 @@ export default function Invoices() {
               placeholder="All months"
               icon={CalendarDays}
               width={150}
+            />
+            <FilterSelect
+              value={agingBandFilter}
+              onChange={setAgingBandFilter}
+              options={Object.keys(agingBuckets).map(bucket => ({ value: bucket, label: bucket }))}
+              placeholder="All aging"
+              icon={CalendarClock}
+              width={135}
             />
             {/* Category — client-side */}
             <FilterSelect
