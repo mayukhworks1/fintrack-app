@@ -72,33 +72,138 @@ def build_excel_xml(title: str, columns: list[str], rows: list[list[Any]], meta:
 
 def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta: dict[str, Any] | None = None) -> bytes:
     meta = meta or {}
-    printable_lines: list[str] = [title, ""]
-    for key, value in meta.items():
-        printable_lines.append(f"{key}: {value}")
-    if meta:
-        printable_lines.append("")
-    header = " | ".join(columns)
-    printable_lines.append(header)
-    printable_lines.append("-" * min(max(len(header), 24), 110))
-    for row in rows:
-        line = " | ".join(_cell(cell) for cell in row)
-        if len(line) > 110:
-            line = line[:107] + "..."
-        printable_lines.append(line)
+    page_width = 842
+    page_height = 595
+    margin = 34
+    content_width = page_width - (margin * 2)
+    header_height = 54
+    meta_card_height = 58
+    footer_height = 24
+    row_gap = 2
 
-    lines_per_page = 42
-    page_height = 792
-    line_height = 15
+    def _key_label(key: str) -> str:
+        return key.replace("_", " ").strip().title()
+
+    def _clip_text(value: str, width: float, font_size: int) -> str:
+        max_chars = max(4, int(width / max(font_size * 0.46, 1)))
+        if len(value) <= max_chars:
+            return value
+        return value[: max(1, max_chars - 1)] + "…"
+
+    meta_items = [(str(k), _cell(v)) for k, v in meta.items()]
+    visible_meta = meta_items[:6]
+    col_count = max(len(columns), 1)
+    base_col_width = content_width / col_count
+    col_widths = [base_col_width for _ in columns]
+
+    def _draw_rect(x: float, y: float, w: float, h: float, fill_rgb: tuple[float, float, float], stroke_rgb: tuple[float, float, float] | None = None, line_width: float = 1.0) -> str:
+        cmds = []
+        if stroke_rgb is not None:
+            cmds.append(f"{stroke_rgb[0]:.3f} {stroke_rgb[1]:.3f} {stroke_rgb[2]:.3f} RG")
+            cmds.append(f"{line_width:.2f} w")
+        cmds.append(f"{fill_rgb[0]:.3f} {fill_rgb[1]:.3f} {fill_rgb[2]:.3f} rg")
+        cmds.append(f"{x:.2f} {y:.2f} {w:.2f} {h:.2f} re")
+        cmds.append("B" if stroke_rgb is not None else "f")
+        return "\n".join(cmds)
+
+    def _draw_text(x: float, y: float, text: str, font: str = "F1", size: int = 10, rgb: tuple[float, float, float] = (0.12, 0.16, 0.24)) -> str:
+        return "\n".join(
+            [
+                "BT",
+                f"/{font} {size} Tf",
+                f"{rgb[0]:.3f} {rgb[1]:.3f} {rgb[2]:.3f} rg",
+                f"1 0 0 1 {x:.2f} {y:.2f} Tm",
+                f"({_escape_pdf_text(text)}) Tj",
+                "ET",
+            ]
+        )
+
+    def _row_height(row: list[Any], font_size: int = 9) -> float:
+        if not columns:
+            return 20
+        lines_needed = 1
+        for idx, cell in enumerate(row):
+            width = col_widths[min(idx, len(col_widths) - 1)] - 10
+            max_chars = max(6, int(width / max(font_size * 0.45, 1)))
+            text = _cell(cell)
+            wrapped = max(1, (len(text) // max_chars) + (1 if len(text) % max_chars else 0))
+            lines_needed = max(lines_needed, min(wrapped, 3))
+        return 16 + ((lines_needed - 1) * 10)
+
+    row_heights = [_row_height(row) for row in rows]
+
+    def _page_commands(page_index: int, page_rows: list[tuple[list[Any], float]], start_row: int) -> str:
+        cmds: list[str] = []
+        # top header band
+        cmds.append(_draw_rect(margin, page_height - margin - header_height, content_width, header_height, (0.16, 0.27, 0.96)))
+        cmds.append(_draw_text(margin + 16, page_height - margin - 20, title, font="F2", size=20, rgb=(1, 1, 1)))
+        subtitle = f"{pageLabel if (pageLabel := meta.get('page_label')) else 'Insight export'} · {len(rows)} rows · {len(columns)} columns"
+        cmds.append(_draw_text(margin + 16, page_height - margin - 38, subtitle, font="F1", size=9, rgb=(0.91, 0.94, 1.0)))
+
+        y = page_height - margin - header_height - 16
+        if visible_meta:
+            meta_y = y - meta_card_height
+            chip_width = (content_width - 12) / 2
+            for idx, (key, value) in enumerate(visible_meta):
+                col = idx % 2
+                row = idx // 2
+                chip_x = margin + (col * (chip_width + 12))
+                chip_y = meta_y - (row * 22)
+                cmds.append(_draw_rect(chip_x, chip_y, chip_width, 18, (0.95, 0.97, 1.0), (0.86, 0.90, 0.98), 0.7))
+                cmds.append(_draw_text(chip_x + 8, chip_y + 11, _key_label(key), font="F2", size=7, rgb=(0.38, 0.46, 0.63)))
+                cmds.append(_draw_text(chip_x + 70, chip_y + 11, _clip_text(value, chip_width - 78, 8), font="F1", size=8, rgb=(0.12, 0.16, 0.24)))
+            y = meta_y - 34
+
+        # table header
+        table_header_y = y
+        cmds.append(_draw_rect(margin, table_header_y - 20, content_width, 20, (0.90, 0.94, 1.0), (0.83, 0.88, 0.96), 0.8))
+        x = margin
+        for idx, column in enumerate(columns):
+            width = col_widths[idx]
+            cmds.append(_draw_text(x + 6, table_header_y - 13, _clip_text(column, width - 12, 8), font="F2", size=8, rgb=(0.19, 0.28, 0.52)))
+            x += width
+        y = table_header_y - 22
+
+        for idx, (row, height) in enumerate(page_rows):
+            row_y = y - height
+            fill = (1.0, 1.0, 1.0) if (start_row + idx) % 2 == 0 else (0.975, 0.982, 1.0)
+            cmds.append(_draw_rect(margin, row_y, content_width, height, fill, (0.90, 0.93, 0.98), 0.5))
+            x = margin
+            for cell_idx, cell in enumerate(row):
+                width = col_widths[min(cell_idx, len(col_widths) - 1)]
+                text = _clip_text(_cell(cell), width - 12, 9)
+                cmds.append(_draw_text(x + 6, row_y + height - 13, text, font="F1", size=9, rgb=(0.15, 0.18, 0.26)))
+                x += width
+            y = row_y - row_gap
+
+        footer = f"Page {page_index + 1}"
+        cmds.append(_draw_text(page_width - margin - 42, footer_height, footer, font="F1", size=8, rgb=(0.50, 0.57, 0.68)))
+        return "\n".join(cmds)
+
+    available_table_height_first = page_height - (margin * 2) - header_height - meta_card_height - footer_height - 48
+    available_table_height_other = page_height - (margin * 2) - header_height - footer_height - 48
+
     pages: list[str] = []
-    for start in range(0, len(printable_lines), lines_per_page):
-        chunk = printable_lines[start:start + lines_per_page]
-        y = page_height - 54
-        commands = ["BT", "/F1 10 Tf", "48 0 0 48 0 0 Tm"]
-        for line in chunk:
-            commands.append(f"1 0 0 1 48 {y} Tm ({_escape_pdf_text(line)}) Tj")
-            y -= line_height
-        commands.append("ET")
-        pages.append("\n".join(commands))
+    cursor = 0
+    page_index = 0
+    while cursor < len(rows):
+        budget = available_table_height_first if page_index == 0 else available_table_height_other
+        page_rows: list[tuple[list[Any], float]] = []
+        used = 20.0  # table header
+        while cursor < len(rows):
+            next_height = row_heights[cursor] + row_gap
+            if page_rows and used + next_height > budget:
+                break
+            if not page_rows and next_height > budget:
+                next_height = min(next_height, budget)
+            page_rows.append((rows[cursor], row_heights[cursor]))
+            used += next_height
+            cursor += 1
+        pages.append(_page_commands(page_index, page_rows, cursor - len(page_rows)))
+        page_index += 1
+
+    if not pages:
+        pages.append(_page_commands(0, [], 0))
 
     objects: list[bytes] = []
 
@@ -107,6 +212,7 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         return len(objects)
 
     font_obj = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    font_bold_obj = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
     page_ids: list[int] = []
     content_ids: list[int] = []
     pages_obj_placeholder = add_object("")
@@ -114,8 +220,9 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         content_id = add_object(f"<< /Length {len(page.encode('utf-8'))} >>\nstream\n{page}\nendstream")
         content_ids.append(content_id)
         page_id = add_object(
-            f"<< /Type /Page /Parent {pages_obj_placeholder} 0 R /MediaBox [0 0 612 792] "
-            f"/Resources << /Font << /F1 {font_obj} 0 R >> >> /Contents {content_id} 0 R >>"
+            f"<< /Type /Page /Parent {pages_obj_placeholder} 0 R "
+            f"/Resources << /Font << /F1 {font_obj} 0 R /F2 {font_bold_obj} 0 R >> >> "
+            f"/MediaBox [0 0 {page_width} {page_height}] /Contents {content_id} 0 R >>"
         )
         page_ids.append(page_id)
 

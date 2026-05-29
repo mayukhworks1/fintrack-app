@@ -51,46 +51,62 @@ export default function InsightWorkbench({
   pageLabel,
   widgetCatalog = [],
   defaultWidgetIds = [],
+  factoryWidgetIds = [],
   sourceOptions = [],
   currentFilters = {},
   onApplyWidgets,
 }) {
   const [showDashboards, setShowDashboards] = useState(false)
   const [showExport, setShowExport] = useState(false)
-  const [configs, setConfigs] = useState([])
-  const [loadingConfigs, setLoadingConfigs] = useState(false)
+  const [dashboardConfigs, setDashboardConfigs] = useState([])
+  const [reportConfigs, setReportConfigs] = useState([])
+  const [loadingDashboards, setLoadingDashboards] = useState(false)
+  const [loadingReports, setLoadingReports] = useState(false)
   const [dashboardTitle, setDashboardTitle] = useState(`${pageLabel} custom board`)
   const [selectedWidgets, setSelectedWidgets] = useState(defaultWidgetIds)
-  const [editingId, setEditingId] = useState('')
+  const [editingDashboardId, setEditingDashboardId] = useState('')
+  const [editingReportId, setEditingReportId] = useState('')
 
   const [sourceKey, setSourceKey] = useState(sourceOptions[0]?.key || '')
   const [exportFormat, setExportFormat] = useState('excel')
   const [exportTitle, setExportTitle] = useState(`${pageLabel} report`)
   const [selectedColumns, setSelectedColumns] = useState(sourceOptions[0]?.defaultColumns || [])
   const [exporting, setExporting] = useState(false)
+  const [savingReport, setSavingReport] = useState(false)
+
+  const baselineWidgetIds = factoryWidgetIds.length ? factoryWidgetIds : defaultWidgetIds
 
   useEffect(() => {
     setSelectedWidgets(defaultWidgetIds)
   }, [defaultWidgetIds.join('|')])
 
-  useEffect(() => {
-    const source = sourceOptions.find(item => item.key === sourceKey) || sourceOptions[0]
-    if (source) setSelectedColumns(source.defaultColumns || source.columns.map(col => col.key))
-  }, [sourceKey, sourceOptions])
-
-  async function loadConfigs() {
-    setLoadingConfigs(true)
+  async function loadDashboardConfigs() {
+    setLoadingDashboards(true)
     try {
       const res = await api.insights.listConfigs({ page_key: pageKey, config_kind: 'dashboard' })
-      setConfigs(res.configs || [])
+      setDashboardConfigs(res.configs || [])
     } finally {
-      setLoadingConfigs(false)
+      setLoadingDashboards(false)
     }
   }
 
   useEffect(() => {
-    if (showDashboards) loadConfigs()
+    if (showDashboards) loadDashboardConfigs()
   }, [showDashboards])
+
+  async function loadReportConfigs() {
+    setLoadingReports(true)
+    try {
+      const res = await api.insights.listConfigs({ page_key: pageKey, config_kind: 'report' })
+      setReportConfigs(res.configs || [])
+    } finally {
+      setLoadingReports(false)
+    }
+  }
+
+  useEffect(() => {
+    if (showExport) loadReportConfigs()
+  }, [showExport])
 
   const currentSource = useMemo(
     () => sourceOptions.find(item => item.key === sourceKey) || sourceOptions[0] || null,
@@ -103,6 +119,37 @@ export default function InsightWorkbench({
   )
 
   const exportableColumns = currentSource?.columns || []
+  const previewColumns = exportableColumns.filter(col => selectedColumns.includes(col.key))
+  const previewRows = useMemo(
+    () => currentRows.slice(0, 8).map((row) => previewColumns.map((column) => row[column.key] ?? '')),
+    [currentRows, previewColumns]
+  )
+
+  function applyWidgetSelection(nextWidgetIds) {
+    setSelectedWidgets(nextWidgetIds)
+    onApplyWidgets?.(nextWidgetIds)
+  }
+
+  function resetDashboardBuilder() {
+    setEditingDashboardId('')
+    setDashboardTitle(`${pageLabel} custom board`)
+    applyWidgetSelection(baselineWidgetIds)
+  }
+
+  function resetReportBuilder() {
+    const source = sourceOptions[0] || null
+    setEditingReportId('')
+    setExportTitle(`${pageLabel} report`)
+    setExportFormat('excel')
+    setSourceKey(source?.key || '')
+    setSelectedColumns(source?.defaultColumns || source?.columns?.map((col) => col.key) || [])
+  }
+
+  function handleSourceChange(nextSourceKey) {
+    const source = sourceOptions.find((item) => item.key === nextSourceKey) || sourceOptions[0] || null
+    setSourceKey(nextSourceKey)
+    setSelectedColumns(source?.defaultColumns || source?.columns?.map((col) => col.key) || [])
+  }
 
   async function saveDashboard() {
     const payload = {
@@ -114,24 +161,65 @@ export default function InsightWorkbench({
         widgetIds: selectedWidgets,
       },
     }
-    if (editingId) await api.insights.updateConfig(editingId, payload)
+    if (editingDashboardId) await api.insights.updateConfig(editingDashboardId, payload)
     else await api.insights.createConfig(payload)
-    await loadConfigs()
+    await loadDashboardConfigs()
     onApplyWidgets?.(selectedWidgets)
   }
 
-  async function deleteDashboard(id) {
+  async function deleteConfig(id, kind) {
     await api.insights.deleteConfig(id)
-    if (editingId === id) setEditingId('')
-    await loadConfigs()
+    if (kind === 'dashboard') {
+      if (editingDashboardId === id) resetDashboardBuilder()
+      await loadDashboardConfigs()
+      return
+    }
+    if (editingReportId === id) resetReportBuilder()
+    await loadReportConfigs()
   }
 
-  function applyConfig(config) {
+  function applyDashboardConfig(config) {
     const widgetIds = config?.config?.widgetIds || []
-    setSelectedWidgets(widgetIds)
+    applyWidgetSelection(widgetIds)
     setDashboardTitle(config.title || `${pageLabel} custom board`)
-    setEditingId(config.id)
-    onApplyWidgets?.(widgetIds)
+    setEditingDashboardId(config.id)
+  }
+
+  function applyReportConfig(config) {
+    const nextSourceKey = config?.config?.sourceKey || sourceOptions[0]?.key || ''
+    const source = sourceOptions.find((item) => item.key === nextSourceKey) || sourceOptions[0]
+    setEditingReportId(config.id)
+    setExportTitle(config.title || `${pageLabel} report`)
+    setExportFormat(config?.config?.exportFormat || 'excel')
+    setSourceKey(nextSourceKey)
+    setSelectedColumns(
+      config?.config?.selectedColumns?.length
+        ? config.config.selectedColumns
+        : source?.defaultColumns || source?.columns?.map((col) => col.key) || []
+    )
+  }
+
+  async function saveReportPreset() {
+    if (!currentSource || !selectedColumns.length) return
+    setSavingReport(true)
+    try {
+      const payload = {
+        page_key: pageKey,
+        config_kind: 'report',
+        title: exportTitle,
+        is_active: true,
+        config: {
+          sourceKey: currentSource.key,
+          exportFormat,
+          selectedColumns,
+        },
+      }
+      if (editingReportId) await api.insights.updateConfig(editingReportId, payload)
+      else await api.insights.createConfig(payload)
+      await loadReportConfigs()
+    } finally {
+      setSavingReport(false)
+    }
   }
 
   async function runExport() {
@@ -149,7 +237,7 @@ export default function InsightWorkbench({
         columns: exportableColumns.filter(col => selectedColumns.includes(col.key)).map(col => col.label),
         rows,
         filters: currentFilters,
-        config_id: editingId || null,
+        config_id: editingReportId || null,
         metadata: {
           widget_ids: selectedWidgets,
           page_label: pageLabel,
@@ -182,21 +270,21 @@ export default function InsightWorkbench({
           <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
             <SectionCard
               title="Saved presets"
-              action={<button onClick={() => { setEditingId(''); setDashboardTitle(`${pageLabel} custom board`); setSelectedWidgets(defaultWidgetIds) }} className="btn-ghost text-xs"><Plus size={12} />New</button>}
+              action={<button onClick={resetDashboardBuilder} className="btn-ghost text-xs"><Plus size={12} />New</button>}
             >
               <div className="space-y-2">
-                {loadingConfigs ? (
+                {loadingDashboards ? (
                   <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
-                ) : configs.length === 0 ? (
+                ) : dashboardConfigs.length === 0 ? (
                   <p className="text-sm" style={{ color: 'var(--text-3)' }}>No saved dashboards yet.</p>
-                ) : configs.map(config => (
-                  <div key={config.id} className="rounded-xl p-3" style={{ border: '1px solid var(--card-border)', background: editingId === config.id ? 'var(--accent-dim)' : 'var(--card-bg)' }}>
+                ) : dashboardConfigs.map(config => (
+                  <div key={config.id} className="rounded-xl p-3" style={{ border: '1px solid var(--card-border)', background: editingDashboardId === config.id ? 'var(--accent-dim)' : 'var(--card-bg)' }}>
                     <div className="flex items-start justify-between gap-2">
-                      <button className="text-left flex-1" onClick={() => applyConfig(config)}>
+                      <button className="text-left flex-1" onClick={() => applyDashboardConfig(config)}>
                         <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{config.title}</p>
                         <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{(config.config?.widgetIds || []).length} widgets</p>
                       </button>
-                      <button onClick={() => deleteDashboard(config.id)} className="btn-ghost text-xs"><Trash2 size={12} /></button>
+                      <button onClick={() => deleteConfig(config.id, 'dashboard')} className="btn-ghost text-xs"><Trash2 size={12} /></button>
                     </div>
                   </div>
                 ))}
@@ -218,10 +306,13 @@ export default function InsightWorkbench({
                     {widgetCatalog.map(widget => {
                       const active = selectedWidgets.includes(widget.id)
                       return (
-                        <button
+                      <button
                           key={widget.id}
                           type="button"
-                          onClick={() => setSelectedWidgets(curr => active ? curr.filter(id => id !== widget.id) : [...curr, widget.id])}
+                          onClick={() => {
+                            const next = active ? selectedWidgets.filter(id => id !== widget.id) : [...selectedWidgets, widget.id]
+                            applyWidgetSelection(next)
+                          }}
                           className="rounded-xl p-3 text-left transition-all"
                           style={{
                             background: active ? 'var(--accent-dim)' : 'var(--card-bg)',
@@ -244,11 +335,34 @@ export default function InsightWorkbench({
       {showExport && (
         <ModalShell
           title={`${pageLabel} export builder`}
-          subtitle="Pick the source, choose exact columns, and export to Excel or PDF with full audit trail."
+          subtitle="Build reusable report presets, preview the dataset, and export polished Excel or PDF reports."
           onClose={() => setShowExport(false)}
         >
           <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <SectionCard title="Report settings" action={<BarChart3 size={14} style={{ color: 'var(--accent)' }} />}>
+            <SectionCard
+              title="Saved report presets"
+              action={<button onClick={resetReportBuilder} className="btn-ghost text-xs"><Plus size={12} />New</button>}
+            >
+              <div className="space-y-2 mb-4">
+                {loadingReports ? (
+                  <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
+                ) : reportConfigs.length === 0 ? (
+                  <p className="text-sm" style={{ color: 'var(--text-3)' }}>No saved report presets yet.</p>
+                ) : reportConfigs.map(config => (
+                  <div key={config.id} className="rounded-xl p-3" style={{ border: '1px solid var(--card-border)', background: editingReportId === config.id ? 'var(--accent-dim)' : 'var(--card-bg)' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <button className="text-left flex-1" onClick={() => applyReportConfig(config)}>
+                        <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{config.title}</p>
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                          {(config.config?.sourceKey || 'source')} · {(config.config?.selectedColumns || []).length} columns · {(config.config?.exportFormat || 'excel').toUpperCase()}
+                        </p>
+                      </button>
+                      <button onClick={() => deleteConfig(config.id, 'report')} className="btn-ghost text-xs"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="label">Report title</label>
@@ -256,7 +370,7 @@ export default function InsightWorkbench({
                 </div>
                 <div>
                   <label className="label">Source</label>
-                  <select className="input" value={sourceKey} onChange={e => setSourceKey(e.target.value)}>
+                  <select className="input" value={sourceKey} onChange={e => handleSourceChange(e.target.value)}>
                     {sourceOptions.map(source => <option key={source.key} value={source.key}>{source.label}</option>)}
                   </select>
                 </div>
@@ -275,13 +389,42 @@ export default function InsightWorkbench({
                     ))}
                   </div>
                 </div>
-                <button onClick={runExport} disabled={exporting || !selectedColumns.length} className="btn-primary">
-                  <Download size={14} />{exporting ? 'Preparing…' : 'Download export'}
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={saveReportPreset} disabled={savingReport || !selectedColumns.length} className="btn-ghost text-xs">
+                    <Save size={12} />{savingReport ? 'Saving…' : 'Save preset'}
+                  </button>
+                  <button onClick={runExport} disabled={exporting || !selectedColumns.length} className="btn-primary text-xs">
+                    <Download size={12} />{exporting ? 'Preparing…' : 'Download'}
+                  </button>
+                </div>
               </div>
             </SectionCard>
 
-            <SectionCard title="Columns">
+            <SectionCard title="Columns and preview" action={<BarChart3 size={14} style={{ color: 'var(--accent)' }} />}>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <button
+                  onClick={() => setSelectedColumns(exportableColumns.map((column) => column.key))}
+                  className="btn-ghost text-xs"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setSelectedColumns([])}
+                  className="btn-ghost text-xs"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => setSelectedColumns(currentSource?.defaultColumns || exportableColumns.map((column) => column.key))}
+                  className="btn-ghost text-xs"
+                >
+                  Reset defaults
+                </button>
+                <div className="ml-auto rounded-xl px-3 py-2 text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-2)' }}>
+                  {currentRows.length} rows · {selectedColumns.length} columns
+                </div>
+              </div>
+
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {exportableColumns.map(column => {
                   const active = selectedColumns.includes(column.key)
@@ -301,10 +444,41 @@ export default function InsightWorkbench({
                   )
                 })}
               </div>
-              <div className="mt-4 rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
-                  {currentRows.length} rows · {selectedColumns.length} columns selected
-                </p>
+
+              <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: '1px solid var(--card-border)' }}>
+                <div className="px-4 py-3" style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Preview</p>
+                </div>
+                <div className="overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead style={{ background: 'var(--bg-layer)' }}>
+                      <tr>
+                        {previewColumns.map((column) => (
+                          <th key={column.key} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
+                            {column.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={Math.max(previewColumns.length, 1)} className="px-4 py-6 text-sm" style={{ color: 'var(--text-3)' }}>
+                            Nothing to preview yet. Pick a source and at least one column.
+                          </td>
+                        </tr>
+                      ) : previewRows.map((row, index) => (
+                        <tr key={index} style={{ borderTop: '1px solid var(--card-border)' }}>
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="px-4 py-3 align-top" style={{ color: 'var(--text-2)' }}>
+                              {String(cell ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </SectionCard>
           </div>

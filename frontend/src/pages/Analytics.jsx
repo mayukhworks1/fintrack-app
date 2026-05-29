@@ -689,6 +689,7 @@ export default function Analytics() {
               pageLabel="Analytics"
               widgetCatalog={ANALYTICS_WIDGET_CATALOG}
               defaultWidgetIds={activeWidgetIds}
+              factoryWidgetIds={ANALYTICS_DEFAULT_WIDGET_IDS}
               sourceOptions={analyticsSourceOptions}
               currentFilters={{ period, invoice_count: invoices.length }}
               onApplyWidgets={setActiveWidgetIds}

@@ -338,6 +338,7 @@ export default function Dashboard() {
               pageLabel="Dashboard"
               widgetCatalog={DASHBOARD_WIDGET_CATALOG}
               defaultWidgetIds={activeWidgetIds}
+              factoryWidgetIds={DASHBOARD_DEFAULT_WIDGET_IDS}
               sourceOptions={dashboardSourceOptions}
               currentFilters={{ updated_at: lastUpdated || null }}
               onApplyWidgets={setActiveWidgetIds}
