@@ -64,6 +64,23 @@ const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
 
 const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
+const INVOICE_SHARE_COLUMNS = [
+  'Invoice Number',
+  'Project',
+  'Category',
+  'Payment Status',
+  'Milestone',
+  'Raised By',
+  'Amount Raised',
+  'Amount with Tax',
+  'Amount Received',
+  'Outstanding Amount',
+  'Raised Date',
+  'Cleared Date',
+  'Next followup',
+  'Description',
+  'Remark',
+]
 
 /* ── Field definitions for advanced filter builder ────────────────────────── */
 const INVOICE_FIELDS = [
@@ -1230,6 +1247,49 @@ export default function Invoices() {
     setDateTo(endOfMonthIso(key))
     setMonthFilter(field === 'Raised Date' ? key : '')
   }, [])
+
+  const shareTitle = useMemo(() => {
+    const parts = ['Invoices']
+    if (projectFilter) parts.push(projectFilter)
+    if (statusFilter) parts.push(statusFilter)
+    if (categoryFilter) parts.push(categoryFilter)
+    if (!projectFilter && !statusFilter && !categoryFilter) parts.push('Current View')
+    return parts.join(' · ')
+  }, [projectFilter, statusFilter, categoryFilter])
+
+  const sharedViewConfig = useMemo(() => ({
+    type: 'list',
+    filterProject: projectFilter || '',
+    filterCategory: categoryFilter || '',
+    filterStatus: statusFilter || '',
+    raisedByFilter: raisedByFilter || '',
+    billingFilter,
+    monthFilter: monthFilter || '',
+    dateFieldFilter,
+    dateFrom: dateFrom || '',
+    dateTo: dateTo || '',
+    agingBandFilter: agingBandFilter || '',
+    overdueOnly,
+    hasDocsOnly,
+    followupDueOnly,
+    search,
+    columns: INVOICE_SHARE_COLUMNS,
+  }), [
+    agingBandFilter,
+    billingFilter,
+    categoryFilter,
+    dateFieldFilter,
+    dateFrom,
+    dateTo,
+    followupDueOnly,
+    hasDocsOnly,
+    monthFilter,
+    overdueOnly,
+    projectFilter,
+    raisedByFilter,
+    search,
+    statusFilter,
+  ])
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -2428,17 +2488,10 @@ export default function Invoices() {
         <ShareLinkModal
           resourceType="invoices"
           selectedRecords={records}
-          title={`Invoices · ${statusFilter || projectFilter || 'Current View'}`}
+          title={shareTitle}
           recordLabel="invoice"
           enableLiveMode
-          viewConfig={{
-            type: 'list',
-            filterProject: projectFilter || '',
-            filterCategory: categoryFilter || '',
-            filterStatus: statusFilter || '',
-            search,
-            columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup', 'Remark'],
-          }}
+          viewConfig={sharedViewConfig}
           onClose={() => setShareModal(false)}
         />
       )}
@@ -2446,14 +2499,7 @@ export default function Invoices() {
         <ManageSharedLinksModal
           resourceType="invoices"
           recordLabel="invoice"
-          currentViewConfig={{
-            type: 'list',
-            filterProject: projectFilter || '',
-            filterCategory: categoryFilter || '',
-            filterStatus: statusFilter || '',
-            search,
-            columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup', 'Remark'],
-          }}
+          currentViewConfig={sharedViewConfig}
           visibleRecords={records}
           onClose={() => setManageModal(false)}
         />

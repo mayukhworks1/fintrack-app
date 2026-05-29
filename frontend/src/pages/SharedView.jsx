@@ -66,13 +66,13 @@ const RESOURCE_META = {
     statusField: 'Payment Status',
     categoryField: 'Category',
     subtitleFields: ['Project', 'Amount Raised'],
-    searchFields: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Remark'],
+    searchFields: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Description', 'Remark'],
     primaryFilterKey: 'filterProject',
     primaryLabel: 'All projects',
     defaultView: 'list',
     showDashboardByDefault: false,
-    columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Cleared Date', 'Next followup', 'Remark', 'Last Modified'],
-    defaultColumns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Raised Date', 'Next followup'],
+    columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup', 'Description', 'Remark', 'Last Modified'],
+    defaultColumns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup'],
   },
 }
 const BOARD_GROUP_OPTIONS = {
@@ -108,6 +108,32 @@ function fmtInr(value) {
   if (!Number.isFinite(num)) return '—'
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num)
 }
+function dateOnlyValue(value) {
+  if (!value) return ''
+  return String(value).slice(0, 10)
+}
+function monthKey(value) {
+  const dateOnly = dateOnlyValue(value)
+  return dateOnly ? dateOnly.slice(0, 7) : ''
+}
+function parseAttachments(value) {
+  return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : []
+}
+function effectiveAging(fields = {}) {
+  const raw = Number(fields['Aging'] || 0)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  const candidate = dateOnlyValue(fields['Next followup']) || dateOnlyValue(fields['Raised Date'])
+  if (!candidate) return 0
+  const target = new Date(candidate)
+  if (Number.isNaN(target.getTime())) return 0
+  return Math.max(0, Math.floor((Date.now() - target.getTime()) / 86400000))
+}
+function classifyAgingBand(days) {
+  if (days <= 14) return '0-14d'
+  if (days <= 30) return '15-30d'
+  if (days <= 60) return '31-60d'
+  return '60d+'
+}
 function simpleStatusStyle(value) {
   const raw = String(value || '')
   const normalized = raw.toLowerCase()
@@ -139,6 +165,16 @@ function SnapshotSummary({ viewConfig, accessMode }) {
     viewConfig?.filterProject ? `Shared project: ${viewConfig.filterProject}` : null,
     viewConfig?.filterStatus ? `Shared status: ${viewConfig.filterStatus}` : null,
     viewConfig?.filterCategory ? `Shared category: ${viewConfig.filterCategory}` : null,
+    viewConfig?.raisedByFilter ? `Raised by: ${viewConfig.raisedByFilter}` : null,
+    viewConfig?.monthFilter ? `Raised month: ${viewConfig.monthFilter}` : null,
+    viewConfig?.agingBandFilter ? `Aging: ${viewConfig.agingBandFilter}` : null,
+    viewConfig?.dateFieldFilter && (viewConfig?.dateFrom || viewConfig?.dateTo)
+      ? `${viewConfig.dateFieldFilter}: ${viewConfig.dateFrom || '…'} → ${viewConfig.dateTo || '…'}`
+      : null,
+    viewConfig?.billingFilter && viewConfig.billingFilter !== 'all' ? `Scope: ${viewConfig.billingFilter}` : null,
+    viewConfig?.overdueOnly ? 'Outstanding only' : null,
+    viewConfig?.hasDocsOnly ? 'With docs only' : null,
+    viewConfig?.followupDueOnly ? 'Follow-up due' : null,
     viewConfig?.search ? `Shared search: "${viewConfig.search}"` : null,
     accessMode === 'edit' ? 'Link permission: can edit' : 'Link permission: read only',
   ].filter(Boolean)
@@ -845,6 +881,16 @@ export default function SharedView() {
   const [filterPrimary, setFilterPrimary] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [raisedByFilter, setRaisedByFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
+  const [dateFieldFilter, setDateFieldFilter] = useState('Raised Date')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [agingBandFilter, setAgingBandFilter] = useState('')
+  const [billingFilter, setBillingFilter] = useState('all')
+  const [overdueOnly, setOverdueOnly] = useState(false)
+  const [hasDocsOnly, setHasDocsOnly] = useState(false)
+  const [followupDueOnly, setFollowupDueOnly] = useState(false)
   const [viewType, setViewType] = useState('card')
   const [boardGroupBy, setBoardGroupBy] = useState('')
   const [editRecord, setEditRecord] = useState(null)
@@ -877,6 +923,16 @@ export default function SharedView() {
       setFilterPrimary(prev => prev || vc[rmeta.primaryFilterKey] || '')
       setFilterStatus(prev => prev || vc.filterStatus || '')
       setFilterCategory(prev => prev || vc.filterCategory || '')
+      setRaisedByFilter(prev => prev || vc.raisedByFilter || '')
+      setMonthFilter(prev => prev || vc.monthFilter || '')
+      setDateFieldFilter(prev => prev || vc.dateFieldFilter || 'Raised Date')
+      setDateFrom(prev => prev || vc.dateFrom || '')
+      setDateTo(prev => prev || vc.dateTo || '')
+      setAgingBandFilter(prev => prev || vc.agingBandFilter || '')
+      setBillingFilter(prev => prev !== 'all' ? prev : (vc.billingFilter || 'all'))
+      setOverdueOnly(prev => prev || vc.overdueOnly === true)
+      setHasDocsOnly(prev => prev || vc.hasDocsOnly === true)
+      setFollowupDueOnly(prev => prev || vc.followupDueOnly === true)
     } catch (e) {
       if (e?.name === 'AbortError') return
       setError(e.message || 'This link is unavailable')
@@ -953,13 +1009,48 @@ export default function SharedView() {
       : [],
     [records, resourceType]
   )
+  const raisedByOptions = useMemo(
+    () => resourceType === 'invoices'
+      ? [...new Set(records.map(r => r.fields?.['Raised By']).filter(Boolean))].sort()
+      : [],
+    [records, resourceType]
+  )
+  const monthOptions = useMemo(
+    () => resourceType === 'invoices'
+      ? [...new Set(records.map(r => monthKey(r.fields?.['Raised Date'])).filter(Boolean))].sort().reverse()
+      : [],
+    [records, resourceType]
+  )
 
   const filtered = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10)
     return recordsForView.filter(r => {
       const f = r.fields || {}
       if (filterPrimary && f[meta.clientField] !== filterPrimary) return false
       if (filterStatus && (f[meta.statusField] || '') !== filterStatus) return false
       if (filterCategory && resourceType === 'invoices' && f.Category !== filterCategory) return false
+      if (resourceType === 'invoices') {
+        if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
+        if (billingFilter === 'retainer' && !/retainer/i.test(String(f.Category || ''))) return false
+        if (billingFilter === 'project' && /retainer/i.test(String(f.Category || ''))) return false
+        if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
+        if (dateFrom || dateTo) {
+          const candidate = dateOnlyValue(f[dateFieldFilter])
+          if (!candidate) return false
+          if (dateFrom && candidate < dateFrom) return false
+          if (dateTo && candidate > dateTo) return false
+        }
+        if (agingBandFilter) {
+          if ((f['Payment Status'] || '') !== 'Pending') return false
+          if (classifyAgingBand(effectiveAging(f)) !== agingBandFilter) return false
+        }
+        if (overdueOnly && !((f['Payment Status'] || '') === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
+        if (hasDocsOnly && parseAttachments(f['Reference']).length + parseAttachments(f['Invoice PDF']).length === 0) return false
+        if (followupDueOnly) {
+          const followup = dateOnlyValue(f['Next followup'])
+          if (!followup || followup > todayIso) return false
+        }
+      }
       if (search) {
         const q = search.toLowerCase()
         const hay = meta.searchFields.map(key => f[key] || '').join(' ').toLowerCase()
@@ -967,7 +1058,7 @@ export default function SharedView() {
       }
       return true
     })
-  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType])
+  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType, raisedByFilter, billingFilter, monthFilter, dateFieldFilter, dateFrom, dateTo, agingBandFilter, overdueOnly, hasDocsOnly, followupDueOnly])
 
   async function saveRecordChanges(record, patch) {
     setSavingRecordId(record.id)
@@ -1135,6 +1226,12 @@ export default function SharedView() {
                 {categoryOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
+            {resourceType === 'invoices' && (
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
+                <option value="">All owners</option>
+                {raisedByOptions.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            )}
             <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e5e7eb' }}>
               {[
                 { id: 'card', Icon: LayoutGrid, label: 'Card' },
@@ -1168,6 +1265,39 @@ export default function SharedView() {
               Refresh
             </button>
           </div>
+          {resourceType === 'invoices' && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
+                <option value="all">All billing</option>
+                <option value="project">Projects only</option>
+                <option value="retainer">Retainers only</option>
+              </select>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+                <option value="">All raised months</option>
+                {monthOptions.map(v => <option key={v} value={v}>{new Date(`${v}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>)}
+              </select>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
+                <option value="Raised Date">Raised Date</option>
+                <option value="Cleared Date">Cleared Date</option>
+                <option value="Next followup">Next Follow-up</option>
+              </select>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={agingBandFilter} onChange={e => setAgingBandFilter(e.target.value)}>
+                <option value="">All aging</option>
+                {['0-14d', '15-30d', '31-60d', '60d+'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <button onClick={() => setOverdueOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: overdueOnly ? theme.accentSoft : '#e5e7eb', color: overdueOnly ? theme.accent : '#475569', background: overdueOnly ? theme.accentDim : '#fff' }}>
+                Outstanding only
+              </button>
+              <button onClick={() => setHasDocsOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: hasDocsOnly ? theme.accentSoft : '#e5e7eb', color: hasDocsOnly ? theme.accent : '#475569', background: hasDocsOnly ? theme.accentDim : '#fff' }}>
+                With docs only
+              </button>
+              <button onClick={() => setFollowupDueOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: followupDueOnly ? theme.accentSoft : '#e5e7eb', color: followupDueOnly ? theme.accent : '#475569', background: followupDueOnly ? theme.accentDim : '#fff' }}>
+                Follow-up due
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

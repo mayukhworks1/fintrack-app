@@ -68,6 +68,13 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     filter_status = view_config.get("filterStatus")
     filter_project = view_config.get("filterProject")
     filter_category = view_config.get("filterCategory")
+    raised_by_filter = view_config.get("raisedByFilter")
+    month_filter = view_config.get("monthFilter")
+    date_field_filter = view_config.get("dateFieldFilter")
+    date_from = view_config.get("dateFrom")
+    date_to = view_config.get("dateTo")
+    aging_band_filter = view_config.get("agingBandFilter")
+    billing_filter = view_config.get("billingFilter")
     board_group_by = view_config.get("boardGroupBy")
     card_group_by = view_config.get("cardGroupBy")
     card_group_sort = view_config.get("cardGroupSort")
@@ -77,6 +84,9 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     density = view_config.get("density")
     show_dashboard = view_config.get("showDashboard")
     show_client_accents = view_config.get("showClientAccents")
+    overdue_only = view_config.get("overdueOnly")
+    has_docs_only = view_config.get("hasDocsOnly")
+    followup_due_only = view_config.get("followupDueOnly")
 
     clean: dict[str, Any] = {}
 
@@ -106,6 +116,27 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     if isinstance(filter_category, str) and filter_category.strip():
         clean["filterCategory"] = filter_category.strip()[:255]
 
+    if isinstance(raised_by_filter, str) and raised_by_filter.strip():
+        clean["raisedByFilter"] = raised_by_filter.strip()[:255]
+
+    if isinstance(month_filter, str) and month_filter.strip():
+        clean["monthFilter"] = month_filter.strip()[:20]
+
+    if isinstance(date_field_filter, str) and date_field_filter.strip():
+        clean["dateFieldFilter"] = date_field_filter.strip()[:80]
+
+    if isinstance(date_from, str) and date_from.strip():
+        clean["dateFrom"] = date_from.strip()[:20]
+
+    if isinstance(date_to, str) and date_to.strip():
+        clean["dateTo"] = date_to.strip()[:20]
+
+    if isinstance(aging_band_filter, str) and aging_band_filter.strip():
+        clean["agingBandFilter"] = aging_band_filter.strip()[:40]
+
+    if isinstance(billing_filter, str) and billing_filter.strip():
+        clean["billingFilter"] = billing_filter.strip()[:40]
+
     if isinstance(board_group_by, str) and board_group_by.strip():
         clean["boardGroupBy"] = board_group_by.strip()[:120]
 
@@ -132,6 +163,15 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(show_client_accents, bool):
         clean["showClientAccents"] = show_client_accents
+
+    if isinstance(overdue_only, bool):
+        clean["overdueOnly"] = overdue_only
+
+    if isinstance(has_docs_only, bool):
+        clean["hasDocsOnly"] = has_docs_only
+
+    if isinstance(followup_due_only, bool):
+        clean["followupDueOnly"] = followup_due_only
 
     all_expanded = view_config.get("allExpanded")
     if isinstance(all_expanded, bool):
@@ -574,6 +614,54 @@ def _extract_ip(request) -> str:
     return request.client.host if request.client else ""
 
 
+def _date_only_value(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    return text[:10]
+
+
+def _month_key(value: Any) -> str:
+    date_only = _date_only_value(value)
+    return date_only[:7] if len(date_only) >= 7 else ""
+
+
+def _parse_attachments(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _effective_aging(fields: dict[str, Any]) -> int:
+    try:
+        aging = int(fields.get("Aging") or 0)
+        if aging > 0:
+            return aging
+    except Exception:
+        pass
+    for key in ("Next followup", "Raised Date"):
+        date_only = _date_only_value(fields.get(key))
+        if date_only:
+            try:
+                target = datetime.fromisoformat(date_only)
+                return max(0, (datetime.now() - target).days)
+            except Exception:
+                continue
+    return 0
+
+
+def _classify_aging_band(days: int) -> str:
+    if days <= 14:
+        return "0-14d"
+    if days <= 30:
+        return "15-30d"
+    if days <= 60:
+        return "31-60d"
+    return "60d+"
+
+
 def _live_service_for(resource_type: str):
     if resource_type == "status":
         from ..services.status import StatusService
@@ -642,6 +730,16 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
     filter_status = cfg.get("filterStatus")
     filter_project = cfg.get("filterProject")
     filter_category = cfg.get("filterCategory")
+    raised_by_filter = cfg.get("raisedByFilter")
+    month_filter = cfg.get("monthFilter")
+    date_field_filter = cfg.get("dateFieldFilter") or "Raised Date"
+    date_from = cfg.get("dateFrom")
+    date_to = cfg.get("dateTo")
+    aging_band_filter = cfg.get("agingBandFilter")
+    billing_filter = cfg.get("billingFilter") or "all"
+    overdue_only = cfg.get("overdueOnly") is True
+    has_docs_only = cfg.get("hasDocsOnly") is True
+    followup_due_only = cfg.get("followupDueOnly") is True
     search = (cfg.get("search") or "").strip().lower()
 
     if resource_type == "status":
@@ -697,6 +795,60 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
             records = [r for r in records if (r.get("fields") or {}).get("Payment Status") == filter_status]
         if filter_category:
             records = [r for r in records if (r.get("fields") or {}).get("Category") == filter_category]
+        if raised_by_filter:
+            records = [r for r in records if (r.get("fields") or {}).get("Raised By") == raised_by_filter]
+        if billing_filter == "retainer":
+            records = [
+                r for r in records
+                if "retainer" in str((r.get("fields") or {}).get("Category") or "").lower()
+            ]
+        elif billing_filter == "project":
+            records = [
+                r for r in records
+                if "retainer" not in str((r.get("fields") or {}).get("Category") or "").lower()
+            ]
+        if month_filter:
+            records = [
+                r for r in records
+                if _month_key((r.get("fields") or {}).get("Raised Date")) == month_filter
+            ]
+        if date_from or date_to:
+            filtered_records = []
+            for r in records:
+                candidate = _date_only_value((r.get("fields") or {}).get(date_field_filter))
+                if not candidate:
+                    continue
+                if date_from and candidate < date_from:
+                    continue
+                if date_to and candidate > date_to:
+                    continue
+                filtered_records.append(r)
+            records = filtered_records
+        if aging_band_filter:
+            records = [
+                r for r in records
+                if (r.get("fields") or {}).get("Payment Status") == "Pending"
+                and _classify_aging_band(_effective_aging(r.get("fields") or {})) == aging_band_filter
+            ]
+        if overdue_only:
+            records = [
+                r for r in records
+                if (r.get("fields") or {}).get("Payment Status") == "Pending"
+                or float((r.get("fields") or {}).get("Outstanding Amount") or 0) > 0
+            ]
+        if has_docs_only:
+            records = [
+                r for r in records
+                if _parse_attachments((r.get("fields") or {}).get("Reference"))
+                or _parse_attachments((r.get("fields") or {}).get("Invoice PDF"))
+            ]
+        if followup_due_only:
+            today_iso = datetime.now().date().isoformat()
+            records = [
+                r for r in records
+                if (candidate := _date_only_value((r.get("fields") or {}).get("Next followup")))
+                and candidate <= today_iso
+            ]
         if search:
             records = [
                 r for r in records
@@ -704,6 +856,8 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
                     str((r.get("fields") or {}).get("Invoice Number", "")),
                     str((r.get("fields") or {}).get("Project", "")),
                     str((r.get("fields") or {}).get("Category", "")),
+                    str((r.get("fields") or {}).get("Raised By", "")),
+                    str((r.get("fields") or {}).get("Milestone", "")),
                     str((r.get("fields") or {}).get("Remark", "")),
                     str((r.get("fields") or {}).get("Payment Status", "")),
                 ]).lower()

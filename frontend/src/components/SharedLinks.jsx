@@ -62,6 +62,16 @@ function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
     if (vc.filterProject) parts.push(`Project: ${vc.filterProject}`)
     if (vc.filterCategory) parts.push(`Category: ${vc.filterCategory}`)
     if (vc.filterStatus) parts.push(`Status: ${vc.filterStatus}`)
+    if (vc.raisedByFilter) parts.push(`Raised by: ${vc.raisedByFilter}`)
+    if (vc.monthFilter) parts.push(`Month: ${vc.monthFilter}`)
+    if (vc.agingBandFilter) parts.push(`Aging: ${vc.agingBandFilter}`)
+    if (vc.dateFieldFilter && (vc.dateFrom || vc.dateTo)) {
+      parts.push(`${vc.dateFieldFilter}: ${vc.dateFrom || '…'} → ${vc.dateTo || '…'}`)
+    }
+    if (vc.billingFilter && vc.billingFilter !== 'all') parts.push(`Scope: ${vc.billingFilter}`)
+    if (vc.overdueOnly) parts.push('Outstanding only')
+    if (vc.hasDocsOnly) parts.push('With docs only')
+    if (vc.followupDueOnly) parts.push('Follow-up due')
     if (vc.search) parts.push(`Search: "${vc.search}"`)
   } else {
     const count = Array.isArray(view?.record_ids) ? view.record_ids.length : fallbackCount
