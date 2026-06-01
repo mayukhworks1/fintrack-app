@@ -674,8 +674,87 @@ export default function Analytics() {
         },
         getRows: () => projMatrix,
       },
+      {
+        key: 'invoice-project-joined',
+        label: 'Invoices + project context',
+        columns: [
+          { key: 'invoice_number', label: 'Invoice #' },
+          { key: 'client', label: 'Client' },
+          { key: 'project', label: 'Project' },
+          { key: 'project_status', label: 'Project Status' },
+          { key: 'project_health', label: 'Health' },
+          { key: 'invoice_status', label: 'Invoice Status' },
+          { key: 'raised_date', label: 'Raised Date' },
+          { key: 'cleared_date', label: 'Cleared Date' },
+          { key: 'amount_raised', label: 'Raised' },
+          { key: 'received', label: 'Received' },
+          { key: 'outstanding', label: 'Outstanding' },
+          { key: 'margin', label: 'Project Margin %' },
+        ],
+        defaultColumns: ['invoice_number', 'client', 'project', 'invoice_status', 'amount_raised', 'received', 'outstanding', 'margin'],
+        loadRows: async () => {
+          const [projList, invList] = await Promise.all([
+            api.projects.list({ limit: 500 }),
+            api.invoices.list({ limit: 1000 }),
+          ])
+          const projectsByName = new Map((projList.records || []).map((project) => [
+            project.fields?.['Project Name'] || '',
+            project,
+          ]))
+          const rows = (invList.records || []).map((record) => {
+            const fields = record.fields || {}
+            const projectName = fields['Project'] || ''
+            const project = projectsByName.get(projectName)
+            const raised = Number(fields['Amount Raised'] || 0)
+            const received = Number(fields['Amount Received'] || 0)
+            return {
+              invoice_number: fields['Invoice Number'] || '',
+              client: project?.fields?.['Client'] || projectName,
+              project: projectName,
+              project_status: project?.fields?.['Project Status'] || '',
+              project_health: project?.fields?.['Health'] || '',
+              invoice_status: fields['Payment Status'] || '',
+              raised_date: fields['Raised Date'] || '',
+              cleared_date: fields['Cleared Date'] || '',
+              amount_raised: raised,
+              received,
+              outstanding: Math.max(0, raised - received),
+              margin: Number(project?.fields?.['Profit percentage'] || 0),
+            }
+          })
+          if (!cutoff) return rows
+          return rows.filter((row) => row.raised_date && row.raised_date >= cutoff)
+        },
+        getRows: () => {
+          const projectsByName = new Map(projects.map((project) => [
+            project.fields?.['Project Name'] || '',
+            project,
+          ]))
+          return invoices.map((record) => {
+            const fields = record.fields || {}
+            const projectName = fields['Project'] || ''
+            const project = projectsByName.get(projectName)
+            const raised = Number(fields['Amount Raised'] || 0)
+            const received = Number(fields['Amount Received'] || 0)
+            return {
+              invoice_number: fields['Invoice Number'] || '',
+              client: project?.fields?.['Client'] || projectName,
+              project: projectName,
+              project_status: project?.fields?.['Project Status'] || '',
+              project_health: project?.fields?.['Health'] || '',
+              invoice_status: fields['Payment Status'] || '',
+              raised_date: fields['Raised Date'] || '',
+              cleared_date: fields['Cleared Date'] || '',
+              amount_raised: raised,
+              received,
+              outstanding: Math.max(0, raised - received),
+              margin: Number(project?.fields?.['Profit percentage'] || 0),
+            }
+          })
+        },
+      },
     ]
-  }, [cashflow, cutoff, invoices, projMatrix])
+  }, [cashflow, cutoff, invoices, projMatrix, projects])
 
   if (loading && !data) return (
     <div className="p-4 sm:p-6 space-y-5 animate-fade-in">

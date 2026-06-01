@@ -90,8 +90,16 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
             return value
         return value[: max(1, max_chars - 1)] + "…"
 
-    meta_items = [(str(k), _cell(v)) for k, v in meta.items()]
-    visible_meta = meta_items[:6]
+    summary_cards = meta.get("summary_cards") if isinstance(meta.get("summary_cards"), list) else []
+    visible_meta = [
+        ("page_label", _cell(meta.get("page_label") or title)),
+        ("source_label", _cell(meta.get("source_label") or meta.get("source") or "")),
+        ("rows", _cell(meta.get("rows") or len(rows))),
+        ("columns", _cell(len(columns))),
+        ("generated_at", _cell(meta.get("generated_at") or "")),
+        ("filters_summary", _cell(meta.get("filters_summary") or "No active filters")),
+    ]
+    visible_meta = [(k, v) for k, v in visible_meta if v][:6]
     col_count = max(len(columns), 1)
     base_col_width = content_width / col_count
     col_widths = [base_col_width for _ in columns]
@@ -130,6 +138,32 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
             lines_needed = max(lines_needed, min(wrapped, 3))
         return 16 + ((lines_needed - 1) * 10)
 
+    def _wrap_text(value: str, width: float, font_size: int, max_lines: int = 3) -> list[str]:
+        text = _cell(value)
+        max_chars = max(6, int(width / max(font_size * 0.45, 1)))
+        if len(text) <= max_chars:
+            return [text]
+        words = text.split()
+        if len(words) <= 1:
+            return [_clip_text(text, width, font_size)]
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            trial = f"{current} {word}".strip()
+            if len(trial) <= max_chars:
+                current = trial
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+            if len(lines) >= max_lines:
+                break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        if len(lines) == max_lines and len(" ".join(words)) > sum(len(line) for line in lines):
+            lines[-1] = _clip_text(lines[-1], width, font_size)
+        return lines[:max_lines]
+
     row_heights = [_row_height(row) for row in rows]
 
     def _page_commands(page_index: int, page_rows: list[tuple[list[Any], float]], start_row: int) -> str:
@@ -141,6 +175,17 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         cmds.append(_draw_text(margin + 16, page_height - margin - 38, subtitle, font="F1", size=9, rgb=(0.91, 0.94, 1.0)))
 
         y = page_height - margin - header_height - 16
+        if summary_cards:
+            card_width = (content_width - 24) / min(4, max(len(summary_cards), 1))
+            top_cards = summary_cards[:4]
+            card_y = y - 28
+            for idx, card in enumerate(top_cards):
+                card_x = margin + (idx * (card_width + 8))
+                cmds.append(_draw_rect(card_x, card_y, card_width, 26, (0.94, 0.97, 1.0), (0.86, 0.90, 0.98), 0.7))
+                cmds.append(_draw_text(card_x + 8, card_y + 17, _clip_text(_cell(card.get("label")), card_width - 16, 7), font="F2", size=7, rgb=(0.38, 0.46, 0.63)))
+                cmds.append(_draw_text(card_x + 8, card_y + 7, _clip_text(_cell(card.get("value")), card_width - 16, 10), font="F2", size=10, rgb=(0.12, 0.16, 0.24)))
+            y = card_y - 14
+
         if visible_meta:
             meta_y = y - meta_card_height
             chip_width = (content_width - 12) / 2
@@ -151,7 +196,7 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
                 chip_y = meta_y - (row * 22)
                 cmds.append(_draw_rect(chip_x, chip_y, chip_width, 18, (0.95, 0.97, 1.0), (0.86, 0.90, 0.98), 0.7))
                 cmds.append(_draw_text(chip_x + 8, chip_y + 11, _key_label(key), font="F2", size=7, rgb=(0.38, 0.46, 0.63)))
-                cmds.append(_draw_text(chip_x + 70, chip_y + 11, _clip_text(value, chip_width - 78, 8), font="F1", size=8, rgb=(0.12, 0.16, 0.24)))
+                cmds.append(_draw_text(chip_x + 78, chip_y + 11, _clip_text(value, chip_width - 86, 8), font="F1", size=8, rgb=(0.12, 0.16, 0.24)))
             y = meta_y - 34
 
         # table header
@@ -171,8 +216,9 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
             x = margin
             for cell_idx, cell in enumerate(row):
                 width = col_widths[min(cell_idx, len(col_widths) - 1)]
-                text = _clip_text(_cell(cell), width - 12, 9)
-                cmds.append(_draw_text(x + 6, row_y + height - 13, text, font="F1", size=9, rgb=(0.15, 0.18, 0.26)))
+                wrapped = _wrap_text(_cell(cell), width - 12, 9, max_lines=3)
+                for line_idx, line in enumerate(wrapped):
+                    cmds.append(_draw_text(x + 6, row_y + height - 13 - (line_idx * 9), line, font="F1", size=9, rgb=(0.15, 0.18, 0.26)))
                 x += width
             y = row_y - row_gap
 

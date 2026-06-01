@@ -292,6 +292,59 @@ export default function Dashboard() {
         })),
       },
       {
+        key: 'portfolio-linked',
+        label: 'Linked portfolio matrix',
+        columns: [
+          { key: 'client', label: 'Client' },
+          { key: 'project', label: 'Project' },
+          { key: 'status', label: 'Project Status' },
+          { key: 'health', label: 'Health' },
+          { key: 'billed', label: 'Billed' },
+          { key: 'profit', label: 'Profit' },
+          { key: 'profit_pct', label: 'Profit %' },
+          { key: 'outstanding_total', label: 'Outstanding' },
+          { key: 'pending_invoices', label: 'Pending Invoices' },
+          { key: 'blocked_statuses', label: 'Blocked Statuses' },
+          { key: 'signal', label: 'Signal' },
+        ],
+        defaultColumns: ['client', 'project', 'status', 'billed', 'profit', 'outstanding_total', 'signal'],
+        loadRows: async () => {
+          const res = await api.projects.list({ limit: 500, order_by: 'Amount Billed So far' })
+          return (res.records || []).map((record) => {
+            const insight = record.association?.insights?.project
+            return {
+              client: record.fields?.['Client'] || '',
+              project: record.fields?.['Project Name'] || '',
+              status: record.fields?.['Project Status'] || '',
+              health: record.fields?.['Health'] || '',
+              billed: record.fields?.['Amount Billed So far'] || 0,
+              profit: record.fields?.['Actual Profit'] || 0,
+              profit_pct: record.fields?.['Profit percentage'] || 0,
+              outstanding_total: Number(insight?.invoice_summary?.outstanding_total || 0),
+              pending_invoices: Number(insight?.invoice_summary?.pending_count || 0),
+              blocked_statuses: Number(insight?.status_summary?.blocked_count || 0),
+              signal: insight?.signal?.label || '',
+            }
+          })
+        },
+        getRows: () => recent.map((record) => {
+          const insight = record.association?.insights?.project
+          return {
+            client: record.fields?.['Client'] || '',
+            project: record.fields?.['Project Name'] || '',
+            status: record.fields?.['Project Status'] || '',
+            health: record.fields?.['Health'] || '',
+            billed: record.fields?.['Amount Billed So far'] || 0,
+            profit: record.fields?.['Actual Profit'] || 0,
+            profit_pct: record.fields?.['Profit percentage'] || 0,
+            outstanding_total: Number(insight?.invoice_summary?.outstanding_total || 0),
+            pending_invoices: Number(insight?.invoice_summary?.pending_count || 0),
+            blocked_statuses: Number(insight?.status_summary?.blocked_count || 0),
+            signal: insight?.signal?.label || '',
+          }
+        }),
+      },
+      {
         key: 'status-summary',
         label: 'Status mix',
         columns: [

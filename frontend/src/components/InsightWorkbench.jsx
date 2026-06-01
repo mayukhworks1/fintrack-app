@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BarChart3, Download, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, BarChart3, Download, GripVertical, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../services/api'
 
 function downloadFile(blob, filename) {
@@ -89,6 +89,15 @@ export default function InsightWorkbench({
   const [blockSortKey, setBlockSortKey] = useState('')
   const [blockSortDir, setBlockSortDir] = useState('desc')
   const [blockLimit, setBlockLimit] = useState(8)
+  const [blockVisual, setBlockVisual] = useState('bars')
+  const [blockSpan, setBlockSpan] = useState('wide')
+  const [blockFormulaMode, setBlockFormulaMode] = useState('field')
+  const [blockNumeratorKey, setBlockNumeratorKey] = useState('')
+  const [blockNumeratorAggregate, setBlockNumeratorAggregate] = useState('sum')
+  const [blockDenominatorKey, setBlockDenominatorKey] = useState('')
+  const [blockDenominatorAggregate, setBlockDenominatorAggregate] = useState('sum')
+  const [blockFormulaOp, setBlockFormulaOp] = useState('ratio_percent')
+  const [draggingBlockId, setDraggingBlockId] = useState('')
 
   const baselineWidgetIds = factoryWidgetIds.length ? factoryWidgetIds : defaultWidgetIds
 
@@ -286,9 +295,26 @@ export default function InsightWorkbench({
   async function runExport() {
     if (!currentSource) return
     const exportRows = await ensureSourceRows(currentSource.key)
-    const rows = exportRows.map((row) =>
-      selectedColumns.map((key) => row[key] ?? '')
-    )
+    const selectedColumnDefs = exportableColumns.filter(col => selectedColumns.includes(col.key))
+    const rows = exportRows.map((row) => selectedColumns.map((key) => row[key] ?? ''))
+    const summaryCards = selectedColumnDefs.slice(0, 4).map((column) => {
+      const values = exportRows.map((row) => row?.[column.key])
+      const nums = values.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+      const numeric = nums.length >= Math.max(2, Math.ceil(values.length * 0.35))
+      if (numeric) {
+        const total = nums.reduce((sum, value) => sum + value, 0)
+        return {
+          label: column.label,
+          value: column.format === 'currency' || /amount|profit|revenue|billed|received|outstanding|cost|raised/i.test(column.key)
+            ? `₹${total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+            : total.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
+        }
+      }
+      return {
+        label: column.label,
+        value: `${new Set(values.filter(Boolean).map((value) => String(value))).size.toLocaleString('en-IN')} distinct`,
+      }
+    })
     setExporting(true)
     try {
       const res = await api.insights.export({
@@ -296,13 +322,17 @@ export default function InsightWorkbench({
         source_key: currentSource.key,
         title: exportTitle,
         export_format: exportFormat,
-        columns: exportableColumns.filter(col => selectedColumns.includes(col.key)).map(col => col.label),
+        columns: selectedColumnDefs.map(col => col.label),
         rows,
         filters: currentFilters,
         config_id: editingReportId || null,
         metadata: {
-          widget_ids: selectedWidgets,
           page_label: pageLabel,
+          source_label: currentSource.label,
+          export_scope: 'full-source',
+          selected_columns: selectedColumnDefs.map((col) => col.label).join(', '),
+          filters_summary: Object.entries(currentFilters || {}).filter(([, value]) => value != null && value !== '' && value !== false).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'No active filters',
+          summary_cards: summaryCards,
         },
       })
       downloadFile(res.blob, res.filename || `${exportTitle}.${exportFormat === 'pdf' ? 'pdf' : 'xls'}`)
@@ -338,6 +368,14 @@ export default function InsightWorkbench({
     setBlockSortKey('')
     setBlockSortDir('desc')
     setBlockLimit(8)
+    setBlockVisual('bars')
+    setBlockSpan('wide')
+    setBlockFormulaMode('field')
+    setBlockNumeratorKey('')
+    setBlockNumeratorAggregate('sum')
+    setBlockDenominatorKey('')
+    setBlockDenominatorAggregate('sum')
+    setBlockFormulaOp('ratio_percent')
   }
 
   function editBlock(block) {
@@ -353,6 +391,14 @@ export default function InsightWorkbench({
     setBlockSortKey(block.sortKey || '')
     setBlockSortDir(block.sortDir || 'desc')
     setBlockLimit(block.limit || 8)
+    setBlockVisual(block.visual || 'bars')
+    setBlockSpan(block.span || 'wide')
+    setBlockFormulaMode(block.formulaMode || 'field')
+    setBlockNumeratorKey(block.numeratorKey || '')
+    setBlockNumeratorAggregate(block.numeratorAggregate || 'sum')
+    setBlockDenominatorKey(block.denominatorKey || '')
+    setBlockDenominatorAggregate(block.denominatorAggregate || 'sum')
+    setBlockFormulaOp(block.formulaOp || 'ratio_percent')
     if (block.sourceKey) ensureSourceRows(block.sourceKey)
   }
 
@@ -373,6 +419,14 @@ export default function InsightWorkbench({
       sortKey: blockSortKey,
       sortDir: blockSortDir,
       limit: Number(blockLimit || 8),
+      visual: blockVisual,
+      span: blockSpan,
+      formulaMode: blockFormulaMode,
+      numeratorKey: blockNumeratorKey,
+      numeratorAggregate: blockNumeratorAggregate,
+      denominatorKey: blockDenominatorKey,
+      denominatorAggregate: blockDenominatorAggregate,
+      formulaOp: blockFormulaOp,
     }
     const nextBlocks = editingBlockId
       ? customBlocks.map((item) => item.id === editingBlockId ? nextBlock : item)
@@ -384,6 +438,27 @@ export default function InsightWorkbench({
   function removeBlock(id) {
     applyCustomBlockSelection(customBlocks.filter((item) => item.id !== id))
     if (editingBlockId === id) resetBlockEditor()
+  }
+
+  function reorderBlocks(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return
+    const next = [...customBlocks]
+    const fromIndex = next.findIndex((item) => item.id === fromId)
+    const toIndex = next.findIndex((item) => item.id === toId)
+    if (fromIndex < 0 || toIndex < 0) return
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    applyCustomBlockSelection(next)
+  }
+
+  function moveBlock(id, delta) {
+    const idx = customBlocks.findIndex((item) => item.id === id)
+    const nextIdx = idx + delta
+    if (idx < 0 || nextIdx < 0 || nextIdx >= customBlocks.length) return
+    const next = [...customBlocks]
+    const [moved] = next.splice(idx, 1)
+    next.splice(nextIdx, 0, moved)
+    applyCustomBlockSelection(next)
   }
 
   return (
@@ -493,13 +568,21 @@ export default function InsightWorkbench({
                             {sourceOptions.map((source) => <option key={source.key} value={source.key}>{source.label}</option>)}
                           </select>
                         </div>
-                        <div>
-                          <label className="label">Rows</label>
-                          <div className="input flex items-center justify-between">
-                            <span>{(sourceRowsByKey[blockSourceKey] || blockSource?.getRows?.() || []).length} rows loaded</span>
-                            {sourceLoadingKey === blockSourceKey && <span style={{ color: 'var(--text-3)' }}>loading…</span>}
+                          <div>
+                            <label className="label">Block width</label>
+                            <select className="input" value={blockSpan} onChange={(e) => setBlockSpan(e.target.value)}>
+                              <option value="compact">Compact</option>
+                              <option value="wide">Wide</option>
+                              <option value="full">Full width</option>
+                            </select>
                           </div>
-                        </div>
+                          <div>
+                            <label className="label">Rows</label>
+                            <div className="input flex items-center justify-between">
+                              <span>{(sourceRowsByKey[blockSourceKey] || blockSource?.getRows?.() || []).length} rows loaded</span>
+                              {sourceLoadingKey === blockSourceKey && <span style={{ color: 'var(--text-3)' }}>loading…</span>}
+                            </div>
+                          </div>
 
                         {blockType !== 'table' && (
                           <>
@@ -522,7 +605,14 @@ export default function InsightWorkbench({
                                 <option value="percent">Percent</option>
                               </select>
                             </div>
-                            {blockAggregate !== 'count' && (
+                            <div>
+                              <label className="label">Measure mode</label>
+                              <select className="input" value={blockFormulaMode} onChange={(e) => setBlockFormulaMode(e.target.value)}>
+                                <option value="field">Single field</option>
+                                <option value="formula">Computed formula</option>
+                              </select>
+                            </div>
+                            {blockFormulaMode === 'field' && blockAggregate !== 'count' && (
                               <div className="sm:col-span-2">
                                 <label className="label">Value field</label>
                                 <select className="input" value={blockValueKey} onChange={(e) => setBlockValueKey(e.target.value)}>
@@ -530,6 +620,57 @@ export default function InsightWorkbench({
                                   {numericBlockFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
                                 </select>
                               </div>
+                            )}
+                            {blockFormulaMode === 'formula' && (
+                              <>
+                                <div>
+                                  <label className="label">Formula</label>
+                                  <select className="input" value={blockFormulaOp} onChange={(e) => setBlockFormulaOp(e.target.value)}>
+                                    <option value="ratio_percent">Numerator / Denominator %</option>
+                                    <option value="ratio">Numerator / Denominator</option>
+                                    <option value="difference">Numerator - Denominator</option>
+                                    <option value="sum">Numerator + Denominator</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="label">Numerator aggregate</label>
+                                  <select className="input" value={blockNumeratorAggregate} onChange={(e) => setBlockNumeratorAggregate(e.target.value)}>
+                                    <option value="sum">Sum</option>
+                                    <option value="count">Count</option>
+                                    <option value="avg">Average</option>
+                                    <option value="min">Min</option>
+                                    <option value="max">Max</option>
+                                  </select>
+                                </div>
+                                {blockNumeratorAggregate !== 'count' && (
+                                  <div>
+                                    <label className="label">Numerator field</label>
+                                    <select className="input" value={blockNumeratorKey} onChange={(e) => setBlockNumeratorKey(e.target.value)}>
+                                      <option value="">Choose numeric field</option>
+                                      {numericBlockFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
+                                    </select>
+                                  </div>
+                                )}
+                                <div>
+                                  <label className="label">Denominator aggregate</label>
+                                  <select className="input" value={blockDenominatorAggregate} onChange={(e) => setBlockDenominatorAggregate(e.target.value)}>
+                                    <option value="sum">Sum</option>
+                                    <option value="count">Count</option>
+                                    <option value="avg">Average</option>
+                                    <option value="min">Min</option>
+                                    <option value="max">Max</option>
+                                  </select>
+                                </div>
+                                {blockDenominatorAggregate !== 'count' && (
+                                  <div className="sm:col-span-2">
+                                    <label className="label">Denominator field</label>
+                                    <select className="input" value={blockDenominatorKey} onChange={(e) => setBlockDenominatorKey(e.target.value)}>
+                                      <option value="">Choose numeric field</option>
+                                      {numericBlockFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
+                                    </select>
+                                  </div>
+                                )}
+                              </>
                             )}
                           </>
                         )}
@@ -546,6 +687,14 @@ export default function InsightWorkbench({
                             <div>
                               <label className="label">Top rows</label>
                               <input className="input" type="number" min="3" max="20" value={blockLimit} onChange={(e) => setBlockLimit(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="label">Visual</label>
+                              <select className="input" value={blockVisual} onChange={(e) => setBlockVisual(e.target.value)}>
+                                <option value="bars">Bars</option>
+                                <option value="donut">Donut</option>
+                                <option value="list">List</option>
+                              </select>
                             </div>
                           </>
                         )}
@@ -597,7 +746,19 @@ export default function InsightWorkbench({
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-4">
-                        <button onClick={upsertBlock} className="btn-primary text-xs" disabled={blockType !== 'table' && blockAggregate !== 'count' && !blockValueKey}>
+                        <button
+                          onClick={upsertBlock}
+                          className="btn-primary text-xs"
+                          disabled={
+                            blockType !== 'table' && (
+                              (blockFormulaMode === 'field' && blockAggregate !== 'count' && !blockValueKey) ||
+                              (blockFormulaMode === 'formula' && (
+                                (blockNumeratorAggregate !== 'count' && !blockNumeratorKey) ||
+                                (blockDenominatorAggregate !== 'count' && !blockDenominatorKey)
+                              ))
+                            )
+                          }
+                        >
                           <Save size={12} />{editingBlockId ? 'Update block' : 'Add block'}
                         </button>
                         <button onClick={resetBlockEditor} className="btn-ghost text-xs">
@@ -612,15 +773,32 @@ export default function InsightWorkbench({
                           No custom blocks yet. Add KPI, grouped breakdown, or table blocks and they will apply live to the page.
                         </div>
                       ) : customBlocks.map((block) => (
-                        <div key={block.id} className="rounded-2xl p-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                        <div
+                          key={block.id}
+                          className="rounded-2xl p-3"
+                          draggable
+                          onDragStart={() => setDraggingBlockId(block.id)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            reorderBlocks(draggingBlockId, block.id)
+                            setDraggingBlockId('')
+                          }}
+                          onDragEnd={() => setDraggingBlockId('')}
+                          style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <button className="text-left flex-1" onClick={() => editBlock(block)}>
                               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{block.title}</p>
                               <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                                {block.type} · {block.sourceKey} · {block.type === 'table' ? (block.columns?.length || 0) + ' columns' : String(block.aggregate || 'sum').toUpperCase()}
+                                {block.type} · {block.sourceKey} · {block.span || 'wide'} · {block.type === 'table' ? (block.columns?.length || 0) + ' columns' : block.formulaMode === 'formula' ? `formula (${block.formulaOp})` : String(block.aggregate || 'sum').toUpperCase()}
                               </p>
                             </button>
-                            <button onClick={() => removeBlock(block.id)} className="btn-ghost text-xs"><Trash2 size={12} /></button>
+                            <div className="flex items-center gap-1">
+                              <span className="btn-ghost text-xs cursor-grab" title="Drag to reorder"><GripVertical size={12} /></span>
+                              <button onClick={() => moveBlock(block.id, -1)} className="btn-ghost text-xs" title="Move up"><ArrowUp size={12} /></button>
+                              <button onClick={() => moveBlock(block.id, 1)} className="btn-ghost text-xs" title="Move down"><ArrowDown size={12} /></button>
+                              <button onClick={() => removeBlock(block.id)} className="btn-ghost text-xs"><Trash2 size={12} /></button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -636,7 +814,7 @@ export default function InsightWorkbench({
       {showExport && (
         <ModalShell
           title={`${pageLabel} export builder`}
-          subtitle="Build reusable report presets, preview the dataset, and export polished Excel or PDF reports."
+          subtitle="Build reusable report presets from the full dataset, preview the dataset, and export polished Excel or PDF reports."
           onClose={() => setShowExport(false)}
         >
           <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
