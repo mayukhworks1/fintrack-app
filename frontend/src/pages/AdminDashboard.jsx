@@ -236,7 +236,7 @@ function StatBox({ label, value, sub, color, accent }) {
   )
 }
 
-function OverviewTab() {
+function OverviewTab({ onOpenHistoryDrilldown }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
@@ -394,11 +394,11 @@ function OverviewTab() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {[
-            ['Projects', data.projects_total, data.projects_stale, data.projects_deleted, data.projects_last_sync],
-            ['Invoices', data.invoices_total, data.invoices_stale, data.invoices_deleted, data.invoices_last_sync],
-            ['Web invoices', data.web_invoices_total, data.web_invoices_stale, data.web_invoices_deleted, data.web_invoices_last_sync],
-            ['Status', data.status_total, data.status_stale, data.status_deleted, data.status_last_sync],
-          ].map(([label, total, stale, deleted, lastSync]) => (
+            ['Projects', 'projects', data.projects_total, data.projects_stale, data.projects_deleted, data.projects_last_sync],
+            ['Invoices', 'invoices', data.invoices_total, data.invoices_stale, data.invoices_deleted, data.invoices_last_sync],
+            ['Web invoices', 'web_invoices', data.web_invoices_total, data.web_invoices_stale, data.web_invoices_deleted, data.web_invoices_last_sync],
+            ['Status', 'status', data.status_total, data.status_stale, data.status_deleted, data.status_last_sync],
+          ].map(([label, sourceTable, total, stale, deleted, lastSync]) => (
             <div key={label} className="card space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{label}</p>
@@ -406,7 +406,18 @@ function OverviewTab() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge color="blue">{fmt(total)} total</Badge>
-                <Badge color={(Number(deleted) || 0) > 0 ? 'red' : 'default'}>{fmt(deleted)} deleted</Badge>
+                {(Number(deleted) || 0) > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenHistoryDrilldown?.(sourceTable, label)}
+                    className="inline-flex items-center"
+                    title={`View attributed delete history for ${label}`}
+                  >
+                    <Badge color="red">{fmt(deleted)} deleted</Badge>
+                  </button>
+                ) : (
+                  <Badge color="default">{fmt(deleted)} deleted</Badge>
+                )}
               </div>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {lastSync ? `Last sync ${relTime(lastSync)}` : 'No sync seen yet'}
@@ -2308,7 +2319,7 @@ function DetailKV({ k, v, mono = false }) {
   )
 }
 
-function HistoryTab() {
+function HistoryTab({ drilldown = null }) {
   const [data, setData]       = useState(null)
   const [fullRows, setFullRows] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -2357,7 +2368,16 @@ function HistoryTab() {
     if (filterConditions.length > 0) ensureFullRows().catch((e) => setError(e.message || 'Failed to hydrate full dataset'))
   }, [filterConditions, ensureFullRows])
 
-  const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
+  useEffect(() => {
+    if (!drilldown) return
+    setFs(drilldown.sourceTable || '')
+    setFilterConditions(drilldown.conditions || [])
+    setOffset(0)
+    setExp(null)
+    setFullRows(null)
+  }, [drilldown])
+
+  const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal', status: 'orange' }
   const sourceRows = filterConditions.length > 0 ? (fullRows || data?.rows || []) : (data?.rows || [])
   const filteredRows = useMemo(
     () => applyConditions(sourceRows, filterConditions, r => r),
@@ -2408,7 +2428,7 @@ function HistoryTab() {
         <FilterSelect
           value={filterSrc}
           onChange={setFs}
-          options={['projects','invoices','web_invoices']}
+          options={['projects','invoices','web_invoices','status']}
           placeholder="All sources"
           width={150}
         />
@@ -2453,6 +2473,18 @@ function HistoryTab() {
         onChange={setFilterConditions}
         label="Add condition filter"
       />
+      {drilldown?.sourceTable && (
+        <div className="rounded-xl border px-3 py-2 flex flex-wrap items-center gap-2"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+          <Badge color="red">Delete drilldown</Badge>
+          <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+            Showing attributed delete history for <span className="font-semibold">{drilldown.label || drilldown.sourceTable}</span>.
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+            Expand a row to inspect session, IP, device, browser, OS, location, and full mutation details.
+          </span>
+        </div>
+      )}
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {fullLoading && (
@@ -3265,6 +3297,19 @@ const TABS = [
 export default function AdminDashboard({ embedded = false }) {
   const { logout } = useAuth()
   const [tab, setTab] = useState('overview')
+  const [historyDrilldown, setHistoryDrilldown] = useState(null)
+
+  const openHistoryDrilldown = useCallback((sourceTable, label) => {
+    setHistoryDrilldown({
+      sourceTable,
+      label,
+      conditions: [
+        { field: 'change_type', op: 'is', value: 'delete' },
+      ],
+      token: Date.now(),
+    })
+    setTab('history')
+  }, [])
 
   const tabBar = (
     <div className={`flex overflow-x-auto gap-0.5 px-2 py-2 ${embedded ? 'rounded-xl border mb-4' : 'sticky top-[49px] z-10'}`}
@@ -3288,7 +3333,7 @@ export default function AdminDashboard({ embedded = false }) {
 
   const content = (
     <>
-      {tab === 'overview'     && <OverviewTab />}
+      {tab === 'overview'     && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
       {tab === 'audit'        && <AuditLogTab />}
       {tab === 'sessions'     && <SessionsTab />}
       {tab === 'chats'        && <ChatsTab />}
@@ -3297,7 +3342,7 @@ export default function AdminDashboard({ embedded = false }) {
       {tab === 'sync'         && <SyncLogTab />}
       {tab === 'projects'     && <ProjectsMirrorTab />}
       {tab === 'invoices'     && <InvoicesTab />}
-      {tab === 'history'      && <HistoryTab />}
+      {tab === 'history'      && <HistoryTab drilldown={historyDrilldown} />}
       {tab === 'shared'       && <SharedLinksTab />}
       {tab === 'associations' && <AssociationsTab />}
       {tab === 'hflogs'       && <HfLogsTab />}
