@@ -27,13 +27,13 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   useEffect(() => { fetchRef.current = fetchFn }, [fetchFn])
 
   // Stable run — never re-created, always reads fetchRef.current
-  const run = useCallback(async (silent = false) => {
+  const run = useCallback(async (silent = false, forceFresh = false) => {
     if (!mounted.current) return
     if (silent) setSyncing(true)
     else        setLoading(true)
     setError(null)
     try {
-      const result = await fetchRef.current()
+      const result = await fetchRef.current(forceFresh ? { fresh: true } : {})
       if (!mounted.current) return
       const hash = JSON.stringify(result)
       if (hash !== lastHash.current) {
@@ -80,7 +80,7 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
 
   const refresh = useCallback(() => {
     lastHash.current = null
-    run(false)
+    run(false, true)
   }, [run])
 
   return { data, loading, error, refresh, lastUpdated, syncing }

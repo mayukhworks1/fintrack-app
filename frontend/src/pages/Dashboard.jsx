@@ -210,10 +210,10 @@ export default function Dashboard() {
   const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
   const [customSourceRows, setCustomSourceRows] = useState({})
 
-  const fetchAll = useCallback(() =>
+  const fetchAll = useCallback((opts = {}) =>
     Promise.all([
-      api.projects.summary(),
-      api.projects.list({ limit: 6, order_by: 'Amount Billed So far' }),
+      api.projects.summary(opts),
+      api.projects.list({ limit: 6, order_by: 'Amount Billed So far', ...opts }),
     ]).then(([summary, list]) => ({ summary, records: list.records || [] }))
   , [])
 

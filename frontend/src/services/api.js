@@ -37,11 +37,11 @@ export function clearAuthToken() { setAuthToken('') }
 // independent cancellation control.
 const _inflight = new Map()  // key -> Promise
 
-function _dedupeKey(method, path) { return `${method} ${path}` }
+function _dedupeKey(method, path, fresh = false) { return `${method} ${path} ${fresh ? 'fresh' : 'cached'}` }
 
-async function _dedupedFetch(method, path, runner, externalSignal) {
+async function _dedupedFetch(method, path, runner, externalSignal, fresh = false) {
   if (method !== 'GET' || externalSignal) return runner()
-  const key = _dedupeKey(method, path)
+  const key = _dedupeKey(method, path, fresh)
   const existing = _inflight.get(key)
   if (existing) return existing
   const promise = runner().finally(() => _inflight.delete(key))
@@ -49,19 +49,18 @@ async function _dedupedFetch(method, path, runner, externalSignal) {
   return promise
 }
 
-// ── Client-side memory cache (disabled) ───────────────────────────────────
-// The in-memory GET cache made manual refresh and polling look broken
-// across Dashboard / Analytics / Invoices / Admin because repeated reads
-// were often served from memory instead of the backend. Keep the bust API
-// for compatibility, but route live GETs to the network while still
-// coalescing identical concurrent requests via the inflight map above.
+// ── Client-side memory cache ───────────────────────────────────────────────
+// Use a short-lived stale cache for GET reads so route changes and remounts
+// feel instant. Manual refresh paths pass `fresh: true`, which bypasses this.
+// This keeps first paint fast while preserving a truthful "Refresh means live"
+// contract.
 const _clientCache = new Map()  // path → { data, ts }
-const _CLIENT_TTL  = 45_000     // 45 s
+const _CLIENT_TTL  = 8_000      // 8 s
 
-function _ccGet(path) {
+function _ccGet(path, ttl = _CLIENT_TTL) {
   const e = _clientCache.get(path)
   if (!e) return null
-  if (Date.now() - e.ts > _CLIENT_TTL) { _clientCache.delete(path); return null }
+  if (Date.now() - e.ts > ttl) { _clientCache.delete(path); return null }
   return e.data
 }
 function _ccSet(path, data) { _clientCache.set(path, { data, ts: Date.now() }) }
@@ -76,12 +75,17 @@ export function clientCacheBust(prefix) {
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
 async function request(path, options = {}, retries = 2) {
-  const { signal: externalSignal, timeout, ...rest } = options
+  const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
+
+  if (method === 'GET' && !externalSignal && !fresh) {
+    const cached = _ccGet(path, cacheTtl)
+    if (cached !== null) return cached
+  }
 
   // Coalesce identical concurrent GETs across the app
   const data = await _dedupedFetch(method, path, () =>
-    _doRequest(path, options, retries), externalSignal)
+    _doRequest(path, { signal: externalSignal, timeout, fresh, cacheTtl, ...rest }, retries), externalSignal, fresh)
   return data
 }
 
@@ -135,7 +139,8 @@ async function requestBlob(path, options = {}) {
 }
 
 async function _doRequest(path, options = {}, retries = 2) {
-  const { signal: externalSignal, timeout, ...rest } = options
+  const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, ...rest } = options
+  const method = (rest.method || 'GET').toUpperCase()
   const controller = new AbortController()
   const timeoutMs = timeout || TIMEOUT_MS
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
@@ -186,7 +191,9 @@ async function _doRequest(path, options = {}, retries = 2) {
     }
 
     if (res.status === 204) return null
-    return res.json()
+    const data = await res.json()
+    if (method === 'GET' && !fresh) _ccSet(path, data)
+    return data
 
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -212,16 +219,17 @@ async function _doRequest(path, options = {}, retries = 2) {
 export const api = {
   projects: {
     list: (params = {}) => {
+      const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
-      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/projects?${q}`)
+      Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/projects?${q}`, { fresh, cacheTtl })
     },
-    get:     (id)       => request(`/api/projects/${id}`),
+    get:     (id, opts = {})       => request(`/api/projects/${id}`, opts),
     create:  (data)     => request('/api/projects',     { method: 'POST',   body: JSON.stringify(data) }),
     update:  (id, data) => request(`/api/projects/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/projects/${id}`, { method: 'DELETE' }),
     search:  (q, limit = 20) => request(`/api/projects/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-    summary: ()         => request('/api/projects/summary'),
+    summary: (opts = {})         => request('/api/projects/summary', opts),
   },
   ai: {
     chat:     (message, history = [], opts = {}) =>
@@ -300,12 +308,13 @@ export const api = {
   },
   invoices: {
     list:    (params = {}) => {
+      const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
-      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/invoices?${q}`)
+      Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/invoices?${q}`, { fresh, cacheTtl })
     },
-    summary: ()         => request('/api/invoices/summary'),
-    get:     (id)       => request(`/api/invoices/${id}`),
+    summary: (opts = {})         => request('/api/invoices/summary', opts),
+    get:     (id, opts = {})       => request(`/api/invoices/${id}`, opts),
     create:  (data)     => request('/api/invoices', { method: 'POST',   body: JSON.stringify(data) }),
     update:  (id, data) => request(`/api/invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
@@ -382,12 +391,13 @@ export const api = {
       })
     },
     list:    (params = {}) => {
+      const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
-      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/web-invoices?${q}`)
+      Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/web-invoices?${q}`, { fresh, cacheTtl })
     },
-    summary:  ()          => request('/api/web-invoices/summary'),
-    get:      (id)        => request(`/api/web-invoices/${id}`),
+    summary:  (opts = {})          => request('/api/web-invoices/summary', opts),
+    get:      (id, opts = {})        => request(`/api/web-invoices/${id}`, opts),
     create:   (data)      => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
     update:   (id, data)  => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:   (id)        => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
@@ -401,13 +411,14 @@ export const api = {
   },
   webProjects: {
     list: (params = {}) => {
+      const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
-      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/web-projects?${q}`)
+      Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      return request(`/api/web-projects?${q}`, { fresh, cacheTtl })
     },
-    names:   ()         => request('/api/web-projects/names'),
-    summary: ()         => request('/api/web-projects/summary'),
-    get:     (id)       => request(`/api/web-projects/${id}`),
+    names:   (opts = {})         => request('/api/web-projects/names', opts),
+    summary: (opts = {})         => request('/api/web-projects/summary', opts),
+    get:     (id, opts = {})       => request(`/api/web-projects/${id}`, opts),
     create:  (data)     => request('/api/web-projects', { method: 'POST',   body: JSON.stringify(data) }),
     update:  (id, data) => request(`/api/web-projects/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/web-projects/${id}`, { method: 'DELETE' }),
@@ -514,8 +525,8 @@ export const api = {
       return request(`/api/project-invoices/picklist?${params}`)
     },
     /** All invoices currently linked to a project. Cached 120 s server-side. */
-    list:   (projectId) =>
-      request(`/api/project-invoices/${encodeURIComponent(projectId)}`),
+    list:   (projectId, opts = {}) =>
+      request(`/api/project-invoices/${encodeURIComponent(projectId)}`, opts),
     /** Link a single invoice to a project. */
     link:   (projectId, invoiceTId, source = 'invoices', note = '') =>
       request(`/api/project-invoices/${encodeURIComponent(projectId)}`, {

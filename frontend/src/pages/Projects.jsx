@@ -76,14 +76,14 @@ export default function Projects() {
     setSearch(query)
   }, [query])
 
-  const fetchProjects = useCallback(() =>
-    api.projects.list({ status: status || undefined, client: client || undefined, order_by: sortBy })
+  const fetchProjects = useCallback((opts = {}) =>
+    api.projects.list({ status: status || undefined, client: client || undefined, order_by: sortBy, ...opts })
       .then(d => d.records || [])
   , [status, client, sortBy])
 
   const { data: _data, loading, error, refresh, lastUpdated, syncing } =
     useAutoRefresh(fetchProjects, 5_000)
-  const fetchSummary = useCallback(() => api.projects.summary(), [])
+  const fetchSummary = useCallback((opts = {}) => api.projects.summary(opts), [])
   const { data: summary } = useAutoRefresh(fetchSummary, 10_000)
   const records = _data ?? []
   const updatedLabel = useRelativeTime(lastUpdated)

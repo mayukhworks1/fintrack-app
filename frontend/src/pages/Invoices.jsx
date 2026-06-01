@@ -911,17 +911,18 @@ export default function Invoices() {
   }, [deferredSearch, updateFilterParam])
 
   /* ── Fetch summary ── */
-  const fetchSummary = useCallback(() => api.invoices.summary(), [])
+  const fetchSummary = useCallback((opts = {}) => api.invoices.summary(opts), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
 
   /* ── Fetch records — refetches when server-side filters/sort change ── */
-  const fetchRecords = useCallback(() =>
+  const fetchRecords = useCallback((opts = {}) =>
     api.invoices.list({
       status:   statusFilter  || undefined,
       project:  projectFilter || undefined,
       limit:    500,
       order_by: sortCol,
       order:    sortDir,
+      ...opts,
     }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)

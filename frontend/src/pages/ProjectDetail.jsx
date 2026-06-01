@@ -162,11 +162,11 @@ export default function ProjectDetail() {
   const [invExpanded,     setInvExpanded]     = useState(false)  // section collapsed by default
   const [expandedInvId,   setExpandedInvId]   = useState(null)  // which invoice row is expanded
 
-  const loadRecord = useCallback(async () => {
+  const loadRecord = useCallback(async (opts = {}) => {
     if (isNew) return
     setLoading(true)
     try {
-      const r = await api.projects.get(id)
+      const r = await api.projects.get(id, opts)
       setRecord(r)
     } catch (e) {
       toast('Failed to load project: ' + e.message, 'error')
@@ -175,11 +175,11 @@ export default function ProjectDetail() {
     }
   }, [id, isNew, toast])
 
-  const loadLinkedInvoices = useCallback(async () => {
+  const loadLinkedInvoices = useCallback(async (opts = {}) => {
     if (isNew || !id) return
     setLoadingInvoices(true)
     try {
-      const res = await api.projectInvoices.list(id)
+      const res = await api.projectInvoices.list(id, opts)
       setLinkedInvoices(res.invoices || [])
     } catch { /* non-fatal */ }
     finally { setLoadingInvoices(false) }

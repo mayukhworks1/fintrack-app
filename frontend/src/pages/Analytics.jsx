@@ -244,12 +244,12 @@ export default function Analytics() {
   const [customSourceRows, setCustomSourceRows] = useState({})
   const { dark } = useTheme()
 
-  const fetchAll = useCallback(() =>
+  const fetchAll = useCallback((opts = {}) =>
     Promise.all([
-      api.projects.summary(),
-      api.projects.list({ limit: 100 }),
-      api.invoices.summary(),
-      api.invoices.list({ limit: 500 }),
+      api.projects.summary(opts),
+      api.projects.list({ limit: 100, ...opts }),
+      api.invoices.summary(opts),
+      api.invoices.list({ limit: 500, ...opts }),
     ]).then(([projSummary, projList, invSummary, invList]) => ({
       projSummary, projects: projList.records || [],
       invSummary,  invoices: invList.records || [],

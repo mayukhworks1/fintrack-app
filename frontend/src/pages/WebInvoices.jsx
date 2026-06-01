@@ -1523,10 +1523,10 @@ export default function WebInvoices() {
     setPicklistPermissionMsg(message)
   }
 
-  const fetchSummary = useCallback(() => api.webInvoices.summary(), [])
+  const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
 
-  const fetchRecords = useCallback(() =>
+  const fetchRecords = useCallback((opts = {}) =>
     api.webInvoices.list({
       // overdueOnly is purely a client-side filter — never pass status='Pending'
       // server-side or it silently drops invoices with Outstanding > 0 but non-Pending status.
@@ -1535,6 +1535,7 @@ export default function WebInvoices() {
       limit:    500,
       order_by: sortCol,
       order:    sortDir,
+      ...opts,
     }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
