@@ -57,6 +57,7 @@ export default function InsightWorkbench({
   onApplyWidgets,
   onApplyCustomBlocks,
 }) {
+  const activeDashboardStorageKey = `fintrack:insight-dashboard:${pageKey}`
   const [showDashboards, setShowDashboards] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [dashboardConfigs, setDashboardConfigs] = useState([])
@@ -98,6 +99,7 @@ export default function InsightWorkbench({
   const [blockDenominatorAggregate, setBlockDenominatorAggregate] = useState('sum')
   const [blockFormulaOp, setBlockFormulaOp] = useState('ratio_percent')
   const [draggingBlockId, setDraggingBlockId] = useState('')
+  const [dashboardHydrated, setDashboardHydrated] = useState(false)
 
   const baselineWidgetIds = factoryWidgetIds.length ? factoryWidgetIds : defaultWidgetIds
 
@@ -230,8 +232,13 @@ export default function InsightWorkbench({
         customBlocks,
       },
     }
-    if (editingDashboardId) await api.insights.updateConfig(editingDashboardId, payload)
-    else await api.insights.createConfig(payload)
+    const saved = editingDashboardId
+      ? await api.insights.updateConfig(editingDashboardId, payload)
+      : await api.insights.createConfig(payload)
+    if (saved?.id) {
+      setEditingDashboardId(saved.id)
+      try { localStorage.setItem(activeDashboardStorageKey, saved.id) } catch {}
+    }
     await loadDashboardConfigs()
     onApplyWidgets?.(selectedWidgets)
   }
@@ -239,7 +246,10 @@ export default function InsightWorkbench({
   async function deleteConfig(id, kind) {
     await api.insights.deleteConfig(id)
     if (kind === 'dashboard') {
-      if (editingDashboardId === id) resetDashboardBuilder()
+      if (editingDashboardId === id) {
+        resetDashboardBuilder()
+        try { localStorage.removeItem(activeDashboardStorageKey) } catch {}
+      }
       await loadDashboardConfigs()
       return
     }
@@ -253,6 +263,7 @@ export default function InsightWorkbench({
     applyCustomBlockSelection(config?.config?.customBlocks || [])
     setDashboardTitle(config.title || `${pageLabel} custom board`)
     setEditingDashboardId(config.id)
+    try { localStorage.setItem(activeDashboardStorageKey, config.id) } catch {}
   }
 
   function applyReportConfig(config) {
@@ -268,6 +279,33 @@ export default function InsightWorkbench({
         : source?.defaultColumns || source?.columns?.map((col) => col.key) || []
     )
   }
+
+  useEffect(() => {
+    let cancelled = false
+    async function hydrateActiveDashboard() {
+      try {
+        const res = await api.insights.listConfigs({ page_key: pageKey, config_kind: 'dashboard' })
+        if (cancelled) return
+        const configs = res.configs || []
+        setDashboardConfigs(configs)
+        let savedId = ''
+        try { savedId = localStorage.getItem(activeDashboardStorageKey) || '' } catch {}
+        const target = configs.find((config) => config.id === savedId) || configs[0]
+        if (target) {
+          applyWidgetSelection(target?.config?.widgetIds || [])
+          applyCustomBlockSelection(target?.config?.customBlocks || [])
+          setDashboardTitle(target.title || `${pageLabel} custom board`)
+          setEditingDashboardId(target.id)
+        }
+      } finally {
+        if (!cancelled) setDashboardHydrated(true)
+      }
+    }
+    hydrateActiveDashboard()
+    return () => { cancelled = true }
+  // intentionally keyed only to page identity
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey])
 
   async function saveReportPreset() {
     if (!currentSource || !selectedColumns.length) return
@@ -693,6 +731,9 @@ export default function InsightWorkbench({
                               <select className="input" value={blockVisual} onChange={(e) => setBlockVisual(e.target.value)}>
                                 <option value="bars">Bars</option>
                                 <option value="donut">Donut</option>
+                                <option value="pie">Pie</option>
+                                <option value="line">Line graph</option>
+                                <option value="area">Area graph</option>
                                 <option value="list">List</option>
                               </select>
                             </div>

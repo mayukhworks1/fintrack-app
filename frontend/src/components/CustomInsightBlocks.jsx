@@ -1,6 +1,6 @@
 import { BarChart3, PieChart as PieChartIcon, Table2, TrendingUp } from 'lucide-react'
 import {
-  BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend,
+  Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 
 const DONUT_COLORS = ['#4b67ff', '#16915f', '#ca7f14', '#d85f58', '#7c3aed', '#0891b2', '#6b7280']
@@ -136,12 +136,19 @@ export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], s
                 icon={block.visual === 'donut' ? <PieChartIcon size={18} /> : <BarChart3 size={18} />}
                 className={spanClass(block.span)}
               >
-                {block.visual === 'donut' ? (
+                {block.visual === 'donut' || block.visual === 'pie' ? (
                   <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] items-center">
                     <div style={{ width: '100%', height: 220 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={items} dataKey="value" nameKey="label" innerRadius={52} outerRadius={84} paddingAngle={2}>
+                          <Pie
+                            data={items}
+                            dataKey="value"
+                            nameKey="label"
+                            innerRadius={block.visual === 'donut' ? 52 : 0}
+                            outerRadius={84}
+                            paddingAngle={2}
+                          >
                             {items.map((item, index) => <Cell key={item.label} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />)}
                           </Pie>
                           <Tooltip formatter={(v) => formatMetricValue(v, block.valueFormat)} />
@@ -162,6 +169,28 @@ export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], s
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : block.visual === 'line' ? (
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={items} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 11 }} hide={items.length > 8} />
+                        <YAxis tick={{ fill: 'var(--text-3)', fontSize: 11 }} />
+                        <Tooltip formatter={(v) => formatMetricValue(v, block.valueFormat)} />
+                        <Line dataKey="value" stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : block.visual === 'area' ? (
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={items} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 11 }} hide={items.length > 8} />
+                        <YAxis tick={{ fill: 'var(--text-3)', fontSize: 11 }} />
+                        <Tooltip formatter={(v) => formatMetricValue(v, block.valueFormat)} />
+                        <Area dataKey="value" stroke="var(--accent)" fill="var(--accent-dim)" strokeWidth={2.5} />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
                 ) : block.visual === 'list' ? (
                   <div className="space-y-3">
