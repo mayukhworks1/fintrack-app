@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
   RefreshCw, Receipt, Unlink, Clock, TrendingUp, DollarSign,
-  Users, Calendar, BarChart2, CheckCircle2, AlertCircle,
+  Users, Calendar, BarChart2, CheckCircle2, AlertCircle, Activity,
   ChevronDown, ChevronUp,
 } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
