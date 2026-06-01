@@ -1,7 +1,40 @@
 from __future__ import annotations
 
+from io import BytesIO
 from datetime import datetime, timezone
 from typing import Any
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+
+_REPORT_FONT = "FinTrackReport"
+_REPORT_FONT_BOLD = "FinTrackReportBold"
+
+
+def _ensure_report_fonts() -> tuple[str, str]:
+    for font_name, font_path in (
+        (_REPORT_FONT, "/Library/Fonts/Arial Unicode.ttf"),
+        (_REPORT_FONT, "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+    ):
+        try:
+            pdfmetrics.getFont(font_name)
+            bold_name = f"{font_name}Bold"
+            pdfmetrics.getFont(bold_name)
+            return font_name, bold_name
+        except KeyError:
+            try:
+                pdfmetrics.registerFont(TTFont(font_name, font_path))
+                pdfmetrics.registerFont(TTFont(bold_name, font_path))
+                return font_name, bold_name
+            except Exception:
+                continue
+    return "Helvetica", "Helvetica-Bold"
 
 
 def _escape_pdf_text(value: str) -> str:
@@ -14,6 +47,83 @@ def _cell(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.2f}".rstrip("0").rstrip(".")
     return str(value)
+
+
+def _human_label(value: str) -> str:
+    return str(value or "").replace("_", " ").replace("-", " ").strip().title()
+
+
+def _friendly_timestamp(value: Any) -> str:
+    text = _cell(value)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        local_dt = parsed.astimezone()
+        return local_dt.strftime("%d %b %Y, %I:%M %p")
+    except Exception:
+        return text
+
+
+def _looks_like_datetime(value: Any) -> bool:
+    text = _cell(value)
+    return "T" in text or text.endswith("Z")
+
+
+def _friendly_date(value: Any) -> str:
+    text = _cell(value)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed.strftime("%d %b %Y")
+    except Exception:
+        return text
+
+
+def _format_metric_value(label: str, value: Any) -> str:
+    text = _cell(value)
+    if not text:
+        return ""
+    if _looks_like_datetime(text):
+        return _friendly_timestamp(text)
+    return text
+
+
+def _format_report_cell(column_label: str, value: Any) -> str:
+    text = _cell(value)
+    if not text:
+        return "—"
+    lowered = column_label.lower()
+    if _looks_like_datetime(text) or "date" in lowered or lowered in {"raised", "cleared"}:
+        return _friendly_date(text)
+    return text
+
+
+def _friendly_filters_summary(value: Any) -> str:
+    text = _cell(value)
+    if not text or text == "No active filters":
+        return "No filters applied"
+    parts = []
+    for chunk in text.split(" · "):
+        if ":" in chunk:
+            key, raw = chunk.split(":", 1)
+            parts.append(f"{_human_label(key)}: {raw.strip()}")
+        else:
+            parts.append(chunk.strip())
+    return "  •  ".join(parts)
+
+
+def _report_meta_lines(meta: dict[str, Any], rows: list[list[Any]], columns: list[str]) -> list[tuple[str, str]]:
+    lines = [
+        ("Report", _cell(meta.get("page_label") or meta.get("page") or "")),
+        ("Dataset", _cell(meta.get("source_label") or meta.get("source") or "")),
+        ("Rows", _cell(meta.get("rows") or len(rows))),
+        ("Columns", _cell(len(columns))),
+        ("Generated", _friendly_timestamp(meta.get("generated_at"))),
+        ("Filters", _friendly_filters_summary(meta.get("filters_summary"))),
+    ]
+    return [(label, value) for label, value in lines if value]
 
 
 def build_excel_xml(title: str, columns: list[str], rows: list[list[Any]], meta: dict[str, Any] | None = None) -> bytes:
@@ -72,228 +182,199 @@ def build_excel_xml(title: str, columns: list[str], rows: list[list[Any]], meta:
 
 def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta: dict[str, Any] | None = None) -> bytes:
     meta = meta or {}
-    page_width = 842
-    page_height = 595
-    margin = 34
-    content_width = page_width - (margin * 2)
-    header_height = 54
-    meta_card_height = 58
-    footer_height = 24
-    row_gap = 2
-
-    def _key_label(key: str) -> str:
-        return key.replace("_", " ").strip().title()
-
-    def _clip_text(value: str, width: float, font_size: int) -> str:
-        max_chars = max(4, int(width / max(font_size * 0.46, 1)))
-        if len(value) <= max_chars:
-            return value
-        return value[: max(1, max_chars - 1)] + "…"
-
-    summary_cards = meta.get("summary_cards") if isinstance(meta.get("summary_cards"), list) else []
-    visible_meta = [
-        ("page_label", _cell(meta.get("page_label") or title)),
-        ("source_label", _cell(meta.get("source_label") or meta.get("source") or "")),
-        ("rows", _cell(meta.get("rows") or len(rows))),
-        ("columns", _cell(len(columns))),
-        ("generated_at", _cell(meta.get("generated_at") or "")),
-        ("filters_summary", _cell(meta.get("filters_summary") or "No active filters")),
-    ]
-    visible_meta = [(k, v) for k, v in visible_meta if v][:6]
-    col_count = max(len(columns), 1)
-    base_col_width = content_width / col_count
-    col_widths = [base_col_width for _ in columns]
-
-    def _draw_rect(x: float, y: float, w: float, h: float, fill_rgb: tuple[float, float, float], stroke_rgb: tuple[float, float, float] | None = None, line_width: float = 1.0) -> str:
-        cmds = []
-        if stroke_rgb is not None:
-            cmds.append(f"{stroke_rgb[0]:.3f} {stroke_rgb[1]:.3f} {stroke_rgb[2]:.3f} RG")
-            cmds.append(f"{line_width:.2f} w")
-        cmds.append(f"{fill_rgb[0]:.3f} {fill_rgb[1]:.3f} {fill_rgb[2]:.3f} rg")
-        cmds.append(f"{x:.2f} {y:.2f} {w:.2f} {h:.2f} re")
-        cmds.append("B" if stroke_rgb is not None else "f")
-        return "\n".join(cmds)
-
-    def _draw_text(x: float, y: float, text: str, font: str = "F1", size: int = 10, rgb: tuple[float, float, float] = (0.12, 0.16, 0.24)) -> str:
-        return "\n".join(
-            [
-                "BT",
-                f"/{font} {size} Tf",
-                f"{rgb[0]:.3f} {rgb[1]:.3f} {rgb[2]:.3f} rg",
-                f"1 0 0 1 {x:.2f} {y:.2f} Tm",
-                f"({_escape_pdf_text(text)}) Tj",
-                "ET",
-            ]
-        )
-
-    def _row_height(row: list[Any], font_size: int = 9) -> float:
-        if not columns:
-            return 20
-        lines_needed = 1
-        for idx, cell in enumerate(row):
-            width = col_widths[min(idx, len(col_widths) - 1)] - 10
-            max_chars = max(6, int(width / max(font_size * 0.45, 1)))
-            text = _cell(cell)
-            wrapped = max(1, (len(text) // max_chars) + (1 if len(text) % max_chars else 0))
-            lines_needed = max(lines_needed, min(wrapped, 3))
-        return 16 + ((lines_needed - 1) * 10)
-
-    def _wrap_text(value: str, width: float, font_size: int, max_lines: int = 3) -> list[str]:
-        text = _cell(value)
-        max_chars = max(6, int(width / max(font_size * 0.45, 1)))
-        if len(text) <= max_chars:
-            return [text]
-        words = text.split()
-        if len(words) <= 1:
-            return [_clip_text(text, width, font_size)]
-        lines: list[str] = []
-        current = ""
-        for word in words:
-            trial = f"{current} {word}".strip()
-            if len(trial) <= max_chars:
-                current = trial
-            else:
-                if current:
-                    lines.append(current)
-                current = word
-            if len(lines) >= max_lines:
-                break
-        if current and len(lines) < max_lines:
-            lines.append(current)
-        if len(lines) == max_lines and len(" ".join(words)) > sum(len(line) for line in lines):
-            lines[-1] = _clip_text(lines[-1], width, font_size)
-        return lines[:max_lines]
-
-    row_heights = [_row_height(row) for row in rows]
-
-    def _page_commands(page_index: int, page_rows: list[tuple[list[Any], float]], start_row: int) -> str:
-        cmds: list[str] = []
-        # top header band
-        cmds.append(_draw_rect(margin, page_height - margin - header_height, content_width, header_height, (0.16, 0.27, 0.96)))
-        cmds.append(_draw_text(margin + 16, page_height - margin - 20, title, font="F2", size=20, rgb=(1, 1, 1)))
-        subtitle = f"{pageLabel if (pageLabel := meta.get('page_label')) else 'Insight export'} · {len(rows)} rows · {len(columns)} columns"
-        cmds.append(_draw_text(margin + 16, page_height - margin - 38, subtitle, font="F1", size=9, rgb=(0.91, 0.94, 1.0)))
-
-        y = page_height - margin - header_height - 16
-        if summary_cards:
-            card_width = (content_width - 24) / min(4, max(len(summary_cards), 1))
-            top_cards = summary_cards[:4]
-            card_y = y - 28
-            for idx, card in enumerate(top_cards):
-                card_x = margin + (idx * (card_width + 8))
-                cmds.append(_draw_rect(card_x, card_y, card_width, 26, (0.94, 0.97, 1.0), (0.86, 0.90, 0.98), 0.7))
-                cmds.append(_draw_text(card_x + 8, card_y + 17, _clip_text(_cell(card.get("label")), card_width - 16, 7), font="F2", size=7, rgb=(0.38, 0.46, 0.63)))
-                cmds.append(_draw_text(card_x + 8, card_y + 7, _clip_text(_cell(card.get("value")), card_width - 16, 10), font="F2", size=10, rgb=(0.12, 0.16, 0.24)))
-            y = card_y - 14
-
-        if visible_meta:
-            meta_y = y - meta_card_height
-            chip_width = (content_width - 12) / 2
-            for idx, (key, value) in enumerate(visible_meta):
-                col = idx % 2
-                row = idx // 2
-                chip_x = margin + (col * (chip_width + 12))
-                chip_y = meta_y - (row * 22)
-                cmds.append(_draw_rect(chip_x, chip_y, chip_width, 18, (0.95, 0.97, 1.0), (0.86, 0.90, 0.98), 0.7))
-                cmds.append(_draw_text(chip_x + 8, chip_y + 11, _key_label(key), font="F2", size=7, rgb=(0.38, 0.46, 0.63)))
-                cmds.append(_draw_text(chip_x + 78, chip_y + 11, _clip_text(value, chip_width - 86, 8), font="F1", size=8, rgb=(0.12, 0.16, 0.24)))
-            y = meta_y - 34
-
-        # table header
-        table_header_y = y
-        cmds.append(_draw_rect(margin, table_header_y - 20, content_width, 20, (0.90, 0.94, 1.0), (0.83, 0.88, 0.96), 0.8))
-        x = margin
-        for idx, column in enumerate(columns):
-            width = col_widths[idx]
-            cmds.append(_draw_text(x + 6, table_header_y - 13, _clip_text(column, width - 12, 8), font="F2", size=8, rgb=(0.19, 0.28, 0.52)))
-            x += width
-        y = table_header_y - 22
-
-        for idx, (row, height) in enumerate(page_rows):
-            row_y = y - height
-            fill = (1.0, 1.0, 1.0) if (start_row + idx) % 2 == 0 else (0.975, 0.982, 1.0)
-            cmds.append(_draw_rect(margin, row_y, content_width, height, fill, (0.90, 0.93, 0.98), 0.5))
-            x = margin
-            for cell_idx, cell in enumerate(row):
-                width = col_widths[min(cell_idx, len(col_widths) - 1)]
-                wrapped = _wrap_text(_cell(cell), width - 12, 9, max_lines=3)
-                for line_idx, line in enumerate(wrapped):
-                    cmds.append(_draw_text(x + 6, row_y + height - 13 - (line_idx * 9), line, font="F1", size=9, rgb=(0.15, 0.18, 0.26)))
-                x += width
-            y = row_y - row_gap
-
-        footer = f"Page {page_index + 1}"
-        cmds.append(_draw_text(page_width - margin - 42, footer_height, footer, font="F1", size=8, rgb=(0.50, 0.57, 0.68)))
-        return "\n".join(cmds)
-
-    available_table_height_first = page_height - (margin * 2) - header_height - meta_card_height - footer_height - 48
-    available_table_height_other = page_height - (margin * 2) - header_height - footer_height - 48
-
-    pages: list[str] = []
-    cursor = 0
-    page_index = 0
-    while cursor < len(rows):
-        budget = available_table_height_first if page_index == 0 else available_table_height_other
-        page_rows: list[tuple[list[Any], float]] = []
-        used = 20.0  # table header
-        while cursor < len(rows):
-            next_height = row_heights[cursor] + row_gap
-            if page_rows and used + next_height > budget:
-                break
-            if not page_rows and next_height > budget:
-                next_height = min(next_height, budget)
-            page_rows.append((rows[cursor], row_heights[cursor]))
-            used += next_height
-            cursor += 1
-        pages.append(_page_commands(page_index, page_rows, cursor - len(page_rows)))
-        page_index += 1
-
-    if not pages:
-        pages.append(_page_commands(0, [], 0))
-
-    objects: list[bytes] = []
-
-    def add_object(payload: str) -> int:
-        objects.append(payload.encode("utf-8"))
-        return len(objects)
-
-    font_obj = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-    font_bold_obj = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
-    page_ids: list[int] = []
-    content_ids: list[int] = []
-    pages_obj_placeholder = add_object("")
-    for page in pages:
-        content_id = add_object(f"<< /Length {len(page.encode('utf-8'))} >>\nstream\n{page}\nendstream")
-        content_ids.append(content_id)
-        page_id = add_object(
-            f"<< /Type /Page /Parent {pages_obj_placeholder} 0 R "
-            f"/Resources << /Font << /F1 {font_obj} 0 R /F2 {font_bold_obj} 0 R >> >> "
-            f"/MediaBox [0 0 {page_width} {page_height}] /Contents {content_id} 0 R >>"
-        )
-        page_ids.append(page_id)
-
-    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
-    objects[pages_obj_placeholder - 1] = f"<< /Type /Pages /Count {len(page_ids)} /Kids [{kids}] >>".encode("utf-8")
-    catalog_obj = add_object(f"<< /Type /Catalog /Pages {pages_obj_placeholder} 0 R >>")
-
-    pdf = bytearray(b"%PDF-1.4\n")
-    xref_positions = [0]
-    for idx, obj in enumerate(objects, start=1):
-        xref_positions.append(len(pdf))
-        pdf.extend(f"{idx} 0 obj\n".encode("utf-8"))
-        pdf.extend(obj)
-        pdf.extend(b"\nendobj\n")
-    xref_start = len(pdf)
-    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("utf-8"))
-    pdf.extend(b"0000000000 65535 f \n")
-    for pos in xref_positions[1:]:
-        pdf.extend(f"{pos:010d} 00000 n \n".encode("utf-8"))
-    pdf.extend(
-        f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_obj} 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode(
-            "utf-8"
-        )
+    base_font, bold_font = _ensure_report_fonts()
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
     )
-    return bytes(pdf)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "FinTrackTitle",
+        parent=styles["Heading1"],
+        fontName=bold_font,
+        fontSize=22,
+        leading=26,
+        textColor=colors.HexColor("#101B33"),
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        "FinTrackSubtitle",
+        parent=styles["BodyText"],
+        fontName=base_font,
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor("#5B6B86"),
+        spaceAfter=8,
+    )
+    label_style = ParagraphStyle(
+        "FinTrackLabel",
+        parent=styles["BodyText"],
+        fontName=bold_font,
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#7082A1"),
+    )
+    value_style = ParagraphStyle(
+        "FinTrackValue",
+        parent=styles["BodyText"],
+        fontName=base_font,
+        fontSize=10,
+        leading=12,
+        textColor=colors.HexColor("#16233B"),
+    )
+    card_label_style = ParagraphStyle(
+        "FinTrackCardLabel",
+        parent=styles["BodyText"],
+        fontName=bold_font,
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#7082A1"),
+    )
+    card_value_style = ParagraphStyle(
+        "FinTrackCardValue",
+        parent=styles["BodyText"],
+        fontName=bold_font,
+        fontSize=14,
+        leading=17,
+        textColor=colors.HexColor("#101B33"),
+    )
+    table_header_style = ParagraphStyle(
+        "FinTrackTableHeader",
+        parent=styles["BodyText"],
+        fontName=bold_font,
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#2746F5"),
+    )
+    table_cell_style = ParagraphStyle(
+        "FinTrackTableCell",
+        parent=styles["BodyText"],
+        fontName=base_font,
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#16233B"),
+    )
+
+    story: list[Any] = []
+    page_label = _cell(meta.get("page_label") or meta.get("page") or title)
+    source_label = _cell(meta.get("source_label") or meta.get("source") or "")
+    summary_cards = meta.get("summary_cards") if isinstance(meta.get("summary_cards"), list) else []
+
+    story.append(Paragraph(title, title_style))
+    subtitle_bits = [page_label]
+    if source_label:
+        subtitle_bits.append(source_label)
+    subtitle_bits.append(f"{len(rows):,} rows")
+    subtitle_bits.append(f"{len(columns):,} columns")
+    story.append(Paragraph(" • ".join(subtitle_bits), subtitle_style))
+
+    report_meta = _report_meta_lines(meta, rows, columns)
+    if report_meta:
+        meta_cells = []
+        for label, value in report_meta:
+            meta_cells.append(
+                [
+                    Paragraph(label.upper(), label_style),
+                    Paragraph(value, value_style),
+                ]
+            )
+        meta_table = Table(meta_cells, colWidths=[30 * mm, 96 * mm], hAlign="LEFT")
+        meta_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F6F8FC")),
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D8E0EE")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E5EBF6")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        story.append(meta_table)
+        story.append(Spacer(1, 8))
+
+    if summary_cards:
+        top_cards = summary_cards[:4]
+        card_rows = []
+        row = []
+        for card in top_cards:
+            cell = Table(
+                [[Paragraph(_cell(card.get("label") or ""), card_label_style)], [Paragraph(_format_metric_value(_cell(card.get("label")), card.get("value")), card_value_style)]],
+                colWidths=[43 * mm],
+            )
+            cell.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EEF3FF")),
+                        ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#D7E1FF")),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                        ("TOPPADDING", (0, 0), (-1, -1), 8),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ]
+                )
+            )
+            row.append(cell)
+        card_rows.append(row)
+        cards_table = Table(card_rows, colWidths=[46 * mm] * len(row), hAlign="LEFT")
+        cards_table.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 8)]))
+        story.append(cards_table)
+        story.append(Spacer(1, 10))
+
+    if not columns:
+        story.append(Paragraph("No columns selected for this report.", value_style))
+    else:
+        header_row = [Paragraph(_human_label(column), table_header_style) for column in columns]
+        body_rows = []
+        for row in rows:
+            body_rows.append(
+                [Paragraph(_format_report_cell(columns[idx], cell), table_cell_style) for idx, cell in enumerate(row)]
+            )
+        table_data = [header_row] + body_rows
+        available_width = doc.width
+        col_width = available_width / max(len(columns), 1)
+        col_widths = [col_width for _ in columns]
+        report_table = Table(table_data, repeatRows=1, colWidths=col_widths, hAlign="LEFT")
+        report_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF0FF")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#2746F5")),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_font),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D7E1F2")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E3EAF5")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FBFF")]),
+                ]
+            )
+        )
+        story.append(report_table)
+
+    def _decorate_page(canvas, document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#DBE5F6"))
+        canvas.setFillColor(colors.HexColor("#2746F5"))
+        canvas.rect(document.leftMargin, document.height + document.topMargin + 3 * mm, document.width, 5 * mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#5B6B86"))
+        canvas.setFont(base_font, 8)
+        canvas.drawRightString(document.pagesize[0] - document.rightMargin, 8 * mm, f"Page {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_decorate_page, onLaterPages=_decorate_page)
+    return buffer.getvalue()
 
 
 def default_export_meta(page_key: str, source_key: str, row_count: int) -> dict[str, Any]:
