@@ -7,6 +7,7 @@ import {
   ArrowRight, Flame, Activity
 } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
+import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
@@ -206,6 +207,8 @@ export default function Dashboard() {
   const { isEditor } = useAuth()
   const { dark } = useTheme()
   const [activeWidgetIds, setActiveWidgetIds] = useState(DASHBOARD_DEFAULT_WIDGET_IDS)
+  const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
+  const [customSourceRows, setCustomSourceRows] = useState({})
 
   const fetchAll = useCallback(() =>
     Promise.all([
@@ -266,6 +269,18 @@ export default function Dashboard() {
         label: 'Top projects snapshot',
         columns: projectColumns,
         defaultColumns: projectColumns.map((col) => col.key),
+        loadRows: async () => {
+          const res = await api.projects.list({ limit: 500, order_by: 'Amount Billed So far' })
+          return (res.records || []).map((record) => ({
+            client: record.fields?.['Client'] || '',
+            project: record.fields?.['Project Name'] || '',
+            status: record.fields?.['Project Status'] || '',
+            health: record.fields?.['Health'] || '',
+            billed: record.fields?.['Amount Billed So far'] || 0,
+            profit: record.fields?.['Actual Profit'] || 0,
+            profit_pct: record.fields?.['Profit percentage'] || 0,
+          }))
+        },
         getRows: () => recent.map((record) => ({
           client: record.fields?.['Client'] || '',
           project: record.fields?.['Project Name'] || '',
@@ -342,6 +357,10 @@ export default function Dashboard() {
               sourceOptions={dashboardSourceOptions}
               currentFilters={{ updated_at: lastUpdated || null }}
               onApplyWidgets={setActiveWidgetIds}
+              onApplyCustomBlocks={(blocks, rowsByKey) => {
+                setActiveCustomBlocks(blocks)
+                setCustomSourceRows(rowsByKey || {})
+              }}
             />
             <button
               onClick={refresh}
@@ -463,6 +482,12 @@ export default function Dashboard() {
           <button onClick={refresh} className="underline">retry</button>
         </div>
       )}
+
+      <CustomInsightBlocks
+        blocks={activeCustomBlocks}
+        sourceOptions={dashboardSourceOptions}
+        sourceRowsByKey={customSourceRows}
+      />
 
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}

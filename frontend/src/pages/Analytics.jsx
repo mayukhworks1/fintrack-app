@@ -10,6 +10,7 @@ import {
   Users, Layers, Zap, ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
@@ -239,6 +240,8 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
 export default function Analytics() {
   const [period, setPeriod] = useState('all')
   const [activeWidgetIds, setActiveWidgetIds] = useState(ANALYTICS_DEFAULT_WIDGET_IDS)
+  const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
+  const [customSourceRows, setCustomSourceRows] = useState({})
   const { dark } = useTheme()
 
   const fetchAll = useCallback(() =>
@@ -577,6 +580,21 @@ export default function Analytics() {
         label: 'Invoices in current period',
         columns: invoiceColumns,
         defaultColumns: invoiceColumns.map((col) => col.key),
+        loadRows: async () => {
+          const res = await api.invoices.list({ limit: 1000 })
+          const rows = (res.records || []).map((record) => ({
+            invoice_number: record.fields?.['Invoice Number'] || '',
+            project: record.fields?.['Project'] || '',
+            status: record.fields?.['Payment Status'] || '',
+            raised_date: record.fields?.['Raised Date'] || '',
+            cleared_date: record.fields?.['Cleared Date'] || '',
+            amount_raised: record.fields?.['Amount Raised'] || 0,
+            received: record.fields?.['Amount Received'] || 0,
+            aging_days: record.fields?.['Agening (Days)'] || 0,
+          }))
+          if (!cutoff) return rows
+          return rows.filter((row) => row.raised_date && row.raised_date >= cutoff)
+        },
         getRows: () => invoices.map((record) => ({
           invoice_number: record.fields?.['Invoice Number'] || '',
           project: record.fields?.['Project'] || '',
@@ -613,10 +631,51 @@ export default function Analytics() {
           { key: 'outstanding', label: 'Outstanding' },
         ],
         defaultColumns: ['name', 'status', 'billed', 'profit', 'margin', 'outstanding'],
+        loadRows: async () => {
+          const [projSummary, projList, invSummary, invList] = await Promise.all([
+            api.projects.summary(),
+            api.projects.list({ limit: 500 }),
+            api.invoices.summary(),
+            api.invoices.list({ limit: 1000 }),
+          ])
+          void projSummary
+          void invSummary
+          const projectsFull = projList.records || []
+          const invoicesFull = invList.records || []
+          const buckets = {}
+          invoicesFull.forEach((record) => {
+            const fields = record.fields || {}
+            const project = fields['Project'] || 'Unknown'
+            const amountRaised = Number(fields['Amount Raised'] || 0)
+            const received = Number(fields['Amount Received'] || 0)
+            const status = fields['Payment Status'] || 'Unknown'
+            const bucket = buckets[project] || { invoiced: 0, outstanding: 0 }
+            bucket.invoiced += amountRaised
+            if (status !== 'Paid' && status !== 'Cancelled') bucket.outstanding += Math.max(0, amountRaised - received)
+            buckets[project] = bucket
+          })
+          return projectsFull.map((project) => {
+            const fields = project.fields || {}
+            const name = fields['Project Name'] || 'Unknown'
+            const billed = Number(fields['Amount Billed So far'] || 0)
+            const cost = Number(fields['Actual Cost'] || 0)
+            const profit = Number(fields['Actual Profit'] || 0)
+            return {
+              name,
+              status: fields['Project Status'] || 'Unknown',
+              billed,
+              cost,
+              profit,
+              margin: billed > 0 ? (profit / billed) * 100 : 0,
+              invoiced: buckets[name]?.invoiced || 0,
+              outstanding: buckets[name]?.outstanding || 0,
+            }
+          })
+        },
         getRows: () => projMatrix,
       },
     ]
-  }, [cashflow, invoices, projMatrix])
+  }, [cashflow, cutoff, invoices, projMatrix])
 
   if (loading && !data) return (
     <div className="p-4 sm:p-6 space-y-5 animate-fade-in">
@@ -693,6 +752,10 @@ export default function Analytics() {
               sourceOptions={analyticsSourceOptions}
               currentFilters={{ period, invoice_count: invoices.length }}
               onApplyWidgets={setActiveWidgetIds}
+              onApplyCustomBlocks={(blocks, rowsByKey) => {
+                setActiveCustomBlocks(blocks)
+                setCustomSourceRows(rowsByKey || {})
+              }}
             />
             <div className="inline-flex items-center p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {PERIODS.map(p => (
@@ -785,6 +848,12 @@ export default function Analytics() {
           <button onClick={refresh} className="underline ml-1">retry</button>
         </div>
       )}
+
+      <CustomInsightBlocks
+        blocks={activeCustomBlocks}
+        sourceOptions={analyticsSourceOptions}
+        sourceRowsByKey={customSourceRows}
+      />
 
       {/* ── KPI strip — 5 cards with sparklines ── */}
       {visibleWidgets.has('kpi_strip') && (
