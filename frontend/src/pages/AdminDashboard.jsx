@@ -241,9 +241,9 @@ function OverviewTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts = {}) => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.stats()) }
+    try { setData(await api.admin.stats(opts)) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [])
@@ -379,9 +379,19 @@ function OverviewTab() {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
-          Mirror Sanity
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+            Mirror Sanity
+          </h3>
+          <button
+            onClick={() => load({ fresh: true })}
+            disabled={loading}
+            className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {[
             ['Projects', data.projects_total, data.projects_stale, data.projects_deleted, data.projects_last_sync],
