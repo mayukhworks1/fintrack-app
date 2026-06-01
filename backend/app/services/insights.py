@@ -4,20 +4,15 @@ from io import BytesIO
 from datetime import datetime, timezone
 from typing import Any
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
 
 _REPORT_FONT = "FinTrackReport"
 _REPORT_FONT_BOLD = "FinTrackReportBold"
 
 
 def _ensure_report_fonts() -> tuple[str, str]:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
     for font_name, font_path in (
         (_REPORT_FONT, "/Library/Fonts/Arial Unicode.ttf"),
         (_REPORT_FONT, "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
@@ -181,6 +176,12 @@ def build_excel_xml(title: str, columns: list[str], rows: list[list[Any]], meta:
 
 
 def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta: dict[str, Any] | None = None) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     meta = meta or {}
     base_font, bold_font = _ensure_report_fonts()
     buffer = BytesIO()
