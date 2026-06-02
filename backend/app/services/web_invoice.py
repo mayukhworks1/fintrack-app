@@ -4,6 +4,7 @@ Handles CRUD + summary for the Web Invoice Tracker module.
 Accessible only to the "web" role.
 """
 import json
+import logging
 from typing import Any, Optional
 from datetime import datetime, timezone
 import httpx
@@ -38,9 +39,12 @@ WEB_INVOICE_FIELD_IDS = {
 _TTL_LIST    = 15
 _TTL_ALL     = 30
 _TTL_SUMMARY = 30
+logger = logging.getLogger("fintrack.web_invoices")
 
 def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
+
+AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
 
 
 def _runtime_aging(fields: dict[str, Any]) -> int | None:
@@ -307,6 +311,8 @@ class WebInvoiceService:
             _bust_web_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
+            if created.get("id"):
+                await self.touch_aging_for_record(created["id"])
             return _apply_runtime_invoice_derivatives(created)
 
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
@@ -316,7 +322,9 @@ class WebInvoiceService:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
             _bust_web_cache()
-            return _apply_runtime_invoice_derivatives(res.json())
+            updated = _apply_runtime_invoice_derivatives(res.json())
+            await self.touch_aging_for_record(record_id)
+            return updated
 
     async def delete_invoice(self, record_id: str) -> None:
         url = f"{self._record_url}/{record_id}"
@@ -324,6 +332,65 @@ class WebInvoiceService:
             res = await client.delete(url, headers=self._headers)
             res.raise_for_status()
             _bust_web_cache()
+
+    async def _ensure_aging_refresh_field(self) -> bool:
+        async with httpx.AsyncClient(timeout=20) as client:
+            res = await client.get(self._field_url, headers=self._headers)
+            res.raise_for_status()
+            fields = res.json()
+            if any((f.get("name") or "").strip() == AGING_REFRESH_HELPER_FIELD for f in fields):
+                return True
+            try:
+                create = await client.post(
+                    self._field_url,
+                    json={"name": AGING_REFRESH_HELPER_FIELD, "type": "singleLineText"},
+                    headers=self._headers,
+                )
+                create.raise_for_status()
+                return True
+            except Exception as exc:
+                logger.warning("web invoice aging helper field create failed: %s", exc)
+                return False
+
+    async def touch_aging_for_record(self, record_id: str) -> bool:
+        try:
+            if not await self._ensure_aging_refresh_field():
+                return False
+            url = f"{self._record_url}/{record_id}"
+            stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            body = {"fieldKeyType": "name", "record": {"fields": {AGING_REFRESH_HELPER_FIELD: stamp}}}
+            async with httpx.AsyncClient(timeout=15) as client:
+                res = await client.patch(url, json=body, headers=self._headers)
+                res.raise_for_status()
+            _bust_web_cache()
+            return True
+        except Exception as exc:
+            logger.warning("web invoice aging touch failed for %s: %s", record_id, exc)
+            return False
+
+    async def touch_pending_aging_records(self) -> dict[str, int]:
+        params: dict[str, Any] = {
+            "fieldKeyType": "name",
+            "take": 1000,
+            "skip": 0,
+            "filter": json.dumps({
+                "conjunction": "and",
+                "filterSet": [{
+                    "fieldId": WEB_INVOICE_FIELD_IDS["Payment Status"],
+                    "operator": "is",
+                    "value": "Pending",
+                }],
+            }),
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.get(self._record_url, params=params, headers=self._headers)
+            res.raise_for_status()
+            records = res.json().get("records", [])
+        touched = 0
+        for record in records:
+            if record.get("id") and await self.touch_aging_for_record(record["id"]):
+                touched += 1
+        return {"total": len(records), "updated": touched}
 
     async def get_summary(self) -> dict:
         cached = cache.get("webinv:summary")

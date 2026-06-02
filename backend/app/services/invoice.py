@@ -43,6 +43,7 @@ _TTL_ALL     = 30   # full record dump (used by summary + AI)
 _TTL_SUMMARY = 30   # computed summary
 
 logger = logging.getLogger("fintrack.invoices")
+AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
 
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
@@ -88,6 +89,10 @@ class InvoiceService:
     @property
     def _record_url(self):
         return f"{self.base_url}/api/table/{self.table_id}/record"
+
+    @property
+    def _field_url(self):
+        return f"{self.base_url}/api/table/{self.table_id}/field"
 
     async def list_invoices_from_pg(
         self,
@@ -333,9 +338,6 @@ class InvoiceService:
 
     # ── Get single invoice ────────────────────────────────────────────────
     async def get_invoice(self, record_id: str) -> dict:
-        pg = await self.get_invoice_from_pg(record_id)
-        if pg is not None:
-            return pg
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(url, headers=self._headers)
@@ -351,6 +353,8 @@ class InvoiceService:
             _bust_invoice_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
+            if created.get("id"):
+                await self.touch_aging_for_record(created["id"])
             return _apply_runtime_invoice_derivatives(created)
 
     # ── Update invoice ────────────────────────────────────────────────────
@@ -364,7 +368,9 @@ class InvoiceService:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
             _bust_invoice_cache()
-            return _apply_runtime_invoice_derivatives(res.json())
+            updated = _apply_runtime_invoice_derivatives(res.json())
+            await self.touch_aging_for_record(record_id)
+            return updated
 
     # ── Delete invoice ────────────────────────────────────────────────────
     async def delete_invoice(self, record_id: str) -> None:
@@ -400,6 +406,65 @@ class InvoiceService:
         fields = data.get("fields", {})
         attachments = fields.get(field_id) or fields.get(field_name) or []
         return {"record": data, "attachments": attachments}
+
+    async def _ensure_aging_refresh_field(self) -> bool:
+        async with httpx.AsyncClient(timeout=20) as client:
+            res = await client.get(self._field_url, headers=self._headers)
+            res.raise_for_status()
+            fields = res.json()
+            if any((f.get("name") or "").strip() == AGING_REFRESH_HELPER_FIELD for f in fields):
+                return True
+            try:
+                create = await client.post(
+                    self._field_url,
+                    json={"name": AGING_REFRESH_HELPER_FIELD, "type": "singleLineText"},
+                    headers=self._headers,
+                )
+                create.raise_for_status()
+                return True
+            except Exception as exc:
+                logger.warning("invoice aging helper field create failed: %s", exc)
+                return False
+
+    async def touch_aging_for_record(self, record_id: str) -> bool:
+        try:
+            if not await self._ensure_aging_refresh_field():
+                return False
+            url = f"{self._record_url}/{record_id}"
+            stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            body = {"fieldKeyType": "name", "record": {"fields": {AGING_REFRESH_HELPER_FIELD: stamp}}}
+            async with httpx.AsyncClient(timeout=15) as client:
+                res = await client.patch(url, json=body, headers=self._headers)
+                res.raise_for_status()
+            _bust_invoice_cache()
+            return True
+        except Exception as exc:
+            logger.warning("invoice aging touch failed for %s: %s", record_id, exc)
+            return False
+
+    async def touch_pending_aging_records(self) -> dict[str, int]:
+        params: dict[str, Any] = {
+            "fieldKeyType": "name",
+            "take": 1000,
+            "skip": 0,
+            "filter": json.dumps({
+                "conjunction": "and",
+                "filterSet": [{
+                    "fieldId": INVOICE_FIELD_IDS["Payment Status"],
+                    "operator": "is",
+                    "value": "Pending",
+                }],
+            }),
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.get(self._record_url, params=params, headers=self._headers)
+            res.raise_for_status()
+            records = res.json().get("records", [])
+        touched = 0
+        for record in records:
+            if record.get("id") and await self.touch_aging_for_record(record["id"]):
+                touched += 1
+        return {"total": len(records), "updated": touched}
 
     # ── Compute summary ───────────────────────────────────────────────────
     async def get_summary(self) -> dict:

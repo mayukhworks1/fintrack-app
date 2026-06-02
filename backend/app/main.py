@@ -24,6 +24,7 @@ from .db import postgres, valkey as vk
 from .db.postgres import get_init_error
 from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
+from .services.invoice_aging import invoice_aging_refresh_loop
 from .routers.deps import require_auth
 
 logger = logging.getLogger("fintrack")
@@ -31,11 +32,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 _sync_task:  Optional[asyncio.Task] = None
 _audit_task: Optional[asyncio.Task] = None
+_aging_refresh_task: Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _sync_task, _audit_task
+    global _sync_task, _audit_task, _aging_refresh_task
     logger.info("FinTrack API starting (version=%s)", app.version)
 
     await postgres.init_pool()
@@ -63,11 +65,13 @@ async def lifespan(app: FastAPI):
     if postgres.get_pool() and (settings.teable_api_token or settings.teable_web_api_token):
         _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
         logger.info("Background Teable sync task started")
+        _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
+        logger.info("Background invoice aging refresh task started")
 
     yield
 
     # ── Graceful shutdown ─────────────────────────────────────────────────
-    for task in (_sync_task, _audit_task):
+    for task in (_sync_task, _audit_task, _aging_refresh_task):
         if task and not task.done():
             task.cancel()
             try:

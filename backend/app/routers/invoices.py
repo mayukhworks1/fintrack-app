@@ -89,10 +89,10 @@ class InvoiceFields(BaseModel):
 async def invoice_summary(_role: str = Depends(require_auth)):
     try:
         svc = InvoiceService()
-        summary = await svc.get_summary_from_pg()
+        summary = await svc.get_summary()
         if summary is not None:
             return summary
-        return await svc.get_summary()
+        return await svc.get_summary_from_pg()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -109,13 +109,13 @@ async def list_invoices(
 ):
     try:
         svc = InvoiceService()
-        result = await svc.list_invoices_from_pg(
+        result = await svc.list_invoices(
             status=status, project=project,
             limit=limit, skip=skip,
             order_by=order_by, order=order,
         )
         if result is None:
-            result = await svc.list_invoices(
+            result = await svc.list_invoices_from_pg(
                 status=status, project=project,
                 limit=limit, skip=skip,
                 order_by=order_by, order=order,
@@ -130,9 +130,9 @@ async def list_invoices(
 async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
     try:
         svc = InvoiceService()
-        record = await svc.get_invoice_from_pg(record_id)
+        record = await svc.get_invoice(record_id)
         if record is None:
-            record = await svc.get_invoice(record_id)
+            record = await svc.get_invoice_from_pg(record_id)
         hydrated = await _associations().hydrate_records("invoices", [record])
         return hydrated[0] if hydrated else record
     except Exception as e:
