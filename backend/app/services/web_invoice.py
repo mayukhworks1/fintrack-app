@@ -9,6 +9,8 @@ from typing import Any, Optional
 from datetime import datetime, timezone
 import httpx
 from ..config import settings
+from ..db.attribution import empty_actor
+from ..db import valkey as vk
 from ..utils.cache import cache
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
@@ -45,6 +47,13 @@ def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
 
 AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
+AGING_REFRESH_DEP_FIELD = "Aging Refresh Serial"
+AGING_FORMULA_FIELD = "Agening (Days)"
+AGING_FORMULA_EXPRESSION = """IF(
+    {Payment Status} = "Pending",
+    ROUND(DATETIME_DIFF(TODAY(), {Raised Date}, 'day')) + (0 * {Aging Refresh Serial}),
+    BLANK()
+)"""
 
 
 def _runtime_aging(fields: dict[str, Any]) -> int | None:
@@ -92,6 +101,18 @@ class WebInvoiceService:
     def _field_url(self):
         return f"{self.base_url}/api/table/{self.table_id}/field"
 
+    def _system_actor(self, path: str) -> dict[str, Any]:
+        actor = empty_actor()
+        actor.update({
+            "change_source": "system",
+            "actor_role": "system",
+            "actor_path": path[:200],
+            "actor_method": "AUTO",
+            "actor_device_label": "FinTrack automation",
+            "actor_device_model": "Web invoice aging refresh worker",
+        })
+        return actor
+
     # ── Picklist (single-select field options) ────────────────────────────
     # Which fields are user-editable select fields (not Payment Status which is fixed)
     PICKLIST_FIELDS = ["Project", "Category", "Milestone", "Raised By", "Currency"]
@@ -131,6 +152,20 @@ class WebInvoiceService:
         }
 
         # Teable's convert endpoint expects the full mutable config where present.
+        for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
+            if key in field:
+                payload[key] = field.get(key)
+        for key in ("unique", "notNull", "isLookup", "isConditionalLookup"):
+            if key in field:
+                payload[key] = bool(field.get(key))
+        return payload
+
+    def _generic_field_convert_payload(self, field: dict, options_override: dict | None = None) -> dict:
+        payload = {
+            "type": field["type"],
+            "name": field["name"],
+            "options": options_override if options_override is not None else (field.get("options") or {}),
+        }
         for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
             if key in field:
                 payload[key] = field.get(key)
@@ -312,7 +347,7 @@ class WebInvoiceService:
             data = res.json()
             created = data.get("records", [{}])[0]
             if created.get("id"):
-                await self.touch_aging_for_record(created["id"])
+                await self.touch_aging_for_record(created["id"], attribute_system=False)
             return _apply_runtime_invoice_derivatives(created)
 
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
@@ -323,7 +358,7 @@ class WebInvoiceService:
             res.raise_for_status()
             _bust_web_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
-            await self.touch_aging_for_record(record_id)
+            await self.touch_aging_for_record(record_id, attribute_system=False)
             return updated
 
     async def delete_invoice(self, record_id: str) -> None:
@@ -351,14 +386,71 @@ class WebInvoiceService:
             except Exception as exc:
                 logger.warning("web invoice aging helper field create failed: %s", exc)
                 return False
+    async def _ensure_aging_refresh_dependency_field(self) -> bool:
+        async with httpx.AsyncClient(timeout=15) as client:
+            fields_res = await client.get(self._field_url, headers=self._headers)
+            fields_res.raise_for_status()
+            fields = fields_res.json()
+            if any((field.get("name") or "").strip() == AGING_REFRESH_DEP_FIELD for field in fields):
+                return True
+            try:
+                create = await client.post(
+                    self._field_url,
+                    json={"name": AGING_REFRESH_DEP_FIELD, "type": "number"},
+                    headers=self._headers,
+                )
+                create.raise_for_status()
+                return True
+            except Exception as exc:
+                logger.warning("web invoice aging dependency field create failed: %s", exc)
+                return False
 
-    async def touch_aging_for_record(self, record_id: str) -> bool:
+    async def _ensure_aging_formula_dependency(self) -> bool:
         try:
-            if not await self._ensure_aging_refresh_field():
+            async with httpx.AsyncClient(timeout=15) as client:
+                fields_res = await client.get(self._field_url, headers=self._headers)
+                fields_res.raise_for_status()
+                fields = fields_res.json()
+                field = next((f for f in fields if (f.get("name") or "").strip() == AGING_FORMULA_FIELD), None)
+                if not field or field.get("type") != "formula":
+                    return False
+                options = dict(field.get("options") or {})
+                key = next((candidate for candidate in ("expression", "formula", "formulaString") if isinstance(options.get(candidate), str)), None)
+                if not key:
+                    logger.warning("web invoice aging formula expression key not found for %s", AGING_FORMULA_FIELD)
+                    return False
+                if AGING_REFRESH_DEP_FIELD in (options.get(key) or ""):
+                    return True
+                updated_options = {**options, key: AGING_FORMULA_EXPRESSION}
+                url = f"{self._field_url}/{field['id']}/convert"
+                res = await client.put(url, json=self._generic_field_convert_payload(field, updated_options), headers=self._headers)
+                res.raise_for_status()
+                logger.info("web invoice aging formula dependency patched for Teable")
+                return True
+        except Exception as exc:
+            logger.warning("web invoice aging formula patch failed: %s", exc)
+            return False
+
+    async def _prepare_aging_refresh_dependencies(self) -> bool:
+        helper_ok = await self._ensure_aging_refresh_field()
+        dep_ok = await self._ensure_aging_refresh_dependency_field()
+        formula_ok = await self._ensure_aging_formula_dependency()
+        return helper_ok and dep_ok and formula_ok
+
+    async def touch_aging_for_record(self, record_id: str, *, attribute_system: bool = True, skip_prepare: bool = False) -> bool:
+        try:
+            if not skip_prepare and not await self._prepare_aging_refresh_dependencies():
                 return False
             url = f"{self._record_url}/{record_id}"
-            stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            body = {"fieldKeyType": "name", "record": {"fields": {AGING_REFRESH_HELPER_FIELD: stamp}}}
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            stamp = now.isoformat().replace("+00:00", "Z")
+            serial = int(now.timestamp())
+            body = {"fieldKeyType": "name", "record": {"fields": {
+                AGING_REFRESH_HELPER_FIELD: stamp,
+                AGING_REFRESH_DEP_FIELD: serial,
+            }}}
+            if attribute_system:
+                await vk.attribution_set(record_id, self._system_actor("/automation/web-invoice-aging-refresh"), ttl=360)
             async with httpx.AsyncClient(timeout=15) as client:
                 res = await client.patch(url, json=body, headers=self._headers)
                 res.raise_for_status()
@@ -369,6 +461,7 @@ class WebInvoiceService:
             return False
 
     async def touch_pending_aging_records(self) -> dict[str, int]:
+        deps_ready = await self._prepare_aging_refresh_dependencies()
         params: dict[str, Any] = {
             "fieldKeyType": "name",
             "take": 1000,
@@ -387,10 +480,21 @@ class WebInvoiceService:
             res.raise_for_status()
             records = res.json().get("records", [])
         touched = 0
+        touched_records: list[dict[str, Any]] = []
         for record in records:
-            if record.get("id") and await self.touch_aging_for_record(record["id"]):
+            if record.get("id") and await self.touch_aging_for_record(record["id"], attribute_system=True, skip_prepare=deps_ready):
                 touched += 1
-        return {"total": len(records), "updated": touched}
+                touched_records.append({
+                    "teable_id": record["id"],
+                    "invoice_number": record.get("fields", {}).get("Invoice Number") or record["id"],
+                    "project": record.get("fields", {}).get("Project") or "",
+                })
+        return {
+            "total": len(records),
+            "updated": touched,
+            "updated_records": touched_records[:25],
+            "formula_dependency_ready": deps_ready,
+        }
 
     async def get_summary(self) -> dict:
         cached = cache.get("webinv:summary")

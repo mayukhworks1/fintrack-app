@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ScrollText, Users, MessageSquareText,
   RefreshCw, Database, FileText, Clock, LogOut,
@@ -1915,6 +1916,12 @@ function SyncLogTab() {
                         <span style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>~{fmt(row.updated)} updated</span>
                         <span style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)} unchanged</span>
                       </div>
+                      {Array.isArray(row.details?.updated_records) && row.details.updated_records.length > 0 && (
+                        <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-2)' }}>
+                          Updated records: {row.details.updated_records.slice(0, 3).map(r => r.invoice_number || r.teable_id).join(', ')}
+                          {row.details.updated_records.length > 3 ? ` +${row.details.updated_records.length - 3}` : ''}
+                        </p>
+                      )}
                       {row.error && <p className="text-[11px] text-red-500 mt-1.5 line-clamp-2">{row.error}</p>}
                     </div>
                   ))}
@@ -1940,6 +1947,12 @@ function SyncLogTab() {
                           </td>
                           <td className="px-3 py-2">
                             <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
+                            {Array.isArray(row.details?.updated_records) && row.details.updated_records.length > 0 && (
+                              <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                                {row.details.updated_records.slice(0, 2).map(r => r.invoice_number || r.teable_id).join(', ')}
+                                {row.details.updated_records.length > 2 ? ` +${row.details.updated_records.length - 2}` : ''}
+                              </p>
+                            )}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-right">{fmt(row.total)}</td>
                           <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>{fmt(row.created)}</td>
@@ -2100,7 +2113,7 @@ function ProjectsMirrorTab() {
 
 // ── Tab: All Invoices (main + web) ────────────────────────────────────────────
 
-function InvoicesTab() {
+function InvoicesTab({ drilldown = null }) {
   const [source, setSource]       = useState('all')   // 'all' | 'main' | 'web'
   const [data, setData]           = useState(null)
   const [loading, setLoading]     = useState(true)
@@ -2109,6 +2122,7 @@ function InvoicesTab() {
   const [statusF, setStatF]       = useState('')
   const [filterProject, setFProject] = useState('')
   const [filterNumber,  setFNumber]  = useState('')
+  const [filterRecordId, setFRecordId] = useState('')
   const [filterFrom,    setFFrom]    = useState('')
   const [filterTo,      setFTo]      = useState('')
   const limit = 50
@@ -2120,6 +2134,7 @@ function InvoicesTab() {
       payment_status: statusF        || undefined,
       project:        filterProject  || undefined,
       invoice_number: filterNumber   || undefined,
+      teable_id:      filterRecordId || undefined,
       from_ts:        filterFrom     || undefined,
       to_ts:          filterTo       || undefined,
     }
@@ -2151,12 +2166,18 @@ function InvoicesTab() {
       }
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [source, offset, statusF, filterProject, filterNumber, filterFrom, filterTo])
+  }, [source, offset, statusF, filterProject, filterNumber, filterRecordId, filterFrom, filterTo])
 
-  useEffect(() => { setOffset(0) }, [source, statusF, filterProject, filterNumber, filterFrom, filterTo])
+  useEffect(() => { setOffset(0) }, [source, statusF, filterProject, filterNumber, filterRecordId, filterFrom, filterTo])
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (!drilldown?.teable_id) return
+    setSource(drilldown.source || 'all')
+    setFRecordId(drilldown.teable_id)
+    setOffset(0)
+  }, [drilldown])
 
-  const advCount = [statusF, filterProject, filterNumber, filterFrom, filterTo].filter(Boolean).length
+  const advCount = [statusF, filterProject, filterNumber, filterRecordId, filterFrom, filterTo].filter(Boolean).length
 
   return (
     <div className="space-y-3">
@@ -2177,7 +2198,7 @@ function InvoicesTab() {
 
       <FilterBar
         count={advCount}
-        onReset={() => { setStatF(''); setFProject(''); setFNumber(''); setFFrom(''); setFTo('') }}
+        onReset={() => { setStatF(''); setFProject(''); setFNumber(''); setFRecordId(''); setFFrom(''); setFTo('') }}
         rightSlot={
           <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
             <RefreshCw size={11} /> Refresh
@@ -2185,11 +2206,18 @@ function InvoicesTab() {
         }>
         <FSel label="Status" value={statusF} onChange={setStatF} width={140}
           opts={[['','All statuses'],['Paid','Paid'],['Pending','Pending'],['Partial','Partial'],['Overdue','Overdue']]} />
+        <FPill label="Record ID" value={filterRecordId} onChange={setFRecordId} placeholder="rec…" width={150} />
         <FPill label="Invoice #" value={filterNumber} onChange={setFNumber} placeholder="INV-…" width={120} />
         <FPill label="Project" value={filterProject} onChange={setFProject} placeholder="Project name…" width={150} />
         <FPill label="From" value={filterFrom} onChange={setFFrom} type="date" width={130} />
         <FPill label="To" value={filterTo} onChange={setFTo} type="date" width={130} />
       </FilterBar>
+      {drilldown?.teable_id && (
+        <div className="rounded-xl border px-3 py-2 text-xs"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg-input)', color: 'var(--text-2)' }}>
+          Focused on record <span className="font-mono" style={{ color: 'var(--text-1)' }}>{drilldown.teable_id}</span>.
+        </div>
+      )}
       {data && (
         <div className="text-xs" style={{ color: 'var(--text-3)' }}>
           {data.total.toLocaleString()} invoices
@@ -2319,7 +2347,8 @@ function DetailKV({ k, v, mono = false }) {
   )
 }
 
-function HistoryTab({ drilldown = null }) {
+function HistoryTab({ drilldown = null, onOpenRecord = null }) {
+  const navigate = useNavigate()
   const [data, setData]       = useState(null)
   const [fullRows, setFullRows] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -2422,6 +2451,19 @@ function HistoryTab({ drilldown = null }) {
     })
   }
 
+  const handleOpenRecord = useCallback((row) => {
+    if (row.navigate_kind === 'app' && row.navigate_target) {
+      navigate(row.navigate_target)
+      return
+    }
+    if (row.navigate_kind === 'admin-invoices' && row.navigate_target && onOpenRecord) {
+      try {
+        const target = JSON.parse(row.navigate_target)
+        onOpenRecord(target.source, target.teable_id)
+      } catch {}
+    }
+  }, [navigate, onOpenRecord])
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
@@ -2519,13 +2561,27 @@ function HistoryTab({ drilldown = null }) {
                           {row.actor_device_label}
                         </span>
                       )}
-                      <span className="text-xs font-mono flex-1 truncate" style={{ color: 'var(--text-2)' }}>
-                        {row.teable_id}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+                          {row.record_label || row.teable_id}
+                        </p>
+                        <p className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>
+                          {[row.record_subtitle, row.teable_id].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
                       {row.changed_fields?.length > 0 && (
                         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                           {row.changed_fields.slice(0, 3).join(', ')}{row.changed_fields.length > 3 ? ` +${row.changed_fields.length - 3}` : ''}
                         </span>
+                      )}
+                      {row.navigate_kind && row.navigate_target && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleOpenRecord(row) }}
+                          className="text-[11px] px-2 py-1 rounded-lg border transition-colors"
+                          style={{ borderColor: 'var(--border)', color: 'var(--accent)', background: 'var(--bg-input)' }}>
+                          Open
+                        </button>
                       )}
                       <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: 'var(--text-3)' }}>
                         {ts(row.recorded_at)}
@@ -3298,6 +3354,7 @@ export default function AdminDashboard({ embedded = false }) {
   const { logout } = useAuth()
   const [tab, setTab] = useState('overview')
   const [historyDrilldown, setHistoryDrilldown] = useState(null)
+  const [invoiceDrilldown, setInvoiceDrilldown] = useState(null)
 
   const openHistoryDrilldown = useCallback((sourceTable, label) => {
     setHistoryDrilldown({
@@ -3309,6 +3366,15 @@ export default function AdminDashboard({ embedded = false }) {
       token: Date.now(),
     })
     setTab('history')
+  }, [])
+
+  const openInvoiceDrilldown = useCallback((source, teableId) => {
+    setInvoiceDrilldown({
+      source: source || 'all',
+      teable_id: teableId,
+      token: Date.now(),
+    })
+    setTab('invoices')
   }, [])
 
   const tabBar = (
@@ -3341,8 +3407,8 @@ export default function AdminDashboard({ embedded = false }) {
       {tab === 'insights'     && <InsightsTab />}
       {tab === 'sync'         && <SyncLogTab />}
       {tab === 'projects'     && <ProjectsMirrorTab />}
-      {tab === 'invoices'     && <InvoicesTab />}
-      {tab === 'history'      && <HistoryTab drilldown={historyDrilldown} />}
+      {tab === 'invoices'     && <InvoicesTab drilldown={invoiceDrilldown} />}
+      {tab === 'history'      && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
       {tab === 'shared'       && <SharedLinksTab />}
       {tab === 'associations' && <AssociationsTab />}
       {tab === 'hflogs'       && <HfLogsTab />}

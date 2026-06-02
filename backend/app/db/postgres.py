@@ -379,8 +379,10 @@ CREATE TABLE IF NOT EXISTS sync_log (
     updated     INTEGER      NOT NULL DEFAULT 0,
     unchanged   INTEGER      NOT NULL DEFAULT 0,
     duration_ms INTEGER,
-    error       TEXT
+    error       TEXT,
+    details     JSONB        NOT NULL DEFAULT '{}'::jsonb
 );
+ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- ── Web invoices mirror (separate Teable table + token) ───────────────────
 CREATE TABLE IF NOT EXISTS web_invoices_mirror (

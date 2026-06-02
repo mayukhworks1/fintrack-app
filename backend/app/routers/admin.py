@@ -68,6 +68,95 @@ def _no_db():
     )
 
 
+async def _enrich_history_rows(pool, records: list[dict]) -> list[dict]:
+    ids_by_source: dict[str, list[str]] = {}
+    for record in records:
+        source = record.get("source_table")
+        teable_id = record.get("teable_id")
+        if source and teable_id:
+            ids_by_source.setdefault(source, []).append(teable_id)
+
+    lookup: dict[tuple[str, str], dict] = {}
+
+    async def _fetch(source: str, query: str):
+        ids = list(dict.fromkeys(ids_by_source.get(source, [])))
+        if not ids:
+            return
+        rows = await pool.fetch(query, ids)
+        for row in rows:
+            data = _row_to_dict(row)
+            lookup[(source, data["teable_id"])] = data
+
+    await _fetch(
+        "projects",
+        """
+        SELECT teable_id, project_name, client, status
+        FROM projects_mirror
+        WHERE teable_id = ANY($1::varchar[])
+        """,
+    )
+    await _fetch(
+        "invoices",
+        """
+        SELECT teable_id, invoice_number, project, payment_status
+        FROM invoices_mirror
+        WHERE teable_id = ANY($1::varchar[])
+        """,
+    )
+    await _fetch(
+        "web_invoices",
+        """
+        SELECT teable_id, invoice_number, project, payment_status
+        FROM web_invoices_mirror
+        WHERE teable_id = ANY($1::varchar[])
+        """,
+    )
+    await _fetch(
+        "status",
+        """
+        SELECT teable_id, project, client, short_status
+        FROM status_mirror
+        WHERE teable_id = ANY($1::varchar[])
+        """,
+    )
+
+    for record in records:
+        source = record.get("source_table")
+        teable_id = record.get("teable_id")
+        meta = lookup.get((source, teable_id), {})
+        label = teable_id
+        subtitle = None
+        navigate_kind = None
+        navigate_target = None
+        if source == "projects":
+            label = meta.get("project_name") or teable_id
+            subtitle = " · ".join([p for p in [meta.get("client"), meta.get("status")] if p]) or None
+            navigate_kind = "app"
+            navigate_target = f"/projects/{teable_id}"
+        elif source == "invoices":
+            label = meta.get("invoice_number") or teable_id
+            subtitle = " · ".join([p for p in [meta.get("project"), meta.get("payment_status")] if p]) or None
+            navigate_kind = "admin-invoices"
+            navigate_target = json.dumps({"source": "main", "teable_id": teable_id})
+        elif source == "web_invoices":
+            label = meta.get("invoice_number") or teable_id
+            subtitle = " · ".join([p for p in [meta.get("project"), meta.get("payment_status")] if p]) or None
+            navigate_kind = "admin-invoices"
+            navigate_target = json.dumps({"source": "web", "teable_id": teable_id})
+        elif source == "status":
+            label = meta.get("project") or teable_id
+            subtitle = " · ".join([p for p in [meta.get("client"), meta.get("short_status")] if p]) or None
+            navigate_kind = "app"
+            navigate_target = f"/status?record={teable_id}"
+
+        record["record_label"] = label
+        record["record_subtitle"] = subtitle
+        record["navigate_kind"] = navigate_kind
+        record["navigate_target"] = navigate_target
+
+    return records
+
+
 @router.get("/shared-links")
 async def admin_shared_links(
     resource_type: Optional[str] = Query(None),
@@ -786,7 +875,7 @@ async def admin_sync_log(
     total = await pool.fetchval(f"SELECT COUNT(*) FROM sync_log {where}", *params)
     rows  = await pool.fetch(
         f"""
-        SELECT id, synced_at, source, total, created, updated, unchanged, duration_ms, error
+        SELECT id, synced_at, source, total, created, updated, unchanged, duration_ms, error, details
         FROM sync_log {where}
         ORDER BY id DESC
         LIMIT ${idx} OFFSET ${idx+1}
@@ -864,6 +953,7 @@ async def admin_mirror_invoices(
     payment_status: Optional[str] = Query(None),
     project:        Optional[str] = Query(None),
     invoice_number: Optional[str] = Query(None, description="Invoice number substring"),
+    teable_id:      Optional[str] = Query(None, description="Exact Teable record id"),
     from_ts:        Optional[str] = Query(None, description="Raised date range start (YYYY-MM-DD)"),
     to_ts:          Optional[str] = Query(None, description="Raised date range end (YYYY-MM-DD)"),
     _:              str           = Depends(require_admin),
@@ -883,6 +973,8 @@ async def admin_mirror_invoices(
         where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
     if invoice_number:
         where.append(f"invoice_number ILIKE ${idx}"); params.append(f"%{invoice_number}%"); idx += 1
+    if teable_id:
+        where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
         where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
     if to_ts:
@@ -924,6 +1016,7 @@ async def admin_mirror_web_invoices(
     payment_status: Optional[str] = Query(None),
     project:        Optional[str] = Query(None),
     invoice_number: Optional[str] = Query(None, description="Invoice number substring"),
+    teable_id:      Optional[str] = Query(None, description="Exact Teable record id"),
     from_ts:        Optional[str] = Query(None, description="Raised date range start (YYYY-MM-DD)"),
     to_ts:          Optional[str] = Query(None, description="Raised date range end (YYYY-MM-DD)"),
     _:              str           = Depends(require_admin),
@@ -943,6 +1036,8 @@ async def admin_mirror_web_invoices(
         where.append(f"project ILIKE ${idx}"); params.append(f"%{project}%"); idx += 1
     if invoice_number:
         where.append(f"invoice_number ILIKE ${idx}"); params.append(f"%{invoice_number}%"); idx += 1
+    if teable_id:
+        where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
         where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
     if to_ts:
@@ -1090,6 +1185,8 @@ async def admin_record_history(
             except Exception:
                 d[fld] = None
         records.append(d)
+
+    records = await _enrich_history_rows(pool, records)
 
     return {"total": total, "limit": limit, "offset": offset, "rows": records}
 
