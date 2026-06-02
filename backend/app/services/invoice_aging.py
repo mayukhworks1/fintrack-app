@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 
@@ -49,7 +50,9 @@ async def _run_one(source: str, runner) -> None:
             duration_ms,
             {
                 "updated_records": result.get("updated_records", []),
+                "aging_mode": result.get("aging_mode"),
                 "formula_dependency_ready": result.get("formula_dependency_ready"),
+                "error": result.get("error"),
             },
         )
         logger.info("%s: total=%s updated=%s (%sms)", source, result.get("total", 0), result.get("updated", 0), duration_ms)

@@ -32,7 +32,7 @@ INVOICE_FIELD_IDS = {
     "Invoice PDF":      "fldErRKNwXVAsnUzWCH",
     "Days To Clear":    "fldZcfdmoKjHRLDWY6o",   # READ-ONLY
     "Speed":            "fldY8J44ZaQi6DC1oW8",   # READ-ONLY
-    "Agening (Days)":   "fld0m8lwVX4wyQeJrOG",   # READ-ONLY
+    "Agening (Days)":   "fld0m8lwVX4wyQeJrOG",   # formula today; writable number is preferred
     "Next followup":    "fldr11YNIf7EPSPObUF",
     "Outstanding Amount": "fldn4mfpKXNQxSnDfc6", # READ-ONLY
 }
@@ -46,13 +46,8 @@ _TTL_SUMMARY = 30   # computed summary
 
 logger = logging.getLogger("fintrack.invoices")
 AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
-AGING_REFRESH_DEP_FIELD = "Aging Refresh Serial"
 AGING_FORMULA_FIELD = "Agening (Days)"
-AGING_FORMULA_EXPRESSION = """IF(
-    {Payment Status} = "Pending",
-    ROUND(DATETIME_DIFF(TODAY(), {Raised Date}, 'day')) + (0 * {Aging Refresh Serial}),
-    BLANK()
-)"""
+AGING_FIELD_META_TTL = 60
 
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
@@ -128,6 +123,29 @@ class InvoiceService:
             if key in field:
                 payload[key] = bool(field.get(key))
         return payload
+
+    async def _get_fields_meta(self) -> list[dict[str, Any]]:
+        async def _load():
+            async with httpx.AsyncClient(timeout=12) as client:
+                res = await client.get(self._field_url, headers=self._headers)
+                res.raise_for_status()
+                return res.json()
+
+        return await cache.get_or_set(f"invoice:fields:{self.table_id}", ttl=AGING_FIELD_META_TTL, loader=_load)
+
+    async def _get_aging_field_mode(self) -> str:
+        try:
+            fields = await self._get_fields_meta()
+            field = next((f for f in fields if (f.get("name") or "").strip() == AGING_FORMULA_FIELD), None)
+            field_type = str((field or {}).get("type") or "").lower()
+            if field_type == "number":
+                return "numeric"
+            if field_type == "formula":
+                return "formula"
+            return field_type or "missing"
+        except Exception as exc:
+            logger.debug("invoice aging field metadata failed: %s", exc)
+            return "unknown"
 
     async def list_invoices_from_pg(
         self,
@@ -389,7 +407,12 @@ class InvoiceService:
             data = res.json()
             created = data.get("records", [{}])[0]
             if created.get("id"):
-                await self.touch_aging_for_record(created["id"], attribute_system=False)
+                await self.touch_aging_for_record(
+                    created["id"],
+                    record_fields=created.get("fields") or {},
+                    attribute_system=False,
+                    allow_formula_touch=False,
+                )
             return _apply_runtime_invoice_derivatives(created)
 
     # ── Update invoice ────────────────────────────────────────────────────
@@ -404,7 +427,12 @@ class InvoiceService:
             res.raise_for_status()
             _bust_invoice_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
-            await self.touch_aging_for_record(record_id, attribute_system=False)
+            await self.touch_aging_for_record(
+                record_id,
+                record_fields=updated.get("fields") or {},
+                attribute_system=False,
+                allow_formula_touch=False,
+            )
             return updated
 
     # ── Delete invoice ────────────────────────────────────────────────────
@@ -443,103 +471,63 @@ class InvoiceService:
         return {"record": data, "attachments": attachments}
 
     async def _ensure_aging_refresh_field(self) -> bool:
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.get(self._field_url, headers=self._headers)
-            res.raise_for_status()
-            fields = res.json()
+        try:
+            fields = await self._get_fields_meta()
             if any((f.get("name") or "").strip() == AGING_REFRESH_HELPER_FIELD for f in fields):
                 return True
-            try:
+            async with httpx.AsyncClient(timeout=12) as client:
                 create = await client.post(
                     self._field_url,
                     json={"name": AGING_REFRESH_HELPER_FIELD, "type": "singleLineText"},
                     headers=self._headers,
                 )
                 create.raise_for_status()
-                return True
-            except Exception as exc:
-                logger.warning("invoice aging helper field create failed: %s", exc)
-                return False
-
-    async def _ensure_aging_refresh_dependency_field(self) -> bool:
-        async with httpx.AsyncClient(timeout=15) as client:
-            fields_res = await client.get(self._field_url, headers=self._headers)
-            fields_res.raise_for_status()
-            fields = fields_res.json()
-            if any((field.get("name") or "").strip() == AGING_REFRESH_DEP_FIELD for field in fields):
-                return True
-            try:
-                create = await client.post(
-                    self._field_url,
-                    json={"name": AGING_REFRESH_DEP_FIELD, "type": "number"},
-                    headers=self._headers,
-                )
-                create.raise_for_status()
-                return True
-            except Exception as exc:
-                logger.warning("invoice aging dependency field create failed: %s", exc)
-                return False
-
-    async def _ensure_aging_formula_dependency(self) -> bool:
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                fields_res = await client.get(self._field_url, headers=self._headers)
-                fields_res.raise_for_status()
-                fields = fields_res.json()
-                field = next((f for f in fields if (f.get("name") or "").strip() == AGING_FORMULA_FIELD), None)
-                if not field or field.get("type") != "formula":
-                    return False
-                options = dict(field.get("options") or {})
-                key = next((candidate for candidate in ("expression", "formula", "formulaString") if isinstance(options.get(candidate), str)), None)
-                if not key:
-                    logger.warning("invoice aging formula expression key not found for %s", AGING_FORMULA_FIELD)
-                    return False
-                if AGING_REFRESH_DEP_FIELD in (options.get(key) or ""):
-                    return True
-                updated_options = {**options, key: AGING_FORMULA_EXPRESSION}
-                url = f"{self._field_url}/{field['id']}/convert"
-                res = await client.put(url, json=self._field_convert_payload(field, updated_options), headers=self._headers)
-                res.raise_for_status()
-                logger.info("invoice aging formula dependency patched for Teable")
-                return True
+            cache.bust(prefix=f"invoice:fields:{self.table_id}")
+            return True
         except Exception as exc:
-            logger.warning("invoice aging formula patch failed: %s", exc)
+            logger.warning("invoice aging helper field create failed: %s", exc)
             return False
 
-    async def _prepare_aging_refresh_dependencies(self) -> bool:
-        helper_ok = await self._ensure_aging_refresh_field()
-        dep_ok = await self._ensure_aging_refresh_dependency_field()
-        formula_ok = await self._ensure_aging_formula_dependency()
-        return helper_ok and dep_ok and formula_ok
-
-    async def touch_aging_for_record(self, record_id: str, *, attribute_system: bool = True, skip_prepare: bool = False) -> bool:
+    async def touch_aging_for_record(
+        self,
+        record_id: str,
+        *,
+        record_fields: dict[str, Any] | None = None,
+        attribute_system: bool = True,
+        allow_formula_touch: bool = True,
+    ) -> dict[str, Any]:
+        mode = await self._get_aging_field_mode()
         try:
-            if not skip_prepare and not await self._prepare_aging_refresh_dependencies():
-                return False
             url = f"{self._record_url}/{record_id}"
             now = datetime.now(timezone.utc).replace(microsecond=0)
             stamp = now.isoformat().replace("+00:00", "Z")
-            serial = int(now.timestamp())
-            body = {
-                "fieldKeyType": "name",
-                "record": {"fields": {
-                    AGING_REFRESH_HELPER_FIELD: stamp,
-                    AGING_REFRESH_DEP_FIELD: serial,
-                }},
-            }
+            fields: dict[str, Any]
+            if mode == "numeric":
+                aging = _runtime_aging(record_fields or {})
+                fields = {AGING_FORMULA_FIELD: aging}
+            else:
+                if not allow_formula_touch:
+                    return {"ok": False, "mode": mode, "aging": None, "skipped": "formula-touch-disabled"}
+                if not await self._ensure_aging_refresh_field():
+                    return {"ok": False, "mode": mode, "aging": None}
+                fields = {AGING_REFRESH_HELPER_FIELD: stamp}
+            body = {"fieldKeyType": "name", "record": {"fields": fields}}
             if attribute_system:
                 await vk.attribution_set(record_id, self._system_actor("/automation/aging-refresh"), ttl=360)
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=12) as client:
                 res = await client.patch(url, json=body, headers=self._headers)
                 res.raise_for_status()
             _bust_invoice_cache()
-            return True
+            return {"ok": True, "mode": mode, "aging": fields.get(AGING_FORMULA_FIELD)}
         except Exception as exc:
-            logger.warning("invoice aging touch failed for %s: %s", record_id, exc)
-            return False
+            logger.warning("invoice aging refresh failed for %s: %s", record_id, exc)
+            return {"ok": False, "mode": mode, "aging": None}
 
-    async def touch_pending_aging_records(self) -> dict[str, int]:
-        deps_ready = await self._prepare_aging_refresh_dependencies()
+    async def touch_pending_aging_records(self) -> dict[str, Any]:
+        mode = await self._get_aging_field_mode()
+        helper_ready = True if mode == "numeric" else await self._ensure_aging_refresh_field()
+        if not helper_ready:
+            return {"total": 0, "updated": 0, "updated_records": [], "aging_mode": mode, "error": "aging helper field unavailable"}
         params: dict[str, Any] = {
             "fieldKeyType": "name",
             "take": 1000,
@@ -560,18 +548,28 @@ class InvoiceService:
         touched = 0
         touched_records: list[dict[str, Any]] = []
         for record in records:
-            if record.get("id") and await self.touch_aging_for_record(record["id"], attribute_system=True, skip_prepare=deps_ready):
+            record_id = record.get("id")
+            if not record_id:
+                continue
+            result = await self.touch_aging_for_record(
+                record_id,
+                record_fields=record.get("fields") or {},
+                attribute_system=True,
+            )
+            if result.get("ok"):
                 touched += 1
                 touched_records.append({
-                    "teable_id": record["id"],
-                    "invoice_number": record.get("fields", {}).get("Invoice Number") or record["id"],
+                    "teable_id": record_id,
+                    "invoice_number": record.get("fields", {}).get("Invoice Number") or record_id,
                     "project": record.get("fields", {}).get("Project") or "",
+                    "aging": result.get("aging"),
                 })
         return {
             "total": len(records),
             "updated": touched,
             "updated_records": touched_records[:25],
-            "formula_dependency_ready": deps_ready,
+            "aging_mode": mode,
+            "formula_dependency_ready": mode == "numeric",
         }
 
     # ── Compute summary ───────────────────────────────────────────────────
