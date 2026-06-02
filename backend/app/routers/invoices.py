@@ -4,8 +4,9 @@ GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
-from typing import Optional, Iterable
+from typing import Optional, Iterable, List, Any
 from pydantic import BaseModel
+import httpx
 from ..services.invoice import InvoiceService
 from ..services.associations import AssociationService
 from ..services.openrouter import parse_invoice_document
@@ -20,8 +21,15 @@ def _associations() -> AssociationService:
 
 
 def _validate_paid_invoice(fields: dict) -> None:
-    if fields.get("Payment Status") != "Paid":
+    has_payment_fields = (
+        fields.get("Payment Status") == "Paid"
+        or fields.get("Amount Received") not in (None, "", 0, 0.0)
+        or bool(fields.get("Cleared Date"))
+    )
+    if not has_payment_fields:
         return
+    if fields.get("Payment Status") != "Paid":
+        raise HTTPException(status_code=400, detail="Payment Status must be Paid when recording received amount or cleared date")
     if fields.get("Amount Received") in (None, "", 0, 0.0):
         raise HTTPException(status_code=400, detail="Amount Received is required when Payment Status is Paid")
     if not fields.get("Cleared Date"):
@@ -46,6 +54,8 @@ class InvoiceFields(BaseModel):
     payment_status:   Optional[str]   = None
     remark:           Optional[str]   = None
     next_followup:    Optional[str]   = None   # ISO 8601
+    reference:        Optional[List[Any]] = None
+    invoice_pdf:      Optional[List[Any]] = None
 
     def to_teable_fields(self, include_null_fields: Iterable[str] | None = None) -> dict:
         m = {
@@ -63,6 +73,8 @@ class InvoiceFields(BaseModel):
             "Payment Status":  self.payment_status,
             "Remark":          self.remark,
             "Next followup":   self.next_followup,
+            "Reference":       self.reference,
+            "Invoice PDF":     self.invoice_pdf,
         }
         allow_null = set(include_null_fields or [])
         return {
@@ -215,3 +227,29 @@ async def parse_invoice(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parse failed: {str(e)}")
+
+
+@router.post("/upload/{record_id}/{field_name}")
+async def upload_attachment(
+    record_id: str,
+    field_name: str,
+    file: UploadFile = File(...),
+    _role: str = Depends(require_editor),
+):
+    """Upload a file into a specific attachment field on an existing invoice record."""
+    service = InvoiceService()
+    try:
+        content = await file.read()
+        return await service.upload_attachment_to_field(
+            record_id=record_id,
+            field_name=field_name,
+            filename=file.filename or "upload.bin",
+            content=content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

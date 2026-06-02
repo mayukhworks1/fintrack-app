@@ -7,7 +7,7 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, CalendarDays, User, Tag, ArrowRight, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw,
-  Sparkles, Upload, Loader2
+  Sparkles, Upload, Loader2, Paperclip
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -31,6 +31,24 @@ const EMPTY_FORM = {
   milestone: '', raised_by: '', raised_date: '', cleared_date: '',
   amount_raised: '', amount_with_tax: '', amount_received: '',
   payment_status: 'Pending', remark: '', next_followup: '',
+  reference: [], invoice_pdf: [],
+}
+
+const INVOICE_PARSE_FIELD_LABELS = {
+  invoice_number: 'Invoice Number',
+  project: 'Project',
+  category: 'Category',
+  description: 'Description',
+  milestone: 'Milestone',
+  raised_by: 'Raised By',
+  raised_date: 'Raised Date',
+  cleared_date: 'Cleared Date',
+  amount_raised: 'Amount Raised',
+  amount_with_tax: 'Amount with Tax',
+  amount_received: 'Amount Received',
+  payment_status: 'Payment Status',
+  remark: 'Remark',
+  next_followup: 'Next Followup',
 }
 
 const monthKey = (iso) => {
@@ -81,6 +99,25 @@ const INVOICE_SHARE_COLUMNS = [
   'Description',
   'Remark',
 ]
+
+const DEFAULT_INVOICE_COLUMN_WIDTHS = {
+  row: 56,
+  invoice_number: 150,
+  project: 300,
+  category: 150,
+  milestone: 150,
+  raised_by: 130,
+  raised_date: 110,
+  amount_raised: 130,
+  amount_with_tax: 130,
+  amount_received: 130,
+  outstanding_amount: 140,
+  payment_status: 120,
+  aging: 95,
+  next_followup: 125,
+  docs: 110,
+  actions: 130,
+}
 
 /* ── Field definitions for advanced filter builder ────────────────────────── */
 const INVOICE_FIELDS = [
@@ -304,6 +341,116 @@ function AttachCard({ a, onPreview }) {
   return <a href={a.url} target="_blank" rel="noopener noreferrer" {...sharedProps}>{content}</a>
 }
 
+function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ensureRecord }) {
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef(null)
+  const attachments = Array.isArray(value) ? value : []
+  const fieldNameMap = { invoice_pdf: 'Invoice PDF', reference: 'Reference' }
+
+  async function processFiles(files) {
+    if (!files?.length) return
+    setUploading(true)
+    setUploadErr('')
+    try {
+      const resolvedRecordId = recordId || await ensureRecord?.()
+      if (!resolvedRecordId) throw new Error('Could not prepare invoice record for upload')
+      let latest = attachments
+      for (const file of files) {
+        const result = await api.invoices.upload(resolvedRecordId, fieldNameMap[fieldKey], file)
+        latest = result?.attachments || latest
+      }
+      onChange(latest)
+    } catch (e) {
+      setUploadErr(e.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function onDrop(e) {
+    e.preventDefault()
+    setDragOver(false)
+    processFiles(Array.from(e.dataTransfer.files))
+  }
+
+  function removeAt(i) {
+    onChange(attachments.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div>
+      <label className="label flex items-center gap-1.5">
+        <Paperclip size={10} style={{ color: 'var(--text-3)' }} />{label}
+      </label>
+
+      {attachments.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {attachments.map((a, i) => {
+            const norm = { name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || '' }
+            return (
+              <div key={i} className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                {isPdf(norm)
+                  ? <FileText size={13} className="flex-shrink-0" style={{ color: '#f87171' }} />
+                  : isImage(norm)
+                    ? <ImageIcon size={13} className="flex-shrink-0" style={{ color: '#60a5fa' }} />
+                    : <Paperclip size={13} className="flex-shrink-0" style={{ color: 'var(--text-3)' }} />}
+                <span className="flex-1 truncate text-xs" style={{ color: 'var(--text-2)' }}>{norm.name}</span>
+                {norm.url && (
+                  <a href={norm.url} target="_blank" rel="noopener noreferrer" title="Open"
+                    className="flex-shrink-0 btn-icon" style={{ width: 22, height: 22 }}
+                    onClick={e => e.stopPropagation()}>
+                    <ExternalLink size={10} />
+                  </a>
+                )}
+                <button type="button" onClick={() => removeAt(i)} className="flex-shrink-0 btn-icon"
+                  style={{ width: 22, height: 22 }} aria-label="Remove attachment">
+                  <X size={10} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        role="button" tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
+        className="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed cursor-pointer transition-all py-4 select-none"
+        style={{
+          borderColor: dragOver ? 'var(--accent)' : 'var(--glass-border)',
+          background: dragOver ? 'rgba(99,102,241,0.06)' : 'var(--glass-bg)',
+          opacity: uploading ? 0.7 : 1,
+        }}
+        aria-label={`Upload ${label}`}>
+        {uploading
+          ? <><Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Uploading…</span></>
+          : <><Upload size={16} style={{ color: 'var(--text-3)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {recordId ? 'Click or drag to upload · PDF, images' : 'Click to save draft and upload · PDF, images'}
+              </span></>}
+        <input ref={fileInputRef} type="file" multiple className="hidden"
+          accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+          onChange={e => processFiles(Array.from(e.target.files || []))} />
+      </div>
+
+      {uploadErr && (
+        <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#f87171' }}>
+          <AlertTriangle size={10} />{uploadErr}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Select wrapper ──────────────────────────────────────────────────────── */
 function SelectInput({ value, onChange, options, placeholder = 'Select…', compact = false }) {
   return (
@@ -320,7 +467,7 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…', comp
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }) {
+function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, onLink, isEditor, onPreview }) {
   if (!invoice) return null
   const navigate = useNavigate()
   const f = invoice.fields || {}
@@ -376,6 +523,11 @@ function InvoiceDetail({ invoice, onClose, onEdit, onLink, isEditor, onPreview }
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {isEditor && f['Payment Status'] === 'Pending' && (
+              <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                <CheckCircle2 size={12} />Record Payment
+              </button>
+            )}
             {isEditor && (
               <button onClick={onLink} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
                 Link
@@ -513,9 +665,10 @@ function Field({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options = {} }) {
+function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]      = useState(EMPTY_FORM)
+  const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
   const [saving,     setSaving]    = useState(false)
   const [deleting,   setDeleting]  = useState(false)
   const [confirmDel, setConfirmDel]= useState(false)
@@ -523,7 +676,9 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
   const [parsing,    setParsing]   = useState(false)
   const [parseNote,  setParseNote] = useState('')   // "Filled N fields" banner text
   const [parseError, setParseError]= useState('')
+  const [parseApplied, setParseApplied] = useState([])
   const parseFileRef = useRef(null)
+  const currentRecordId = invoice?.id || workingRecordId
   const paidSelected = form.payment_status === 'Paid'
   const projectOptions  = options.projects  || []
   const categoryOptions = options.categories || []
@@ -531,6 +686,7 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
   const raisedByOptions = options.raisedBy  || []
   const retainerCategoryOption = categoryOptions.find(c => /retainer/i.test(c)) || 'Development- Retainer'
   const retainerSelected = isRetainerCategory(form.category)
+  const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
 
   useEffect(() => {
     if (!invoice && !prefill) { setForm(EMPTY_FORM); return }
@@ -554,18 +710,51 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
       payment_status:  f['Payment Status']  || 'Pending',
       remark:          f['Remark']          || '',
       next_followup:   f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
+      reference:       Array.isArray(f['Reference']) ? f['Reference'] : [],
+      invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
+      ...(prefill || {}),
     })
   }, [invoice, prefill])
+
+  useEffect(() => {
+    setWorkingRecordId(invoice?.id || null)
+  }, [invoice?.id])
 
   const set  = k => v   => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev  => setForm(f => ({ ...f, [k]: ev.target.value }))
 
+  async function persistDraftRecord() {
+    if (currentRecordId) return currentRecordId
+    const payload = {
+      ...form,
+      amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
+      amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
+      amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
+      raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : undefined,
+      cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
+      next_followup:   form.next_followup   ? `${form.next_followup}T00:00:00.000Z` : undefined,
+      payment_status:  form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date) ? 'Pending' : form.payment_status,
+      remark: form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date)
+        ? [form.remark, 'Draft created for attachment upload. Complete paid details before final save.'].filter(Boolean).join(' ')
+        : form.remark,
+    }
+    const created = await api.invoices.create(payload)
+    const createdId = created?.id
+    if (!createdId) throw new Error('Invoice draft was created but no record id was returned')
+    setWorkingRecordId(createdId)
+    return createdId
+  }
+
   async function handleSave() {
-    if (paidSelected && !String(form.amount_received).trim()) {
+    if (hasPaymentAttempt && form.payment_status !== 'Paid') {
+      setError('Payment Status must be Paid when recording received amount or cleared date')
+      return
+    }
+    if (hasPaymentAttempt && !String(form.amount_received).trim()) {
       setError('Amount received is required when status is Paid')
       return
     }
-    if (paidSelected && !form.cleared_date) {
+    if (hasPaymentAttempt && !form.cleared_date) {
       setError('Cleared date is required when status is Paid')
       return
     }
@@ -578,11 +767,14 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
         raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : (isEdit ? null : undefined),
         cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : (isEdit ? null : undefined),
-        next_followup:   form.next_followup   ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
+        next_followup:   paymentOnly
+          ? null
+          : form.next_followup
+            ? `${form.next_followup}T00:00:00.000Z`
+            : (isEdit ? null : undefined),
       }
-      if (isEdit) await api.invoices.update(invoice.id, payload)
-      else        await api.invoices.create(payload)
-      onSaved()
+      const saved = currentRecordId ? await api.invoices.update(currentRecordId, payload) : await api.invoices.create(payload)
+      onSaved(saved)
     } catch (e) {
       setError(e.message || 'Save failed')
     } finally {
@@ -593,14 +785,14 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
   async function handleDelete() {
     if (!confirmDel) { setConfirmDel(true); return }
     setDeleting(true)
-    try { await api.invoices.delete(invoice.id); onDeleted() }
+    try { await api.invoices.delete(invoice.id); onDeleted(invoice.id) }
     catch (e) { setError(e.message || 'Delete failed') }
     finally { setDeleting(false) }
   }
 
   async function handleParseFile(file) {
     if (!file) return
-    setParsing(true); setParseError(''); setParseNote('')
+    setParsing(true); setParseError(''); setParseNote(''); setParseApplied([])
     try {
       const { fields } = await api.invoices.parse(file)
       if (!fields || Object.keys(fields).length === 0) {
@@ -622,31 +814,30 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
         raised_by:       'raised_by',
         remark:          'remark',
       }
+      const next = { ...form }
+      const applied = []
       let filled = 0
-      setForm(prev => {
-        const next = { ...prev }
-        for (const [aiKey, formKey] of Object.entries(FIELD_MAP)) {
-          const val = fields[aiKey]
-          if (val == null || val === '') continue
-          // Only overwrite if the current field is blank / default
-          const cur = prev[formKey]
-          const isEmpty = cur === '' || cur === null || cur === undefined ||
-                          cur === 'Pending'  // default status — safe to overwrite
-          if (formKey === 'payment_status' || isEmpty) {
-            // Normalise dates — strip time portion
-            const normalised = (formKey.endsWith('_date') && typeof val === 'string')
-              ? val.slice(0, 10)
-              : val
-            next[formKey] = String(normalised)
-            if (isEmpty) filled++
-          }
+      for (const [aiKey, formKey] of Object.entries(FIELD_MAP)) {
+        const val = fields[aiKey]
+        if (val == null || val === '') continue
+        const cur = form[formKey]
+        const isEmpty = cur === '' || cur === null || cur === undefined || cur === 'Pending'
+        if (formKey === 'payment_status' || isEmpty) {
+          const normalised = (formKey.endsWith('_date') && typeof val === 'string')
+            ? val.slice(0, 10)
+            : val
+          next[formKey] = String(normalised)
+          applied.push({
+            key: formKey,
+            label: INVOICE_PARSE_FIELD_LABELS[formKey] || formKey,
+            value: String(normalised),
+          })
+          if (isEmpty) filled++
         }
-        return next
-      })
-      // Use a small delay so `filled` captures the final count
-      setTimeout(() => {
-        setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review and correct`)
-      }, 50)
+      }
+      setForm(next)
+      setParseApplied(applied)
+      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review and correct`)
     } catch (e) {
       const status = e.status
       const msg = status === 400 ? e.message               // our explicit error (bad file, unreadable PDF, etc.)
@@ -670,7 +861,9 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
 
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--glass-border)' }}>
           <h2 className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>
-            {isEdit ? `Edit · ${invoice.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
+            {paymentOnly
+              ? `Record Payment · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}`
+              : isEdit ? `Edit · ${invoice.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
           </h2>
           <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
         </div>
@@ -713,6 +906,23 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
                 {parseNote}
               </div>
             )}
+            {parseApplied.length > 0 && !parsing && (
+              <div className="mt-2 rounded-xl p-3 space-y-2"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                  AI filled these fields
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {parseApplied.map((item) => (
+                    <div key={item.key} className="rounded-lg px-2.5 py-2"
+                      style={{ background: 'var(--card-bg)', border: '1px solid var(--glass-border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{item.label}</p>
+                      <p className="text-xs mt-1 break-words" style={{ color: 'var(--text-1)' }}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {parseError && !parsing && (
               <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
                 style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
@@ -729,84 +939,132 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Invoice Number">
-              <input className="input" value={form.invoice_number} onChange={setE('invoice_number')} placeholder="WM/25-26/001" />
-            </Field>
-            <Field label="Payment Status">
-              <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Project">
-              <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project…" />
-            </Field>
-            <Field label="Category">
-              <SelectInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Select…" />
-            </Field>
-          </div>
-          <div>
-            <label className="label">Billing Type</label>
-            <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, category: categoryOptions.find(c => !isRetainerCategory(c)) || '' }))}
-                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                style={!retainerSelected
-                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                  : { color: 'var(--text-3)' }}>
-                Project
-              </button>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, category: retainerCategoryOption }))}
-                className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                style={retainerSelected
-                  ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
-                  : { color: 'var(--text-3)' }}>
-                Retainer
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Milestone">
-              <SelectInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Select…" />
-            </Field>
-            <Field label="Raised By">
-              <SelectInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Select…" />
-            </Field>
-          </div>
-          <Field label="Description">
-            <textarea className="input resize-none" rows={2} value={form.description} onChange={setE('description')} placeholder="Brief description…" />
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Raised Date"><input type="date" className="input" value={form.raised_date} onChange={setE('raised_date')} /></Field>
-            <Field label="Cleared Date"><input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} /></Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Raised (₹)"><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></Field>
-            <Field label="With GST (₹)"><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></Field>
-            <Field label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Next Followup">
-              <div className="flex items-center gap-2">
-                <input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} />
-                <button
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, next_followup: '' }))}
-                  className="btn-ghost flex-shrink-0"
-                  style={{ fontSize: '0.75rem', padding: '0.55rem 0.75rem' }}
-                  title="Clear follow-up date"
-                >
-                  <RotateCcw size={12} />Clear
-                </button>
+          {paymentOnly ? (
+            <>
+              <div className="rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Invoice context</p>
+                <p className="text-sm font-semibold mt-2" style={{ color: 'var(--text-1)' }}>{form.invoice_number || invoice?.fields?.['Invoice Number'] || '—'}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                  {[form.project || invoice?.fields?.['Project'], form.category || invoice?.fields?.['Category'], form.milestone || invoice?.fields?.['Milestone']].filter(Boolean).join(' · ')}
+                </p>
               </div>
-            </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Payment Status">
+                  <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
+                </Field>
+                <Field label="Cleared Date">
+                  <input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Received (₹)">
+                  <input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" />
+                </Field>
+                <Field label="Remark">
+                  <input className="input" value={form.remark} onChange={setE('remark')} placeholder="Payment note or settlement details…" />
+                </Field>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Invoice Number">
+                  <input className="input" value={form.invoice_number} onChange={setE('invoice_number')} placeholder="WM/25-26/001" />
+                </Field>
+                <Field label="Payment Status">
+                  <SelectInput value={form.payment_status} onChange={set('payment_status')} options={STATUSES} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Project">
+                  <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project…" />
+                </Field>
+                <Field label="Category">
+                  <SelectInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Select…" />
+                </Field>
+              </div>
+              <div>
+                <label className="label">Billing Type</label>
+                <div className="inline-flex items-center p-1 rounded-lg" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, category: categoryOptions.find(c => !isRetainerCategory(c)) || '' }))}
+                    className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                    style={!retainerSelected
+                      ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                      : { color: 'var(--text-3)' }}>
+                    Project
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, category: retainerCategoryOption }))}
+                    className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                    style={retainerSelected
+                      ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                      : { color: 'var(--text-3)' }}>
+                    Retainer
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Milestone">
+                  <SelectInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Select…" />
+                </Field>
+                <Field label="Raised By">
+                  <SelectInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Select…" />
+                </Field>
+              </div>
+              <Field label="Description">
+                <textarea className="input resize-none" rows={2} value={form.description} onChange={setE('description')} placeholder="Brief description…" />
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Raised Date"><input type="date" className="input" value={form.raised_date} onChange={setE('raised_date')} /></Field>
+                <Field label="Cleared Date"><input type="date" className="input" value={form.cleared_date} onChange={setE('cleared_date')} /></Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Field label="Raised (₹)"><input type="number" className="input" value={form.amount_raised}   onChange={setE('amount_raised')}   placeholder="0" /></Field>
+                <Field label="With GST (₹)"><input type="number" className="input" value={form.amount_with_tax} onChange={setE('amount_with_tax')} placeholder="0" /></Field>
+                <Field label="Received (₹)"><input type="number" className="input" value={form.amount_received} onChange={setE('amount_received')} placeholder="0" /></Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Next Followup">
+                  <div className="flex items-center gap-2">
+                    <input type="date" className="input" value={form.next_followup} onChange={setE('next_followup')} />
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, next_followup: '' }))}
+                      className="btn-ghost flex-shrink-0"
+                      style={{ fontSize: '0.75rem', padding: '0.55rem 0.75rem' }}
+                      title="Clear follow-up date"
+                    >
+                      <RotateCcw size={12} />Clear
+                    </button>
+                  </div>
+                </Field>
+              </div>
+              <Field label="Remark">
+                <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
+              </Field>
+            </>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <AttachmentUploadField
+              label="Invoice PDF"
+              fieldKey="invoice_pdf"
+              value={form.invoice_pdf}
+              onChange={v => setForm(f => ({ ...f, invoice_pdf: v }))}
+              recordId={currentRecordId}
+              ensureRecord={persistDraftRecord}
+            />
+            <AttachmentUploadField
+              label="Payment Reference"
+              fieldKey="reference"
+              value={form.reference}
+              onChange={v => setForm(f => ({ ...f, reference: v }))}
+              recordId={currentRecordId}
+              ensureRecord={persistDraftRecord}
+            />
           </div>
-          <Field label="Remark">
-            <textarea className="input resize-none" rows={2} value={form.remark} onChange={setE('remark')} placeholder="Notes…" />
-          </Field>
 
           {paidSelected && (
             <div className="rounded-xl p-3 text-xs flex items-start gap-2"
@@ -833,11 +1091,31 @@ function InvoiceDrawer({ invoice, prefill, onClose, onSaved, onDeleted, options 
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Save size={12} />{saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create invoice'}
+              <Save size={12} />{saving ? 'Saving…' : paymentOnly ? 'Record payment' : isEdit ? 'Save changes' : 'Create invoice'}
             </button>
           </div>
         </div>
       </aside>
+    </div>
+  )
+}
+
+function ResizableHead({ width, children, onResizeStart }) {
+  return (
+    <div className="relative flex items-center pr-3" style={{ width }}>
+      <div className="min-w-0 flex-1">{children}</div>
+      <button
+        type="button"
+        aria-label="Resize column"
+        onMouseDown={onResizeStart}
+        className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-3 cursor-col-resize"
+        style={{ background: 'transparent', border: 'none' }}
+      >
+        <span
+          className="block mx-auto h-4 rounded-full transition-colors"
+          style={{ width: 2, background: 'var(--glass-border)' }}
+        />
+      </button>
     </div>
   )
 }
@@ -890,7 +1168,9 @@ export default function Invoices() {
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
   const [associationRecord, setAssociationRecord] = useState(null)
+  const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
   const deferredSearch = useDeferredValue(search)
+  const resizeRef = useRef(null)
 
   useEffect(() => { setStatusFilter(searchParams.get('status') || '') }, [searchParams])
   useEffect(() => { setProjectFilter(searchParams.get('project') || '') }, [searchParams])
@@ -926,7 +1206,11 @@ export default function Invoices() {
     }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
-  const allRecords = listData?.records || []
+  const [recordsState, setRecordsState] = useState([])
+  useEffect(() => {
+    setRecordsState(listData?.records || [])
+  }, [listData?.records])
+  const allRecords = recordsState
 
   /* ── Dynamic filter/form options derived from actual records ── */
   const projectOptions = useMemo(() => (
@@ -1312,9 +1596,61 @@ export default function Invoices() {
   /* ── Helpers ── */
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
+  const openRecordPayment = r => setDrawer({
+    mode: 'payment',
+    invoice: r,
+    prefill: {
+      payment_status: 'Paid',
+      amount_received: r?.fields?.['Amount Raised'] ?? '',
+      cleared_date: new Date().toISOString().slice(0, 10),
+      reference: Array.isArray(r?.fields?.['Reference']) ? r.fields['Reference'] : [],
+      remark: r?.fields?.['Remark'] || '',
+    },
+  })
   const closeDrawer = () => setDrawer(null)
-  const handleSaved   = () => { refresh(); closeDrawer() }
-  const handleDeleted = () => { refresh(); closeDrawer() }
+  const handleSaved = (savedRecord) => {
+    if (savedRecord?.id) {
+      setRecordsState((prev) => {
+        const idx = prev.findIndex((row) => row.id === savedRecord.id)
+        if (idx >= 0) {
+          const next = [...prev]
+          next[idx] = savedRecord
+          return next
+        }
+        return [savedRecord, ...prev]
+      })
+    }
+    refresh()
+    closeDrawer()
+  }
+  const handleDeleted = (deletedId) => {
+    if (deletedId) setRecordsState((prev) => prev.filter((row) => row.id !== deletedId))
+    refresh()
+    closeDrawer()
+  }
+
+  useEffect(() => () => {
+    if (resizeRef.current?.stop) resizeRef.current.stop()
+  }, [])
+
+  const startColumnResize = useCallback((key, event) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = columnWidths[key] || DEFAULT_INVOICE_COLUMN_WIDTHS[key] || 120
+    const minWidth = key === 'project' ? 220 : key === 'actions' ? 120 : 90
+    const onMove = (moveEvent) => {
+      const nextWidth = Math.max(minWidth, startWidth + (moveEvent.clientX - startX))
+      setColumnWidths((prev) => ({ ...prev, [key]: nextWidth }))
+    }
+    const stop = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', stop)
+      resizeRef.current = null
+    }
+    resizeRef.current = { stop }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', stop)
+  }, [columnWidths])
 
   function handleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -2187,25 +2523,57 @@ export default function Invoices() {
       {/* ── Desktop table (md+) ── */}
       <div className="data-table-shell hidden md:block">
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: 1200 }}>
+          <table className="w-full" style={{ minWidth: 1700, tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th className="tbl-head" style={{ width: 56 }}>#</th>
-                <th className="tbl-head"><SortLabel col="Invoice Number">Invoice #</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Project">Project</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Category">Category</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Milestone">Milestone</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Raised By">Raised By</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Raised Date">Raised</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Amount Raised">Amount</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Amount with Tax">GST Total</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Amount Received">Received</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Outstanding Amount">Outstanding</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Payment Status">Status</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Agening (Days)">Aging</SortLabel></th>
-                <th className="tbl-head"><SortLabel col="Next followup">Next Followup</SortLabel></th>
-                <th className="tbl-head">Docs</th>
-                <th className="tbl-head" style={{ width: 80 }} />
+                <th className="tbl-head" style={{ width: columnWidths.row }}>
+                  <ResizableHead width={columnWidths.row} onResizeStart={(e) => startColumnResize('row', e)}>#</ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.invoice_number }}>
+                  <ResizableHead width={columnWidths.invoice_number} onResizeStart={(e) => startColumnResize('invoice_number', e)}><SortLabel col="Invoice Number">Invoice #</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.project }}>
+                  <ResizableHead width={columnWidths.project} onResizeStart={(e) => startColumnResize('project', e)}><SortLabel col="Project">Project</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.category }}>
+                  <ResizableHead width={columnWidths.category} onResizeStart={(e) => startColumnResize('category', e)}><SortLabel col="Category">Category</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.milestone }}>
+                  <ResizableHead width={columnWidths.milestone} onResizeStart={(e) => startColumnResize('milestone', e)}><SortLabel col="Milestone">Milestone</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.raised_by }}>
+                  <ResizableHead width={columnWidths.raised_by} onResizeStart={(e) => startColumnResize('raised_by', e)}><SortLabel col="Raised By">Raised By</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.raised_date }}>
+                  <ResizableHead width={columnWidths.raised_date} onResizeStart={(e) => startColumnResize('raised_date', e)}><SortLabel col="Raised Date">Raised</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_raised }}>
+                  <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)}><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_with_tax }}>
+                  <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)}><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_received }}>
+                  <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)}><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.outstanding_amount }}>
+                  <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)}><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.payment_status }}>
+                  <ResizableHead width={columnWidths.payment_status} onResizeStart={(e) => startColumnResize('payment_status', e)}><SortLabel col="Payment Status">Status</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.aging }}>
+                  <ResizableHead width={columnWidths.aging} onResizeStart={(e) => startColumnResize('aging', e)}><SortLabel col="Agening (Days)">Aging</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.next_followup }}>
+                  <ResizableHead width={columnWidths.next_followup} onResizeStart={(e) => startColumnResize('next_followup', e)}><SortLabel col="Next followup">Next Followup</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.docs }}>
+                  <ResizableHead width={columnWidths.docs} onResizeStart={(e) => startColumnResize('docs', e)}>Docs</ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.actions }}>
+                  <ResizableHead width={columnWidths.actions} onResizeStart={(e) => startColumnResize('actions', e)}>Actions</ResizableHead>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -2253,22 +2621,22 @@ export default function Invoices() {
                             e.currentTarget.style.transform = ''
                           }}>
 
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.row }}>
                             <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
                               {rowIndex + 1}
                             </span>
                           </td>
 
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.invoice_number }}>
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
                               {f['Invoice Number'] || '—'}
                             </span>
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell align-top" style={{ width: columnWidths.project }}>
                             <div className="min-w-0">
-                              <span className="text-xs font-semibold block truncate" style={{ color: 'var(--text-1)' }}>{f['Project'] || '—'}</span>
+                              <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Project'] || '—'}</span>
                               {f['Description'] && (
-                                <span className="block text-[11px] mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                                <span className="block text-[11px] mt-1" style={{ color: 'var(--text-3)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                                   {f['Description']}
                                 </span>
                               )}
@@ -2281,47 +2649,47 @@ export default function Invoices() {
                               )}
                             </div>
                           </td>
-                          <td className="tbl-cell">
-                            <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Category'] || '—'}</span>
+                          <td className="tbl-cell" style={{ width: columnWidths.category }}>
+                            <span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Category'] || '—'}</span>
                           </td>
-                          <td className="tbl-cell"><span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{f['Milestone'] || '—'}</span></td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.milestone }}><span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Milestone'] || '—'}</span></td>
+                          <td className="tbl-cell" style={{ width: columnWidths.raised_by }}>
                             {f['Raised By']
                               ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
                                   <User size={9} />{f['Raised By']}
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_raised }}>
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>
                               {fmt(f['Amount Raised'])}
                             </span>
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax }}>
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>
                               {fmt(f['Amount with Tax'])}
                             </span>
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_received }}>
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>
                               {fmt(f['Amount Received'])}
                             </span>
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount }}>
                             {outstanding > 0
                               ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
                               : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.payment_status }}>
                             <StatusPill status={f['Payment Status']} />
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.aging }}>
                             <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                           </td>
-                          <td className="tbl-cell">
+                          <td className="tbl-cell" style={{ width: columnWidths.next_followup }}>
                             {f['Next followup']
                               ? <span className="text-xs tabular-nums" style={{ color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>
                                   {fmtDate(f['Next followup'])}
@@ -2330,7 +2698,7 @@ export default function Invoices() {
                           </td>
 
                           {/* Attachment thumbs */}
-                          <td className="tbl-cell" onClick={e => e.stopPropagation()}>
+                          <td className="tbl-cell" onClick={e => e.stopPropagation()} style={{ width: columnWidths.docs }}>
                             {allFiles.length > 0 ? (
                               <div className="flex items-center gap-1">
                                 {allFiles.slice(0, 2).map((a, i) => (
@@ -2348,15 +2716,27 @@ export default function Invoices() {
                           </td>
 
                           {/* View action */}
-                          <td className="tbl-cell" onClick={e => e.stopPropagation()}>
-                            <button
-                              onClick={() => openView(r)}
-                              className="btn-ghost flex items-center gap-1.5"
-                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}
-                              aria-label={`View ${f['Invoice Number']}`}>
-                              <Eye size={12} />
-                              <span className="text-[11px] font-semibold">View</span>
-                            </button>
+                          <td className="tbl-cell" onClick={e => e.stopPropagation()} style={{ width: columnWidths.actions }}>
+                            <div className="flex flex-wrap gap-2">
+                              {isEditor && f['Payment Status'] === 'Pending' && (
+                                <button
+                                  onClick={() => openRecordPayment(r)}
+                                  className="btn-ghost flex items-center gap-1.5"
+                                  style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.3)' }}
+                                  aria-label={`Record payment for ${f['Invoice Number']}`}>
+                                  <CheckCircle2 size={12} />
+                                  <span className="text-[11px] font-semibold">Pay</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openView(r)}
+                                className="btn-ghost flex items-center gap-1.5"
+                                style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}
+                                aria-label={`View ${f['Invoice Number']}`}>
+                                <Eye size={12} />
+                                <span className="text-[11px] font-semibold">View</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -2377,6 +2757,7 @@ export default function Invoices() {
           onClose={closeDrawer}
           onLink={() => { setAssociationRecord(drawer.invoice); closeDrawer() }}
           onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer.invoice })}
+          onRecordPayment={() => isEditor && openRecordPayment(drawer.invoice)}
           isEditor={isEditor}
           onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
         />,
@@ -2391,10 +2772,11 @@ export default function Invoices() {
         />,
         document.body
       )}
-      {isEditor && (drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
+      {isEditor && (drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment') && createPortal(
         <InvoiceDrawer
-          invoice={drawer.mode === 'edit' ? drawer.invoice : null}
-          prefill={drawer.mode === 'new' ? drawer.prefill : null}
+          invoice={drawer.mode === 'edit' || drawer.mode === 'payment' ? drawer.invoice : null}
+          prefill={drawer.mode === 'new' || drawer.mode === 'payment' ? drawer.prefill : null}
+          paymentOnly={drawer.mode === 'payment'}
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
