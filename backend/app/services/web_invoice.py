@@ -5,6 +5,7 @@ Accessible only to the "web" role.
 """
 import json
 from typing import Any, Optional
+from datetime import datetime, timezone
 import httpx
 from ..config import settings
 from ..utils.cache import cache
@@ -40,6 +41,29 @@ _TTL_SUMMARY = 30
 
 def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
+
+
+def _runtime_aging(fields: dict[str, Any]) -> int | None:
+    status = str(fields.get("Payment Status") or "").strip()
+    if status != "Pending":
+        return None
+    raised_raw = fields.get("Raised Date")
+    if not raised_raw:
+        return None
+    try:
+        raised_dt = datetime.fromisoformat(str(raised_raw).replace("Z", "+00:00"))
+        return max(0, (datetime.now(timezone.utc) - raised_dt).days)
+    except Exception:
+        return None
+
+
+def _apply_runtime_invoice_derivatives(record: dict[str, Any]) -> dict[str, Any]:
+    fields = dict(record.get("fields") or {})
+    aging = _runtime_aging(fields)
+    if aging is not None:
+        fields["Agening (Days)"] = aging
+    record["fields"] = fields
+    return record
 
 
 class WebInvoiceService:
@@ -239,7 +263,8 @@ class WebInvoiceService:
                 res = await client.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 data = res.json()
-            return {"records": data.get("records", []), "total": data.get("total", 0)}
+            records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
+            return {"records": records, "total": data.get("total", 0)}
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
@@ -264,7 +289,7 @@ class WebInvoiceService:
                     if len(batch) < 1000:
                         break
                     skip += 1000
-            return records
+            return [_apply_runtime_invoice_derivatives(r) for r in records]
         return await cache.get_or_set("webinv:all", ttl=_TTL_ALL, loader=_load)
 
     async def get_invoice(self, record_id: str) -> dict:
@@ -272,7 +297,7 @@ class WebInvoiceService:
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(url, headers=self._headers)
             res.raise_for_status()
-            return res.json()
+            return _apply_runtime_invoice_derivatives(res.json())
 
     async def create_invoice(self, fields: dict) -> dict:
         body = {"fieldKeyType": "name", "records": [{"fields": _clean_fields(fields)}]}
@@ -281,7 +306,8 @@ class WebInvoiceService:
             res.raise_for_status()
             _bust_web_cache()
             data = res.json()
-            return data.get("records", [{}])[0]
+            created = data.get("records", [{}])[0]
+            return _apply_runtime_invoice_derivatives(created)
 
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
         url = f"{self._record_url}/{record_id}"
@@ -290,7 +316,7 @@ class WebInvoiceService:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
             _bust_web_cache()
-            return res.json()
+            return _apply_runtime_invoice_derivatives(res.json())
 
     async def delete_invoice(self, record_id: str) -> None:
         url = f"{self._record_url}/{record_id}"

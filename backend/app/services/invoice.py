@@ -5,6 +5,7 @@ Handles CRUD + summary for Invoice Tracking.
 import json
 import logging
 from typing import Any, Optional
+from datetime import datetime, timezone
 import httpx
 from ..config import settings
 from ..utils.cache import cache
@@ -46,6 +47,29 @@ logger = logging.getLogger("fintrack.invoices")
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
     cache.bust(prefix="invoice:")
+
+
+def _runtime_aging(fields: dict[str, Any]) -> int | None:
+    status = str(fields.get("Payment Status") or "").strip()
+    if status != "Pending":
+        return None
+    raised_raw = fields.get("Raised Date")
+    if not raised_raw:
+        return None
+    try:
+        raised_dt = datetime.fromisoformat(str(raised_raw).replace("Z", "+00:00"))
+        return max(0, (datetime.now(timezone.utc) - raised_dt).days)
+    except Exception:
+        return None
+
+
+def _apply_runtime_invoice_derivatives(record: dict[str, Any]) -> dict[str, Any]:
+    fields = dict(record.get("fields") or {})
+    aging = _runtime_aging(fields)
+    if aging is not None:
+        fields["Agening (Days)"] = aging
+    record["fields"] = fields
+    return record
 
 
 class InvoiceService:
@@ -119,7 +143,7 @@ class InvoiceService:
             records: list[dict[str, Any]] = []
             for row in rows:
                 fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
-                records.append({"id": row["teable_id"], "fields": fields or {}})
+                records.append(_apply_runtime_invoice_derivatives({"id": row["teable_id"], "fields": fields or {}}))
             return {"records": records, "total": total or len(records)}
         except Exception as exc:
             logger.debug("invoices_mirror PG list failed: %s", exc)
@@ -137,7 +161,7 @@ class InvoiceService:
             if not row:
                 return None
             fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
-            return {"id": row["teable_id"], "fields": fields or {}}
+            return _apply_runtime_invoice_derivatives({"id": row["teable_id"], "fields": fields or {}})
         except Exception as exc:
             logger.debug("invoices_mirror PG get failed: %s", exc)
             return None
@@ -234,7 +258,7 @@ class InvoiceService:
             records = []
             for row in rows:
                 fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
-                records.append({"fields": fields or {}})
+                records.append(_apply_runtime_invoice_derivatives({"fields": fields or {}}))
             return self._compute_summary(records)
         except Exception as exc:
             logger.debug("invoices_mirror PG summary failed: %s", exc)
@@ -280,7 +304,8 @@ class InvoiceService:
                 res = await client.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 data = res.json()
-            return {"records": data.get("records", []), "total": data.get("total", 0)}
+            records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
+            return {"records": records, "total": data.get("total", 0)}
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
@@ -303,7 +328,7 @@ class InvoiceService:
                     if len(batch) < 1000:
                         break
                     skip += 1000
-            return records
+            return [_apply_runtime_invoice_derivatives(r) for r in records]
         return await cache.get_or_set("invoice:all", ttl=_TTL_ALL, loader=_load)
 
     # ── Get single invoice ────────────────────────────────────────────────
@@ -315,7 +340,7 @@ class InvoiceService:
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(url, headers=self._headers)
             res.raise_for_status()
-            return res.json()
+            return _apply_runtime_invoice_derivatives(res.json())
 
     # ── Create invoice ────────────────────────────────────────────────────
     async def create_invoice(self, fields: dict) -> dict:
@@ -325,7 +350,8 @@ class InvoiceService:
             res.raise_for_status()
             _bust_invoice_cache()
             data = res.json()
-            return data.get("records", [{}])[0]
+            created = data.get("records", [{}])[0]
+            return _apply_runtime_invoice_derivatives(created)
 
     # ── Update invoice ────────────────────────────────────────────────────
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
@@ -338,7 +364,7 @@ class InvoiceService:
             res = await client.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
             _bust_invoice_cache()
-            return res.json()
+            return _apply_runtime_invoice_derivatives(res.json())
 
     # ── Delete invoice ────────────────────────────────────────────────────
     async def delete_invoice(self, record_id: str) -> None:
