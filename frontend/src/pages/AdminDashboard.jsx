@@ -1752,6 +1752,7 @@ function SyncLogTab() {
   const [filterError,  setFErr]   = useState('')   // '' | 'errors_only' | 'success_only'
   const [limit, setSLimit]        = useState(50)
   const [triggering, setTrig]     = useState(false)
+  const [agingRefreshing, setAgingRefreshing] = useState(false)
   const [trigMsg, setTrigMsg]     = useState(null)
   const [diagnosing, setDiag]     = useState(false)
   const [diagResult, setDiagRes]  = useState(null)
@@ -1780,6 +1781,19 @@ function SyncLogTab() {
       setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
     } finally {
       setTrig(false)
+    }
+  }, [load])
+
+  const triggerAgingRefresh = useCallback(async () => {
+    setAgingRefreshing(true); setTrigMsg(null)
+    try {
+      await api.admin.triggerAgingRefresh()
+      setTrigMsg({ ok: true, text: 'Invoice aging refresh started — numeric aging values will appear in Teable shortly' })
+      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+    } catch (e) {
+      setTrigMsg({ ok: false, text: e.message || 'Aging refresh failed' })
+    } finally {
+      setAgingRefreshing(false)
     }
   }, [load])
 
@@ -1826,6 +1840,16 @@ function SyncLogTab() {
             opacity: triggering ? 0.6 : 1,
           }}>
           <Play size={11} /> {triggering ? 'Triggering…' : 'Trigger Full Sync Now'}
+        </button>
+        <button onClick={triggerAgingRefresh} disabled={agingRefreshing}
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: agingRefreshing ? 'var(--bg-input)' : 'rgba(5,150,105,0.08)',
+            border: '1px solid rgba(5,150,105,0.25)',
+            color: agingRefreshing ? 'var(--text-3)' : '#059669',
+            opacity: agingRefreshing ? 0.6 : 1,
+          }}>
+          <RefreshCw size={11} /> {agingRefreshing ? 'Refreshing…' : 'Refresh Aging'}
         </button>
         <button onClick={diagnoseSync} disabled={diagnosing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"

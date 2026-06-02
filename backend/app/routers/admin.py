@@ -273,6 +273,25 @@ async def admin_trigger_sync(_: str = Depends(require_admin)):
     return {"status": "sync_started", "message": "Full sync triggered — check Sync Log in a few seconds"}
 
 
+@router.post("/sync/aging-refresh")
+async def admin_trigger_aging_refresh(_: str = Depends(require_admin)):
+    """
+    Run invoice aging refresh immediately for both invoice tables.
+    This writes numeric Agening (Days) values when those Teable fields are numeric.
+    """
+    from ..services.invoice_aging import run_invoice_aging_refresh_cycle
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    asyncio.create_task(run_invoice_aging_refresh_cycle())
+    return {
+        "status": "aging_refresh_started",
+        "message": "Invoice aging refresh started — check Sync Log for invoices-aging-refresh and web-invoices-aging-refresh",
+    }
+
+
 @router.get("/sync/diagnose")
 async def admin_sync_diagnose(_: str = Depends(require_admin)):
     """

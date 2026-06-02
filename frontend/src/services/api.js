@@ -516,6 +516,7 @@ export const api = {
     sharedLinks:   (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/shared-links?${q}`) },
     sharedLinkAccesses: (token, limit = 200) => request(`/api/admin/shared-links/${token}/accesses?limit=${limit}`),
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
+    triggerAgingRefresh: ()      => request('/api/admin/sync/aging-refresh', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),
     getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),
     insightConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/insight-configs?${q}`) },
