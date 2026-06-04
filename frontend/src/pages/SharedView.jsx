@@ -134,10 +134,17 @@ function taxParts(fields = {}) {
   const isCancelled = status === 'Cancelled'
   const gst = Math.max(0, gross - base)
   const tds = isPaid && received < gross ? Math.max(0, gross - received) : 0
-  const outstanding = !isPaid && !isCancelled ? Math.max(0, gross - received) : 0
+  const outstanding = !isPaid && !isCancelled ? Math.max(0, base) : 0
   return {
+    base,
+    gross,
+    received,
+    status,
+    isPaid,
+    isCancelled,
     gst,
     tds,
+    gstPct: base > 0 ? (gst / base) * 100 : 0,
     tdsPct: base > 0 ? (tds / base) * 100 : 0,
     outstanding,
   }
@@ -255,6 +262,90 @@ function SummaryStrip({ records, statusOptions, filterStatus, onFilterStatus, ac
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function TaxLedgerDashboard({ records, filterStatus, onFilterStatus, theme }) {
+  const totals = records.reduce((acc, record) => {
+    const p = taxParts(record.fields || {})
+    if (!p.isCancelled) {
+      acc.active += 1
+      if (p.isPaid) {
+        acc.paid += 1
+        acc.taxable += p.base
+        acc.gross += p.gross
+        acc.gst += p.gst
+        acc.tds += p.tds
+        acc.received += p.received
+      } else {
+        acc.open += 1
+        acc.openBase += p.base
+        acc.openGross += p.gross
+        acc.outstanding += p.outstanding
+      }
+    } else {
+      acc.cancelled += 1
+    }
+    return acc
+  }, {
+    active: 0,
+    paid: 0,
+    open: 0,
+    cancelled: 0,
+    taxable: 0,
+    gross: 0,
+    gst: 0,
+    tds: 0,
+    received: 0,
+    openBase: 0,
+    openGross: 0,
+    outstanding: 0,
+  })
+  const collectionRate = totals.gross > 0 ? (totals.received / totals.gross) * 100 : 0
+  const tdsPct = totals.taxable > 0 ? (totals.tds / totals.taxable) * 100 : 0
+  const statusCards = [
+    ['Paid', totals.paid, 'Paid tax register'],
+    ['Pending', totals.open, 'Open receivables'],
+    ['Cancelled', totals.cancelled, 'Excluded'],
+  ]
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+        {[
+          ['Taxable base', fmtInr(totals.taxable), `${totals.paid} paid invoices`],
+          ['GST collected', fmtInr(totals.gst), 'Paid invoices only'],
+          ['TDS deducted', totals.tds > 0 ? fmtInr(totals.tds) : '—', `${tdsPct.toFixed(1)}% on taxable`],
+          ['Net received', fmtInr(totals.received), `${collectionRate.toFixed(1)}% of gross`],
+          ['Open invoices', fmtInr(totals.outstanding), `${totals.open} pending · excluded from tax totals`],
+        ].map(([label, value, sub], index) => (
+          <div key={label} className="rounded-2xl p-3" style={{
+            background: index === 1 ? 'rgba(16,185,129,0.08)' : index === 2 ? 'rgba(245,158,11,0.08)' : '#fff',
+            border: '1px solid #e5e7eb',
+          }}>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
+            <p className="text-lg sm:text-xl font-black tabular-nums mt-1" style={{ color: index === 1 ? '#059669' : index === 2 ? '#d97706' : '#111827' }}>{value}</p>
+            <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => onFilterStatus('')} className="px-3 py-2 rounded-xl text-xs font-bold"
+          style={{ background: !filterStatus ? theme.accent : '#fff', color: !filterStatus ? '#fff' : '#475569', border: `1px solid ${!filterStatus ? theme.accent : '#e5e7eb'}` }}>
+          All tax invoices · {totals.active}
+        </button>
+        {statusCards.map(([status, count, label]) => {
+          const active = filterStatus === status
+          const st = simpleStatusStyle(status)
+          return (
+            <button key={status} onClick={() => onFilterStatus(active ? '' : status)}
+              className="px-3 py-2 rounded-xl text-xs font-bold"
+              style={{ background: active ? st.bg : '#fff', color: active ? st.text : '#475569', border: `1px solid ${active ? st.border : '#e5e7eb'}` }}>
+              {label} · {count}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -957,6 +1048,7 @@ export default function SharedView() {
   const [dateTo, setDateTo] = useState('')
   const [agingBandFilter, setAgingBandFilter] = useState('')
   const [billingFilter, setBillingFilter] = useState('all')
+  const [invoiceScope, setInvoiceScope] = useState('all')
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [hasDocsOnly, setHasDocsOnly] = useState(false)
   const [followupDueOnly, setFollowupDueOnly] = useState(false)
@@ -970,6 +1062,7 @@ export default function SharedView() {
 
   const resourceType = data?.resource_type || 'status'
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
+  const isInvoiceLike = resourceType === 'invoices' || resourceType === 'tax-ledger'
 
   const load = async ({ silent = false, signal } = {}) => {
     if (silent) setRefreshing(true)
@@ -999,6 +1092,7 @@ export default function SharedView() {
       setDateTo(prev => prev || vc.dateTo || '')
       setAgingBandFilter(prev => prev || vc.agingBandFilter || '')
       setBillingFilter(prev => prev !== 'all' ? prev : (vc.billingFilter || 'all'))
+      setInvoiceScope(prev => prev !== 'all' ? prev : (vc.invoiceScope || 'all'))
       setOverdueOnly(prev => prev || vc.overdueOnly === true)
       setHasDocsOnly(prev => prev || vc.hasDocsOnly === true)
       setFollowupDueOnly(prev => prev || vc.followupDueOnly === true)
@@ -1073,22 +1167,22 @@ export default function SharedView() {
     return dynamic.length ? dynamic : ['Uncategorized']
   }, [recordsForView, meta.statusField, resourceType])
   const categoryOptions = useMemo(
-    () => resourceType === 'invoices'
+    () => isInvoiceLike
       ? [...new Set(records.map(r => r.fields?.Category).filter(Boolean))].sort()
       : [],
-    [records, resourceType]
+    [records, isInvoiceLike]
   )
   const raisedByOptions = useMemo(
-    () => resourceType === 'invoices'
+    () => isInvoiceLike
       ? [...new Set(records.map(r => r.fields?.['Raised By']).filter(Boolean))].sort()
       : [],
-    [records, resourceType]
+    [records, isInvoiceLike]
   )
   const monthOptions = useMemo(
-    () => resourceType === 'invoices'
+    () => isInvoiceLike
       ? [...new Set(records.map(r => monthKey(r.fields?.['Raised Date'])).filter(Boolean))].sort().reverse()
       : [],
-    [records, resourceType]
+    [records, isInvoiceLike]
   )
 
   const filtered = useMemo(() => {
@@ -1097,8 +1191,14 @@ export default function SharedView() {
       const f = r.fields || {}
       if (filterPrimary && f[meta.clientField] !== filterPrimary) return false
       if (filterStatus && (f[meta.statusField] || '') !== filterStatus) return false
-      if (filterCategory && resourceType === 'invoices' && f.Category !== filterCategory) return false
-      if (resourceType === 'invoices') {
+      if (filterCategory && isInvoiceLike && f.Category !== filterCategory) return false
+      if (isInvoiceLike) {
+        if (resourceType === 'tax-ledger') {
+          const parts = taxParts(f)
+          if (invoiceScope === 'tax' && !parts.isPaid) return false
+          if (invoiceScope === 'open' && (parts.isPaid || parts.isCancelled)) return false
+          if (invoiceScope !== 'all' && parts.isCancelled) return false
+        }
         if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
         if (billingFilter === 'retainer' && !/retainer/i.test(String(f.Category || ''))) return false
         if (billingFilter === 'project' && /retainer/i.test(String(f.Category || ''))) return false
@@ -1127,7 +1227,7 @@ export default function SharedView() {
       }
       return true
     })
-  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType, raisedByFilter, billingFilter, monthFilter, dateFieldFilter, dateFrom, dateTo, agingBandFilter, overdueOnly, hasDocsOnly, followupDueOnly])
+  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType, isInvoiceLike, invoiceScope, raisedByFilter, billingFilter, monthFilter, dateFieldFilter, dateFrom, dateTo, agingBandFilter, overdueOnly, hasDocsOnly, followupDueOnly])
 
   async function saveRecordChanges(record, patch) {
     setSavingRecordId(record.id)
@@ -1246,7 +1346,7 @@ export default function SharedView() {
               <div>
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {filtered.length} shown of {records.length} {meta.plural} · {primaryOptions.length} {resourceType === 'invoices' ? 'projects' : 'clients'}
+                  {filtered.length} shown of {records.length} {meta.plural} · {primaryOptions.length} clients
                   {createdAt && ` · ${fmtDate(createdAt)}`}
                 </p>
               </div>
@@ -1260,15 +1360,24 @@ export default function SharedView() {
           <SnapshotSummary viewConfig={vc} accessMode={data?.access_mode || 'read'} />
 
           {showDashboard && records.length > 0 && (
-            <SummaryStrip
-              records={records}
-              statusOptions={statusOptions}
-              filterStatus={filterStatus}
-              onFilterStatus={setFilterStatus}
-              accent={theme}
-              noun={meta.plural}
-              statusField={meta.statusField}
-            />
+            resourceType === 'tax-ledger' ? (
+              <TaxLedgerDashboard
+                records={filtered}
+                filterStatus={filterStatus}
+                onFilterStatus={setFilterStatus}
+                theme={theme}
+              />
+            ) : (
+              <SummaryStrip
+                records={records}
+                statusOptions={statusOptions}
+                filterStatus={filterStatus}
+                onFilterStatus={setFilterStatus}
+                accent={theme}
+                noun={meta.plural}
+                statusField={meta.statusField}
+              />
+            )
           )}
 
           <div className="flex flex-col lg:flex-row gap-2">
@@ -1289,13 +1398,13 @@ export default function SharedView() {
               <option value="">All statuses</option>
               {statusOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
-            {resourceType === 'invoices' && (
+            {isInvoiceLike && (
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                 <option value="">All categories</option>
                 {categoryOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
-            {resourceType === 'invoices' && (
+            {isInvoiceLike && (
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
                 <option value="">All owners</option>
                 {raisedByOptions.map(v => <option key={v} value={v}>{v}</option>)}
@@ -1334,8 +1443,15 @@ export default function SharedView() {
               Refresh
             </button>
           </div>
-          {resourceType === 'invoices' && (
+          {isInvoiceLike && (
             <div className="mt-3 flex flex-wrap gap-2">
+              {resourceType === 'tax-ledger' && (
+                <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={invoiceScope} onChange={e => setInvoiceScope(e.target.value)}>
+                  <option value="all">All valid invoices</option>
+                  <option value="tax">Paid tax register</option>
+                  <option value="open">Open invoices only</option>
+                </select>
+              )}
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
                 <option value="all">All billing</option>
                 <option value="project">Projects only</option>
