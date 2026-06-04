@@ -84,6 +84,29 @@ const projectInitials = (value) => String(value || 'NA')
   .map((part) => part[0]?.toUpperCase())
   .join('') || 'NA'
 
+const INVOICE_SCALAR_FORM_KEYS = [
+  'invoice_number',
+  'project',
+  'category',
+  'description',
+  'milestone',
+  'raised_by',
+  'raised_date',
+  'cleared_date',
+  'amount_raised',
+  'amount_with_tax',
+  'amount_received',
+  'payment_status',
+  'remark',
+  'next_followup',
+]
+
+const normalizeInvoiceScalarForm = (form) => INVOICE_SCALAR_FORM_KEYS.reduce((acc, key) => {
+  const value = form?.[key]
+  acc[key] = value == null ? '' : String(value).trim()
+  return acc
+}, {})
+
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
@@ -675,6 +698,7 @@ function Field({ label, children }) {
 function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
   const isEdit = Boolean(invoice?.id)
   const [form,       setForm]      = useState(EMPTY_FORM)
+  const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
   const [saving,     setSaving]    = useState(false)
   const [deleting,   setDeleting]  = useState(false)
@@ -694,15 +718,26 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
   const retainerCategoryOption = categoryOptions.find(c => /retainer/i.test(c)) || 'Development- Retainer'
   const retainerSelected = isRetainerCategory(form.category)
   const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizeInvoiceScalarForm(form)) !== JSON.stringify(normalizeInvoiceScalarForm(initialForm)),
+    [form, initialForm]
+  )
+  const canSubmit = !saving && (!isEdit || paymentOnly || hasFormChanges)
 
   useEffect(() => {
-    if (!invoice && !prefill) { setForm(EMPTY_FORM); return }
+    if (!invoice && !prefill) {
+      setForm(EMPTY_FORM)
+      setInitialForm(EMPTY_FORM)
+      return
+    }
     if (!invoice && prefill) {
-      setForm({ ...EMPTY_FORM, ...prefill })
+      const next = { ...EMPTY_FORM, ...prefill }
+      setForm(next)
+      setInitialForm(next)
       return
     }
     const f = invoice.fields || {}
-    setForm({
+    const next = {
       invoice_number:  f['Invoice Number']  || '',
       project:         f['Project']         || '',
       category:        f['Category']        || '',
@@ -720,7 +755,9 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
       reference:       Array.isArray(f['Reference']) ? f['Reference'] : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
       ...(prefill || {}),
-    })
+    }
+    setForm(next)
+    setInitialForm(next)
   }, [invoice, prefill])
 
   useEffect(() => {
@@ -753,6 +790,10 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
   }
 
   async function handleSave() {
+    if (isEdit && !paymentOnly && !hasFormChanges) {
+      setError('')
+      return
+    }
     if (hasPaymentAttempt && form.payment_status !== 'Paid') {
       setError('Payment Status must be Paid when recording received amount or cleared date')
       return
@@ -781,6 +822,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
             : (isEdit ? null : undefined),
       }
       const saved = currentRecordId ? await api.invoices.update(currentRecordId, payload) : await api.invoices.create(payload)
+      setInitialForm(form)
       onSaved(saved)
     } catch (e) {
       setError(e.message || 'Save failed')
@@ -1097,8 +1139,14 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
           ) : <div />}
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Save size={12} />{saving ? 'Saving…' : paymentOnly ? 'Record payment' : isEdit ? 'Save changes' : 'Create invoice'}
+            <button
+              onClick={handleSave}
+              disabled={!canSubmit}
+              className={canSubmit ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: canSubmit ? 1 : 0.62 }}
+              title={!canSubmit ? 'No form changes to save' : undefined}
+            >
+              <Save size={12} />{saving ? 'Saving…' : !canSubmit ? 'No changes' : paymentOnly ? 'Record payment' : isEdit ? 'Save changes' : 'Create invoice'}
             </button>
           </div>
         </div>

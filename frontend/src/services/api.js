@@ -71,6 +71,10 @@ export function clientCacheBust(prefix) {
   for (const k of _clientCache.keys()) if (k.startsWith(prefix)) _clientCache.delete(k)
 }
 
+function bustInvoiceReads() {
+  clientCacheBust('/api/invoices')
+}
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
@@ -141,6 +145,7 @@ async function requestBlob(path, options = {}) {
 async function _doRequest(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
+  if (method !== 'GET') retries = 0
   const controller = new AbortController()
   const timeoutMs = timeout || TIMEOUT_MS
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
@@ -322,7 +327,9 @@ export const api = {
           e.status = res.status
           throw e
         }
-        return res.json()
+        const data = await res.json()
+        bustInvoiceReads()
+        return data
       })
     },
     list:    (params = {}) => {
@@ -333,9 +340,21 @@ export const api = {
     },
     summary: (opts = {})         => request('/api/invoices/summary', opts),
     get:     (id, opts = {})       => request(`/api/invoices/${id}`, opts),
-    create:  (data)     => request('/api/invoices', { method: 'POST',   body: JSON.stringify(data) }),
-    update:  (id, data) => request(`/api/invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
-    delete:  (id)       => request(`/api/invoices/${id}`, { method: 'DELETE' }),
+    create:  async (data) => {
+      const result = await request('/api/invoices', { method: 'POST', body: JSON.stringify(data) })
+      bustInvoiceReads()
+      return result
+    },
+    update:  async (id, data) => {
+      const result = await request(`/api/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+      bustInvoiceReads()
+      return result
+    },
+    delete:  async (id) => {
+      const result = await request(`/api/invoices/${id}`, { method: 'DELETE' })
+      bustInvoiceReads()
+      return result
+    },
     // Upload an invoice file (PDF/image) and get AI-extracted fields back.
     // Uses multipart/form-data — do NOT set Content-Type header (browser sets boundary).
     parse: (file) => {
