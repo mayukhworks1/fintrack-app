@@ -196,7 +196,7 @@ const DASHBOARD_WIDGET_CATALOG = [
   { id: 'needs_attention', label: 'Needs attention', description: 'Projects with negative profit or critical health.' },
   { id: 'leaders', label: 'Performance leaders', description: 'Top performer and lowest margin cards.' },
   { id: 'status_mix', label: 'Status mix', description: 'Clickable status counts for the current visible portfolio.' },
-  { id: 'top_projects', label: 'Top projects', description: 'Highest-billed projects with linked context and quick navigation.' },
+  { id: 'top_projects', label: 'Top projects', description: 'Highest-billed projects with direct project context and quick navigation.' },
 ]
 
 const DASHBOARD_DEFAULT_WIDGET_IDS = DASHBOARD_WIDGET_CATALOG.map((widget) => widget.id)
@@ -224,23 +224,25 @@ export default function Dashboard() {
   const recent = data?.records || []
   const recentSignals = recent
     .map((record) => {
-      const insight = record.association?.insights?.project
       const profit = Number(record.fields?.['Profit percentage'] || 0)
+      const health = record.fields?.['Health'] || ''
       const severityRank = profit < 0
         ? 3
-        : insight?.signal?.severity === 'danger'
+        : health === 'Critical'
           ? 3
-          : insight?.signal?.severity === 'warning'
+          : health === 'At Risk'
             ? 2
             : 1
-      return { record, insight, severityRank, profit }
+      return { record, severityRank, profit, health }
     })
     .sort((a, b) => b.severityRank - a.severityRank || a.profit - b.profit)
   const leadSignal = recentSignals[0]
   const leadRecord = leadSignal?.record
-  const leadInsight = leadSignal?.insight
-  const blockedRecent = recent.filter(r => Number(r.association?.insights?.project?.status_summary?.blocked_count || 0) > 0).length
-  const outstandingRecent = recent.reduce((sum, r) => sum + Number(r.association?.insights?.project?.invoice_summary?.outstanding_total || 0), 0)
+  const blockedRecent = recent.filter(r => {
+    const profit = Number(r.fields?.['Profit percentage'] || 0)
+    const health = r.fields?.['Health'] || ''
+    return profit < 0 || health === 'Critical' || health === 'At Risk'
+  }).length
 
   const margin    = s?.total_billed > 0 ? (s.total_profit / s.total_billed) * 100 : 0
   const costRatio = s?.total_billed > 0 ? (s.total_cost   / s.total_billed) * 100 : 0
@@ -290,59 +292,6 @@ export default function Dashboard() {
           profit: record.fields?.['Actual Profit'] || 0,
           profit_pct: record.fields?.['Profit percentage'] || 0,
         })),
-      },
-      {
-        key: 'portfolio-linked',
-        label: 'Linked portfolio matrix',
-        columns: [
-          { key: 'client', label: 'Client' },
-          { key: 'project', label: 'Project' },
-          { key: 'status', label: 'Project Status' },
-          { key: 'health', label: 'Health' },
-          { key: 'billed', label: 'Billed' },
-          { key: 'profit', label: 'Profit' },
-          { key: 'profit_pct', label: 'Profit %' },
-          { key: 'outstanding_total', label: 'Outstanding' },
-          { key: 'pending_invoices', label: 'Pending Invoices' },
-          { key: 'blocked_statuses', label: 'Blocked Statuses' },
-          { key: 'signal', label: 'Signal' },
-        ],
-        defaultColumns: ['client', 'project', 'status', 'billed', 'profit', 'outstanding_total', 'signal'],
-        loadRows: async () => {
-          const res = await api.projects.list({ limit: 500, order_by: 'Amount Billed So far' })
-          return (res.records || []).map((record) => {
-            const insight = record.association?.insights?.project
-            return {
-              client: record.fields?.['Client'] || '',
-              project: record.fields?.['Project Name'] || '',
-              status: record.fields?.['Project Status'] || '',
-              health: record.fields?.['Health'] || '',
-              billed: record.fields?.['Amount Billed So far'] || 0,
-              profit: record.fields?.['Actual Profit'] || 0,
-              profit_pct: record.fields?.['Profit percentage'] || 0,
-              outstanding_total: Number(insight?.invoice_summary?.outstanding_total || 0),
-              pending_invoices: Number(insight?.invoice_summary?.pending_count || 0),
-              blocked_statuses: Number(insight?.status_summary?.blocked_count || 0),
-              signal: insight?.signal?.label || '',
-            }
-          })
-        },
-        getRows: () => recent.map((record) => {
-          const insight = record.association?.insights?.project
-          return {
-            client: record.fields?.['Client'] || '',
-            project: record.fields?.['Project Name'] || '',
-            status: record.fields?.['Project Status'] || '',
-            health: record.fields?.['Health'] || '',
-            billed: record.fields?.['Amount Billed So far'] || 0,
-            profit: record.fields?.['Actual Profit'] || 0,
-            profit_pct: record.fields?.['Profit percentage'] || 0,
-            outstanding_total: Number(insight?.invoice_summary?.outstanding_total || 0),
-            pending_invoices: Number(insight?.invoice_summary?.pending_count || 0),
-            blocked_statuses: Number(insight?.status_summary?.blocked_count || 0),
-            signal: insight?.signal?.label || '',
-          }
-        }),
       },
       {
         key: 'status-summary',
@@ -504,21 +453,21 @@ export default function Dashboard() {
                   {leadSignal
                     ? (leadSignal.profit < 0
                       ? `${formatPct(leadSignal.profit, 2)} margin currently needs intervention.`
-                      : leadInsight?.signal?.detail || 'Linked delivery and billing context is available for review.')
+                      : `${leadSignal.health || 'Project'} health with live project financial context.`)
                     : 'As project financials settle in, this space will surface the strongest performer.'}
                 </p>
               </div>
               <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
-                <p className="text-base font-semibold mt-2" style={{ color: blockedRecent || outstandingRecent > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
-                  {blockedRecent || outstandingRecent > 0
-                    ? `${blockedRecent} blocked · ${inr(outstandingRecent)} open`
+                <p className="text-base font-semibold mt-2" style={{ color: blockedRecent ? 'var(--fin-negative)' : 'var(--text-1)' }}>
+                  {blockedRecent
+                    ? `${blockedRecent} project${blockedRecent === 1 ? '' : 's'} need review`
                     : 'No critical portfolio blockers'}
                 </p>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-                  {blockedRecent || outstandingRecent > 0
-                    ? 'Combines blocked delivery statuses with open receivable exposure on the visible control set.'
-                    : 'No blocked linked statuses and no open receivable pressure in the visible control set.'}
+                  {blockedRecent
+                    ? 'Based on project health and margin signals from the live project records.'
+                    : 'No negative margin or critical health flags in the visible control set.'}
                 </p>
               </div>
             </div>

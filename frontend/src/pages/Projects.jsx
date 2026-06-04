@@ -123,10 +123,11 @@ export default function Projects() {
     .slice(0, 4)
   const actionQueue = [...displayed]
     .map((row) => {
-      const insight = row.association?.insights?.project
-      const severity = row.fields?.['Profit percentage'] < 0 ? 'danger' : (insight?.signal?.severity || 'muted')
+      const profit = Number(row.fields?.['Profit percentage'] || 0)
+      const health = row.fields?.['Health'] || ''
+      const severity = profit < 0 || health === 'Critical' ? 'danger' : health === 'At Risk' ? 'warning' : 'muted'
       const rank = severity === 'danger' ? 3 : severity === 'warning' ? 2 : severity === 'positive' ? 1 : 0
-      return { row, insight, rank }
+      return { row, rank }
     })
     .filter(item => item.rank > 0)
     .sort((a, b) => b.rank - a.rank)
@@ -134,23 +135,19 @@ export default function Projects() {
   const margin = Number(summary?.total_billed || 0) > 0
     ? (Number(summary?.total_profit || 0) / Number(summary?.total_billed || 1)) * 100
     : 0
-  const visibleInsights = displayed.map(row => row.association?.insights?.project).filter(Boolean)
   const projectsNeedingAction = displayed.filter((row) => {
-    const insight = row.association?.insights?.project
-    const severity = insight?.signal?.severity
     const profit = Number(row.fields?.['Profit percentage'] || 0)
-    return severity === 'danger' || severity === 'warning' || profit < 0
+    const health = row.fields?.['Health'] || ''
+    return health === 'Critical' || health === 'At Risk' || profit < 0
   })
-  const blockedProjects = displayed.filter((row) => Number(row.association?.insights?.project?.status_summary?.blocked_count || 0) > 0)
-  const outstandingTotal = displayed.reduce((sum, row) => sum + Number(row.association?.insights?.project?.invoice_summary?.outstanding_total || 0), 0)
+  const blockedProjects = projectsNeedingAction
+  const outstandingTotal = 0
   const blindSpots = displayed.filter((row) => {
-    const insight = row.association?.insights?.project
-    const statuses = Number(insight?.status_summary?.total_count || 0)
-    const invoices = Number(insight?.invoice_summary?.total_count || 0)
-    return !statuses && !invoices
+    const f = row.fields || {}
+    return !f['Health'] && !f['Project Status']
   })
   const highestExposure = [...displayed]
-    .sort((a, b) => Number(b.association?.insights?.project?.invoice_summary?.outstanding_total || 0) - Number(a.association?.insights?.project?.invoice_summary?.outstanding_total || 0))[0]
+    .sort((a, b) => Number(b.fields?.['Amount Billed So far'] || 0) - Number(a.fields?.['Amount Billed So far'] || 0))[0]
 
   const setFilter = (key, val) => {
     const p = new URLSearchParams(searchParams)
@@ -174,7 +171,7 @@ export default function Projects() {
       <ExecutiveHero
         eyebrow="Projects Control Center"
         title="Projects"
-        description="Track portfolio health, profit coverage, linked invoices, and delivery risk from one unified project workspace."
+        description="Track portfolio health, profit coverage, billing context, and delivery risk from one unified project workspace."
         icon={FolderKanban}
         meta={
           <div className="flex flex-wrap items-center gap-2">
@@ -231,8 +228,8 @@ export default function Projects() {
             label="Open receivables"
             value={formatInr(outstandingTotal)}
             sub={highestExposure
-              ? `${highestExposure.fields?.['Project Name'] || 'Highest exposure'} carries the biggest linked open amount`
-              : 'No linked invoice exposure visible in this scope'}
+              ? `${highestExposure.fields?.['Project Name'] || 'Highest billed project'} has the largest billed exposure`
+              : 'No billing exposure visible in this scope'}
             accent={outstandingTotal > 0 ? 'warning' : 'positive'}
             icon={Link2}
           />
@@ -240,8 +237,8 @@ export default function Projects() {
             label="Delivery blockers"
             value={blockedProjects.length}
             sub={blindSpots.length
-              ? `${blindSpots.length} project${blindSpots.length !== 1 ? 's' : ''} still missing linked status or invoice context`
-              : 'Linked portfolio context is available on the visible projects'}
+              ? `${blindSpots.length} project${blindSpots.length !== 1 ? 's' : ''} still missing health or status`
+              : 'Project health and status are available on the visible projects'}
             accent={blockedProjects.length ? 'warning' : 'positive'}
             icon={Activity}
           />
@@ -360,7 +357,7 @@ export default function Projects() {
         >
           {actionQueue.length > 0 ? (
             <div className="signal-list">
-              {actionQueue.map(({ row, insight }, index) => (
+              {actionQueue.map(({ row }, index) => (
                 <button
                   key={row.id}
                   onClick={() => navigate(`/projects/${row.id}`)}
@@ -371,10 +368,10 @@ export default function Projects() {
                       <p className="signal-list-kicker">Priority {index + 1}</p>
                       <p className="signal-list-title truncate">{row.fields?.['Project Name'] || 'Project'}</p>
                     </div>
-                    <ExecutiveChip accent>{insight?.signal?.title || 'Review'}</ExecutiveChip>
+                    <ExecutiveChip accent>Review</ExecutiveChip>
                   </div>
                   <p className="signal-list-copy">
-                    {insight?.signal?.detail || row.fields?.['Health'] || 'Review linked delivery and billing context'}
+                    {row.fields?.['Health'] || 'Review project health, margin, and delivery status'}
                   </p>
                 </button>
               ))}
@@ -446,7 +443,7 @@ export default function Projects() {
         </div>
         </ExecutivePanel>
       ) : (
-        <ExecutivePanel title="Project stream" subtitle="Live project cards with linked invoice and status context.">
+        <ExecutivePanel title="Project stream" subtitle="Live project cards with direct finance and delivery context.">
           <div className="project-stream-grid">
             {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
           </div>

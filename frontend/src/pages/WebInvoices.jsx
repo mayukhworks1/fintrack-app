@@ -1232,8 +1232,8 @@ function HelpModal({ open, onClose }) {
               {[
                 ['Create a project', 'Click + New Project. Fill in name, client, status, priority, timeline, and budget. The profit preview updates live as you type amounts.'],
                 ['Project cards', 'Each card shows live status badge, priority, progress bar, client charge, and estimated profit. Click to open the full project detail view.'],
-                ['Project detail', 'Full KPI breakdown — total cost, profit, margin %, man hours vs planned, and revenue. Also shows all resources assigned and linked invoices.'],
-                ['Linked Invoices', 'Invoices whose Project field exactly matches the project name are automatically listed with totals. Project name spelling must match precisely.'],
+                ['Project detail', 'Full KPI breakdown — total cost, profit, margin %, man hours vs planned, and revenue. Also shows all resources assigned and matching invoices.'],
+                ['Matching invoices', 'Invoices whose Project field exactly matches the project name are automatically listed with totals. Project name spelling must match precisely.'],
                 ['Progress %', 'Use the slider in the edit form to update completion. This syncs directly to Teable and reflects on the project card.'],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 text-sm">
@@ -2452,7 +2452,7 @@ export default function WebInvoices() {
                   {[
                     ['Invoices', 'Track pending, overdue, and fully collected billing records with live filters and file previews.'],
                     ['Retainers', 'Raise externally in Zoho, then record the final invoice details internally for month-by-month continuity.'],
-                    ['Projects', isAll ? 'Open the admin project workspace for linked project health, cashflow, and invoice association.' : 'Project workspace is only available to admin access.'],
+                    ['Projects', isAll ? 'Open the admin project workspace for project health, cashflow, and invoice context.' : 'Project workspace is only available to admin access.'],
                   ].map(([title, body]) => (
                     <div
                       key={title}

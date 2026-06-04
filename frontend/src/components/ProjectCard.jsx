@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, Link2, AlertTriangle, Activity, ReceiptText } from 'lucide-react'
+import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, AlertTriangle, Activity, ReceiptText } from 'lucide-react'
 import { formatInr, formatPct } from '../utils/format'
 
 function StatusBadge({ status }) {
@@ -25,7 +25,7 @@ function SignalBadge({ signal, override }) {
       style={{ color: palette.color, background: palette.bg, border: `1px solid ${palette.border}` }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: palette.color }} />
-      {signal?.title || 'Linked context'}
+      {signal?.title || 'Project signal'}
     </span>
   )
 }
@@ -33,36 +33,30 @@ function SignalBadge({ signal, override }) {
 export default function ProjectCard({ record }) {
   const navigate   = useNavigate()
   const f          = record?.fields || {}
-  const assoc      = record?.association
-  const related    = assoc?.related_counts?.project || {}
-  const insight    = assoc?.insights?.project
-  const invoiceSummary = insight?.invoice_summary || {}
-  const statusSummary = insight?.status_summary || {}
   const profitPct  = parseFloat(f['Profit percentage'] || 0)
   const billed     = parseFloat(f['Amount Billed So far'] || 0)
   const target     = parseFloat(f['Target Revenue'] || 0)
   const targetPct  = target > 0 ? Math.min((billed / target) * 100, 100) : 0
   const isProfit   = profitPct >= 0
-  const outstanding = Number(invoiceSummary.outstanding_total || 0)
-  const blockedCount = Number(statusSummary.blocked_count || 0)
-  const pendingCount = Number(invoiceSummary.pending_count || 0)
-  const overdueCount = Number(invoiceSummary.overdue_count || 0)
-  const latestHeadline = statusSummary.latest_headline || statusSummary.latest_detail || ''
   const negativeMargin = profitPct < 0
+  const health = f['Health'] || 'Not tracked'
+  const projectStatus = f['Project Status'] || 'Unknown'
   const primarySignal = negativeMargin
     ? {
         severity: 'danger',
         title: 'Negative margin',
         detail: `${formatPct(profitPct, 2)} margin on ${formatInr(billed)} billed so far.`,
       }
-    : insight?.signal
-  const SignalIcon = negativeMargin
+    : {
+        severity: health === 'At Risk' ? 'warning' : health === 'Critical' ? 'danger' : 'positive',
+        title: health,
+        detail: `${projectStatus} project with ${formatInr(billed)} billed so far.`,
+      }
+  const SignalIcon = negativeMargin || health === 'Critical'
     ? AlertTriangle
-    : blockedCount > 0
+    : health === 'At Risk'
       ? Activity
-      : outstanding > 0
-        ? ReceiptText
-        : Activity
+      : ReceiptText
 
   return (
     <article
@@ -77,13 +71,6 @@ export default function ProjectCard({ record }) {
         <div className="min-w-0">
           <h3 className="font-bold text-sm truncate" style={{ color: 'var(--text-1)' }}>{f['Project Name'] || '—'}</h3>
           <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{f['Client'] || '—'}</p>
-          {assoc?.project?.name && (
-            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold"
-              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}>
-              <Link2 size={10} />
-              {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''} · {related.status || 0} status
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <StatusBadge status={f['Project Status']} />
@@ -102,27 +89,27 @@ export default function ProjectCard({ record }) {
           )}
         </div>
         <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>
-          {primarySignal?.detail || latestHeadline || f['Health'] || 'No linked delivery or billing context yet.'}
+          {primarySignal?.detail || 'Project health and billing summary is based on the live project record.'}
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Open</p>
-          <p className="text-xs font-bold tabular-nums" style={{ color: outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-1)' }}>
-            {formatInr(outstanding)}
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Target</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: target > 0 ? 'var(--text-1)' : 'var(--text-3)' }}>
+            {target > 0 ? formatInr(target) : '—'}
           </p>
         </div>
         <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Aging</p>
-          <p className="text-xs font-bold tabular-nums" style={{ color: overdueCount > 0 ? 'var(--fin-negative)' : pendingCount > 0 ? 'var(--fin-warning)' : 'var(--text-1)' }}>
-            {overdueCount > 0 ? `${overdueCount} overdue` : `${pendingCount} pending`}
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Progress</p>
+          <p className="text-xs font-bold tabular-nums" style={{ color: targetPct >= 100 ? 'var(--fin-positive)' : 'var(--text-1)' }}>
+            {target > 0 ? formatPct(targetPct, 1) : '—'}
           </p>
         </div>
         <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Blocked</p>
-          <p className="text-xs font-bold tabular-nums" style={{ color: blockedCount > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
-            {blockedCount}
+          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>Health</p>
+          <p className="text-xs font-bold tabular-nums truncate" style={{ color: health === 'Critical' ? 'var(--fin-negative)' : health === 'At Risk' ? 'var(--fin-warning)' : 'var(--text-1)' }}>
+            {health}
           </p>
         </div>
       </div>
@@ -164,19 +151,13 @@ export default function ProjectCard({ record }) {
         </div>
         <div className="text-right">
           <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>
-            {statusSummary.latest_status ? 'Latest status' : 'Margin'}
+            Margin
           </p>
-          {statusSummary.latest_status ? (
-            <p className="font-bold text-sm max-w-[140px] truncate" style={{ color: 'var(--text-1)' }}>
-              {statusSummary.latest_status}
-            </p>
-          ) : (
           <p className="font-bold text-sm flex items-center gap-1 tabular-nums"
             style={{ color: isProfit ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
             {isProfit ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {formatPct(profitPct, 2)}
           </p>
-          )}
         </div>
       </div>
     </article>

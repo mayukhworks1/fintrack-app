@@ -24,7 +24,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 // ── Constants ────────────────────────────────────────────────────────────────
 const GST_RATE   = 0.18   // 18%
 const TDS_RATE   = 0.10   // 10%
-const FMT_INR    = (n) => '₹' + Math.abs(Math.round(n || 0)).toLocaleString('en-IN')
+const FMT_INR    = (n) => `${Number(n || 0) < 0 ? '-' : ''}₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
 const FMT_PCT    = (n) => (n == null ? '—' : `${Math.round(n * 10) / 10}%`)
 const PCT_OK     = (pct, expected, tol = 1.5) => Math.abs(pct - expected) <= tol
 
@@ -116,7 +116,7 @@ function taxParts(fields = {}) {
   // between gross and (received + any outstanding kept by client).
   // Best proxy: if paid, tds = gross - received when received < gross
   const tdsAmt  = isPaid && received < gross ? Math.max(0, gross - received) : 0
-  const tdsPct  = gross > 0 ? (tdsAmt / gross) * 100 : 0
+  const tdsPct  = base > 0 ? (tdsAmt / base) * 100 : 0
 
   // Taxable base (pre-GST)
   const taxable = base
@@ -201,6 +201,7 @@ export default function TaxLedger() {
   const [expandedClients, setExpandedClients] = useState(new Set())
   const [expandedMonths, setExpandedMonths] = useState(new Set())
   const [activeTab, setActiveTab] = useState('summary') // summary | monthly | clients | invoices
+  const [invoiceScope, setInvoiceScope] = useState('tax')
   const printRef = useRef(null)
 
   const fetchInvoices = useCallback((opts = {}) =>
@@ -217,7 +218,7 @@ export default function TaxLedger() {
     return PERIODS.find(p => p.key === selectedPeriodKey) || PERIODS[0]
   }, [selectedPeriodKey, useCustom, customFrom, customTo])
 
-  // Filtered invoices within period (by Raised Date, excluding Cancelled)
+  // Period invoices by Raised Date. Tax calculations below use paid invoices only.
   const periodInvoices = useMemo(() =>
     allInvoices.filter(r => {
       const f = r.fields || {}
@@ -226,20 +227,39 @@ export default function TaxLedger() {
     }),
   [allInvoices, period])
 
+  const taxInvoices = useMemo(
+    () => periodInvoices.filter(r => taxParts(r.fields).isPaid),
+    [periodInvoices]
+  )
+
+  const openInvoices = useMemo(
+    () => periodInvoices.filter(r => {
+      const p = taxParts(r.fields)
+      return !p.isPaid && !p.isCancelled
+    }),
+    [periodInvoices]
+  )
+
+  const invoiceScopeRecords = useMemo(() => {
+    if (invoiceScope === 'all') return periodInvoices
+    if (invoiceScope === 'open') return openInvoices
+    return taxInvoices
+  }, [invoiceScope, openInvoices, periodInvoices, taxInvoices])
+
   // Search-filtered for drilldown
   const filteredInvoices = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return periodInvoices
-    return periodInvoices.filter(r => {
+    if (!q) return invoiceScopeRecords
+    return invoiceScopeRecords.filter(r => {
       const f = r.fields || {}
-      return [f['Invoice Number'], f['Project'], f['Client'], f['Payment Status']].some(v => String(v || '').toLowerCase().includes(q))
+      return [f['Invoice Number'], f['Project'], f['Client Name'], f['Client'], f['Payment Status']].some(v => String(v || '').toLowerCase().includes(q))
     })
-  }, [periodInvoices, search])
+  }, [invoiceScopeRecords, search])
 
   // Aggregate totals
   const totals = useMemo(() => {
     let taxable = 0, gstAmt = 0, tdsAmt = 0, gross = 0, received = 0, outstanding = 0, count = 0
-    for (const r of periodInvoices) {
+    for (const r of taxInvoices) {
       const p = taxParts(r.fields)
       taxable     += p.base
       gstAmt      += p.gstAmt
@@ -250,16 +270,30 @@ export default function TaxLedger() {
       count++
     }
     const effectiveGstPct = taxable > 0 ? (gstAmt / taxable) * 100 : 0
-    const effectiveTdsPct = gross   > 0 ? (tdsAmt / gross)   * 100 : 0
+    const effectiveTdsPct = taxable > 0 ? (tdsAmt / taxable) * 100 : 0
     const netReceivable   = gross - tdsAmt
     const collectionRate  = gross > 0 ? (received / gross) * 100 : 0
     return { taxable, gstAmt, tdsAmt, gross, received, outstanding, netReceivable, effectiveGstPct, effectiveTdsPct, collectionRate, count }
-  }, [periodInvoices])
+  }, [taxInvoices])
+
+  const openSummary = useMemo(() => {
+    let taxable = 0, gross = 0, received = 0, outstanding = 0
+    let oldest = 0
+    for (const r of openInvoices) {
+      const p = taxParts(r.fields)
+      taxable += p.base
+      gross += p.gross
+      received += p.received
+      outstanding += p.outstanding
+      oldest = Math.max(oldest, Number(r.fields?.['Agening (Days)'] || 0))
+    }
+    return { count: openInvoices.length, taxable, gross, received, outstanding, oldest }
+  }, [openInvoices])
 
   // Month-by-month breakdown
   const monthlyRows = useMemo(() => {
     const map = new Map()
-    for (const r of periodInvoices) {
+    for (const r of taxInvoices) {
       const f   = r.fields || {}
       const key = dateKey(f['Raised Date'])
       if (!key) continue
@@ -277,12 +311,12 @@ export default function TaxLedger() {
         }
         return { ...row, taxable, gstAmt, tdsAmt, gross, received, outstanding, count: row.invoices.length }
       })
-  }, [periodInvoices])
+  }, [taxInvoices])
 
   // Client-wise breakdown
   const clientRows = useMemo(() => {
     const map = new Map()
-    for (const r of periodInvoices) {
+    for (const r of taxInvoices) {
       const f      = r.fields || {}
       const client = f['Client Name'] || f['Project'] || 'Unknown'
       if (!map.has(client)) map.set(client, { client, invoices: [] })
@@ -296,10 +330,10 @@ export default function TaxLedger() {
         gross += p.gross; received += p.received; outstanding += p.outstanding
       }
       const gstPct = taxable > 0 ? (gstAmt / taxable) * 100 : 0
-      const tdsPct = gross   > 0 ? (tdsAmt / gross)   * 100 : 0
+      const tdsPct = taxable > 0 ? (tdsAmt / taxable) * 100 : 0
       return { ...row, taxable, gstAmt, tdsAmt, gross, received, outstanding, gstPct, tdsPct, count: row.invoices.length }
     }).sort((a, b) => b.gross - a.gross)
-  }, [periodInvoices])
+  }, [taxInvoices])
 
   // CSV export rows
   const csvRows = useMemo(() =>
@@ -333,6 +367,7 @@ export default function TaxLedger() {
     { id: 'summary',  label: 'Summary'  },
     { id: 'monthly',  label: 'Monthly'  },
     { id: 'clients',  label: 'By Client' },
+    { id: 'reports',  label: 'Reports' },
     { id: 'invoices', label: 'All Invoices' },
   ]
 
@@ -411,7 +446,7 @@ export default function TaxLedger() {
             </>
           )}
           <div className="ml-auto text-xs" style={{ color: 'var(--text-3)' }}>
-            <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{totals.count}</span> invoices · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{period.label}</span>
+            <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{totals.count}</span> paid tax invoice{totals.count !== 1 ? 's' : ''} · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{openSummary.count}</span> open · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{period.label}</span>
           </div>
         </div>
       </div>
@@ -419,11 +454,11 @@ export default function TaxLedger() {
       {/* ── KPI strip ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Taxable Value"   value={FMT_INR(totals.taxable)}     sub="Pre-GST base" />
-        <StatCard label="GST Collected"   value={FMT_INR(totals.gstAmt)}      sub={`Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent />
-        <StatCard label="TDS Deducted"    value={FMT_INR(totals.tdsAmt)}      sub={`Avg ${FMT_PCT(totals.effectiveTdsPct)} on gross`} warn={totals.tdsAmt > 0} />
-        <StatCard label="Gross Invoiced"  value={FMT_INR(totals.gross)}       sub={`${totals.count} invoices`} />
+        <StatCard label="GST Collected Total" value={FMT_INR(totals.gstAmt)}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent />
+        <StatCard label="TDS Collected Total" value={FMT_INR(totals.tdsAmt)}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveTdsPct)} on taxable`} warn={totals.tdsAmt > 0} />
+        <StatCard label="Gross Invoiced"  value={FMT_INR(totals.gross)}       sub={`${totals.count} paid invoices`} />
         <StatCard label="Net Receivable"  value={FMT_INR(totals.netReceivable)} sub="Gross minus TDS" />
-        <StatCard label="Outstanding"     value={FMT_INR(totals.outstanding)} sub={`${FMT_PCT(100 - totals.collectionRate)} uncollected`} warn={totals.outstanding > 0} />
+        <StatCard label="Open Invoices"   value={FMT_INR(openSummary.outstanding)} sub={`${openSummary.count} pending · excluded from GST/TDS`} warn={openSummary.count > 0} />
       </div>
 
       {/* ── GST / TDS health bar ───────────────────────────────────────────── */}
@@ -746,15 +781,87 @@ export default function TaxLedger() {
         </div>
       )}
 
+      {/* ── Reports tab ───────────────────────────────────────────────────── */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          <SectionHead
+            title="Accounts Filing Pack"
+            sub="Paid invoices only for GST/TDS; open invoices are shown as receivable controls and excluded from filing totals."
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>GST collected</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</p>
+              <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
+                <div className="flex justify-between"><span>Taxable turnover</span><strong>{FMT_INR(totals.taxable)}</strong></div>
+                <div className="flex justify-between"><span>CGST 9%</span><strong>{FMT_INR(totals.gstAmt / 2)}</strong></div>
+                <div className="flex justify-between"><span>SGST 9%</span><strong>{FMT_INR(totals.gstAmt / 2)}</strong></div>
+                <div className="flex justify-between"><span>Paid invoice count</span><strong>{totals.count}</strong></div>
+              </div>
+            </div>
+
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#d97706' }}>TDS collected / deducted</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: '#d97706' }}>{FMT_INR(totals.tdsAmt)}</p>
+              <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
+                <div className="flex justify-between"><span>Gross billed</span><strong>{FMT_INR(totals.gross)}</strong></div>
+                <div className="flex justify-between"><span>Net received</span><strong>{FMT_INR(totals.received)}</strong></div>
+                <div className="flex justify-between"><span>Effective TDS %</span><strong>{FMT_PCT(totals.effectiveTdsPct)}</strong></div>
+                <div className="flex justify-between"><span>Expected TDS @10%</span><strong>{FMT_INR(totals.taxable * TDS_RATE)}</strong></div>
+              </div>
+            </div>
+
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)' }}>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#d97706' }}>Open invoices control</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: '#d97706' }}>{FMT_INR(openSummary.outstanding)}</p>
+              <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
+                <div className="flex justify-between"><span>Open invoice count</span><strong>{openSummary.count}</strong></div>
+                <div className="flex justify-between"><span>Open taxable base</span><strong>{FMT_INR(openSummary.taxable)}</strong></div>
+                <div className="flex justify-between"><span>Open gross amount</span><strong>{FMT_INR(openSummary.gross)}</strong></div>
+                <div className="flex justify-between"><span>Oldest aging</span><strong>{openSummary.oldest || 0} days</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+            <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>Filing checklist</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" style={{ color: 'var(--text-2)' }}>
+              {[
+                'Match GST collected with paid/cleared invoice register before GSTR filing.',
+                'Reconcile TDS deducted with Form 26AS/AIS before ITR filing.',
+                'Keep open invoices outside GST/TDS collected cards until payment is recorded.',
+                'Use All Invoices scope to audit pending records, but use Tax Register scope for filing totals.',
+              ].map(item => (
+                <div key={item} className="flex gap-2 rounded-lg p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <CheckCircle2 size={14} style={{ color: '#10b981', marginTop: 2 }} />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── All invoices tab ───────────────────────────────────────────────── */}
       {activeTab === 'invoices' && (
         <div className="space-y-3">
-          <SectionHead title="Invoice-level Tax Register" sub={`${filteredInvoices.length} of ${periodInvoices.length} invoices`}>
+          <SectionHead title="Invoice-level Tax Register" sub={`${filteredInvoices.length} of ${invoiceScopeRecords.length} invoices · tax totals stay paid-only`}>
+            <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={invoiceScope}
+              onChange={e => setInvoiceScope(e.target.value)}
+              className="input text-xs h-8 min-w-[180px]"
+            >
+              <option value="tax">Tax register only</option>
+              <option value="open">Open invoices only</option>
+              <option value="all">All invoices</option>
+            </select>
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoices…"
                 className="input text-xs pl-8 h-8 w-52" />
               {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2"><X size={12} style={{ color: 'var(--text-3)' }} /></button>}
+            </div>
             </div>
           </SectionHead>
 
@@ -762,7 +869,7 @@ export default function TaxLedger() {
             <table className="w-full text-xs whitespace-nowrap">
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                  {['Invoice No', 'Raised Date', 'Client', 'Project', 'Taxable', 'CGST 9%', 'SGST 9%', 'Total GST', 'GST %', 'TDS 10%', 'Gross', 'Received', 'Outstanding', 'Status'].map(h => (
+                  {['Invoice No', 'Raised Date', 'Client', 'Project', 'Taxable', 'CGST 9%', 'SGST 9%', 'Total GST', 'GST %', 'TDS Amount', 'TDS %', 'Gross', 'Received', 'Outstanding', 'Status'].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px]" style={{ color: 'var(--text-3)' }}>{h}</th>
                   ))}
                 </tr>
@@ -784,6 +891,7 @@ export default function TaxLedger() {
                       <td className="px-3 py-2 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt)}</td>
                       <td className="px-3 py-2 font-bold" style={ts.style}>{ts.label}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: p.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
+                      <td className="px-3 py-2 font-semibold" style={{ color: p.tdsAmt > 0 ? '#d97706' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_PCT(p.tdsPct) : '—'}</td>
                       <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.gross)}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: p.outstanding > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.outstanding > 0 ? FMT_INR(p.outstanding) : '—'}</td>
@@ -806,6 +914,7 @@ export default function TaxLedger() {
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</td>
                   <td className="px-3 py-2.5 font-bold" style={{ color: PCT_OK(totals.effectiveGstPct, 18) ? '#10b981' : '#d97706' }}>{FMT_PCT(totals.effectiveGstPct)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#f59e0b' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
+                  <td className="px-3 py-2.5 font-bold" style={{ color: '#d97706' }}>{totals.tdsAmt > 0 ? FMT_PCT(totals.effectiveTdsPct) : '—'}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.gross)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.received)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: totals.outstanding > 0 ? '#f59e0b' : 'var(--text-2)' }}>{totals.outstanding > 0 ? FMT_INR(totals.outstanding) : '—'}</td>

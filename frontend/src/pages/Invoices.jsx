@@ -18,7 +18,6 @@ import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
-import AssociationLinkModal from '../components/AssociationLinkModal'
 import clsx from 'clsx'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
 
@@ -561,30 +560,26 @@ function SuggestInput({ value, onChange, options = [], placeholder = 'Type or se
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, onLink, isEditor, onPreview }) {
+function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
   if (!invoice) return null
   const navigate = useNavigate()
   const f = invoice.fields || {}
-  const assoc = invoice.association
-  const related = assoc?.related_counts?.project || {}
-  const insight = assoc?.insights?.project
-  const signal = insight?.signal
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
   const outstanding = Number(f['Outstanding Amount'] || 0)
   const openProjects = () => {
     const params = new URLSearchParams()
-    if (assoc?.client?.name) params.set('client', assoc.client.name)
-    if (assoc?.project?.name) params.set('q', assoc.project.name)
+    if (f['Client Name']) params.set('client', f['Client Name'])
+    if (f['Project']) params.set('q', f['Project'])
     navigate(`/projects?${params.toString()}`)
   }
   const openStatus = () => {
     const cfg = {
       type: 'card',
-      filterClient: assoc?.client?.name || '',
+      filterClient: f['Client Name'] || '',
       filterStatus: '',
-      search: assoc?.project?.name || f['Project'] || '',
+      search: f['Project'] || '',
       columns: ['Client', 'Project', 'Status', 'Short Status'],
       boardGroupBy: 'Status',
       cardGroupBy: 'Client',
@@ -623,11 +618,6 @@ function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, onLink, isEd
               </button>
             )}
             {isEditor && (
-              <button onClick={onLink} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                Link
-              </button>
-            )}
-            {isEditor && (
               <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
                 Edit
               </button>
@@ -662,27 +652,19 @@ function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, onLink, isEd
             </div>
           )}
 
-          {assoc?.project?.name && (
+          {(f['Project'] || f['Client Name']) && (
             <div className="rounded-xl p-3.5" style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase size={13} style={{ color: 'var(--accent)' }} />
-                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Linked portfolio association</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Record context</p>
               </div>
               <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
-                <p><strong style={{ color: 'var(--text-1)' }}>Project:</strong> {assoc.project.name}</p>
-                {assoc.client?.name && <p><strong style={{ color: 'var(--text-1)' }}>Client:</strong> {assoc.client.name}</p>}
-                <p>{related.projects || 0} project record{(related.projects || 0) !== 1 ? 's' : ''} · {related.status || 0} status update{(related.status || 0) !== 1 ? 's' : ''} · {related.invoices || 0} invoice{(related.invoices || 0) !== 1 ? 's' : ''}</p>
-                {signal?.detail && (
-                  <p><strong style={{ color: 'var(--text-1)' }}>{signal.title}:</strong> {signal.detail}</p>
-                )}
+                {f['Project'] && <p><strong style={{ color: 'var(--text-1)' }}>Project:</strong> {f['Project']}</p>}
+                {f['Client Name'] && <p><strong style={{ color: 'var(--text-1)' }}>Client:</strong> {f['Client Name']}</p>}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>
-                  Open projects
-                </button>
-                <button onClick={openStatus} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>
-                  Open status board
-                </button>
+                <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>Open projects</button>
+                <button onClick={openStatus} className="btn-ghost text-xs" style={{ padding: '0.45rem 0.75rem' }}>Open status board</button>
               </div>
             </div>
           )}
@@ -1275,7 +1257,6 @@ export default function Invoices() {
   const [previewDocs, setPreviewDocs] = useState(null)
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
-  const [associationRecord, setAssociationRecord] = useState(null)
   const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
   const [tableDensity, setTableDensity] = useState('comfortable')
   const deferredSearch = useDeferredValue(search)
@@ -1967,7 +1948,7 @@ export default function Invoices() {
       <ExecutiveHero
         eyebrow="Receivables Command Deck"
         title="Invoices"
-        description="Operate collections, aging, retainer billing, and linked project context from a denser finance workspace."
+        description="Operate collections, aging, retainer billing, and project context from a denser finance workspace."
         icon={Receipt}
         meta={
           <div className="flex flex-wrap items-center gap-2">
@@ -2568,7 +2549,7 @@ export default function Invoices() {
       <>
       {/* ── Project Snapshot ── */}
       {projectSummaryCards.length > 0 && (
-        <ExecutivePanel title="Project-linked billing" subtitle="Project cards behave as filters and surface raised, received, and open value at a glance.">
+        <ExecutivePanel title="Project billing" subtitle="Project cards behave as filters and surface raised, received, and open value at a glance.">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Project Snapshot</h2>
@@ -3048,8 +3029,6 @@ export default function Invoices() {
                     </td></tr>
                   : records.map((r, rowIndex) => {
                       const f = r.fields || {}
-                      const assoc = r.association
-                      const related = assoc?.related_counts?.project || {}
                       const outstanding = Number(f['Outstanding Amount'] || 0)
                       const refs = parseAttachments(f['Reference'])
                       const pdfs = parseAttachments(f['Invoice PDF'])
@@ -3095,13 +3074,6 @@ export default function Invoices() {
                               {f['Description'] && (
                                 <span className="block text-[11px] mt-1" style={{ color: 'var(--text-3)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                                   {f['Description']}
-                                </span>
-                              )}
-                              {assoc?.project?.name && (
-                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                                  style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-                                  <Briefcase size={9} />
-                                  {related.status || 0} status · {related.projects || 0} project
                                 </span>
                               )}
                             </div>
@@ -3212,20 +3184,10 @@ export default function Invoices() {
         <InvoiceDetail
           invoice={drawer.invoice}
           onClose={closeDrawer}
-          onLink={() => { setAssociationRecord(drawer.invoice); closeDrawer() }}
           onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer.invoice })}
           onRecordPayment={() => isEditor && openRecordPayment(drawer.invoice)}
           isEditor={isEditor}
           onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
-        />,
-        document.body
-      )}
-      {associationRecord && createPortal(
-        <AssociationLinkModal
-          sourceTable="invoices"
-          record={associationRecord}
-          onClose={() => setAssociationRecord(null)}
-          onSaved={() => { setAssociationRecord(null); refresh() }}
         />,
         document.body
       )}

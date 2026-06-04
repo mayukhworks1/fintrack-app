@@ -1129,12 +1129,12 @@ function ProjectDetailView({
         )}
       </div>
 
-      {/* ── Linked Invoices ── */}
+      {/* ── Matching Invoices ── */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-              <Receipt size={11} className="inline mr-1.5" />Linked Invoices
+              <Receipt size={11} className="inline mr-1.5" />Matching Invoices
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
               Invoices matching this project name

@@ -2,12 +2,10 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
-  RefreshCw, Receipt, Unlink, Clock, TrendingUp, DollarSign,
+  RefreshCw, Receipt, Clock, TrendingUp, DollarSign,
   Users, Calendar, BarChart2, CheckCircle2, AlertCircle, Activity,
-  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import ProjectForm from '../components/ProjectForm'
-import InvoicePicklist from '../components/InvoicePicklist'
 import { api, clientCacheBust } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
@@ -155,12 +153,6 @@ export default function ProjectDetail() {
   const [analyzing,       setAnalyzing]       = useState(false)
   const [deleteConfirm,   setDeleteConfirm]   = useState(false)
   const [deleting,        setDeleting]        = useState(false)
-  const [showPicklist,    setShowPicklist]     = useState(false)
-  const [linkedInvoices,  setLinkedInvoices]  = useState([])
-  const [loadingInvoices, setLoadingInvoices] = useState(false)
-  const [unlinkingId,     setUnlinkingId]     = useState(null)
-  const [invExpanded,     setInvExpanded]     = useState(false)  // section collapsed by default
-  const [expandedInvId,   setExpandedInvId]   = useState(null)  // which invoice row is expanded
 
   const loadRecord = useCallback(async (opts = {}) => {
     if (isNew) return
@@ -175,45 +167,7 @@ export default function ProjectDetail() {
     }
   }, [id, isNew, toast])
 
-  const loadLinkedInvoices = useCallback(async (opts = {}) => {
-    if (isNew || !id) return
-    setLoadingInvoices(true)
-    try {
-      const res = await api.projectInvoices.list(id, opts)
-      setLinkedInvoices(res.invoices || [])
-    } catch { /* non-fatal */ }
-    finally { setLoadingInvoices(false) }
-  }, [id, isNew])
-
-  // Raw link — no toast, no reload (bulk handler does both after all complete)
-  const handleLinkInvoice = async (invoiceTId, source) => {
-    await api.projectInvoices.link(id, invoiceTId, source)
-  }
-
-  const handleBulkLinkDone = async (linked, failed) => {
-    await loadLinkedInvoices()
-    setInvExpanded(true) // auto-expand so user sees the newly linked invoices
-    if (failed > 0)
-      toast(`${linked} linked, ${failed} failed`, 'warning')
-    else
-      toast(`${linked} invoice${linked !== 1 ? 's' : ''} linked!`, 'success')
-  }
-
-  const handleUnlinkInvoice = async (invoiceId) => {
-    setUnlinkingId(invoiceId)
-    try {
-      await api.projectInvoices.unlink(id, invoiceId)
-      setLinkedInvoices(prev => prev.filter(i => i.invoice_teable_id !== invoiceId))
-      toast('Invoice unlinked', 'info')
-    } catch (e) {
-      toast('Unlink failed: ' + e.message, 'error')
-    } finally {
-      setUnlinkingId(null)
-    }
-  }
-
   useEffect(() => { loadRecord() }, [loadRecord])
-  useEffect(() => { loadLinkedInvoices() }, [loadLinkedInvoices])
 
   const handleSave = async (payload) => {
     setSaving(true)
@@ -276,11 +230,6 @@ export default function ProjectDetail() {
   }
 
   const f = record?.fields || {}
-  const assoc = record?.association
-  const insight = assoc?.insights?.project
-  const invoiceInsight = insight?.invoice_summary || {}
-  const statusInsight = insight?.status_summary || {}
-  const signal = insight?.signal
   const profitPct  = Number(f['Profit percentage'] || 0)
   const clientName = f['Client'] || ''
   const projectName = f['Project Name'] || 'Untitled Project'
@@ -385,11 +334,6 @@ export default function ProjectDetail() {
             </button>
             {isEditor && (
               <>
-                <button onClick={() => setShowPicklist(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                  style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
-                  <Receipt size={12} /> Link Invoice
-                </button>
                 <button onClick={() => setEditing(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                   style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
@@ -477,34 +421,18 @@ export default function ProjectDetail() {
                 </span>
               )}
             </div>
-            {assoc?.project?.name && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={openStatusBoard}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                  style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)', background: 'var(--accent-dim)' }}>
-                  <Activity size={11} /> View linked status
-                </button>
-                <button onClick={openInvoicesWorkspace}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
-                  <Receipt size={11} /> View linked invoices
-                </button>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                  style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--accent)' }}>
-                  {assoc?.related_counts?.project?.status || 0} status · {assoc?.related_counts?.project?.invoices || 0} invoice
-                </span>
-                {signal?.title && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                    style={{
-                      background: signal.severity === 'danger' ? 'var(--fin-neg-bg)' : signal.severity === 'warning' ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)',
-                      border: `1px solid ${signal.severity === 'danger' ? 'var(--fin-neg-border)' : signal.severity === 'warning' ? 'var(--fin-warn-border)' : 'var(--fin-pos-border)'}`,
-                      color: signal.severity === 'danger' ? 'var(--fin-negative)' : signal.severity === 'warning' ? 'var(--fin-warning)' : 'var(--fin-positive)',
-                    }}>
-                    {signal.title}
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button onClick={openStatusBoard}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{ color: 'var(--accent)', border: '1px solid var(--accent-soft)', background: 'var(--accent-dim)' }}>
+                <Activity size={11} /> View matching status
+              </button>
+              <button onClick={openInvoicesWorkspace}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{ color: 'var(--text-2)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}>
+                <Receipt size={11} /> View matching invoices
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -520,8 +448,8 @@ export default function ProjectDetail() {
           <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="#8b5cf6" />
         </div>
 
-        {/* ── Two-column: Details + Invoices ───────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr,380px] gap-5">
+        {/* ── Project details ───────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-5">
 
           {/* Project details */}
           <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
@@ -529,24 +457,6 @@ export default function ProjectDetail() {
               style={{ color: 'var(--text-3)' }}>
               <BarChart2 size={12} /> Project Details
             </h2>
-            {signal?.detail && (
-              <div className="rounded-xl p-3 mb-5"
-                style={{
-                  background: signal.severity === 'danger' ? 'var(--fin-neg-bg)' : signal.severity === 'warning' ? 'var(--fin-warn-bg)' : 'var(--accent-dim)',
-                  border: `1px solid ${signal.severity === 'danger' ? 'var(--fin-neg-border)' : signal.severity === 'warning' ? 'var(--fin-warn-border)' : 'var(--accent-soft)'}`,
-                }}>
-                <p className="text-xs font-semibold mb-1"
-                  style={{ color: signal.severity === 'danger' ? 'var(--fin-negative)' : signal.severity === 'warning' ? 'var(--fin-warning)' : 'var(--accent)' }}>
-                  Linked operational signal
-                </p>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-1)' }}>{signal.detail}</p>
-                <div className="mt-2 flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-2)' }}>
-                  <span>{Number(invoiceInsight.pending_count || 0)} pending invoice</span>
-                  <span>{formatInr(invoiceInsight.outstanding_total || 0)} open</span>
-                  <span>{Number(statusInsight.blocked_count || 0)} blocked status</span>
-                </div>
-              </div>
-            )}
             <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
               <Field label="Client"          value={f['Client']} />
               <Field label="Project Name"    value={f['Project Name']} />
@@ -574,167 +484,6 @@ export default function ProjectDetail() {
             </dl>
           </div>
 
-          {/* Linked Invoices — collapsible, collapsed by default */}
-          <div className="rounded-2xl overflow-hidden flex flex-col"
-            style={{ border: '2px solid rgba(37,99,235,0.2)', background: 'var(--card-bg)' }}>
-
-            {/* Section header — click left side to expand/collapse */}
-            <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: invExpanded ? '1px solid rgba(37,99,235,0.12)' : 'none' }}>
-              <button
-                onClick={() => setInvExpanded(v => !v)}
-                className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-              >
-                <Receipt size={14} style={{ color: 'var(--accent)' }} />
-                <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>Linked Invoices</p>
-                {linkedInvoices.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
-                    style={{ background: 'var(--accent-btn)', color: '#fff' }}>
-                    {linkedInvoices.length}
-                  </span>
-                )}
-                {invExpanded
-                  ? <ChevronUp size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />
-                  : <ChevronDown size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />}
-              </button>
-              {isEditor && (
-                <button onClick={() => setShowPicklist(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                  style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                  <Receipt size={11} />
-                  {linkedInvoices.length > 0 ? 'Add' : 'Link'}
-                </button>
-              )}
-            </div>
-
-            {/* Invoice list body — only when expanded */}
-            {invExpanded && <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ maxHeight: 420 }}>
-              {loadingInvoices && (
-                <div className="flex items-center gap-2 py-4 justify-center" style={{ color: 'var(--text-3)' }}>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span className="text-sm">Loading…</span>
-                </div>
-              )}
-
-              {!loadingInvoices && linkedInvoices.length === 0 && (
-                <div className="flex flex-col items-center py-8 gap-3">
-                  <Receipt size={32} style={{ color: 'rgba(37,99,235,0.2)' }} />
-                  <p className="text-sm font-medium text-center" style={{ color: 'var(--text-3)' }}>
-                    No invoices linked yet
-                  </p>
-                  {isEditor && (
-                    <button onClick={() => setShowPicklist(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold"
-                      style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}>
-                      <Receipt size={12} /> Link invoices to this project
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {!loadingInvoices && linkedInvoices.map((inv) => {
-                const statusColor   = INV_STATUS[inv.payment_status] || 'var(--text-3)'
-                const isUnlinking   = unlinkingId === inv.invoice_teable_id
-                const isRowExpanded = expandedInvId === inv.invoice_teable_id
-                return (
-                  <div key={inv.invoice_teable_id}
-                    className="rounded-xl overflow-hidden"
-                    style={{
-                      background: 'var(--bg-input)',
-                      border: `1px solid ${isRowExpanded ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
-                      opacity: isUnlinking ? 0.5 : 1,
-                    }}>
-                    {/* Row summary — click to toggle details */}
-                    <button
-                      onClick={() => setExpandedInvId(isRowExpanded ? null : inv.invoice_teable_id)}
-                      className="w-full flex items-center gap-2.5 p-3 text-left"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
-                            {inv.invoice_number || '—'}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                            style={{ background: `${statusColor}20`, color: statusColor }}>
-                            {inv.payment_status || '—'}
-                          </span>
-                          {inv.invoice_source === 'web_invoices' && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded"
-                              style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
-                        {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
-                      </span>
-                      {isRowExpanded
-                        ? <ChevronUp size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                        : <ChevronDown size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
-                    </button>
-                    {/* Expanded detail panel */}
-                    {isRowExpanded && (
-                      <div className="px-3 pb-3 pt-0 space-y-1.5"
-                        style={{ borderTop: '1px solid var(--border)' }}>
-                        {inv.raised_date && (
-                          <div className="flex justify-between text-xs">
-                            <span style={{ color: 'var(--text-3)' }}>Date</span>
-                            <span style={{ color: 'var(--text-2)' }}>
-                              {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                          </div>
-                        )}
-                        {inv.amount_with_tax != null && inv.amount_with_tax !== inv.amount_raised && (
-                          <div className="flex justify-between text-xs">
-                            <span style={{ color: 'var(--text-3)' }}>With Tax</span>
-                            <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                              {formatInr(inv.amount_with_tax)}
-                            </span>
-                          </div>
-                        )}
-                        {inv.amount_received != null && inv.amount_received > 0 && (
-                          <div className="flex justify-between text-xs">
-                            <span style={{ color: 'var(--text-3)' }}>Received</span>
-                            <span className="font-semibold tabular-nums" style={{ color: '#10b981' }}>
-                              {formatInr(inv.amount_received)}
-                            </span>
-                          </div>
-                        )}
-                        {isEditor && (
-                          <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
-                            disabled={isUnlinking}
-                            className="flex items-center gap-1 mt-1 text-[11px] font-semibold"
-                            style={{ color: '#ef4444', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                            {isUnlinking ? <Loader2 size={11} className="animate-spin" /> : <Unlink size={11} />}
-                            Unlink invoice
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>}
-
-            {/* Invoice total — only when expanded */}
-            {invExpanded && linkedInvoices.length > 1 && (
-              <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0"
-                style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-input)' }}>
-                <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                  Total ({linkedInvoices.length} invoices)
-                </span>
-                <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                  {formatInr(linkedInvoices.reduce((s, i) => s + (i.amount_raised || 0), 0))}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* ── AI analysis loading ────────────────────────────────────────── */}
@@ -757,18 +506,6 @@ export default function ProjectDetail() {
           </div>
         )}
       </div>
-
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      {showPicklist && (
-        <InvoicePicklist
-          projectId={id}
-          projectName={record?.fields?.['Project Name']}
-          linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
-          onLink={handleLinkInvoice}
-          onBulkDone={handleBulkLinkDone}
-          onClose={() => setShowPicklist(false)}
-        />
-      )}
     </div>
   )
 }
