@@ -141,7 +141,9 @@ class WebInvoiceService:
                     }
             return result
 
-        return await cache.get_or_set("webinv:picklists", ttl=60, loader=_load)
+        # No cache — always live from Teable so new options added in Teable
+        # (or via the form's + button) appear immediately on the next open.
+        return await _load()
 
     def _field_convert_payload(self, field: dict, updated_choices: list[dict]) -> dict:
         payload = {

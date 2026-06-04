@@ -1000,12 +1000,10 @@ function InvoiceDrawer({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Project">
-              <ProjectInput
-                value={form.project}
-                onChange={set('project')}
-                options={picklists?.Project || []}
-                placeholder="Type or select project…"
-              />
+              <PicklistSelect fieldName="Project" value={form.project} onChange={set('project')}
+                options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate}
+                placeholder="Select project…"
+                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
             <FieldRow label="Category">
               <PicklistSelect fieldName="Category" value={form.category} onChange={setCategoryValue}
@@ -1535,40 +1533,18 @@ export default function WebInvoices() {
   const deferredSearch = useDeferredValue(search)
 
   useEffect(() => {
-    // 1. Load Category / Milestone / Raised By options from Teable field schema
+    // Load ALL picklist fields (Project, Category, Milestone, Raised By, Currency)
+    // directly from Teable field schema — same source as Currency, no detours.
     api.webInvoices.picklists.get()
       .then(data => {
         setPicklists(prev => ({
           ...prev,
           ...Object.fromEntries(
-            Object.entries(data)
-              .filter(([k]) => k !== 'Project')   // Project comes from real records, not schema
-              .map(([k, v]) => [k, v.options])
+            Object.entries(data).map(([k, v]) => [k, v.options])
           ),
         }))
       })
       .catch(() => {})
-
-    // 2. Seed Project list from web-projects table (includes projects with no invoices yet).
-    //    Runs immediately then every 30 s. allRecords-based merge happens in a separate effect.
-    let alive = true
-    async function seedProjects() {
-      try {
-        const list = await api.webProjects.names()  // always fresh — cache removed on backend
-        if (!alive) return
-        const names = (list || []).map(p => p.name).filter(Boolean)
-        if (names.length > 0) {
-          setPicklists(prev => {
-            const merged = [...new Set([...names, ...(prev.Project || [])])].sort()
-            return { ...prev, Project: merged }
-          })
-        }
-      } catch { /* non-fatal — allRecords effect still populates from loaded invoices */ }
-    }
-
-    seedProjects()
-    const projectRefreshTimer = setInterval(seedProjects, 30_000)
-    return () => { alive = false; clearInterval(projectRefreshTimer) }
   }, [])
 
   function handleOptionsUpdate(fieldName, newOptions) {
@@ -1603,20 +1579,6 @@ export default function WebInvoices() {
   }, [serverRecords])
   const allRecords = recordsState
 
-  useEffect(() => {
-    const liveProjects = [...new Set(
-      allRecords
-        .map(r => r.fields?.Project)
-        .filter(Boolean)
-        .map(String)
-    )].sort((a, b) => a.localeCompare(b))
-    if (!liveProjects.length) return
-    setPicklists(prev => {
-      const current = prev.Project || []
-      const merged = [...new Set([...current, ...liveProjects])].sort((a, b) => a.localeCompare(b))
-      return merged.join('\u0000') === current.join('\u0000') ? prev : { ...prev, Project: merged }
-    })
-  }, [allRecords])
 
   const monthOptions = useMemo(() => (
     [...new Set(
