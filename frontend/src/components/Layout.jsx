@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus
+  Plus, Landmark
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -50,6 +50,7 @@ const nav = [
   { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
   { to: '/projects',  label: 'Projects',     icon: FolderKanban },
   { to: '/invoices',  label: 'Invoices',     icon: Receipt },
+  { to: '/tax',        label: 'Tax Ledger',   icon: Landmark },
   { to: '/analytics', label: 'Analytics',    icon: BarChart3 },
   { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText },
   { to: '/report',    label: 'Report',       icon: FileText },

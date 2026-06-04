@@ -242,7 +242,8 @@ class WebProjectService:
                 for r in records
                 if r["fields"].get("Project Name")
             ]
-        return await cache.get_or_set("webproj:names", ttl=_TTL_LIST, loader=_load)
+        # No cache — always fetch live from Teable so new projects appear instantly
+        return await _load()
 
     # ── Get one ───────────────────────────────────────────────────────────
 

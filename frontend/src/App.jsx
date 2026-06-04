@@ -52,6 +52,7 @@ const AIAssistant   = lazyWithReload(() => import('./pages/AIAssistant'))
 const Report        = lazyWithReload(() => import('./pages/Report'))
 const StatusBoard   = lazyWithReload(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazyWithReload(() => import('./pages/WebInvoices'))
+const TaxLedger     = lazyWithReload(() => import('./pages/TaxLedger'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
 
 const WARM_IMPORTERS = [
@@ -147,6 +148,7 @@ export default function App() {
               <Route path="/projects"     element={<Projects />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/invoices"     element={<Invoices />} />
+              <Route path="/tax"          element={<TaxLedger />} />
               <Route path="/analytics"    element={<Analytics />} />
               <Route path="/ai"           element={<AIAssistant />} />
               <Route path="/report"       element={<Report />} />

@@ -484,7 +484,7 @@ export const api = {
       Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
       return request(`/api/web-projects?${q}`, { fresh, cacheTtl })
     },
-    names:   (opts = {})         => request('/api/web-projects/names', opts),
+    names:   (opts = {})         => request('/api/web-projects/names', { fresh: true, cacheTtl: 0, ...opts }),
     summary: (opts = {})         => request('/api/web-projects/summary', opts),
     get:     (id, opts = {})       => request(`/api/web-projects/${id}`, opts),
     create:  async (data) => {
