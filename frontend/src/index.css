@@ -1007,6 +1007,245 @@ html.dark .main-app-theme {
     letter-spacing: 0;
   }
 
+  .invoice-runey-widgets {
+    display: grid;
+    grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.1fr);
+    gap: 1rem;
+  }
+
+  .invoice-runey-card {
+    min-height: 15rem;
+    border-radius: 1.6rem;
+    border: 1px solid rgba(255,255,255,0.07);
+    background:
+      radial-gradient(circle at 82% 4%, rgba(255,255,255,0.06), transparent 28%),
+      linear-gradient(180deg, #1a1a1a 0%, #151515 100%);
+    color: #f5f5f2;
+    box-shadow: 0 22px 54px rgba(0,0,0,0.16);
+    padding: 1.35rem;
+  }
+
+  .invoice-runey-card h2 {
+    color: #f6f4ee;
+    font-size: 1.15rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .invoice-runey-card p,
+  .invoice-runey-card small {
+    color: rgba(245,245,242,0.58);
+  }
+
+  .invoice-runey-card > div:first-child > p,
+  .invoice-runey-card-head p {
+    margin-top: 0.25rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+
+  .invoice-month-bars {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.8rem;
+    min-height: 11.5rem;
+    margin-top: 1rem;
+  }
+
+  .invoice-month-bar-item {
+    display: grid;
+    justify-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    border-radius: 1.15rem;
+    padding: 0.55rem 0.35rem;
+    text-align: center;
+    transition: background 160ms ease, transform 160ms ease;
+  }
+
+  .invoice-month-bar-item:hover {
+    background: rgba(255,255,255,0.055);
+    transform: translateY(-2px);
+  }
+
+  .invoice-month-bar-wrap {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    height: 7.2rem;
+  }
+
+  .invoice-month-bar {
+    display: block;
+    max-width: 5rem;
+    border-radius: 1rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 10px 24px rgba(0,0,0,0.25);
+  }
+
+  .invoice-month-bar.is-positive {
+    background: linear-gradient(180deg, rgba(135,229,93,0.95), rgba(135,229,93,0.72));
+  }
+
+  .invoice-month-bar.is-negative {
+    background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.07));
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .invoice-month-label {
+    color: rgba(245,245,242,0.58);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .invoice-month-value {
+    max-width: 100%;
+    color: #f7f7f3;
+    font-size: 0.82rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .invoice-month-change {
+    border-radius: 999px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 900;
+  }
+
+  .invoice-month-change.is-up {
+    background: rgba(117,215,73,0.16);
+    color: #7ee05d;
+  }
+
+  .invoice-month-change.is-down {
+    background: rgba(255,82,93,0.17);
+    color: #ff6b77;
+  }
+
+  .invoice-month-change.is-neutral {
+    background: rgba(255,255,255,0.08);
+    color: rgba(245,245,242,0.58);
+  }
+
+  .invoice-runey-card-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .invoice-runey-card-head button {
+    color: rgba(245,245,242,0.58);
+    font-size: 0.78rem;
+    font-weight: 800;
+    transition: color 160ms ease;
+  }
+
+  .invoice-runey-card-head button:hover {
+    color: #f7f7f3;
+  }
+
+  .invoice-recent-project-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.1rem;
+  }
+
+  .invoice-recent-project-row {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr) minmax(4rem, 6rem) auto auto;
+    align-items: center;
+    gap: 0.85rem;
+    border-radius: 1rem;
+    padding: 0.55rem;
+    text-align: left;
+    transition: background 160ms ease, transform 160ms ease;
+  }
+
+  .invoice-recent-project-row:hover,
+  .invoice-recent-project-row.is-active {
+    background: rgba(255,255,255,0.06);
+    transform: translateX(2px);
+  }
+
+  .invoice-project-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.85rem;
+    background: #2b2b2b;
+    color: #f5f5f2;
+    font-size: 0.85rem;
+    font-weight: 900;
+  }
+
+  .invoice-project-meta {
+    min-width: 0;
+  }
+
+  .invoice-project-meta strong,
+  .invoice-project-meta small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .invoice-project-meta strong {
+    color: #f7f7f3;
+    font-size: 0.92rem;
+    font-weight: 900;
+  }
+
+  .invoice-project-meta small {
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+  }
+
+  .invoice-project-progress {
+    height: 0.28rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    overflow: hidden;
+  }
+
+  .invoice-project-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: rgba(245,245,242,0.86);
+  }
+
+  .invoice-project-amount {
+    color: #f7f7f3;
+    font-size: 0.82rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .invoice-project-percent {
+    color: rgba(245,245,242,0.58);
+    font-size: 0.72rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .invoice-runey-empty {
+    border-radius: 1rem;
+    background: rgba(255,255,255,0.055);
+    padding: 1rem;
+    font-size: 0.82rem;
+  }
+
   .data-table-shell {
     border-radius: 1.15rem;
     border: 1px solid var(--card-border);
@@ -1167,6 +1406,19 @@ html.dark .main-app-theme {
   }
 
   @media (max-width: 767px) {
+    .invoice-runey-widgets {
+      grid-template-columns: 1fr;
+    }
+
+    .invoice-recent-project-row {
+      grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+    }
+
+    .invoice-project-progress,
+    .invoice-project-percent {
+      display: none;
+    }
+
     .invoice-scope-strip {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

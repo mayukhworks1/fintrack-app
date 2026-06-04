@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Settings, HelpCircle
+  Plus
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -208,26 +208,6 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
 
       {/* Bottom controls */}
       <div className={`runey-sidebar-footer ${collapsed ? 'is-collapsed' : ''}`}>
-        <button
-          type="button"
-          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
-          title={collapsed ? 'Settings' : undefined}
-          aria-label={collapsed ? 'Settings' : undefined}
-        >
-          <Settings size={15} aria-hidden="true" />
-          {!collapsed && <span className="flex-1 truncate font-medium">Settings</span>}
-        </button>
-
-        <button
-          type="button"
-          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
-          title={collapsed ? 'Help' : undefined}
-          aria-label={collapsed ? 'Help' : undefined}
-        >
-          <HelpCircle size={15} aria-hidden="true" />
-          {!collapsed && <span className="flex-1 truncate font-medium">Help</span>}
-        </button>
-
         {/* Theme toggle */}
         <button
           onClick={toggle}

@@ -9,7 +9,7 @@ import {
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
   ChevronLeft, ChevronRight, Briefcase, Repeat2,
   Users, HelpCircle, Mail, BookOpen, X as XIcon,
-  LayoutDashboard, Activity, ArrowRight, ShieldAlert, Settings
+  LayoutDashboard, Activity, ArrowRight, ShieldAlert
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -1433,10 +1433,6 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
 
       {/* Footer: help + theme + logout */}
       <div className={`runey-sidebar-footer ${open ? '' : 'is-collapsed'}`}>
-        <button type="button" title={!open ? 'Settings' : undefined} className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
-          <Settings size={14} style={{ flexShrink: 0 }} />
-          {open && <span className="text-xs">Settings</span>}
-        </button>
         {onHelp && (
           <button onClick={onHelp} title="Help & Guide" className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
             <HelpCircle size={14} style={{ flexShrink: 0 }} />

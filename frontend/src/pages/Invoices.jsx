@@ -77,6 +77,13 @@ const shortMonthLabel = (key) => {
   return d.toLocaleDateString('en-IN', { month: 'short' })
 }
 
+const projectInitials = (value) => String(value || 'NA')
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase())
+  .join('') || 'NA'
+
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
@@ -1509,6 +1516,65 @@ export default function Invoices() {
     }
     return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
   }, [scopedRecords])
+  const lastThreeMonthBalance = useMemo(() => {
+    const current = currentMonthKey()
+    const keys = [shiftMonthKey(current, -2), shiftMonthKey(current, -1), current]
+    return keys.map((key, index) => {
+      let raised = 0
+      let received = 0
+      let invoiceCount = 0
+      for (const record of scopedRecords) {
+        const fields = record.fields || {}
+        if (monthKey(fields['Raised Date']) === key) {
+          raised += Number(fields['Amount Raised'] || 0)
+          invoiceCount += 1
+        }
+        if (monthKey(fields['Cleared Date']) === key) {
+          received += Number(fields['Amount Received'] || fields['Amount Raised'] || 0)
+        }
+      }
+      const balance = received - raised
+      const previous = index > 0 ? keys[index - 1] : ''
+      let previousBalance = 0
+      if (previous) {
+        for (const record of scopedRecords) {
+          const fields = record.fields || {}
+          if (monthKey(fields['Cleared Date']) === previous) previousBalance += Number(fields['Amount Received'] || fields['Amount Raised'] || 0)
+          if (monthKey(fields['Raised Date']) === previous) previousBalance -= Number(fields['Amount Raised'] || 0)
+        }
+      }
+      const change = previous && previousBalance
+        ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100
+        : null
+      return { key, label: shortMonthLabel(key), raised, received, balance, invoiceCount, change }
+    })
+  }, [scopedRecords])
+  const maxMonthlyBalanceMagnitude = useMemo(
+    () => Math.max(1, ...lastThreeMonthBalance.map((entry) => Math.abs(entry.balance))),
+    [lastThreeMonthBalance]
+  )
+  const recentProjectCards = useMemo(() => {
+    const buckets = new Map()
+    for (const record of scopedRecords) {
+      const fields = record.fields || {}
+      const project = fields.Project || 'Unassigned'
+      const current = buckets.get(project) || { project, raised: 0, received: 0, outstanding: 0, count: 0 }
+      const raised = Number(fields['Amount Raised'] || 0)
+      const received = Number(fields['Amount Received'] || 0)
+      current.raised += raised
+      current.received += received
+      current.outstanding += Math.max(0, raised - received)
+      current.count += 1
+      buckets.set(project, current)
+    }
+    return [...buckets.values()]
+      .map((entry) => ({
+        ...entry,
+        progress: entry.raised > 0 ? Math.max(0, Math.min(100, Math.round((entry.received / entry.raised) * 100))) : 0,
+      }))
+      .sort((a, b) => (b.outstanding - a.outstanding) || (b.raised - a.raised))
+      .slice(0, 4)
+  }, [scopedRecords])
   const followupsDueCount = useMemo(
     () => records.filter((r) => {
       const raw = r.fields?.['Next followup']
@@ -1940,6 +2006,94 @@ export default function Invoices() {
           </div>
         </ExecutivePanel>
       </div>
+
+      {workspace === 'invoices' && (
+        <div className="invoice-runey-widgets">
+          <section className="invoice-runey-card invoice-month-balance-card" aria-label="Last 3 months invoice balance">
+            <div>
+              <h2>Last 3 Months</h2>
+              <p>Monthly balance</p>
+            </div>
+            <div className="invoice-month-bars">
+              {lastThreeMonthBalance.map((entry) => {
+                const height = Math.max(12, Math.round((Math.abs(entry.balance) / maxMonthlyBalanceMagnitude) * 112))
+                const isPositive = entry.balance >= 0
+                return (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    className="invoice-month-bar-item"
+                    onClick={() => applyMonthDrilldown('Raised Date', entry.key)}
+                    title={`Filter raised invoices for ${monthLabel(entry.key)}`}
+                  >
+                    <span className="invoice-month-bar-wrap" aria-hidden="true">
+                      <span
+                        className={clsx('invoice-month-bar', isPositive ? 'is-positive' : 'is-negative')}
+                        style={{
+                          height: `${height}px`,
+                          width: entry.invoiceCount > 1 ? '4.8rem' : '3.6rem',
+                        }}
+                      />
+                    </span>
+                    <span className="invoice-month-label">{entry.label}</span>
+                    <strong className="invoice-month-value">{entry.balance === 0 ? '-' : fmt(entry.balance)}</strong>
+                    <em className={clsx('invoice-month-change', entry.change == null ? 'is-neutral' : entry.change >= 0 ? 'is-up' : 'is-down')}>
+                      {entry.change == null ? 'baseline' : `${entry.change >= 0 ? 'up' : 'down'} ${Math.abs(entry.change).toFixed(0)}%`}
+                    </em>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          <section className="invoice-runey-card invoice-recent-projects-card" aria-label="Recent invoice projects">
+            <div className="invoice-runey-card-head">
+              <div>
+                <h2>Recent Projects</h2>
+                <p>Active invoice pressure</p>
+              </div>
+              {projectFilter && (
+                <button
+                  type="button"
+                  onClick={() => { setProjectFilter(''); updateFilterParam('project', '') }}
+                >
+                  View all -&gt;
+                </button>
+              )}
+            </div>
+            <div className="invoice-recent-project-list">
+              {recentProjectCards.length === 0 ? (
+                <p className="invoice-runey-empty">No project invoice movement in this scope.</p>
+              ) : recentProjectCards.map((entry) => {
+                const active = projectFilter === entry.project
+                return (
+                  <button
+                    key={entry.project}
+                    type="button"
+                    className={clsx('invoice-recent-project-row', active && 'is-active')}
+                    onClick={() => {
+                      const next = active ? '' : entry.project
+                      setProjectFilter(next)
+                      updateFilterParam('project', next)
+                    }}
+                  >
+                    <span className="invoice-project-avatar">{projectInitials(entry.project)}</span>
+                    <span className="invoice-project-meta">
+                      <strong>{entry.project}</strong>
+                      <small>{entry.count} invoice{entry.count === 1 ? '' : 's'} | {fmt(entry.outstanding)} open</small>
+                    </span>
+                    <span className="invoice-project-progress" aria-hidden="true">
+                      <span style={{ width: `${entry.progress}%` }} />
+                    </span>
+                    <span className="invoice-project-amount">{fmt(entry.raised)}</span>
+                    <span className="invoice-project-percent">{entry.progress}%</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ── Status chips — click to filter, shows count + total amount ── */}
       {s?.by_status && Object.keys(s.by_status).length > 0 && (
