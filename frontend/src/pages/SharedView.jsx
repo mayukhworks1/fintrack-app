@@ -61,24 +61,41 @@ const RESOURCE_META = {
   invoices: {
     noun: 'invoice',
     plural: 'invoices',
-    clientField: 'Project',
+    clientField: 'Client Name',
     titleField: 'Invoice Number',
     statusField: 'Payment Status',
     categoryField: 'Category',
-    subtitleFields: ['Project', 'Amount Raised'],
-    searchFields: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Description', 'Remark'],
-    primaryFilterKey: 'filterProject',
-    primaryLabel: 'All projects',
+    subtitleFields: ['Client Name', 'Project', 'Amount Raised'],
+    searchFields: ['Invoice Number', 'Client Name', 'Client', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Description', 'Remark'],
+    primaryFilterKey: 'filterClient',
+    primaryLabel: 'All clients',
     defaultView: 'list',
     showDashboardByDefault: false,
-    columns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup', 'Description', 'Remark', 'Last Modified'],
-    defaultColumns: ['Invoice Number', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup'],
+    columns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup', 'Description', 'Remark', 'Last Modified'],
+    defaultColumns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup'],
+  },
+  'tax-ledger': {
+    noun: 'tax invoice',
+    plural: 'tax invoices',
+    clientField: 'Client Name',
+    titleField: 'Invoice Number',
+    statusField: 'Payment Status',
+    categoryField: 'Category',
+    subtitleFields: ['Client Name', 'Project', 'Amount Raised'],
+    searchFields: ['Invoice Number', 'Client Name', 'Client', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Description', 'Remark'],
+    primaryFilterKey: 'filterClient',
+    primaryLabel: 'All clients',
+    defaultView: 'list',
+    showDashboardByDefault: true,
+    columns: ['Invoice Number', 'Client Name', 'Project', 'Payment Status', 'Amount Raised', 'Amount with Tax', 'GST Amount', 'TDS Amount', 'TDS %', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date'],
+    defaultColumns: ['Invoice Number', 'Client Name', 'Project', 'Payment Status', 'Amount Raised', 'Amount with Tax', 'GST Amount', 'TDS Amount', 'TDS %', 'Amount Received', 'Outstanding Amount', 'Raised Date'],
   },
 }
 const BOARD_GROUP_OPTIONS = {
   status: ['Status', 'Client'],
   projects: ['Project Status', 'Client', 'Health'],
-  invoices: ['Payment Status', 'Project', 'Category'],
+  invoices: ['Payment Status', 'Client Name', 'Project', 'Category'],
+  'tax-ledger': ['Payment Status', 'Client Name', 'Project'],
 }
 
 function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
@@ -107,6 +124,23 @@ function fmtInr(value) {
   const num = Number(value || 0)
   if (!Number.isFinite(num)) return '—'
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num)
+}
+function taxParts(fields = {}) {
+  const base = Number(fields['Amount Raised'] || 0)
+  const gross = Number(fields['Amount with Tax'] || base)
+  const received = Number(fields['Amount Received'] || 0)
+  const status = String(fields['Payment Status'] || '').trim()
+  const isPaid = status === 'Paid'
+  const isCancelled = status === 'Cancelled'
+  const gst = Math.max(0, gross - base)
+  const tds = isPaid && received < gross ? Math.max(0, gross - received) : 0
+  const outstanding = !isPaid && !isCancelled ? Math.max(0, gross - received) : 0
+  return {
+    gst,
+    tds,
+    tdsPct: base > 0 ? (tds / base) * 100 : 0,
+    outstanding,
+  }
 }
 function dateOnlyValue(value) {
   if (!value) return ''
@@ -172,6 +206,9 @@ function SnapshotSummary({ viewConfig, accessMode }) {
       ? `${viewConfig.dateFieldFilter}: ${viewConfig.dateFrom || '…'} → ${viewConfig.dateTo || '…'}`
       : null,
     viewConfig?.billingFilter && viewConfig.billingFilter !== 'all' ? `Scope: ${viewConfig.billingFilter}` : null,
+    viewConfig?.invoiceScope && viewConfig.invoiceScope !== 'tax' ? `Invoice scope: ${viewConfig.invoiceScope}` : null,
+    viewConfig?.periodLabel ? `Period: ${viewConfig.periodLabel}` : null,
+    viewConfig?.periodFrom || viewConfig?.periodTo ? `Date: ${viewConfig.periodFrom || '…'} → ${viewConfig.periodTo || '…'}` : null,
     viewConfig?.overdueOnly ? 'Outstanding only' : null,
     viewConfig?.hasDocsOnly ? 'With docs only' : null,
     viewConfig?.followupDueOnly ? 'Follow-up due' : null,
@@ -294,6 +331,19 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>
           </div>
         )}
+        {resourceType === 'tax-ledger' && (() => {
+          const tax = taxParts(f)
+          return (
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Client</p><p className="font-semibold text-gray-700">{f['Client Name'] || f['Client'] || '—'}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Project</p><p className="font-semibold text-gray-700">{f['Project'] || '—'}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Taxable</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Raised'])}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">GST</p><p className="font-semibold text-gray-700">{fmtInr(tax.gst)}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">TDS</p><p className="font-semibold text-gray-700">{tax.tds > 0 ? `${fmtInr(tax.tds)} · ${tax.tdsPct.toFixed(1)}%` : '—'}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Received</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Received'])}</p></div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -399,8 +449,14 @@ const COL_WIDTHS = {
   'Actual Profit':              '110px',
   'Profit percentage':          '90px',
   'Invoice Number':             '140px',
+  'Client Name':                '150px',
   'Amount Raised':              '120px',
+  'Amount with Tax':            '120px',
   'Amount Received':            '120px',
+  'GST Amount':                 '115px',
+  'TDS Amount':                 '115px',
+  'TDS %':                      '75px',
+  'Outstanding Amount':         '125px',
   'Raised Date':                '110px',
   'Cleared Date':               '110px',
   'Next followup':              '110px',
@@ -408,6 +464,19 @@ const COL_WIDTHS = {
 }
 
 function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
+  const tax = resourceType === 'tax-ledger' ? taxParts(f) : null
+  if (resourceType === 'tax-ledger' && col === 'GST Amount') return (
+    <span className="text-[12px] font-semibold tabular-nums text-emerald-700">{fmtInr(tax.gst)}</span>
+  )
+  if (resourceType === 'tax-ledger' && col === 'TDS Amount') return (
+    <span className="text-[12px] font-semibold tabular-nums text-amber-700">{tax.tds > 0 ? fmtInr(tax.tds) : '—'}</span>
+  )
+  if (resourceType === 'tax-ledger' && col === 'TDS %') return (
+    <span className="text-[12px] font-semibold tabular-nums text-amber-700">{tax.tds > 0 ? `${tax.tdsPct.toFixed(1)}%` : '—'}</span>
+  )
+  if (resourceType === 'tax-ledger' && col === 'Outstanding Amount') return (
+    <span className="text-[12px] font-semibold tabular-nums text-amber-700">{tax.outstanding > 0 ? fmtInr(tax.outstanding) : '—'}</span>
+  )
   if (col === meta.clientField) return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full truncate"
       style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexRgba(clr, 0.2) : '#e2e8f0'}` }}>
@@ -435,7 +504,7 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (col === 'Health') return (
     <span className="text-[12px] font-medium text-gray-700">{f[col] || '—'}</span>
   )
-  if (['Amount Billed So far', 'Actual Profit', 'Amount Raised', 'Amount Received'].includes(col)) return (
+  if (['Amount Billed So far', 'Actual Profit', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount'].includes(col)) return (
     <span className="text-[12px] font-semibold tabular-nums text-gray-800">{fmtInr(f[col])}</span>
   )
   if (col === 'Profit percentage') return (

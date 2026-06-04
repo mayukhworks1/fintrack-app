@@ -11,15 +11,17 @@
  */
 
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   FileText, Download, Printer, ChevronDown, ChevronUp,
   CheckCircle2, AlertCircle, Info, Calendar, Filter,
   TrendingUp, TrendingDown, Percent, IndianRupee,
-  ReceiptText, Building2, RefreshCw, Search, X,
+  ReceiptText, Building2, RefreshCw, Search, X, Share2, Link2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GST_RATE   = 0.18   // 18%
@@ -202,6 +204,8 @@ export default function TaxLedger() {
   const [expandedMonths, setExpandedMonths] = useState(new Set())
   const [activeTab, setActiveTab] = useState('summary') // summary | monthly | clients | invoices
   const [invoiceScope, setInvoiceScope] = useState('tax')
+  const [shareModal, setShareModal] = useState(false)
+  const [manageModal, setManageModal] = useState(false)
   const printRef = useRef(null)
 
   const fetchInvoices = useCallback((opts = {}) =>
@@ -350,6 +354,41 @@ export default function TaxLedger() {
     }),
   [filteredInvoices])
 
+  const sharedViewConfig = useMemo(() => ({
+    type: 'list',
+    periodLabel: period.label,
+    periodFrom: period.from,
+    periodTo: period.to,
+    invoiceScope,
+    search,
+    filterClient: '',
+    filterProject: '',
+    filterStatus: '',
+    columns: [
+      'Invoice Number',
+      'Client Name',
+      'Project',
+      'Payment Status',
+      'Amount Raised',
+      'Amount with Tax',
+      'GST Amount',
+      'TDS Amount',
+      'TDS %',
+      'Amount Received',
+      'Outstanding Amount',
+      'Raised Date',
+      'Cleared Date',
+    ],
+    theme: 'amber',
+    density: 'compact',
+    showDashboard: true,
+  }), [invoiceScope, period.from, period.label, period.to, search])
+
+  const shareTitle = useMemo(
+    () => `Tax Ledger · ${period.label} · ${invoiceScope === 'tax' ? 'Paid tax register' : invoiceScope === 'open' ? 'Open invoices' : 'All invoices'}`,
+    [invoiceScope, period.label]
+  )
+
   function handleExport() {
     exportCSV(csvRows, `tax-ledger-${period.label.replace(/[^a-z0-9]/gi, '-')}.csv`)
   }
@@ -388,6 +427,16 @@ export default function TaxLedger() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {isEditor && (
+              <>
+                <button onClick={() => setShareModal(true)} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
+                  <Share2 size={12} /> Share View
+                </button>
+                <button onClick={() => setManageModal(true)} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
+                  <Link2 size={12} /> Links
+                </button>
+              </>
+            )}
             <button onClick={refresh} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
@@ -485,7 +534,7 @@ export default function TaxLedger() {
           <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
             <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totals.effectiveTdsPct / 10 * 100)}%`, background: '#f59e0b' }} />
           </div>
-          <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>Clients typically deduct 10% TDS from gross</p>
+          <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>Expected TDS is computed on taxable value / Amount Raised when GST is separately shown.</p>
         </div>
       </div>
 
@@ -532,7 +581,7 @@ export default function TaxLedger() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
                   { l: 'Gross Amount Billed',  v: FMT_INR(totals.gross)           },
-                  { l: 'TDS @ 10% Deducted',   v: FMT_INR(totals.tdsAmt), bold: true },
+                  { l: 'TDS Deducted',          v: FMT_INR(totals.tdsAmt), bold: true },
                   { l: 'Net Amount Received',  v: FMT_INR(totals.received)        },
                   { l: 'Balance Outstanding',  v: FMT_INR(totals.outstanding)     },
                 ].map(({ l, v, bold }) => (
@@ -883,7 +932,7 @@ export default function TaxLedger() {
                     <tr key={r.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 ? 'var(--bg-input)' : 'transparent' }}>
                       <td className="px-3 py-2 font-mono font-semibold" style={{ color: 'var(--accent)' }}>{f['Invoice Number'] || '—'}</td>
                       <td className="px-3 py-2" style={{ color: 'var(--text-3)' }}>{String(f['Raised Date'] || '').slice(0, 10)}</td>
-                      <td className="px-3 py-2 max-w-[100px] truncate" style={{ color: 'var(--text-2)' }}>{f['Client'] || '—'}</td>
+                      <td className="px-3 py-2 max-w-[100px] truncate" style={{ color: 'var(--text-2)' }}>{f['Client Name'] || f['Client'] || '—'}</td>
                       <td className="px-3 py-2 max-w-[140px] truncate" style={{ color: 'var(--text-2)' }}>{f['Project'] || '—'}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.base)}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt / 2)}</td>
@@ -935,6 +984,29 @@ export default function TaxLedger() {
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
+      {isEditor && shareModal && createPortal(
+        <ShareLinkModal
+          resourceType="tax-ledger"
+          selectedRecords={filteredInvoices}
+          title={shareTitle}
+          recordLabel="invoice"
+          enableLiveMode
+          allowEdit={false}
+          viewConfig={sharedViewConfig}
+          onClose={() => setShareModal(false)}
+        />,
+        document.body
+      )}
+      {isEditor && manageModal && createPortal(
+        <ManageSharedLinksModal
+          resourceType="tax-ledger"
+          recordLabel="invoice"
+          currentViewConfig={sharedViewConfig}
+          visibleRecords={filteredInvoices}
+          onClose={() => setManageModal(false)}
+        />,
+        document.body
+      )}
     </div>
   )
 }

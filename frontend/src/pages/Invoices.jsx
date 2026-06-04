@@ -155,6 +155,7 @@ const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
 const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
 const INVOICE_SHARE_COLUMNS = [
   'Invoice Number',
+  'Client Name',
   'Project',
   'Category',
   'Payment Status',
@@ -174,6 +175,7 @@ const INVOICE_SHARE_COLUMNS = [
 const DEFAULT_INVOICE_COLUMN_WIDTHS = {
   row: 56,
   invoice_number: 150,
+  client_name: 190,
   project: 300,
   category: 150,
   milestone: 150,
@@ -192,6 +194,7 @@ const DEFAULT_INVOICE_COLUMN_WIDTHS = {
 
 /* ── Field definitions for advanced filter builder ────────────────────────── */
 const INVOICE_FIELDS = [
+  { key: 'Client Name',      label: 'Client Name',     type: 'text' },
   { key: 'Project',          label: 'Project',         type: 'text' },
   { key: 'Category',         label: 'Category',        type: 'text' },
   { key: 'Milestone',        label: 'Milestone',       type: 'text' },
@@ -1230,6 +1233,7 @@ export default function Invoices() {
   const toast = useToast()
   const initialStatus = searchParams.get('status') || ''
   const initialProject = searchParams.get('project') || ''
+  const initialClient = searchParams.get('client') || ''
   const initialQuery = searchParams.get('q') || ''
   const [workspace,       setWorkspace]       = useState('invoices')
   const [selectedRetainer,setSelectedRetainer]= useState('')
@@ -1238,6 +1242,7 @@ export default function Invoices() {
   const [retainerActionBusy, setRetainerActionBusy] = useState('')
   const [statusFilter,   setStatusFilter]   = useState(initialStatus)
   const [projectFilter,  setProjectFilter]  = useState(initialProject)
+  const [clientFilter,   setClientFilter]   = useState(initialClient)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
   const [monthFilter,    setMonthFilter]    = useState('')
@@ -1264,6 +1269,7 @@ export default function Invoices() {
 
   useEffect(() => { setStatusFilter(searchParams.get('status') || '') }, [searchParams])
   useEffect(() => { setProjectFilter(searchParams.get('project') || '') }, [searchParams])
+  useEffect(() => { setClientFilter(searchParams.get('client') || '') }, [searchParams])
   useEffect(() => { setSearch(searchParams.get('q') || '') }, [searchParams])
 
   const updateFilterParam = useCallback((key, value) => {
@@ -1486,6 +1492,7 @@ export default function Invoices() {
       // Server-side filters moved client-side (API now fetches all records)
       if (statusFilter && f['Payment Status'] !== statusFilter) return false
       if (projectFilter && f['Project'] !== projectFilter) return false
+      if (clientFilter && (f['Client Name'] || f['Client']) !== clientFilter) return false
       if (billingFilter === 'retainer' && !isRetainerCategory(f['Category'])) return false
       if (billingFilter === 'project' && isRetainerCategory(f['Category'])) return false
       if (categoryFilter && f['Category'] !== categoryFilter) return false
@@ -1517,6 +1524,8 @@ export default function Invoices() {
       if (!q) return true
       return (
         (f['Invoice Number'] || '').toLowerCase().includes(q) ||
+        (f['Client Name']    || '').toLowerCase().includes(q) ||
+        (f['Client']         || '').toLowerCase().includes(q) ||
         (f['Project']        || '').toLowerCase().includes(q) ||
         (f['Description']    || '').toLowerCase().includes(q) ||
         (f['Category']       || '').toLowerCase().includes(q) ||
@@ -1528,6 +1537,7 @@ export default function Invoices() {
     agingBandFilter,
     billingFilter,
     categoryFilter,
+    clientFilter,
     dateFieldFilter,
     dateFrom,
     dateTo,
@@ -1559,13 +1569,15 @@ export default function Invoices() {
   }, [scopedRecords])
   const overdue = s?.overdue_invoices || []
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
-  const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
+  const hasFilters = statusFilter || projectFilter || clientFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
 
   const clearAllFilters = useCallback(() => {
     setStatusFilter('')
     updateFilterParam('status', '')
     setProjectFilter('')
     updateFilterParam('project', '')
+    setClientFilter('')
+    updateFilterParam('client', '')
     setCategoryFilter('')
     setRaisedByFilter('')
     setMonthFilter('')
@@ -1586,6 +1598,7 @@ export default function Invoices() {
     if (search) chips.push({ key: 'search', label: `Search: ${search}`, onClear: () => setSearch('') })
     if (statusFilter) chips.push({ key: 'status', label: `Status: ${statusFilter}`, onClear: () => { setStatusFilter(''); updateFilterParam('status', '') } })
     if (projectFilter) chips.push({ key: 'project', label: `Project: ${projectFilter}`, onClear: () => { setProjectFilter(''); updateFilterParam('project', '') } })
+    if (clientFilter) chips.push({ key: 'client', label: `Client: ${clientFilter}`, onClear: () => { setClientFilter(''); updateFilterParam('client', '') } })
     if (categoryFilter) chips.push({ key: 'category', label: `Category: ${categoryFilter}`, onClear: () => setCategoryFilter('') })
     if (raisedByFilter) chips.push({ key: 'raised_by', label: `Owner: ${raisedByFilter}`, onClear: () => setRaisedByFilter('') })
     if (billingFilter !== 'all') chips.push({ key: 'billing', label: `Billing: ${billingFilter === 'retainer' ? 'Retainers' : 'Projects'}`, onClear: () => setBillingFilter('all') })
@@ -1602,6 +1615,7 @@ export default function Invoices() {
     agingBandFilter,
     billingFilter,
     categoryFilter,
+    clientFilter,
     dateFieldFilter,
     dateFrom,
     dateTo,
@@ -1744,14 +1758,16 @@ export default function Invoices() {
   const shareTitle = useMemo(() => {
     const parts = ['Invoices']
     if (projectFilter) parts.push(projectFilter)
+    if (clientFilter) parts.push(clientFilter)
     if (statusFilter) parts.push(statusFilter)
     if (categoryFilter) parts.push(categoryFilter)
-    if (!projectFilter && !statusFilter && !categoryFilter) parts.push('Current View')
+    if (!projectFilter && !clientFilter && !statusFilter && !categoryFilter) parts.push('Current View')
     return parts.join(' · ')
-  }, [projectFilter, statusFilter, categoryFilter])
+  }, [projectFilter, clientFilter, statusFilter, categoryFilter])
 
   const sharedViewConfig = useMemo(() => ({
     type: 'list',
+    filterClient: clientFilter || '',
     filterProject: projectFilter || '',
     filterCategory: categoryFilter || '',
     filterStatus: statusFilter || '',
@@ -1771,6 +1787,7 @@ export default function Invoices() {
     agingBandFilter,
     billingFilter,
     categoryFilter,
+    clientFilter,
     dateFieldFilter,
     dateFrom,
     dateTo,
@@ -2691,6 +2708,17 @@ export default function Invoices() {
             </div>
             {/* Project — server-side */}
             <FilterSelect
+              value={clientFilter}
+              onChange={(value) => {
+                setClientFilter(value)
+                updateFilterParam('client', value)
+              }}
+              options={clientNameOptions}
+              placeholder="All clients"
+              icon={User}
+              width={150}
+            />
+            <FilterSelect
               value={projectFilter}
               onChange={(value) => {
                 setProjectFilter(value)
@@ -2970,6 +2998,9 @@ export default function Invoices() {
                 <th className="tbl-head" style={{ width: columnWidths.invoice_number }}>
                   <ResizableHead width={columnWidths.invoice_number} onResizeStart={(e) => startColumnResize('invoice_number', e)}><SortLabel col="Invoice Number">Invoice #</SortLabel></ResizableHead>
                 </th>
+                <th className="tbl-head" style={{ width: columnWidths.client_name }}>
+                  <ResizableHead width={columnWidths.client_name} onResizeStart={(e) => startColumnResize('client_name', e)}><SortLabel col="Client Name">Client</SortLabel></ResizableHead>
+                </th>
                 <th className="tbl-head" style={{ width: columnWidths.project }}>
                   <ResizableHead width={columnWidths.project} onResizeStart={(e) => startColumnResize('project', e)}><SortLabel col="Project">Project</SortLabel></ResizableHead>
                 </th>
@@ -3018,7 +3049,7 @@ export default function Invoices() {
               {loading && !listData
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : records.length === 0
-                  ? <tr><td colSpan={16} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
+                  ? <tr><td colSpan={17} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
                       <div className="flex flex-col items-center gap-2">
                         <Receipt size={28} style={{ opacity: 0.3 }} />
                         <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
@@ -3067,6 +3098,9 @@ export default function Invoices() {
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
                               {f['Invoice Number'] || '—'}
                             </span>
+                          </td>
+                          <td className="tbl-cell align-top" style={{ width: columnWidths.client_name }}>
+                            <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Client Name'] || f['Client'] || '—'}</span>
                           </td>
                           <td className="tbl-cell align-top" style={{ width: columnWidths.project }}>
                             <div className="min-w-0">

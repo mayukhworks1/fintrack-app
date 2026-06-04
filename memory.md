@@ -477,4 +477,16 @@ Branch: `main`. Direct push. No PRs.
 Frontend auto-deploys to Cloudflare Pages on push.  
 Backend auto-deploys to HF Space on push.
 
+---
+
+## 2026-06-04 Tax Ledger / Invoice Contract
+
+- Tax Ledger shared views use the same `shared_views` and `shared_view_accesses` infrastructure as Status Board, with `resource_type=tax-ledger`.
+- Tax Ledger public links are intentionally read-only; compliance/tax register links should be trackable without allowing public financial edits.
+- Tax Ledger live links re-fetch invoices from Teable and apply period, scope, and search filters server-side.
+- All-invoice tax math contract: `Amount Raised` is taxable/base value, `Amount with Tax` is base + GST, `Amount Received` is net bank receipt after deductions.
+- TDS is computed as `Amount with Tax - Amount Received` for paid invoices, and TDS percentage is computed on `Amount Raised` because GST is separately shown.
+- Pending/open invoices are excluded from GST collected and TDS collected filing cards; they remain visible only in open receivable controls.
+- `/invoices` now treats `Client Name` as a first-class field for filtering, table columns, shared links, and public invoice views.
+
 **This file is gitignored — local only. Do not commit.**

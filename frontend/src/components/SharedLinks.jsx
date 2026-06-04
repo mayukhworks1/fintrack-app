@@ -22,6 +22,7 @@ const DEFAULT_LABELS = {
   status: 'project',
   projects: 'project',
   invoices: 'invoice',
+  'tax-ledger': 'invoice',
 }
 
 function fmtDate(iso) {
@@ -43,7 +44,7 @@ function isExpired(iso) {
 
 function defaultRecordChip(record, resourceType) {
   const f = record?.fields || {}
-  if (resourceType === 'invoices') {
+  if (resourceType === 'invoices' || resourceType === 'tax-ledger') {
     return `${f['Invoice Number'] || 'No number'} · ${f['Project'] || 'No project'}`
   }
   if (resourceType === 'projects') {
@@ -69,6 +70,9 @@ function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
       parts.push(`${vc.dateFieldFilter}: ${vc.dateFrom || '…'} → ${vc.dateTo || '…'}`)
     }
     if (vc.billingFilter && vc.billingFilter !== 'all') parts.push(`Scope: ${vc.billingFilter}`)
+    if (vc.invoiceScope && vc.invoiceScope !== 'tax') parts.push(`Invoice scope: ${vc.invoiceScope}`)
+    if (vc.periodLabel) parts.push(`Period: ${vc.periodLabel}`)
+    if (vc.periodFrom || vc.periodTo) parts.push(`Date: ${vc.periodFrom || '…'} → ${vc.periodTo || '…'}`)
     if (vc.overdueOnly) parts.push('Outstanding only')
     if (vc.hasDocsOnly) parts.push('With docs only')
     if (vc.followupDueOnly) parts.push('Follow-up due')
@@ -87,6 +91,7 @@ export function ShareLinkModal({
   title: defaultTitle = '',
   recordLabel,
   enableLiveMode = false,
+  allowEdit = true,
   onClose,
 }) {
   const [step, setStep] = useState('form')
@@ -220,8 +225,8 @@ export function ShareLinkModal({
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
                     { id: 'read', label: 'Read only', hint: 'Recipients can view, filter, and switch layouts.' },
-                    { id: 'edit', label: 'Can edit', hint: 'Recipients can update the fields allowed for this module.' },
-                  ].map(opt => (
+                    allowEdit ? { id: 'edit', label: 'Can edit', hint: 'Recipients can update the fields allowed for this module.' } : null,
+                  ].filter(Boolean).map(opt => (
                     <button key={opt.id} type="button" onClick={() => setAccessMode(opt.id)}
                       className="rounded-xl px-3 py-2 text-left transition-all"
                       style={{

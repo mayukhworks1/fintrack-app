@@ -25,7 +25,7 @@ logger = logging.getLogger("fintrack.shared_views")
 _MAX_RECORD_IDS = 50
 _ALLOWED_ACCESS_MODES = {"read", "edit"}
 _ALLOWED_VIEW_TYPES = {"card", "list", "board"}
-_ALLOWED_RESOURCE_TYPES = {"status", "projects", "invoices"}
+_ALLOWED_RESOURCE_TYPES = {"status", "projects", "invoices", "tax-ledger"}
 _ALLOWED_THEMES = {"cobalt", "emerald", "amber", "rose", "slate"}
 _ALLOWED_DENSITIES = {"comfortable", "compact"}
 _COLUMN_ALIASES = {
@@ -87,6 +87,10 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     overdue_only = view_config.get("overdueOnly")
     has_docs_only = view_config.get("hasDocsOnly")
     followup_due_only = view_config.get("followupDueOnly")
+    invoice_scope = view_config.get("invoiceScope")
+    period_label = view_config.get("periodLabel")
+    period_from = view_config.get("periodFrom")
+    period_to = view_config.get("periodTo")
 
     clean: dict[str, Any] = {}
 
@@ -172,6 +176,18 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
 
     if isinstance(followup_due_only, bool):
         clean["followupDueOnly"] = followup_due_only
+
+    if isinstance(invoice_scope, str) and invoice_scope in {"tax", "open", "all"}:
+        clean["invoiceScope"] = invoice_scope
+
+    if isinstance(period_label, str) and period_label.strip():
+        clean["periodLabel"] = period_label.strip()[:120]
+
+    if isinstance(period_from, str) and period_from.strip():
+        clean["periodFrom"] = period_from.strip()[:20]
+
+    if isinstance(period_to, str) and period_to.strip():
+        clean["periodTo"] = period_to.strip()[:20]
 
     all_expanded = view_config.get("allExpanded")
     if isinstance(all_expanded, bool):
@@ -467,6 +483,7 @@ class SharedViewService:
                     "status": ("status", "status_mirror", _extract_status),
                     "projects": ("projects", "projects_mirror", _extract_project),
                     "invoices": ("invoices", "invoices_mirror", _extract_invoice),
+                    "tax-ledger": ("invoices", "invoices_mirror", _extract_invoice),
                 }[resource_type]
                 await upsert_record(
                     pool=pool,
@@ -672,6 +689,9 @@ def _live_service_for(resource_type: str):
     if resource_type == "invoices":
         from ..services.invoice import InvoiceService
         return InvoiceService()
+    if resource_type == "tax-ledger":
+        from ..services.invoice import InvoiceService
+        return InvoiceService()
     raise ValueError("Unsupported resource type")
 
 
@@ -681,6 +701,8 @@ async def _live_get_record(resource_type: str, service, record_id: str) -> dict[
     if resource_type == "projects":
         return await service.get_record(record_id)
     if resource_type == "invoices":
+        return await service.get_invoice(record_id)
+    if resource_type == "tax-ledger":
         return await service.get_invoice(record_id)
     raise ValueError("Unsupported resource type")
 
@@ -713,6 +735,8 @@ def _public_edit_fields(resource_type: str, fields: dict) -> dict[str, Any]:
                 raise ValueError("Amount Received is required when Payment Status is Paid")
             if not allowed.get("Cleared Date"):
                 raise ValueError("Cleared Date is required when Payment Status is Paid")
+    elif resource_type == "tax-ledger":
+        allowed = {}
     else:
         raise ValueError("Unsupported resource type")
     return {k: v for k, v in allowed.items() if v is not None}
@@ -784,11 +808,14 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
             ]
         return records
 
-    if resource_type == "invoices":
+    if resource_type in {"invoices", "tax-ledger"}:
         from ..services.invoice import InvoiceService
         records = await InvoiceService().get_all_invoices()
         if filter_client:
-            records = [r for r in records if (r.get("fields") or {}).get("Client") == filter_client]
+            records = [
+                r for r in records
+                if ((r.get("fields") or {}).get("Client Name") or (r.get("fields") or {}).get("Client")) == filter_client
+            ]
         if filter_project:
             records = [r for r in records if (r.get("fields") or {}).get("Project") == filter_project]
         if filter_status:
@@ -824,6 +851,35 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
                     continue
                 filtered_records.append(r)
             records = filtered_records
+        if resource_type == "tax-ledger":
+            period_from = cfg.get("periodFrom")
+            period_to = cfg.get("periodTo")
+            if period_from or period_to:
+                filtered_records = []
+                for r in records:
+                    candidate = _date_only_value((r.get("fields") or {}).get("Raised Date"))
+                    if not candidate:
+                        continue
+                    if period_from and candidate < period_from:
+                        continue
+                    if period_to and candidate > period_to:
+                        continue
+                    filtered_records.append(r)
+                records = filtered_records
+
+            invoice_scope = cfg.get("invoiceScope") or "tax"
+            scoped_records = []
+            for r in records:
+                f = r.get("fields") or {}
+                status = str(f.get("Payment Status") or "").strip()
+                if status == "Cancelled":
+                    continue
+                if invoice_scope == "tax" and status != "Paid":
+                    continue
+                if invoice_scope == "open" and status == "Paid":
+                    continue
+                scoped_records.append(r)
+            records = scoped_records
         if aging_band_filter:
             records = [
                 r for r in records
@@ -854,6 +910,8 @@ async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list
                 r for r in records
                 if search in " ".join([
                     str((r.get("fields") or {}).get("Invoice Number", "")),
+                    str((r.get("fields") or {}).get("Client Name", "")),
+                    str((r.get("fields") or {}).get("Client", "")),
                     str((r.get("fields") or {}).get("Project", "")),
                     str((r.get("fields") or {}).get("Category", "")),
                     str((r.get("fields") or {}).get("Raised By", "")),
@@ -905,4 +963,6 @@ async def _live_update_record(resource_type: str, record_id: str, cleaned: dict[
         except Exception:
             pass
         return await InvoiceService().update_invoice(record_id, cleaned)
+    if resource_type == "tax-ledger":
+        raise PermissionError("Tax ledger shared views are read-only")
     raise ValueError("Unsupported resource type")
