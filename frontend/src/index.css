@@ -1492,6 +1492,24 @@ h1 { letter-spacing: -0.03em; }
     var(--bg-base);
 }
 
+html.dark .app-layout-shell {
+  background:
+    linear-gradient(90deg, #090a09 0 88px, var(--bg-base) 88px 100%),
+    var(--bg-base);
+}
+
+.web-invoices-shell {
+  background:
+    linear-gradient(90deg, #f7f7f5 0 88px, var(--bg-base) 88px 100%),
+    var(--bg-base);
+}
+
+html.dark .web-invoices-shell {
+  background:
+    linear-gradient(90deg, #090a09 0 88px, var(--bg-base) 88px 100%),
+    var(--bg-base);
+}
+
 .runey-app-sidebar {
   margin: 0.65rem;
   height: calc(100vh - 1.3rem);
@@ -1506,6 +1524,10 @@ h1 { letter-spacing: -0.03em; }
 
 .runey-app-sidebar.is-collapsed {
   align-items: center;
+}
+
+.web-runey-sidebar {
+  height: calc(100dvh - 1.3rem);
 }
 
 .runey-sidebar-header {

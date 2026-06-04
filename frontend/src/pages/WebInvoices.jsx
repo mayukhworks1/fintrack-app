@@ -9,7 +9,7 @@ import {
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
   ChevronLeft, ChevronRight, Briefcase, Repeat2,
   Users, HelpCircle, Mail, BookOpen, X as XIcon,
-  LayoutDashboard, Activity, ArrowRight, ShieldAlert
+  LayoutDashboard, Activity, ArrowRight, ShieldAlert, Settings
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -1360,7 +1360,7 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
 }
 
 /* ── Collapsible app sidebar ── */
-function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) {
+function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, onNew }) {
   const { logout } = useAuth()
   const { dark, toggle } = useTheme()
 
@@ -1375,45 +1375,55 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
 
   return (
     <aside
-      className="hidden sm:flex flex-col flex-shrink-0 transition-all duration-200 z-20"
+      className={`web-runey-sidebar runey-app-sidebar hidden sm:flex flex-col flex-shrink-0 transition-all duration-200 z-20 ${open ? '' : 'is-collapsed'}`}
       style={{
-        width: open ? 220 : 56,
-        background: 'var(--sidebar-bg)',
-        borderRight: '1px solid var(--sidebar-border)',
-        height: '100dvh',
+        width: open ? 200 : 76,
         overflow: 'hidden',
       }}>
 
       {/* Brand + toggle */}
-      <div className="flex items-center justify-between pl-3 pr-2 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--sidebar-border)', minHeight: 52 }}>
-        <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
-          <div className="flex items-center justify-center flex-shrink-0"
-            style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #2f72f5 0%, #1d4ed8 100%)', boxShadow: '0 2px 6px rgba(37,99,235,0.35)' }}>
-            <Globe size={12} className="text-white" />
-          </div>
+      <div className={`runey-sidebar-header ${open ? '' : 'is-collapsed'}`}>
+        <div className="runey-brand-link min-w-0 overflow-hidden">
+          <span className="runey-brand-mark">
+            <Globe size={15} style={{ color: '#111' }} />
+          </span>
           {open && (
             <div className="min-w-0">
-              <p className="font-bold text-sm leading-tight tracking-tight truncate" style={{ color: 'var(--text-1)' }}>TheWorks</p>
-              <p className="text-[10px] leading-none truncate" style={{ color: 'var(--text-3)' }}>Web Tracker</p>
+              <p className="runey-brand-title">TheWorks</p>
+              <p className="runey-brand-subtitle">Web Tracker</p>
             </div>
           )}
         </div>
         <button onClick={onToggle} title={open ? 'Collapse' : 'Expand'}
-          className="w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0 transition-colors"
-          style={{ color: 'var(--text-3)' }}>
+          className="runey-collapse-button">
           {open ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
       </div>
 
+      <div className="runey-quick-action">
+        <button
+          type="button"
+          onClick={() => {
+            setWorkspace('invoices')
+            if (onNew) onNew()
+          }}
+          className={`runey-new-button ${open ? '' : 'is-collapsed'}`}
+          title={open ? undefined : 'New invoice'}
+          aria-label={open ? undefined : 'New invoice'}
+        >
+          <Plus size={open ? 15 : 18} />
+          {open && <span>New</span>}
+        </button>
+      </div>
+
       {/* Nav items */}
-      <nav className="flex-1 py-2 space-y-0.5 px-2 overflow-y-auto">
+      <nav className={`runey-nav ${open ? '' : 'is-collapsed'}`}>
         {navItems.map(({ value, label, icon: Icon }) => {
           const active = workspace === value
           return (
             <button key={value} onClick={() => setWorkspace(value)}
               title={!open ? label : undefined}
-              className={`nav-item ${active ? 'active' : ''}`}>
+              className={`runey-nav-link ${open ? '' : 'is-collapsed'} ${active ? 'active' : ''}`}>
               <Icon size={15} className="flex-shrink-0" style={{ flexShrink: 0 }} />
               {open && <span className="truncate">{label}</span>}
             </button>
@@ -1422,24 +1432,36 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp }) 
       </nav>
 
       {/* Footer: help + theme + logout */}
-      <div className="px-2 pb-3 flex-shrink-0 space-y-0.5"
-        style={{ borderTop: '1px solid var(--sidebar-border)', paddingTop: '0.5rem' }}>
+      <div className={`runey-sidebar-footer ${open ? '' : 'is-collapsed'}`}>
+        <button type="button" title={!open ? 'Settings' : undefined} className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
+          <Settings size={14} style={{ flexShrink: 0 }} />
+          {open && <span className="text-xs">Settings</span>}
+        </button>
         {onHelp && (
-          <button onClick={onHelp} title="Help & Guide" className="nav-item">
+          <button onClick={onHelp} title="Help & Guide" className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
             <HelpCircle size={14} style={{ flexShrink: 0 }} />
-            {open && <span className="text-xs">Help & Guide</span>}
+            {open && <span className="text-xs">Help</span>}
           </button>
         )}
-        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'} className="nav-item">
+        <button onClick={toggle} title={dark ? 'Light mode' : 'Dark mode'} className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
           {dark
-            ? <Sun size={14} style={{ color: '#fbbf24', flexShrink: 0 }} />
-            : <Moon size={14} style={{ color: '#818cf8', flexShrink: 0 }} />}
+            ? <Sun size={14} style={{ flexShrink: 0 }} />
+            : <Moon size={14} style={{ flexShrink: 0 }} />}
           {open && <span className="text-xs">{dark ? 'Light mode' : 'Dark mode'}</span>}
         </button>
-        <button onClick={logout} title="Sign out" className="nav-item">
+        <button onClick={logout} title="Sign out" className={`runey-nav-link ${open ? '' : 'is-collapsed'}`}>
           <LogOut size={13} style={{ flexShrink: 0 }} />
           {open && <span className="text-xs">Sign out</span>}
         </button>
+        <div className={`runey-profile ${open ? '' : 'is-collapsed'}`}>
+          <span className="runey-profile-avatar">TW</span>
+          {open && (
+            <div className="min-w-0">
+              <p>TheWorks</p>
+              <span>Web billing</span>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   )
@@ -1932,7 +1954,7 @@ export default function WebInvoices() {
   }
 
   return (
-    <div className="app-shell flex overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+    <div className="app-shell web-invoices-shell flex overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* ── Sidebar — desktop only ── */}
       <AppSidebar
         workspace={workspace}
@@ -1941,6 +1963,7 @@ export default function WebInvoices() {
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(v => !v)}
         onHelp={() => setHelpOpen(true)}
+        onNew={openNew}
       />
 
       {/* ── Content area ── */}
