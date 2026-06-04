@@ -286,7 +286,7 @@ class WebInvoiceService:
             })
             return names
 
-        return await cache.get_or_set("webinv:client_names", ttl=60, loader=_load)
+        return await _load()  # no cache — always live
 
     async def list_invoices(
         self,

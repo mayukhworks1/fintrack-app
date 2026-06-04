@@ -452,6 +452,33 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…' }) {
   )
 }
 
+/**
+ * ProjectInput — free-text input with datalist autocomplete.
+ * Works even when the options list is empty (user can always type).
+ * Used for the Project field which is a plain text field in Teable,
+ * not a single-select — so PicklistSelect (which renders a <select>)
+ * shows blank when options haven't loaded yet.
+ */
+function ProjectInput({ value, onChange, options = [], placeholder = 'Type or select project…' }) {
+  const listId = 'wb-project-datalist'
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        list={listId}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="input w-full"
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {options.map(o => <option key={o} value={o} />)}
+      </datalist>
+    </div>
+  )
+}
+
 /* Picklist select with inline "add new option" for Teable-backed fields */
 function PicklistSelect({
   fieldName,
@@ -973,9 +1000,12 @@ function InvoiceDrawer({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRow label="Project">
-              <PicklistSelect fieldName="Project" value={form.project} onChange={set('project')}
-                options={picklists?.Project || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select project…"
-                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
+              <ProjectInput
+                value={form.project}
+                onChange={set('project')}
+                options={picklists?.Project || []}
+                placeholder="Type or select project…"
+              />
             </FieldRow>
             <FieldRow label="Category">
               <PicklistSelect fieldName="Category" value={form.category} onChange={setCategoryValue}
@@ -1519,25 +1549,26 @@ export default function WebInvoices() {
       })
       .catch(() => {})
 
-    // 2. Build Project list from two live sources, deduplicated and sorted.
-    //    Runs once at mount then every 30 s so new projects added in Teable
-    //    appear in the dropdown without a page reload.
-    async function refreshProjects() {
-      const [invoiceRes, projectRes] = await Promise.allSettled([
-        api.webInvoices.clientNames(),
-        api.webProjects.names({ fresh: true }),
-      ])
-      const fromInvoices = invoiceRes.status === 'fulfilled' && Array.isArray(invoiceRes.value)
-        ? invoiceRes.value : []
-      const fromProjects = projectRes.status === 'fulfilled' && Array.isArray(projectRes.value)
-        ? projectRes.value.map(p => p.name).filter(Boolean) : []
-      const merged = [...new Set([...fromInvoices, ...fromProjects])].sort()
-      if (merged.length > 0) setPicklists(prev => ({ ...prev, Project: merged }))
+    // 2. Seed Project list from web-projects table (includes projects with no invoices yet).
+    //    Runs immediately then every 30 s. allRecords-based merge happens in a separate effect.
+    let alive = true
+    async function seedProjects() {
+      try {
+        const list = await api.webProjects.names()  // always fresh — cache removed on backend
+        if (!alive) return
+        const names = (list || []).map(p => p.name).filter(Boolean)
+        if (names.length > 0) {
+          setPicklists(prev => {
+            const merged = [...new Set([...names, ...(prev.Project || [])])].sort()
+            return { ...prev, Project: merged }
+          })
+        }
+      } catch { /* non-fatal — allRecords effect still populates from loaded invoices */ }
     }
 
-    refreshProjects()
-    const projectRefreshTimer = setInterval(refreshProjects, 30_000)
-    return () => clearInterval(projectRefreshTimer)
+    seedProjects()
+    const projectRefreshTimer = setInterval(seedProjects, 30_000)
+    return () => { alive = false; clearInterval(projectRefreshTimer) }
   }, [])
 
   function handleOptionsUpdate(fieldName, newOptions) {
