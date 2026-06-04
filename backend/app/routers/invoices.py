@@ -79,7 +79,9 @@ class InvoiceFields(BaseModel):
         allow_null = set(include_null_fields or [])
         return {
             k: v for k, v in m.items()
-            if v is not None or k in allow_null
+            # Exclude None, empty strings, and empty arrays — Teable linked-record
+            # fields (Reference, Invoice PDF) reject [] with a validation error.
+            if (v is not None and v != "" and v != []) or k in allow_null
         }
 
 

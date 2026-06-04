@@ -73,6 +73,42 @@ async def get_summary(_role: str = Depends(require_auth)):
     return await teable.get_summary()
 
 
+@router.get("/names")
+async def list_project_names(_role: str = Depends(require_auth)):
+    """
+    Lightweight endpoint — returns just project names (and clients) for picklists.
+    Reads from PG mirror so it's ~2 ms. Falls back to full Teable list.
+    Used by the invoice form to populate the Project dropdown in real time.
+    """
+    from ..db.postgres import get_pool
+    pool = get_pool()
+    if pool:
+        try:
+            rows = await pool.fetch(
+                """
+                SELECT fields->>'Project Name' AS name, fields->>'Client' AS client
+                FROM projects_mirror
+                WHERE fields->>'Project Name' IS NOT NULL
+                  AND fields->>'Project Name' != ''
+                ORDER BY fields->>'Project Name'
+                """
+            )
+            return [{"name": r["name"], "client": r["client"]} for r in rows]
+        except Exception:
+            pass
+    # Fallback: live Teable
+    teable = get_teable()
+    records = await teable.list_records(take=500)
+    return [
+        {
+            "name": r.get("fields", {}).get("Project Name", ""),
+            "client": r.get("fields", {}).get("Client", ""),
+        }
+        for r in records
+        if r.get("fields", {}).get("Project Name")
+    ]
+
+
 @router.get("/search")
 async def search_projects(
     q: str = Query(..., min_length=1),

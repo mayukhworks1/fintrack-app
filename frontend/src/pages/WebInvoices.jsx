@@ -1519,22 +1519,25 @@ export default function WebInvoices() {
       })
       .catch(() => {})
 
-    // 2. Build Project list from three live sources, deduplicated and sorted
-    Promise.allSettled([
-      api.webInvoices.clientNames(),   // distinct Project values from actual invoice records
-      api.webProjects.names(),          // project names from Web Projects table
-    ]).then(([invoiceRes, projectRes]) => {
+    // 2. Build Project list from two live sources, deduplicated and sorted.
+    //    Runs once at mount then every 30 s so new projects added in Teable
+    //    appear in the dropdown without a page reload.
+    async function refreshProjects() {
+      const [invoiceRes, projectRes] = await Promise.allSettled([
+        api.webInvoices.clientNames(),
+        api.webProjects.names({ fresh: true }),
+      ])
       const fromInvoices = invoiceRes.status === 'fulfilled' && Array.isArray(invoiceRes.value)
-        ? invoiceRes.value
-        : []
+        ? invoiceRes.value : []
       const fromProjects = projectRes.status === 'fulfilled' && Array.isArray(projectRes.value)
-        ? projectRes.value.map(p => p.name).filter(Boolean)
-        : []
+        ? projectRes.value.map(p => p.name).filter(Boolean) : []
       const merged = [...new Set([...fromInvoices, ...fromProjects])].sort()
-      if (merged.length > 0) {
-        setPicklists(prev => ({ ...prev, Project: merged }))
-      }
-    })
+      if (merged.length > 0) setPicklists(prev => ({ ...prev, Project: merged }))
+    }
+
+    refreshProjects()
+    const projectRefreshTimer = setInterval(refreshProjects, 30_000)
+    return () => clearInterval(projectRefreshTimer)
   }, [])
 
   function handleOptionsUpdate(fieldName, newOptions) {

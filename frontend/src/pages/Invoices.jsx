@@ -1312,10 +1312,34 @@ export default function Invoices() {
   }, [listData?.records])
   const allRecords = recordsState
 
+  /* ── Live project names from Projects table ──────────────────────────────
+   * Merges names from actual invoices (already loaded) with names from the
+   * Projects module so brand-new projects appear in the dropdown immediately,
+   * even before any invoice is raised for them.  Refreshes every 30 s so
+   * projects added by another session also show up without a page reload.   */
+  const [liveProjectNames, setLiveProjectNames] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    async function fetchProjectNames() {
+      try {
+        const list = await api.projects.names({ fresh: true })
+        if (cancelled) return
+        const names = (list || []).map(p => p.name).filter(Boolean)
+        setLiveProjectNames(names)
+      } catch { /* non-fatal — invoice-derived list is still shown */ }
+    }
+    fetchProjectNames()
+    const t = setInterval(fetchProjectNames, 30_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
+
   /* ── Dynamic filter/form options derived from actual records ── */
   const projectOptions = useMemo(() => (
-    [...new Set(allRecords.map(r => r.fields?.['Project']).filter(Boolean))].sort()
-  ), [allRecords])
+    [...new Set([
+      ...allRecords.map(r => r.fields?.['Project']).filter(Boolean),
+      ...liveProjectNames,
+    ])].sort()
+  ), [allRecords, liveProjectNames])
 
   const categoryOptions = useMemo(() => (
     [...new Set(allRecords.map(r => r.fields?.['Category']).filter(Boolean))].sort()

@@ -243,6 +243,7 @@ export const api = {
     delete:  (id)       => request(`/api/projects/${id}`, { method: 'DELETE' }),
     search:  (q, limit = 20) => request(`/api/projects/search?q=${encodeURIComponent(q)}&limit=${limit}`),
     summary: (opts = {})         => request('/api/projects/summary', opts),
+    names:   (opts = {})         => request('/api/projects/names', opts),
   },
   ai: {
     chat:     (message, history = [], opts = {}) =>

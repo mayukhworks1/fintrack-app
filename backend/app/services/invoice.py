@@ -605,5 +605,10 @@ def _clean_fields(fields: dict, allow_null_fields: set[str] | None = None) -> di
     allow_null = allow_null_fields or set()
     return {
         k: v for k, v in fields.items()
-        if k not in _READ_ONLY and ((v is not None and v != "") or (k in allow_null and v is None))
+        if k not in _READ_ONLY and (
+            # Send the value if it is truthy, or a legitimate 0 / False
+            (v is not None and v != "" and v != []) or
+            # Explicitly allow null for date-clearable fields
+            (k in allow_null and v is None)
+        )
     }
