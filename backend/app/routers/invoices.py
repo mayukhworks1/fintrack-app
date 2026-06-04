@@ -8,16 +8,11 @@ from typing import Optional, Iterable, List, Any
 from pydantic import BaseModel
 import httpx
 from ..services.invoice import InvoiceService
-from ..services.associations import AssociationService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
-
-
-def _associations() -> AssociationService:
-    return AssociationService()
 
 
 def _validate_paid_invoice(fields: dict) -> None:
@@ -54,6 +49,7 @@ class InvoiceFields(BaseModel):
     payment_status:   Optional[str]   = None
     remark:           Optional[str]   = None
     next_followup:    Optional[str]   = None   # ISO 8601
+    client_name:      Optional[str]   = None   # single-select: Birla Open Minds / Maitrimetal / Innovine
     reference:        Optional[List[Any]] = None
     invoice_pdf:      Optional[List[Any]] = None
 
@@ -61,6 +57,7 @@ class InvoiceFields(BaseModel):
         m = {
             "Invoice Number":  self.invoice_number,
             "Project":         self.project,
+            "Client Name":     self.client_name,
             "Category":        self.category,
             "Description":     self.description,
             "Milestone":       self.milestone,
@@ -99,6 +96,15 @@ async def invoice_summary(_role: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/picklists")
+async def get_invoice_picklists(_role: str = Depends(require_auth)):
+    """Return single-select options (Project, Client Name, Category, etc.) from Teable schema."""
+    try:
+        return await InvoiceService().get_picklists()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("")
 async def list_invoices(
     status:   Optional[str] = Query(None),
@@ -122,7 +128,6 @@ async def list_invoices(
                 limit=limit, skip=skip,
                 order_by=order_by, order=order,
             )
-        result["records"] = await _associations().hydrate_records("invoices", result.get("records", []))
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -135,8 +140,7 @@ async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
         record = await svc.get_invoice(record_id)
         if record is None:
             record = await svc.get_invoice_from_pg(record_id)
-        hydrated = await _associations().hydrate_records("invoices", [record])
-        return hydrated[0] if hydrated else record
+        return record
     except Exception as e:
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 

@@ -284,7 +284,7 @@ export default function TaxLedger() {
     const map = new Map()
     for (const r of periodInvoices) {
       const f      = r.fields || {}
-      const client = f['Client'] || f['Project'] || 'Unknown'
+      const client = f['Client Name'] || f['Project'] || 'Unknown'
       if (!map.has(client)) map.set(client, { client, invoices: [] })
       map.get(client).invoices.push(r)
     }
@@ -310,7 +310,7 @@ export default function TaxLedger() {
         invoiceNo: f['Invoice Number'] || r.id,
         date:      String(f['Raised Date'] || '').slice(0, 10),
         project:   f['Project'] || '',
-        client:    f['Client']  || '',
+        client:    f['Client Name'] || f['Project'] || '',
         ...p,
       }
     }),

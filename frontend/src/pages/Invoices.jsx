@@ -27,7 +27,7 @@ import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, Ex
 const STATUSES = ['Paid', 'Pending', 'Cancelled']
 
 const EMPTY_FORM = {
-  invoice_number: '', project: '', category: '', description: '',
+  invoice_number: '', project: '', client_name: '', category: '', description: '',
   milestone: '', raised_by: '', raised_date: '', cleared_date: '',
   amount_raised: '', amount_with_tax: '', amount_received: '',
   payment_status: 'Pending', remark: '', next_followup: '',
@@ -87,6 +87,7 @@ const projectInitials = (value) => String(value || 'NA')
 const INVOICE_SCALAR_FORM_KEYS = [
   'invoice_number',
   'project',
+  'client_name',
   'category',
   'description',
   'milestone',
@@ -129,6 +130,7 @@ const invoiceAmountParts = (fields = {}) => {
 const buildInvoiceScalarPayload = (form, { isEdit = false, paymentOnly = false } = {}) => ({
   invoice_number:   form.invoice_number,
   project:          form.project,
+  client_name:      form.client_name || undefined,
   category:         form.category,
   description:      form.description,
   milestone:        form.milestone,
@@ -773,10 +775,11 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
   const parseFileRef = useRef(null)
   const currentRecordId = invoice?.id || workingRecordId
   const paidSelected = form.payment_status === 'Paid'
-  const projectOptions  = options.projects  || []
-  const categoryOptions = options.categories || []
-  const milestoneOptions= options.milestones || []
-  const raisedByOptions = options.raisedBy  || []
+  const projectOptions    = options.projects    || []
+  const clientNameOptions = options.clientNames || []
+  const categoryOptions   = options.categories  || []
+  const milestoneOptions  = options.milestones  || []
+  const raisedByOptions   = options.raisedBy    || []
   const retainerCategoryOption = categoryOptions.find(c => /retainer/i.test(c)) || 'Development- Retainer'
   const retainerSelected = isRetainerCategory(form.category)
   const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
@@ -802,6 +805,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
     const next = {
       invoice_number:  f['Invoice Number']  || '',
       project:         f['Project']         || '',
+      client_name:     f['Client Name']     || '',
       category:        f['Category']        || '',
       description:     f['Description']     || '',
       milestone:       f['Milestone']       || '',
@@ -1069,9 +1073,14 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
                 </Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Project">
-                  <SuggestInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Type or select project..." listId="invoice-project-options" />
+                <Field label="Client Name">
+                  <SelectInput value={form.client_name} onChange={set('client_name')} options={clientNameOptions} placeholder="Select client..." />
                 </Field>
+                <Field label="Project">
+                  <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project..." />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Category">
                   <SuggestInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Type or select category..." listId="invoice-category-options" />
                 </Field>
@@ -1334,33 +1343,51 @@ export default function Invoices() {
     return () => { cancelled = true; clearInterval(t) }
   }, [])
 
-  /* ── Dynamic filter/form options derived from actual records ── */
-  const projectOptions = useMemo(() => (
-    [...new Set([
-      ...allRecords.map(r => r.fields?.['Project']).filter(Boolean),
-      ...liveProjectNames,
-    ])].sort()
-  ), [allRecords, liveProjectNames])
+  /* ── Picklists from Teable schema (Project, Client Name, Category, etc.) ── */
+  const [invoicePicklists, setInvoicePicklists] = useState({})
+  useEffect(() => {
+    api.invoices.picklists().then(setInvoicePicklists).catch(() => {})
+  }, [])
 
-  const categoryOptions = useMemo(() => (
-    [...new Set(allRecords.map(r => r.fields?.['Category']).filter(Boolean))].sort()
-  ), [allRecords])
+  /* ── Dynamic filter/form options — prefer Teable schema, supplement from records ── */
+  const projectOptions = useMemo(() => {
+    const fromSchema  = invoicePicklists['Project'] || []
+    const fromRecords = allRecords.map(r => r.fields?.['Project']).filter(Boolean)
+    return [...new Set([...fromSchema, ...fromRecords, ...liveProjectNames])].sort()
+  }, [invoicePicklists, allRecords, liveProjectNames])
 
-  const milestoneOptions = useMemo(() => (
-    [...new Set(allRecords.map(r => r.fields?.['Milestone']).filter(Boolean))].sort()
-  ), [allRecords])
+  const clientNameOptions = useMemo(() => {
+    const fromSchema  = invoicePicklists['Client Name'] || []
+    const fromRecords = allRecords.map(r => r.fields?.['Client Name']).filter(Boolean)
+    return [...new Set([...fromSchema, ...fromRecords])].sort()
+  }, [invoicePicklists, allRecords])
 
-  const raisedByOptions = useMemo(() => (
-    [...new Set(allRecords.map(r => r.fields?.['Raised By']).filter(Boolean))].sort()
-  ), [allRecords])
+  const categoryOptions = useMemo(() => {
+    const fromSchema  = invoicePicklists['Category'] || []
+    const fromRecords = allRecords.map(r => r.fields?.['Category']).filter(Boolean)
+    return [...new Set([...fromSchema, ...fromRecords])].sort()
+  }, [invoicePicklists, allRecords])
+
+  const milestoneOptions = useMemo(() => {
+    const fromSchema  = invoicePicklists['Milestone'] || []
+    const fromRecords = allRecords.map(r => r.fields?.['Milestone']).filter(Boolean)
+    return [...new Set([...fromSchema, ...fromRecords])].sort()
+  }, [invoicePicklists, allRecords])
+
+  const raisedByOptions = useMemo(() => {
+    const fromSchema  = invoicePicklists['Raised By'] || []
+    const fromRecords = allRecords.map(r => r.fields?.['Raised By']).filter(Boolean)
+    return [...new Set([...fromSchema, ...fromRecords])].sort()
+  }, [invoicePicklists, allRecords])
 
   // Bundle for InvoiceDrawer
   const formOptions = useMemo(() => ({
-    projects:   projectOptions,
-    categories: categoryOptions,
-    milestones: milestoneOptions,
-    raisedBy:   raisedByOptions,
-  }), [projectOptions, categoryOptions, milestoneOptions, raisedByOptions])
+    projects:    projectOptions,
+    clientNames: clientNameOptions,
+    categories:  categoryOptions,
+    milestones:  milestoneOptions,
+    raisedBy:    raisedByOptions,
+  }), [projectOptions, clientNameOptions, categoryOptions, milestoneOptions, raisedByOptions])
 
   /* ── Client-side filter (category, raisedBy, freetext) ── */
   const monthOptions = useMemo(() => (

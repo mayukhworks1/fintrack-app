@@ -24,14 +24,12 @@ import {
   Bookmark, BookmarkPlus, Trash, SlidersHorizontal,
   GripVertical, ArrowRight, ChevronRight, TrendingUp, Filter,
   CheckSquare, Square,
-  Receipt, Unlink,
 } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { useTheme } from '../context/ThemeContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
-import InvoicePicklist from '../components/InvoicePicklist'
 import { formatInr } from '../utils/format'
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -289,10 +287,9 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detail Panel — slide-in from right
 // ─────────────────────────────────────────────────────────────────────────────
-function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice = false }) {
+function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   const navigate = useNavigate()
   const f = record?.fields || {}
-  const assoc = record?.association
   const client  = f['Client']  || ''
   const project = f['Project'] || ''
   const status  = f['Status']  || ''
@@ -302,70 +299,12 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
   const clrHex  = clientColor(client)
   const sc      = statusStyle(status)
   const toast   = useToast()
-  const related = assoc?.related_counts?.project || {}
-  const insight = assoc?.insights?.project
-  const openProjects = () => {
-    const params = new URLSearchParams()
-    if (assoc?.client?.name || client) params.set('client', assoc?.client?.name || client)
-    if (assoc?.project?.name || project) params.set('q', assoc?.project?.name || project)
-    navigate(`/projects?${params.toString()}`)
-  }
   const openInvoices = () => {
     const params = new URLSearchParams()
-    if (assoc?.project?.name || project) params.set('project', assoc?.project?.name || project)
+    if (project) params.set('project', project)
     navigate(`/invoices?${params.toString()}`)
   }
 
-  // ── Linked invoices state ──────────────────────────────────────────────
-  const [linkedInvoices,  setLinkedInvoices]  = useState([])
-  const [loadingInvs,     setLoadingInvs]     = useState(false)
-  const [showPicklist,    setShowPicklist]     = useState(false)
-  const [unlinkingId,     setUnlinkingId]     = useState(null)
-  const [invExpanded,     setInvExpanded]     = useState(false)  // section collapsed by default
-  const [expandedInvId,   setExpandedInvId]   = useState(null)  // which invoice row is expanded
-
-  // Load linked invoices when the panel opens
-  useEffect(() => {
-    if (!record?.id) return
-    setLoadingInvs(true)
-    api.projectInvoices.list(record.id)
-      .then(res => setLinkedInvoices(res.invoices || []))
-      .catch(() => {})
-      .finally(() => setLoadingInvs(false))
-  }, [record?.id])
-
-  // Auto-open picklist if launched from invoice button on card
-  useEffect(() => {
-    if (openInvoice) setShowPicklist(true)
-  }, [openInvoice])
-
-  // Raw link — no toast, no reload (bulk handler does both after all complete)
-  const handleLinkInvoice = async (invoiceTId, source) => {
-    await api.projectInvoices.link(record.id, invoiceTId, source)
-  }
-
-  const handleBulkLinkDone = async (linked, failed) => {
-    const res = await api.projectInvoices.list(record.id)
-    setLinkedInvoices(res.invoices || [])
-    setInvExpanded(true) // auto-expand so user sees the newly linked invoices
-    if (failed > 0)
-      toast(`${linked} linked, ${failed} failed`, 'warning')
-    else
-      toast(`${linked} invoice${linked !== 1 ? 's' : ''} linked!`, 'success')
-  }
-
-  const handleUnlinkInvoice = async (invoiceTeableId) => {
-    setUnlinkingId(invoiceTeableId)
-    try {
-      await api.projectInvoices.unlink(record.id, invoiceTeableId)
-      setLinkedInvoices(prev => prev.filter(i => i.invoice_teable_id !== invoiceTeableId))
-      toast('Invoice unlinked', 'info')
-    } catch (e) {
-      toast('Unlink failed: ' + e.message, 'error')
-    } finally {
-      setUnlinkingId(null)
-    }
-  }
 
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
@@ -424,170 +363,6 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
 
         <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
 
-          {/* ── Linked Invoices — collapsible ────────────────────────────── */}
-          <div className="rounded-2xl overflow-hidden"
-            style={{ border: '2px solid rgba(37,99,235,0.22)', background: 'var(--card-bg)' }}>
-            {/* Section header — click left side to expand/collapse */}
-            <div className="flex items-center justify-between px-4 py-3"
-              style={{ background: 'rgba(37,99,235,0.06)', borderBottom: invExpanded ? '1px solid rgba(37,99,235,0.12)' : 'none' }}>
-              <button
-                onClick={() => setInvExpanded(v => !v)}
-                className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-              >
-                <Receipt size={14} style={{ color: 'var(--accent)' }} />
-                <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>Linked Invoices</p>
-                {linkedInvoices.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
-                    style={{ background: 'var(--accent)', color: '#fff' }}>
-                    {linkedInvoices.length}
-                  </span>
-                )}
-                {invExpanded
-                  ? <ChevronUp size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />
-                  : <ChevronDown size={13} style={{ color: 'var(--accent)', marginLeft: 2 }} />}
-              </button>
-              {isEditor && (
-                <button
-                  onClick={() => setShowPicklist(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                  style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                >
-                  <Receipt size={11} />
-                  {linkedInvoices.length > 0 ? 'Add' : 'Link'}
-                </button>
-              )}
-            </div>
-
-            {/* Invoice list — only rendered when expanded */}
-            {invExpanded && <div className="p-4">
-              {loadingInvs && (
-                <div className="flex items-center gap-2 py-2" style={{ color: 'var(--text-3)' }}>
-                  <Loader2 size={12} className="animate-spin" />
-                  <span className="text-xs">Loading…</span>
-                </div>
-              )}
-              {!loadingInvs && linkedInvoices.length === 0 && (
-                <div className="flex flex-col items-center py-5 gap-2">
-                  <Receipt size={28} style={{ color: 'rgba(37,99,235,0.2)' }} />
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-3)' }}>No invoices linked yet</p>
-                  {isEditor && (
-                    <button
-                      onClick={() => setShowPicklist(true)}
-                      className="mt-1 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
-                      style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)', border: '1px solid rgba(37,99,235,0.2)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.18)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(37,99,235,0.1)'}
-                    >
-                      <Receipt size={12} /> Link an invoice to this project
-                    </button>
-                  )}
-                </div>
-              )}
-              {!loadingInvs && linkedInvoices.length > 0 && (
-                <div className="space-y-1.5">
-                  {linkedInvoices.map(inv => {
-                    const isUnlinking  = unlinkingId === inv.invoice_teable_id
-                    const isRowExpanded = expandedInvId === inv.invoice_teable_id
-                    const statusColor = {
-                      'Paid': '#10b981', 'Received': '#10b981',
-                      'Partially Paid': '#f59e0b', 'Pending': '#f97316',
-                      'Overdue': '#ef4444', 'Raised': '#6366f1',
-                    }[inv.payment_status] || 'var(--text-3)'
-                    return (
-                      <div key={inv.invoice_teable_id}
-                        className="rounded-xl overflow-hidden"
-                        style={{
-                          background: 'var(--bg-input)',
-                          border: `1px solid ${isRowExpanded ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
-                          opacity: isUnlinking ? 0.5 : 1,
-                        }}>
-                        {/* Row summary — click to expand */}
-                        <button
-                          onClick={() => setExpandedInvId(isRowExpanded ? null : inv.invoice_teable_id)}
-                          className="w-full flex items-center gap-2.5 p-3 text-left"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
-                                {inv.invoice_number || '—'}
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold"
-                                style={{ background: `${statusColor}20`, color: statusColor }}>
-                                {inv.payment_status || '—'}
-                              </span>
-                              {inv.invoice_source === 'web_invoices' && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded"
-                                  style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>Web</span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--text-1)' }}>
-                            {inv.amount_raised != null ? formatInr(inv.amount_raised) : '—'}
-                          </span>
-                          {isRowExpanded
-                            ? <ChevronUp size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                            : <ChevronDown size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
-                        </button>
-                        {/* Expanded detail row */}
-                        {isRowExpanded && (
-                          <div className="px-3 pb-3 pt-0 space-y-1.5"
-                            style={{ borderTop: '1px solid var(--border)' }}>
-                            {inv.raised_date && (
-                              <div className="flex justify-between text-xs">
-                                <span style={{ color: 'var(--text-3)' }}>Date</span>
-                                <span style={{ color: 'var(--text-2)' }}>
-                                  {new Date(inv.raised_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                </span>
-                              </div>
-                            )}
-                            {inv.amount_with_tax != null && inv.amount_with_tax !== inv.amount_raised && (
-                              <div className="flex justify-between text-xs">
-                                <span style={{ color: 'var(--text-3)' }}>With Tax</span>
-                                <span className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                                  {formatInr(inv.amount_with_tax)}
-                                </span>
-                              </div>
-                            )}
-                            {inv.amount_received != null && inv.amount_received > 0 && (
-                              <div className="flex justify-between text-xs">
-                                <span style={{ color: 'var(--text-3)' }}>Received</span>
-                                <span className="font-semibold tabular-nums" style={{ color: '#10b981' }}>
-                                  {formatInr(inv.amount_received)}
-                                </span>
-                              </div>
-                            )}
-                            {isEditor && (
-                              <button onClick={() => handleUnlinkInvoice(inv.invoice_teable_id)}
-                                disabled={isUnlinking}
-                                className="flex items-center gap-1 mt-1 text-[11px] font-semibold"
-                                style={{ color: '#ef4444', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                                {isUnlinking ? <Loader2 size={11} className="animate-spin" /> : <Unlink size={11} />}
-                                Unlink invoice
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {linkedInvoices.length > 1 && (
-                    <div className="flex justify-between items-center px-1 pt-2 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>Total ({linkedInvoices.length} invoices)</span>
-                      <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                        {formatInr(linkedInvoices.reduce((s, i) => s + (i.amount_raised || 0), 0))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>}
-          </div>
-
           {/* ── Status ─────────────────────────────────────────────────── */}
           {status && (
             <div className="rounded-2xl p-4" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
@@ -618,26 +393,11 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Project</p>
                     <p style={{ color: 'var(--text-1)' }}>{project || '—'}</p>
                   </div>
-                  {assoc?.project?.name && (
-                    <div className="pt-1 space-y-2">
-                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>
-                        {related.invoices || 0} invoice · {related.projects || 0} project record
-                      </p>
-                      {insight?.signal?.detail && (
-                        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                          <strong style={{ color: 'var(--text-1)' }}>{insight.signal.title}:</strong> {insight.signal.detail}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        <button onClick={openProjects} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
-                          Open projects
-                        </button>
-                        <button onClick={openInvoices} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
-                          Open invoices
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div className="pt-1">
+                    <button onClick={openInvoices} className="btn-ghost text-xs" style={{ padding: '0.4rem 0.7rem' }}>
+                      View invoices
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -652,17 +412,6 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
         </div>
       </div>
 
-      {/* Invoice picklist modal */}
-      {showPicklist && (
-        <InvoicePicklist
-          projectId={record.id}
-          projectName={project}
-          linkedIds={linkedInvoices.map(i => i.invoice_teable_id)}
-          onLink={handleLinkInvoice}
-          onBulkDone={handleBulkLinkDone}
-          onClose={() => setShowPicklist(false)}
-        />
-      )}
     </div>
   )
 }
@@ -670,7 +419,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor, openInvoice 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Card — Card view
 // ─────────────────────────────────────────────────────────────────────────────
-function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, onInvoice, selected, onSelect, expanded, onToggle, deleting, compact = false, showClientAccents = true }) {
+function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, onSelect, expanded, onToggle, deleting, compact = false, showClientAccents = true }) {
   const f        = record.fields || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
@@ -724,12 +473,6 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, onInvoice, s
           </div>
           {/* Actions — hidden until hover */}
           <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            {isEditor && (
-              <button onClick={e => { e.stopPropagation(); onInvoice?.(record) }}
-                className="btn-icon p-1" style={{ color: 'var(--accent)' }} title="Link invoice">
-                <Receipt size={12} />
-              </button>
-            )}
             <button onClick={e => { e.stopPropagation(); onDetail(record) }}
               className="btn-icon p-1" style={{ color: 'var(--text-3)' }} title="View details">
               <Eye size={12} />
@@ -793,7 +536,7 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, onInvoice, s
 // ─────────────────────────────────────────────────────────────────────────────
 // List View Row
 // ─────────────────────────────────────────────────────────────────────────────
-function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, onInvoice, selected, onSelect, columns, deleting, compact = false, showClientAccents = true, layout }) {
+function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, selected, onSelect, columns, deleting, compact = false, showClientAccents = true, layout }) {
   const f = record.fields || {}
   const client   = f['Client']  || '?'
   const project  = f['Project'] || '?'
@@ -878,11 +621,6 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, onInvo
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-        {isEditor && (
-          <button onClick={() => onInvoice?.(record)} className="btn-icon p-1" style={{ color: 'var(--accent)' }} title="Link invoice">
-            <Receipt size={12} />
-          </button>
-        )}
         <button onClick={() => onDetail(record)} className="btn-icon p-1" style={{ color: 'var(--text-3)' }} title="View">
           <Eye size={12} />
         </button>
@@ -909,7 +647,7 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, onInvo
 // ─────────────────────────────────────────────────────────────────────────────
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
-function KanbanCard({ record, isEditor, onEdit, onDetail, onInvoice, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false }) {
+function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -957,12 +695,6 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, onInvoice, selected, o
               {sel && <Check size={8} color="#fff" strokeWidth={3} />}
             </button>
           )}
-          {isEditor && (
-            <button onClick={e => { e.stopPropagation(); onInvoice?.(record) }}
-              className="btn-icon p-0.5" style={{ color: 'var(--accent)' }} title="Link invoice">
-              <Receipt size={11} />
-            </button>
-          )}
           <button onClick={e => { e.stopPropagation(); onDetail(record) }} className="btn-icon p-0.5" style={{ color: 'var(--text-3)' }}>
             <Eye size={11} />
           </button>
@@ -988,7 +720,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, onInvoice, selected, o
   )
 }
 
-function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, onInvoice, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true }) {
+function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true }) {
   const [dragOver, setDragOver] = useState(false)
   const sc = draggable ? statusStyle(statusLabel) : { color: '#475569', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8' }
 
@@ -1040,7 +772,6 @@ function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDet
             isEditor={isEditor}
             onEdit={() => onEdit(r)}
             onDetail={onDetail}
-            onInvoice={onInvoice}
             selected={selectedIds.has(r.id)}
             onSelect={onSelect}
             updating={updatingIds.has(r.id)}
@@ -2585,7 +2316,6 @@ export default function StatusBoard() {
   const [deletingId,    setDeletingId]    = useState(null)
   const [updatingIds,   setUpdatingIds]   = useState(new Set())  // kanban DnD in-flight
   const [detailRecord,      setDetailRecord]      = useState(null)
-  const [detailOpenInvoice, setDetailOpenInvoice] = useState(false)
   const [aiModal,           setAiModal]           = useState(false)
   const [shareModal,    setShareModal]    = useState(false)
   const [manageModal,   setManageModal]   = useState(false)
@@ -2819,12 +2549,6 @@ export default function StatusBoard() {
     '--accent-dim': theme.accentDim,
     '--accent-soft': theme.accentSoft,
   }), [theme, executiveVars])
-
-  // Opens detail panel and immediately shows invoice picklist
-  function openInvoicePanel(record) {
-    setDetailOpenInvoice(true)
-    setDetailRecord(record)
-  }
 
   function toggleSelect(id) {
     setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -3405,7 +3129,6 @@ export default function StatusBoard() {
                         onEdit={() => setModal(r)}
                         onDelete={() => handleDelete(r)}
                         onDetail={setDetailRecord}
-                        onInvoice={openInvoicePanel}
                         selected={selectedIds.has(r.id)}
                         onSelect={toggleSelect}
                         expanded={allExpanded}
@@ -3444,7 +3167,6 @@ export default function StatusBoard() {
                     onEdit={() => setModal(r)}
                     onDelete={() => handleDelete(r)}
                     onDetail={setDetailRecord}
-                    onInvoice={openInvoicePanel}
                     selected={selectedIds.has(r.id)}
                     onSelect={toggleSelect}
                     columns={listColumns}
@@ -3494,8 +3216,7 @@ export default function StatusBoard() {
                       isEditor={isEditor}
                       onEdit={r => setModal(r)}
                       onDetail={setDetailRecord}
-                      onInvoice={openInvoicePanel}
-                      selectedIds={selectedIds}
+                        selectedIds={selectedIds}
                       onSelect={toggleSelect}
                       onDrop={handleKanbanDrop}
                       updatingIds={updatingIds}
@@ -3552,11 +3273,10 @@ export default function StatusBoard() {
       {detailRecord && (
         <DetailPanel
           record={detailRecord}
-          onClose={() => { setDetailRecord(null); setDetailOpenInvoice(false) }}
-          onEdit={() => { setModal(detailRecord); setDetailRecord(null); setDetailOpenInvoice(false) }}
-          onDelete={() => { handleDelete(detailRecord); setDetailRecord(null); setDetailOpenInvoice(false) }}
+          onClose={() => setDetailRecord(null)}
+          onEdit={() => { setModal(detailRecord); setDetailRecord(null) }}
+          onDelete={() => { handleDelete(detailRecord); setDetailRecord(null) }}
           isEditor={isEditor}
-          openInvoice={detailOpenInvoice}
         />
       )}
 

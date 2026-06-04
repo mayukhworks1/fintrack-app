@@ -349,6 +349,7 @@ export const api = {
       // Always fresh — no client cache for invoices (backend is also cache-free now)
       return request(`/api/invoices?${q}`, { fresh: true, cacheTtl: 0 })
     },
+    picklists: (opts = {}) => request('/api/invoices/picklists', { fresh: true, cacheTtl: 0, ...opts }),
     summary: (opts = {})         => request('/api/invoices/summary', opts),
     get:     (id, opts = {})       => request(`/api/invoices/${id}`, opts),
     create:  async (data) => {
@@ -399,25 +400,6 @@ export const api = {
         return data
       })
     },
-  },
-  associations: {
-    search: (q, limit = 10) =>
-      request(`/api/associations/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-    getRecord: (sourceTable, teableId) =>
-      request(`/api/associations/record/${encodeURIComponent(sourceTable)}/${encodeURIComponent(teableId)}`),
-    link: (data) =>
-      request('/api/associations/link', { method: 'POST', body: JSON.stringify(data) }),
-    unlink: (sourceTable, teableId) =>
-      request(`/api/associations/record/${encodeURIComponent(sourceTable)}/${encodeURIComponent(teableId)}`, { method: 'DELETE' }),
-    /** Link ALL matching records across all modules by client + project name */
-    bulkLink: (data) =>
-      request('/api/associations/bulk-link', { method: 'POST', body: JSON.stringify(data) }),
-    /** Get row counts for all association tables */
-    stats: () =>
-      request('/api/associations/stats'),
-    /** Admin: delete all association data (record_links, entities) */
-    reset: () =>
-      request('/api/associations/reset', { method: 'DELETE' }),
   },
   webInvoices: {
     // File upload bypasses the standard request() so the browser sets the
@@ -593,38 +575,6 @@ export const api = {
     updateConfig: (id, data) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteConfig: (id) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     export: (data, opts = {}) => requestBlob('/api/insights/export', { method: 'POST', body: JSON.stringify(data), signal: opts.signal, timeout: AI_TIMEOUT_MS }),
-  },
-  // ── Project ↔ Invoice associations ────────────────────────────────────
-  projectInvoices: {
-    /**
-     * Lightweight invoice list for picklist dropdowns.
-     * @param {string} source  'invoices' | 'web_invoices'
-     * @param {string} q       Search term (invoice number or project name)
-     * @param {string[]} excludeIds  teable_ids already linked (to hide from list)
-     */
-    picklist: (source = 'invoices', q = '', excludeIds = []) => {
-      const params = new URLSearchParams({ source })
-      if (q)                    params.set('q', q)
-      if (excludeIds?.length)   params.set('exclude', excludeIds.join(','))
-      return request(`/api/project-invoices/picklist?${params}`)
-    },
-    /** All invoices currently linked to a project. Cached 120 s server-side. */
-    list:   (projectId, opts = {}) =>
-      request(`/api/project-invoices/${encodeURIComponent(projectId)}`, opts),
-    /** Link a single invoice to a project. */
-    link:   (projectId, invoiceTId, source = 'invoices', note = '') =>
-      request(`/api/project-invoices/${encodeURIComponent(projectId)}`, {
-        method: 'POST',
-        body: JSON.stringify({ invoice_teable_id: invoiceTId, invoice_source: source, note: note || undefined }),
-      }),
-    /** Soft-delete the association (kept in DB for audit). */
-    unlink: (projectId, invoiceId) =>
-      request(`/api/project-invoices/${encodeURIComponent(projectId)}/${encodeURIComponent(invoiceId)}`, {
-        method: 'DELETE',
-      }),
-    /** Append-only audit trail for a project's invoice associations. */
-    log: (projectId, limit = 50) =>
-      request(`/api/project-invoices/${encodeURIComponent(projectId)}/log?limit=${limit}`),
   },
   health: () => request('/health', {}, 0),
   auth: {

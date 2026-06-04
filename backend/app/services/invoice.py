@@ -17,6 +17,7 @@ from ..db.postgres import get_pool
 INVOICE_FIELD_IDS = {
     "Invoice Number":   "fldKSNWW3OwqTtsWLqD",
     "Project":          "fldavbndGaQVJZ4spJs",
+    "Client Name":      "fldVnXFCaHHxqsp6AHq",   # single-select: Birla Open Minds, Maitrimetal, Innovine
     "Category":         "flduUcIbAvyk4LeYmDB",
     "Description":      "fldzeYOWTfJpQMIcF54",
     "Milestone":        "fldInxvxnEH7VNkkBsN",
@@ -32,10 +33,13 @@ INVOICE_FIELD_IDS = {
     "Invoice PDF":      "fldErRKNwXVAsnUzWCH",
     "Days To Clear":    "fldZcfdmoKjHRLDWY6o",   # READ-ONLY
     "Speed":            "fldY8J44ZaQi6DC1oW8",   # READ-ONLY
-    "Agening (Days)":   "fld0m8lwVX4wyQeJrOG",   # formula today; writable number is preferred
+    "Agening (Days)":   "fld0m8lwVX4wyQeJrOG",
     "Next followup":    "fldr11YNIf7EPSPObUF",
     "Outstanding Amount": "fldn4mfpKXNQxSnDfc6", # READ-ONLY
 }
+
+# Single-select fields whose options we expose as picklists
+INVOICE_PICKLIST_FIELDS = {"Project", "Client Name", "Category", "Milestone", "Raised By", "Payment Status"}
 
 # ── Cache config ───────────────────────────────────────────────────────────
 # All entries live in the shared ../utils/cache singleton, namespaced by
@@ -104,6 +108,20 @@ class InvoiceService:
     @property
     def _field_url(self):
         return f"{self.base_url}/api/table/{self.table_id}/field"
+
+    async def get_picklists(self) -> dict[str, Any]:
+        """Return single-select options for Project, Client Name, Category, etc. directly from Teable schema."""
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(self._field_url, headers=self._headers)
+            res.raise_for_status()
+            fields = res.json()
+        result = {}
+        for field in fields:
+            name = field.get("name", "")
+            if name in INVOICE_PICKLIST_FIELDS and field.get("type") == "singleSelect":
+                choices = field.get("options", {}).get("choices", [])
+                result[name] = [c["name"] for c in choices if c.get("name")]
+        return result
 
     def _system_actor(self, path: str) -> dict[str, Any]:
         actor = empty_actor()
