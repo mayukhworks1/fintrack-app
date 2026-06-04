@@ -235,15 +235,16 @@ export const api = {
       const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
       Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/projects?${q}`, { fresh, cacheTtl })
+      // Always fresh — no cache (backend reads direct from Teable)
+      return request(`/api/projects?${q}`, { fresh: true, cacheTtl: 0 })
     },
-    get:     (id, opts = {})       => request(`/api/projects/${id}`, opts),
+    get:     (id, opts = {})       => request(`/api/projects/${id}`, { fresh: true, cacheTtl: 0, ...opts }),
     create:  (data)     => request('/api/projects',     { method: 'POST',   body: JSON.stringify(data) }),
     update:  (id, data) => request(`/api/projects/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete:  (id)       => request(`/api/projects/${id}`, { method: 'DELETE' }),
-    search:  (q, limit = 20) => request(`/api/projects/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-    summary: (opts = {})         => request('/api/projects/summary', opts),
-    names:   (opts = {})         => request('/api/projects/names', opts),
+    search:  (q, limit = 20) => request(`/api/projects/search?q=${encodeURIComponent(q)}&limit=${limit}`, { fresh: true, cacheTtl: 0 }),
+    summary: (opts = {})         => request('/api/projects/summary', { fresh: true, cacheTtl: 0, ...opts }),
+    names:   (opts = {})         => request('/api/projects/names', { fresh: true, cacheTtl: 0, ...opts }),
   },
   ai: {
     chat:     (message, history = [], opts = {}) =>
@@ -345,7 +346,8 @@ export const api = {
       const { fresh, cacheTtl, ...queryParams } = params
       const q = new URLSearchParams()
       Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      return request(`/api/invoices?${q}`, { fresh, cacheTtl })
+      // Always fresh — no client cache for invoices (backend is also cache-free now)
+      return request(`/api/invoices?${q}`, { fresh: true, cacheTtl: 0 })
     },
     summary: (opts = {})         => request('/api/invoices/summary', opts),
     get:     (id, opts = {})       => request(`/api/invoices/${id}`, opts),

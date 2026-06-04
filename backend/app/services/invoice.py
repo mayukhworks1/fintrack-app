@@ -339,40 +339,37 @@ class InvoiceService:
         order_by: str = "Raised Date",
         order: str = "desc",
     ) -> dict:
-        cache_key = f"invoice:list:{status}:{project}:{limit}:{skip}:{order_by}:{order}"
+        # No in-process cache — always read live from Teable so the UI
+        # reflects edits (payment, dates, follow-ups) instantly.
+        params: dict[str, Any] = {
+            "fieldKeyType": "name",
+            "take": limit,
+            "skip": skip,
+        }
+        filter_set = []
+        if status:
+            filter_set.append({
+                "fieldId": INVOICE_FIELD_IDS["Payment Status"],
+                "operator": "is",
+                "value": status,
+            })
+        if project:
+            filter_set.append({
+                "fieldId": INVOICE_FIELD_IDS["Project"],
+                "operator": "is",
+                "value": project,
+            })
+        if filter_set:
+            params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
+        field_id = INVOICE_FIELD_IDS.get(order_by, INVOICE_FIELD_IDS["Raised Date"])
+        params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
 
-        async def _load():
-            params: dict[str, Any] = {
-                "fieldKeyType": "name",
-                "take": limit,
-                "skip": skip,
-            }
-            filter_set = []
-            if status:
-                filter_set.append({
-                    "fieldId": INVOICE_FIELD_IDS["Payment Status"],
-                    "operator": "is",
-                    "value": status,
-                })
-            if project:
-                filter_set.append({
-                    "fieldId": INVOICE_FIELD_IDS["Project"],
-                    "operator": "is",
-                    "value": project,
-                })
-            if filter_set:
-                params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
-            field_id = INVOICE_FIELD_IDS.get(order_by, INVOICE_FIELD_IDS["Raised Date"])
-            params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
-
-            async with httpx.AsyncClient(timeout=20) as client:
-                res = await client.get(self._record_url, params=params, headers=self._headers)
-                res.raise_for_status()
-                data = res.json()
-            records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
-            return {"records": records, "total": data.get("total", 0)}
-
-        return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
+        async with httpx.AsyncClient(timeout=20) as client:
+            res = await client.get(self._record_url, params=params, headers=self._headers)
+            res.raise_for_status()
+            data = res.json()
+        records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
+        return {"records": records, "total": data.get("total", 0)}
 
     # ── Fetch all records (for summary / AI) ──────────────────────────────
     async def get_all_invoices(self) -> list[dict]:

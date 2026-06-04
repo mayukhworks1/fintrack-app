@@ -1294,16 +1294,17 @@ export default function Invoices() {
   const fetchSummary = useCallback((opts = {}) => api.invoices.summary(opts), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
 
-  /* ── Fetch records — refetches when server-side filters/sort change ── */
+  /* ── Fetch ALL records from Teable (no server-side status/project filter) ──
+   * Filtering by status/project happens client-side in scopedRecords so that
+   * dashboard widgets (Last 3 Months, Recent Projects) always use the full
+   * dataset and don't show ₹0 for months that have paid/non-matching invoices. */
   const fetchRecords = useCallback((opts = {}) =>
     api.invoices.list({
-      status:   statusFilter  || undefined,
-      project:  projectFilter || undefined,
-      limit:    500,
+      limit:    1000,
       order_by: sortCol,
       order:    sortDir,
       ...opts,
-    }), [statusFilter, projectFilter, sortCol, sortDir])
+    }), [sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const [recordsState, setRecordsState] = useState([])
@@ -1474,6 +1475,9 @@ export default function Invoices() {
     const q = deferredSearch.trim().toLowerCase()
     return allRecords.filter((r) => {
       const f = r.fields || {}
+      // Server-side filters moved client-side (API now fetches all records)
+      if (statusFilter && f['Payment Status'] !== statusFilter) return false
+      if (projectFilter && f['Project'] !== projectFilter) return false
       if (billingFilter === 'retainer' && !isRetainerCategory(f['Category'])) return false
       if (billingFilter === 'project' && isRetainerCategory(f['Category'])) return false
       if (categoryFilter && f['Category'] !== categoryFilter) return false
@@ -1524,7 +1528,9 @@ export default function Invoices() {
     hasDocsOnly,
     monthFilter,
     overdueOnly,
+    projectFilter,
     raisedByFilter,
+    statusFilter,
     todayIso,
   ])
 
@@ -1635,6 +1641,9 @@ export default function Invoices() {
   const lastThreeMonthBalance = useMemo(() => {
     const current = currentMonthKey()
     const keys = [shiftMonthKey(current, -2), shiftMonthKey(current, -1), current]
+    // Use allRecords (not scopedRecords) so this widget always shows complete
+    // monthly totals regardless of any status/project/category filter the user
+    // has active on the table view.
     return keys.map((key, index) => {
       let base = 0
       let gross = 0
@@ -1643,7 +1652,7 @@ export default function Invoices() {
       let deduction = 0
       let outstanding = 0
       let invoiceCount = 0
-      for (const record of scopedRecords) {
+      for (const record of allRecords) {
         const fields = record.fields || {}
         if (monthKey(fields['Raised Date']) === key) {
           const parts = invoiceAmountParts(fields)
@@ -1659,7 +1668,7 @@ export default function Invoices() {
       const previous = index > 0 ? keys[index - 1] : ''
       let previousGross = 0
       if (previous) {
-        for (const record of scopedRecords) {
+        for (const record of allRecords) {
           const fields = record.fields || {}
           if (monthKey(fields['Raised Date']) === previous) previousGross += invoiceAmountParts(fields).gross
         }
@@ -1670,14 +1679,16 @@ export default function Invoices() {
       const collectionRate = gross > 0 ? Math.min(100, Math.max(0, (received / gross) * 100)) : 0
       return { key, label: shortMonthLabel(key), base, gross, gst, received, deduction, outstanding, invoiceCount, collectionRate, change }
     })
-  }, [scopedRecords])
+  }, [allRecords])
   const maxMonthlyBalanceMagnitude = useMemo(
     () => Math.max(1, ...lastThreeMonthBalance.map((entry) => entry.gross)),
     [lastThreeMonthBalance]
   )
   const recentProjectCards = useMemo(() => {
+    // Use allRecords so "Recent Projects" always shows all-time project totals
+    // regardless of any status/date/category filter active on the table.
     const buckets = new Map()
-    for (const record of scopedRecords) {
+    for (const record of allRecords) {
       const fields = record.fields || {}
       const project = fields.Project || 'Unassigned'
       const current = buckets.get(project) || { project, base: 0, gross: 0, gst: 0, received: 0, deduction: 0, outstanding: 0, count: 0 }
@@ -1698,7 +1709,7 @@ export default function Invoices() {
       }))
       .sort((a, b) => (b.outstanding - a.outstanding) || (b.gross - a.gross))
       .slice(0, 4)
-  }, [scopedRecords])
+  }, [allRecords])
   const followupsDueCount = useMemo(
     () => records.filter((r) => {
       const raw = r.fields?.['Next followup']

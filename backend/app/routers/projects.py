@@ -34,14 +34,12 @@ async def list_projects(
     skip: int = Query(0),
     _role: str = Depends(require_auth),
 ):
+    # No cache — read directly from Teable so new projects and status changes
+    # appear immediately without any stale-window.
     teable = get_teable()
     associations = get_associations()
     resolved = resolve_status(status) if status else None
-    cache_key = f"projects:list:{status}:{client}:{order_by}:{order_dir}:{limit}:{skip}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
-    records = await teable.list_records_from_pg(
+    records = await teable.list_records(
         status=resolved,
         client=client,
         order_by_field=order_by,
@@ -49,19 +47,8 @@ async def list_projects(
         take=limit,
         skip=skip,
     )
-    if records is None:
-        records = await teable.list_records(
-            status=resolved,
-            client=client,
-            order_by_field=order_by,
-            order_dir=order_dir,
-            take=limit,
-            skip=skip,
-        )
     records = await associations.hydrate_records("projects", records)
-    result = {"records": records, "count": len(records)}
-    await cache_set(cache_key, result, _PROJECTS_LIST_TTL)
-    return result
+    return {"records": records, "count": len(records)}
 
 
 @router.get("/summary")
