@@ -49,6 +49,13 @@ AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
 AGING_FORMULA_FIELD = "Agening (Days)"
 AGING_FIELD_META_TTL = 60
 
+def _teable_error(res: httpx.Response) -> str:
+    try:
+        payload = res.json()
+    except Exception:
+        payload = res.text
+    return f"Teable {res.status_code}: {payload}"
+
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
     cache.bust(prefix="invoice:")
@@ -402,7 +409,10 @@ class InvoiceService:
         body = {"fieldKeyType": "name", "records": [{"fields": _clean_fields(fields)}]}
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.post(self._record_url, json=body, headers=self._headers)
-            res.raise_for_status()
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise RuntimeError(_teable_error(res)) from exc
             _bust_invoice_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
@@ -424,7 +434,11 @@ class InvoiceService:
         }
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
-            res.raise_for_status()
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                safe_fields = sorted((body.get("record") or {}).get("fields", {}).keys())
+                raise RuntimeError(f"{_teable_error(res)}; fields={safe_fields}") from exc
             _bust_invoice_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
             await self.touch_aging_for_record(

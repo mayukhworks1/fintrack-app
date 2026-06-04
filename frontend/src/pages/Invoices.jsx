@@ -107,6 +107,46 @@ const normalizeInvoiceScalarForm = (form) => INVOICE_SCALAR_FORM_KEYS.reduce((ac
   return acc
 }, {})
 
+const invoiceAmountParts = (fields = {}) => {
+  const base = Number(fields['Amount Raised'] || 0)
+  const gross = Number(fields['Amount with Tax'] || base)
+  const received = Number(fields['Amount Received'] || 0)
+  const status = String(fields['Payment Status'] || '').trim()
+  const isPaid = status === 'Paid'
+  const gst = Math.max(0, gross - base)
+  const variance = Math.max(0, gross - received)
+  return {
+    base,
+    gross,
+    gst,
+    received,
+    deduction: isPaid ? variance : 0,
+    outstanding: isPaid || status === 'Cancelled' ? 0 : variance,
+    isPaid,
+  }
+}
+
+const buildInvoiceScalarPayload = (form, { isEdit = false, paymentOnly = false } = {}) => ({
+  invoice_number:   form.invoice_number,
+  project:          form.project,
+  category:         form.category,
+  description:      form.description,
+  milestone:        form.milestone,
+  raised_by:        form.raised_by,
+  payment_status:   form.payment_status,
+  remark:           form.remark,
+  amount_raised:    form.amount_raised !== '' ? Number(form.amount_raised) : undefined,
+  amount_with_tax:  form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
+  amount_received:  form.amount_received !== '' ? Number(form.amount_received) : undefined,
+  raised_date:      form.raised_date ? `${form.raised_date}T00:00:00.000Z` : (isEdit ? null : undefined),
+  cleared_date:     form.cleared_date ? `${form.cleared_date}T00:00:00.000Z` : (isEdit ? null : undefined),
+  next_followup:    paymentOnly
+    ? null
+    : form.next_followup
+      ? `${form.next_followup}T00:00:00.000Z`
+      : (isEdit ? null : undefined),
+})
+
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
@@ -496,6 +536,28 @@ function SelectInput({ value, onChange, options, placeholder = 'Select…', comp
   )
 }
 
+function SuggestInput({ value, onChange, options = [], placeholder = 'Type or select…', listId }) {
+  const cleanOptions = useMemo(
+    () => [...new Set(options.filter(Boolean).map(String))].sort((a, b) => a.localeCompare(b)),
+    [options]
+  )
+  return (
+    <div className="relative">
+      <input
+        className="input"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        list={listId}
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {cleanOptions.map(o => <option key={o} value={o} />)}
+      </datalist>
+    </div>
+  )
+}
+
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
 function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, onLink, isEditor, onPreview }) {
   if (!invoice) return null
@@ -770,13 +832,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
   async function persistDraftRecord() {
     if (currentRecordId) return currentRecordId
     const payload = {
-      ...form,
-      amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
-      amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
-      amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
-      raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : undefined,
-      cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
-      next_followup:   form.next_followup   ? `${form.next_followup}T00:00:00.000Z` : undefined,
+      ...buildInvoiceScalarPayload(form),
       payment_status:  form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date) ? 'Pending' : form.payment_status,
       remark: form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date)
         ? [form.remark, 'Draft created for attachment upload. Complete paid details before final save.'].filter(Boolean).join(' ')
@@ -808,19 +864,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
     }
     setSaving(true); setError('')
     try {
-      const payload = {
-        ...form,
-        amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
-        amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
-        amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
-        raised_date:     form.raised_date     ? `${form.raised_date}T00:00:00.000Z`   : (isEdit ? null : undefined),
-        cleared_date:    form.cleared_date    ? `${form.cleared_date}T00:00:00.000Z`  : (isEdit ? null : undefined),
-        next_followup:   paymentOnly
-          ? null
-          : form.next_followup
-            ? `${form.next_followup}T00:00:00.000Z`
-            : (isEdit ? null : undefined),
-      }
+      const payload = buildInvoiceScalarPayload(form, { isEdit, paymentOnly })
       const saved = currentRecordId ? await api.invoices.update(currentRecordId, payload) : await api.invoices.create(payload)
       setInitialForm(form)
       onSaved(saved)
@@ -1026,10 +1070,10 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Project">
-                  <SelectInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Select project…" />
+                  <SuggestInput value={form.project} onChange={set('project')} options={projectOptions} placeholder="Type or select project..." listId="invoice-project-options" />
                 </Field>
                 <Field label="Category">
-                  <SelectInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Select…" />
+                  <SuggestInput value={form.category} onChange={set('category')} options={categoryOptions} placeholder="Type or select category..." listId="invoice-category-options" />
                 </Field>
               </div>
               <div>
@@ -1057,10 +1101,10 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Milestone">
-                  <SelectInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Select…" />
+                  <SuggestInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Type or select milestone..." listId="invoice-milestone-options" />
                 </Field>
                 <Field label="Raised By">
-                  <SelectInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Select…" />
+                  <SuggestInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Type or select owner..." listId="invoice-raised-by-options" />
                 </Field>
               </div>
               <Field label="Description">
@@ -1568,37 +1612,43 @@ export default function Invoices() {
     const current = currentMonthKey()
     const keys = [shiftMonthKey(current, -2), shiftMonthKey(current, -1), current]
     return keys.map((key, index) => {
-      let raised = 0
+      let base = 0
+      let gross = 0
+      let gst = 0
       let received = 0
+      let deduction = 0
+      let outstanding = 0
       let invoiceCount = 0
       for (const record of scopedRecords) {
         const fields = record.fields || {}
         if (monthKey(fields['Raised Date']) === key) {
-          raised += Number(fields['Amount Raised'] || 0)
+          const parts = invoiceAmountParts(fields)
+          base += parts.base
+          gross += parts.gross
+          gst += parts.gst
+          received += parts.received
+          deduction += parts.deduction
+          outstanding += parts.outstanding
           invoiceCount += 1
         }
-        if (monthKey(fields['Cleared Date']) === key) {
-          received += Number(fields['Amount Received'] || fields['Amount Raised'] || 0)
-        }
       }
-      const balance = received - raised
       const previous = index > 0 ? keys[index - 1] : ''
-      let previousBalance = 0
+      let previousGross = 0
       if (previous) {
         for (const record of scopedRecords) {
           const fields = record.fields || {}
-          if (monthKey(fields['Cleared Date']) === previous) previousBalance += Number(fields['Amount Received'] || fields['Amount Raised'] || 0)
-          if (monthKey(fields['Raised Date']) === previous) previousBalance -= Number(fields['Amount Raised'] || 0)
+          if (monthKey(fields['Raised Date']) === previous) previousGross += invoiceAmountParts(fields).gross
         }
       }
-      const change = previous && previousBalance
-        ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100
+      const change = previous && previousGross
+        ? ((gross - previousGross) / Math.abs(previousGross)) * 100
         : null
-      return { key, label: shortMonthLabel(key), raised, received, balance, invoiceCount, change }
+      const collectionRate = gross > 0 ? Math.min(100, Math.max(0, (received / gross) * 100)) : 0
+      return { key, label: shortMonthLabel(key), base, gross, gst, received, deduction, outstanding, invoiceCount, collectionRate, change }
     })
   }, [scopedRecords])
   const maxMonthlyBalanceMagnitude = useMemo(
-    () => Math.max(1, ...lastThreeMonthBalance.map((entry) => Math.abs(entry.balance))),
+    () => Math.max(1, ...lastThreeMonthBalance.map((entry) => entry.gross)),
     [lastThreeMonthBalance]
   )
   const recentProjectCards = useMemo(() => {
@@ -1606,21 +1656,23 @@ export default function Invoices() {
     for (const record of scopedRecords) {
       const fields = record.fields || {}
       const project = fields.Project || 'Unassigned'
-      const current = buckets.get(project) || { project, raised: 0, received: 0, outstanding: 0, count: 0 }
-      const raised = Number(fields['Amount Raised'] || 0)
-      const received = Number(fields['Amount Received'] || 0)
-      current.raised += raised
-      current.received += received
-      current.outstanding += Math.max(0, raised - received)
+      const current = buckets.get(project) || { project, base: 0, gross: 0, gst: 0, received: 0, deduction: 0, outstanding: 0, count: 0 }
+      const parts = invoiceAmountParts(fields)
+      current.base += parts.base
+      current.gross += parts.gross
+      current.gst += parts.gst
+      current.received += parts.received
+      current.deduction += parts.deduction
+      current.outstanding += parts.outstanding
       current.count += 1
       buckets.set(project, current)
     }
     return [...buckets.values()]
       .map((entry) => ({
         ...entry,
-        progress: entry.raised > 0 ? Math.max(0, Math.min(100, Math.round((entry.received / entry.raised) * 100))) : 0,
+        progress: entry.gross > 0 ? Math.max(0, Math.min(100, Math.round((entry.received / entry.gross) * 100))) : 0,
       }))
-      .sort((a, b) => (b.outstanding - a.outstanding) || (b.raised - a.raised))
+      .sort((a, b) => (b.outstanding - a.outstanding) || (b.gross - a.gross))
       .slice(0, 4)
   }, [scopedRecords])
   const followupsDueCount = useMemo(
@@ -2060,12 +2112,12 @@ export default function Invoices() {
           <section className="invoice-runey-card invoice-month-balance-card" aria-label="Last 3 months invoice balance">
             <div>
               <h2>Last 3 Months</h2>
-              <p>Monthly balance</p>
+              <p>GST-aware receivables</p>
             </div>
             <div className="invoice-month-bars">
               {lastThreeMonthBalance.map((entry) => {
-                const height = Math.max(12, Math.round((Math.abs(entry.balance) / maxMonthlyBalanceMagnitude) * 112))
-                const isPositive = entry.balance >= 0
+                const height = Math.max(12, Math.round((entry.gross / maxMonthlyBalanceMagnitude) * 112))
+                const isSettled = entry.outstanding <= 0 && entry.gross > 0
                 return (
                   <button
                     key={entry.key}
@@ -2076,7 +2128,7 @@ export default function Invoices() {
                   >
                     <span className="invoice-month-bar-wrap" aria-hidden="true">
                       <span
-                        className={clsx('invoice-month-bar', isPositive ? 'is-positive' : 'is-negative')}
+                        className={clsx('invoice-month-bar', isSettled ? 'is-positive' : 'is-negative')}
                         style={{
                           height: `${height}px`,
                           width: entry.invoiceCount > 1 ? '4.8rem' : '3.6rem',
@@ -2084,9 +2136,17 @@ export default function Invoices() {
                       />
                     </span>
                     <span className="invoice-month-label">{entry.label}</span>
-                    <strong className="invoice-month-value">{entry.balance === 0 ? '-' : fmt(entry.balance)}</strong>
+                    <strong className="invoice-month-value">{entry.gross === 0 ? '-' : fmt(entry.gross)}</strong>
+                    <small className="invoice-month-subvalue">
+                      {entry.received > 0 ? `${fmt(entry.received)} received` : `${fmt(entry.base)} raised`}
+                    </small>
+                    <span className="invoice-month-mini-grid">
+                      <span>GST {fmt(entry.gst)}</span>
+                      <span>Open {fmt(entry.outstanding)}</span>
+                      <span>TDS {fmt(entry.deduction)}</span>
+                    </span>
                     <em className={clsx('invoice-month-change', entry.change == null ? 'is-neutral' : entry.change >= 0 ? 'is-up' : 'is-down')}>
-                      {entry.change == null ? 'baseline' : `${entry.change >= 0 ? 'up' : 'down'} ${Math.abs(entry.change).toFixed(0)}%`}
+                      {entry.change == null ? `${entry.collectionRate.toFixed(0)}% collected` : `${entry.change >= 0 ? 'up' : 'down'} ${Math.abs(entry.change).toFixed(0)}%`}
                     </em>
                   </button>
                 )
@@ -2128,12 +2188,12 @@ export default function Invoices() {
                     <span className="invoice-project-avatar">{projectInitials(entry.project)}</span>
                     <span className="invoice-project-meta">
                       <strong>{entry.project}</strong>
-                      <small>{entry.count} invoice{entry.count === 1 ? '' : 's'} | {fmt(entry.outstanding)} open</small>
+                      <small>{entry.count} invoice{entry.count === 1 ? '' : 's'} | {fmt(entry.outstanding)} open | {fmt(entry.deduction)} TDS</small>
                     </span>
                     <span className="invoice-project-progress" aria-hidden="true">
                       <span style={{ width: `${entry.progress}%` }} />
                     </span>
-                    <span className="invoice-project-amount">{fmt(entry.raised)}</span>
+                    <span className="invoice-project-amount">{fmt(entry.gross)}</span>
                     <span className="invoice-project-percent">{entry.progress}%</span>
                   </button>
                 )

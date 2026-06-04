@@ -46,6 +46,13 @@ logger = logging.getLogger("fintrack.web_invoices")
 def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
 
+def _teable_error(res: httpx.Response) -> str:
+    try:
+        payload = res.json()
+    except Exception:
+        payload = res.text
+    return f"Teable {res.status_code}: {payload}"
+
 AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
 AGING_FORMULA_FIELD = "Agening (Days)"
 AGING_FIELD_META_TTL = 60
@@ -360,7 +367,10 @@ class WebInvoiceService:
         body = {"fieldKeyType": "name", "records": [{"fields": _clean_fields(fields)}]}
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.post(self._record_url, json=body, headers=self._headers)
-            res.raise_for_status()
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise RuntimeError(_teable_error(res)) from exc
             _bust_web_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
@@ -375,10 +385,17 @@ class WebInvoiceService:
 
     async def update_invoice(self, record_id: str, fields: dict) -> dict:
         url = f"{self._record_url}/{record_id}"
-        body = {"fieldKeyType": "name", "record": {"fields": _clean_fields(fields)}}
+        body = {
+            "fieldKeyType": "name",
+            "record": {"fields": _clean_fields(fields, allow_null_fields={"Raised Date", "Cleared Date", "Next followup"})},
+        }
         async with httpx.AsyncClient(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
-            res.raise_for_status()
+            try:
+                res.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                safe_fields = sorted((body.get("record") or {}).get("fields", {}).keys())
+                raise RuntimeError(f"{_teable_error(res)}; fields={safe_fields}") from exc
             _bust_web_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
             await self.touch_aging_for_record(
@@ -656,8 +673,9 @@ class WebInvoiceService:
 
 _READ_ONLY = {"Days To Clear", "Speed", "Agening (Days)", "Outstanding Amount"}
 
-def _clean_fields(fields: dict) -> dict:
+def _clean_fields(fields: dict, allow_null_fields: set[str] | None = None) -> dict:
+    allow_null = allow_null_fields or set()
     return {
         k: v for k, v in fields.items()
-        if k not in _READ_ONLY and v is not None and v != ""
+        if k not in _READ_ONLY and ((v is not None and v != "") or (k in allow_null and v is None))
     }

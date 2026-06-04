@@ -75,6 +75,14 @@ function bustInvoiceReads() {
   clientCacheBust('/api/invoices')
 }
 
+function bustWebInvoiceReads() {
+  clientCacheBust('/api/web-invoices')
+}
+
+function bustWebProjectReads() {
+  clientCacheBust('/api/web-projects')
+}
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
@@ -383,7 +391,9 @@ export const api = {
           e.status = res.status
           throw e
         }
-        return res.json()
+        const data = await res.json()
+        bustWebInvoiceReads()
+        return data
       })
     },
   },
@@ -424,7 +434,9 @@ export const api = {
           e.status = res.status
           throw e
         }
-        return res.json()
+        const data = await res.json()
+        bustWebInvoiceReads()
+        return data
       })
     },
     list:    (params = {}) => {
@@ -435,15 +447,31 @@ export const api = {
     },
     summary:  (opts = {})          => request('/api/web-invoices/summary', opts),
     get:      (id, opts = {})        => request(`/api/web-invoices/${id}`, opts),
-    create:   (data)      => request('/api/web-invoices', { method: 'POST',   body: JSON.stringify(data) }),
-    update:   (id, data)  => request(`/api/web-invoices/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
-    delete:   (id)        => request(`/api/web-invoices/${id}`, { method: 'DELETE' }),
+    create:   async (data) => {
+      const result = await request('/api/web-invoices', { method: 'POST', body: JSON.stringify(data) })
+      bustWebInvoiceReads()
+      return result
+    },
+    update:   async (id, data) => {
+      const result = await request(`/api/web-invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+      bustWebInvoiceReads()
+      return result
+    },
+    delete:   async (id) => {
+      const result = await request(`/api/web-invoices/${id}`, { method: 'DELETE' })
+      bustWebInvoiceReads()
+      return result
+    },
     clientNames: ()              => request('/api/web-invoices/client-names'),
     picklists: {
       get:    ()                   => request('/api/web-invoices/picklists'),
-      add:    (fieldName, option)  => request(`/api/web-invoices/picklists/${encodeURIComponent(fieldName)}`, {
-        method: 'POST', body: JSON.stringify({ option }),
-      }),
+      add:    async (fieldName, option) => {
+        const result = await request(`/api/web-invoices/picklists/${encodeURIComponent(fieldName)}`, {
+          method: 'POST', body: JSON.stringify({ option }),
+        })
+        bustWebInvoiceReads()
+        return result
+      },
     },
   },
   webProjects: {
@@ -456,9 +484,24 @@ export const api = {
     names:   (opts = {})         => request('/api/web-projects/names', opts),
     summary: (opts = {})         => request('/api/web-projects/summary', opts),
     get:     (id, opts = {})       => request(`/api/web-projects/${id}`, opts),
-    create:  (data)     => request('/api/web-projects', { method: 'POST',   body: JSON.stringify(data) }),
-    update:  (id, data) => request(`/api/web-projects/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
-    delete:  (id)       => request(`/api/web-projects/${id}`, { method: 'DELETE' }),
+    create:  async (data) => {
+      const result = await request('/api/web-projects', { method: 'POST', body: JSON.stringify(data) })
+      bustWebProjectReads()
+      bustWebInvoiceReads()
+      return result
+    },
+    update:  async (id, data) => {
+      const result = await request(`/api/web-projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+      bustWebProjectReads()
+      bustWebInvoiceReads()
+      return result
+    },
+    delete:  async (id) => {
+      const result = await request(`/api/web-projects/${id}`, { method: 'DELETE' })
+      bustWebProjectReads()
+      bustWebInvoiceReads()
+      return result
+    },
     resources: {
       listAll: (params = {})    => { const q = new URLSearchParams(params).toString(); return request(`/api/web-resources?${q}`) },
       list:    (projectId)      => request(`/api/web-projects/${projectId}/resources?bust=true`),

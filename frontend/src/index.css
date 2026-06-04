@@ -1016,17 +1016,17 @@ html.dark .main-app-theme {
   .invoice-runey-card {
     min-height: 15rem;
     border-radius: 1.6rem;
-    border: 1px solid rgba(255,255,255,0.07);
+    border: 1px solid var(--card-border);
     background:
-      radial-gradient(circle at 82% 4%, rgba(255,255,255,0.06), transparent 28%),
-      linear-gradient(180deg, #1a1a1a 0%, #151515 100%);
-    color: #f5f5f2;
-    box-shadow: 0 22px 54px rgba(0,0,0,0.16);
+      radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 30%),
+      linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, var(--bg-input) 4%) 0%, var(--card-bg) 100%);
+    color: var(--text-1);
+    box-shadow: 0 18px 44px rgba(32,26,18,0.075);
     padding: 1.35rem;
   }
 
   .invoice-runey-card h2 {
-    color: #f6f4ee;
+    color: var(--text-1);
     font-size: 1.15rem;
     font-weight: 900;
     letter-spacing: -0.03em;
@@ -1035,7 +1035,7 @@ html.dark .main-app-theme {
 
   .invoice-runey-card p,
   .invoice-runey-card small {
-    color: rgba(245,245,242,0.58);
+    color: var(--text-3);
   }
 
   .invoice-runey-card > div:first-child > p,
@@ -1066,7 +1066,7 @@ html.dark .main-app-theme {
   }
 
   .invoice-month-bar-item:hover {
-    background: rgba(255,255,255,0.055);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
     transform: translateY(-2px);
   }
 
@@ -1085,26 +1085,53 @@ html.dark .main-app-theme {
   }
 
   .invoice-month-bar.is-positive {
-    background: linear-gradient(180deg, rgba(135,229,93,0.95), rgba(135,229,93,0.72));
+    background: linear-gradient(180deg, rgba(135,229,93,0.95), rgba(100,190,68,0.78));
   }
 
   .invoice-month-bar.is-negative {
-    background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.07));
-    border: 1px solid rgba(255,255,255,0.12);
+    background: linear-gradient(180deg, rgba(244,159,51,0.76), rgba(244,159,51,0.24));
+    border: 1px solid rgba(244,159,51,0.22);
   }
 
   .invoice-month-label {
-    color: rgba(245,245,242,0.58);
+    color: var(--text-3);
     font-size: 0.75rem;
     font-weight: 700;
   }
 
   .invoice-month-value {
     max-width: 100%;
-    color: #f7f7f3;
+    color: var(--text-1);
     font-size: 0.82rem;
     font-weight: 900;
     font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .invoice-month-subvalue {
+    max-width: 100%;
+    color: var(--text-3);
+    font-size: 0.68rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .invoice-month-mini-grid {
+    display: grid;
+    gap: 0.15rem;
+    width: 100%;
+    max-width: 7.5rem;
+    color: var(--text-3);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .invoice-month-mini-grid span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1129,8 +1156,8 @@ html.dark .main-app-theme {
   }
 
   .invoice-month-change.is-neutral {
-    background: rgba(255,255,255,0.08);
-    color: rgba(245,245,242,0.58);
+    background: var(--bg-input);
+    color: var(--text-3);
   }
 
   .invoice-runey-card-head {
@@ -1141,14 +1168,14 @@ html.dark .main-app-theme {
   }
 
   .invoice-runey-card-head button {
-    color: rgba(245,245,242,0.58);
+    color: var(--text-3);
     font-size: 0.78rem;
     font-weight: 800;
     transition: color 160ms ease;
   }
 
   .invoice-runey-card-head button:hover {
-    color: #f7f7f3;
+    color: var(--text-1);
   }
 
   .invoice-recent-project-list {
@@ -1170,7 +1197,7 @@ html.dark .main-app-theme {
 
   .invoice-recent-project-row:hover,
   .invoice-recent-project-row.is-active {
-    background: rgba(255,255,255,0.06);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
     transform: translateX(2px);
   }
 
@@ -1181,8 +1208,8 @@ html.dark .main-app-theme {
     width: 3rem;
     height: 3rem;
     border-radius: 0.85rem;
-    background: #2b2b2b;
-    color: #f5f5f2;
+    background: var(--bg-input);
+    color: var(--text-1);
     font-size: 0.85rem;
     font-weight: 900;
   }
@@ -1200,7 +1227,7 @@ html.dark .main-app-theme {
   }
 
   .invoice-project-meta strong {
-    color: #f7f7f3;
+    color: var(--text-1);
     font-size: 0.92rem;
     font-weight: 900;
   }
@@ -1213,7 +1240,7 @@ html.dark .main-app-theme {
   .invoice-project-progress {
     height: 0.28rem;
     border-radius: 999px;
-    background: rgba(255,255,255,0.07);
+    background: var(--bg-input);
     overflow: hidden;
   }
 
@@ -1221,11 +1248,11 @@ html.dark .main-app-theme {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: rgba(245,245,242,0.86);
+    background: var(--text-2);
   }
 
   .invoice-project-amount {
-    color: #f7f7f3;
+    color: var(--text-1);
     font-size: 0.82rem;
     font-weight: 900;
     font-variant-numeric: tabular-nums;
@@ -1233,7 +1260,7 @@ html.dark .main-app-theme {
   }
 
   .invoice-project-percent {
-    color: rgba(245,245,242,0.58);
+    color: var(--text-3);
     font-size: 0.72rem;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
@@ -1241,7 +1268,7 @@ html.dark .main-app-theme {
 
   .invoice-runey-empty {
     border-radius: 1rem;
-    background: rgba(255,255,255,0.055);
+    background: var(--bg-input);
     padding: 1rem;
     font-size: 0.82rem;
   }
@@ -1482,6 +1509,56 @@ html.dark .main-app-theme {
 
   html.dark .invoice-workspace .invoice-density-toggle button.active {
     background: #22231f;
+  }
+
+  html.dark .invoice-workspace .invoice-runey-card {
+    border-color: rgba(255,255,255,0.07);
+    background:
+      radial-gradient(circle at 82% 4%, rgba(255,255,255,0.06), transparent 28%),
+      linear-gradient(180deg, #1a1a1a 0%, #151515 100%);
+    color: #f5f5f2;
+    box-shadow: 0 22px 54px rgba(0,0,0,0.22);
+  }
+
+  html.dark .invoice-workspace .invoice-runey-card h2,
+  html.dark .invoice-workspace .invoice-month-value,
+  html.dark .invoice-workspace .invoice-project-meta strong,
+  html.dark .invoice-workspace .invoice-project-amount {
+    color: #f7f7f3;
+  }
+
+  html.dark .invoice-workspace .invoice-runey-card p,
+  html.dark .invoice-workspace .invoice-runey-card small,
+  html.dark .invoice-workspace .invoice-month-label,
+  html.dark .invoice-workspace .invoice-month-subvalue,
+  html.dark .invoice-workspace .invoice-month-mini-grid,
+  html.dark .invoice-workspace .invoice-project-percent,
+  html.dark .invoice-workspace .invoice-runey-card-head button {
+    color: rgba(245,245,242,0.58);
+  }
+
+  html.dark .invoice-workspace .invoice-month-bar-item:hover,
+  html.dark .invoice-workspace .invoice-recent-project-row:hover,
+  html.dark .invoice-workspace .invoice-recent-project-row.is-active {
+    background: rgba(255,255,255,0.055);
+  }
+
+  html.dark .invoice-workspace .invoice-project-avatar {
+    background: #2b2b2b;
+    color: #f5f5f2;
+  }
+
+  html.dark .invoice-workspace .invoice-project-progress {
+    background: rgba(255,255,255,0.07);
+  }
+
+  html.dark .invoice-workspace .invoice-project-progress span {
+    background: rgba(245,245,242,0.86);
+  }
+
+  html.dark .invoice-workspace .invoice-month-change.is-neutral,
+  html.dark .invoice-workspace .invoice-runey-empty {
+    background: rgba(255,255,255,0.08);
   }
 }
 

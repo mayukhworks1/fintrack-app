@@ -114,6 +114,24 @@ function getProjectCategoryOption(options = [], current = '') {
   return options.find(o => !isRetainerCategory(o)) || ''
 }
 
+const buildWebInvoiceScalarPayload = (form, { isEdit = false } = {}) => ({
+  invoice_number:   form.invoice_number,
+  project:          form.project,
+  category:         form.category,
+  description:      form.description,
+  milestone:        form.milestone,
+  raised_by:        form.raised_by,
+  payment_status:   form.payment_status,
+  remark:           form.remark,
+  currency:         form.currency,
+  amount_raised:    form.amount_raised !== '' ? Number(form.amount_raised) : undefined,
+  amount_with_tax:  form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
+  amount_received:  form.amount_received !== '' ? Number(form.amount_received) : undefined,
+  raised_date:      form.raised_date ? `${form.raised_date}T00:00:00.000Z` : (isEdit ? null : undefined),
+  cleared_date:     form.cleared_date ? `${form.cleared_date}T00:00:00.000Z` : (isEdit ? null : undefined),
+  next_followup:    form.next_followup ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
+})
+
 function parseIsoDate(value) {
   const d = new Date(value || '')
   return Number.isNaN(d.getTime()) ? null : d
@@ -863,13 +881,7 @@ function InvoiceDrawer({
     if (currentRecordId) return currentRecordId
     const paidDraftIncomplete = form.payment_status === 'Paid' && (!String(form.amount_received).trim() || !form.cleared_date)
     const payload = {
-      ...form,
-      amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
-      amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
-      amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
-      raised_date:     form.raised_date   ? `${form.raised_date}T00:00:00.000Z`   : undefined,
-      cleared_date:    form.cleared_date  ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
-      next_followup:   form.next_followup ? `${form.next_followup}T00:00:00.000Z` : undefined,
+      ...buildWebInvoiceScalarPayload(form),
       payment_status:  paidDraftIncomplete ? 'Pending' : form.payment_status,
       remark: paidDraftIncomplete
         ? [form.remark, 'Draft created for attachment upload. Complete paid details before final save.'].filter(Boolean).join(' ')
@@ -893,18 +905,11 @@ function InvoiceDrawer({
     }
     setSaving(true); setError('')
     try {
-      const payload = {
-        ...form,
-        amount_raised:   form.amount_raised   !== '' ? Number(form.amount_raised)   : undefined,
-        amount_with_tax: form.amount_with_tax !== '' ? Number(form.amount_with_tax) : undefined,
-        amount_received: form.amount_received !== '' ? Number(form.amount_received) : undefined,
-        raised_date:     form.raised_date   ? `${form.raised_date}T00:00:00.000Z`   : undefined,
-        cleared_date:    form.cleared_date  ? `${form.cleared_date}T00:00:00.000Z`  : undefined,
-        next_followup:   form.next_followup ? `${form.next_followup}T00:00:00.000Z` : undefined,
-      }
-      if (currentRecordId) await api.webInvoices.update(currentRecordId, payload)
-      else                 await api.webInvoices.create(payload)
-      onSaved()
+      const payload = buildWebInvoiceScalarPayload(form, { isEdit })
+      const saved = currentRecordId
+        ? await api.webInvoices.update(currentRecordId, payload)
+        : await api.webInvoices.create(payload)
+      onSaved(saved)
     } catch (e) {
       setError(e.message || 'Save failed')
     } finally {
@@ -915,7 +920,7 @@ function InvoiceDrawer({
   async function handleDelete() {
     if (!confirmDel) { setConfirmDel(true); return }
     setDeleting(true)
-    try { await api.webInvoices.delete(invoice.id); onDeleted() }
+    try { await api.webInvoices.delete(invoice.id); onDeleted(invoice.id) }
     catch (e) { setError(e.message || 'Delete failed') }
     finally { setDeleting(false) }
   }
@@ -1557,7 +1562,27 @@ export default function WebInvoices() {
     }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
-  const allRecords = listData?.records || []
+  const serverRecords = listData?.records || []
+  const [recordsState, setRecordsState] = useState([])
+  useEffect(() => {
+    setRecordsState(serverRecords)
+  }, [serverRecords])
+  const allRecords = recordsState
+
+  useEffect(() => {
+    const liveProjects = [...new Set(
+      allRecords
+        .map(r => r.fields?.Project)
+        .filter(Boolean)
+        .map(String)
+    )].sort((a, b) => a.localeCompare(b))
+    if (!liveProjects.length) return
+    setPicklists(prev => {
+      const current = prev.Project || []
+      const merged = [...new Set([...current, ...liveProjects])].sort((a, b) => a.localeCompare(b))
+      return merged.join('\u0000') === current.join('\u0000') ? prev : { ...prev, Project: merged }
+    })
+  }, [allRecords])
 
   const monthOptions = useMemo(() => (
     [...new Set(
@@ -1922,8 +1947,26 @@ export default function WebInvoices() {
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null, draft: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
   const closeDrawer = () => setDrawer(null)
-  const handleSaved   = () => { refresh(); closeDrawer() }
-  const handleDeleted = () => { refresh(); closeDrawer() }
+  const handleSaved = (savedRecord) => {
+    if (savedRecord?.id) {
+      setRecordsState((prev) => {
+        const idx = prev.findIndex((row) => row.id === savedRecord.id)
+        if (idx >= 0) {
+          const next = [...prev]
+          next[idx] = savedRecord
+          return next
+        }
+        return [savedRecord, ...prev]
+      })
+    }
+    refresh()
+    closeDrawer()
+  }
+  const handleDeleted = (deletedId) => {
+    if (deletedId) setRecordsState((prev) => prev.filter((row) => row.id !== deletedId))
+    refresh()
+    closeDrawer()
+  }
 
   function handleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
