@@ -1411,7 +1411,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
       className={`web-runey-sidebar runey-app-sidebar hidden sm:flex flex-col flex-shrink-0 transition-all duration-200 z-20 ${open ? '' : 'is-collapsed'}`}
       style={{
         width: open ? 200 : 76,
-        overflow: 'hidden',
+        overflow: 'visible',
       }}>
 
       {/* Brand + toggle */}

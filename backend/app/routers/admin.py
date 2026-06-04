@@ -725,6 +725,50 @@ async def admin_sessions(
     }
 
 
+@router.delete("/sessions/purge")
+async def admin_purge_sessions(
+    older_than_days: Optional[int] = Query(30, ge=1, le=3650, description="Delete inactive/expired sessions older than N days"),
+    _: str = Depends(require_admin),
+):
+    """
+    Bulk-delete old login sessions.
+    Safeguards:
+    - only removes inactive or expired sessions;
+    - always keeps the 100 most-recent sessions for traceability.
+    """
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    days = int(older_than_days or 30)
+    count = await pool.fetchval(
+        """
+        WITH ranked AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY last_seen_at DESC NULLS LAST, created_at DESC) AS rn
+            FROM login_sessions
+        ),
+        to_delete AS (
+            SELECT s.id
+            FROM login_sessions s
+            JOIN ranked r ON r.id = s.id
+            WHERE r.rn > 100
+              AND (s.is_active = false OR s.expires_at <= NOW())
+              AND COALESCE(s.last_seen_at, s.created_at) < NOW() - ($1::int * INTERVAL '1 day')
+        ),
+        deleted AS (
+            DELETE FROM login_sessions WHERE id IN (SELECT id FROM to_delete) RETURNING id
+        )
+        SELECT COUNT(*) FROM deleted
+        """,
+        days,
+    )
+    return {
+        "deleted": int(count or 0),
+        "label": f"{days} day{'s' if days != 1 else ''}",
+        "message": f"Deleted {count or 0} inactive/expired sessions older than {days} day{'s' if days != 1 else ''} (kept >=100 most recent rows)",
+    }
+
+
 # ── AI chat sessions ──────────────────────────────────────────────────────────
 
 @router.get("/chat-sessions")

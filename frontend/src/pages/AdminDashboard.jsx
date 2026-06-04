@@ -1277,6 +1277,8 @@ function SessionsTab() {
   const [filterCountry,setSCountry]= useState('')
   const [filterDevice, setSDevice] = useState([])
   const [limit, setLimit]          = useState(50)
+  const [purging, setPurging]      = useState(false)
+  const [purgeMsg, setPurgeMsg]    = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -1296,6 +1298,20 @@ function SessionsTab() {
 
   useEffect(() => { setOffset(0) }, [activeOnly, filterRole, filterStatus, filterCountry, filterDevice, limit])
   useEffect(() => { load() }, [load])
+
+  const purgeInactiveSessions = useCallback(async () => {
+    if (!window.confirm('Delete inactive/expired sessions older than 30 days? The 100 most recent sessions are always kept.')) return
+    setPurging(true); setPurgeMsg(null)
+    try {
+      const res = await api.admin.purgeSessions({ days: 30 })
+      setPurgeMsg(res.message || `Deleted ${res.deleted || 0} old sessions`)
+      await load()
+    } catch (e) {
+      setPurgeMsg(e.message || 'Failed to purge sessions')
+    } finally {
+      setPurging(false)
+    }
+  }, [load])
 
   return (
     <div className="space-y-3">
@@ -1338,6 +1354,17 @@ function SessionsTab() {
           <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
             <RefreshCw size={11} /> Refresh
           </button>
+          <button onClick={purgeInactiveSessions} disabled={purging}
+            className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1"
+            style={{
+              borderColor: 'rgba(220,38,38,0.25)',
+              color: '#dc2626',
+              background: 'rgba(220,38,38,0.06)',
+              opacity: purging ? 0.65 : 1,
+            }}>
+            {purging ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
+            {purging ? 'Purging…' : 'Purge inactive'}
+          </button>
         </>}>
         <FMulti label="Role" selected={filterRole} onChange={setSRole} width={140}
           opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
@@ -1348,8 +1375,9 @@ function SessionsTab() {
           opts={[['desktop','🖥 Desktop'],['mobile','📱 Mobile'],['tablet','⬛ Tablet']]} />
       </FilterBar>
       {data && (
-        <div className="text-xs" style={{ color: 'var(--text-3)' }}>
-          {data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}
+        <div className="text-xs flex flex-wrap items-center gap-2" style={{ color: 'var(--text-3)' }}>
+          <span>{data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}</span>
+          {purgeMsg && <span style={{ color: purgeMsg.includes('Failed') ? '#dc2626' : '#16a34a' }}>{purgeMsg}</span>}
         </div>
       )}
 

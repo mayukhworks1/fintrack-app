@@ -1856,7 +1856,20 @@ html.dark .web-invoices-shell {
 }
 
 .web-runey-sidebar {
+  position: sticky;
+  top: 0.65rem;
   height: calc(100dvh - 1.3rem);
+  overflow: visible;
+}
+
+.web-runey-sidebar .runey-collapse-button {
+  right: -0.68rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.web-runey-sidebar .runey-collapse-button:hover {
+  transform: translateY(-50%) translateX(1px);
 }
 
 .runey-sidebar-header {

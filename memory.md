@@ -488,5 +488,7 @@ Backend auto-deploys to HF Space on push.
 - TDS is computed as `Amount with Tax - Amount Received` for paid invoices, and TDS percentage is computed on `Amount Raised` because GST is separately shown.
 - Pending/open invoices are excluded from GST collected and TDS collected filing cards; they remain visible only in open receivable controls.
 - `/invoices` now treats `Client Name` as a first-class field for filtering, table columns, shared links, and public invoice views.
+- 2026-06-04 hardening: backend invoice summaries must never use `Amount Raised` as paid receipt. `total_received` and project received totals use `Amount Received`; pending/overdue amount chips use base `Amount Raised`; GST/TDS totals are separate summary fields.
+- Session/device tracking already uses `X-Client-Hint` plus IP geo; browser GPS is attempted once per secure session and stored as `browserGeo` when the user grants permission. Do not make geolocation blocking for normal app loads.
 
 **This file is gitignored — local only. Do not commit.**

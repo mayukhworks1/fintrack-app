@@ -251,6 +251,7 @@ class InvoiceService:
 
     def _compute_summary(self, records: list[dict]) -> dict:
         total_raised = total_with_tax = total_received = total_outstanding = 0.0
+        total_gst = total_tds = 0.0
         by_status: dict[str, int] = {}
         by_status_amounts: dict[str, float] = {}
         by_project: dict[str, dict] = {}
@@ -261,6 +262,7 @@ class InvoiceService:
             f = r.get("fields", {})
             raised      = float(f.get("Amount Raised") or 0)
             with_tax    = float(f.get("Amount with Tax") or 0)
+            received    = float(f.get("Amount Received") or 0)
             status      = f.get("Payment Status", "Unknown")
             project     = f.get("Project", "Unknown")
             aging       = float(f.get("Agening (Days)") or 0)
@@ -276,8 +278,12 @@ class InvoiceService:
             if not cancelled:
                 total_raised += raised
                 total_with_tax += with_tax
+                total_gst += max(0.0, with_tax - raised)
                 if status == "Paid":
-                    total_received += raised
+                    paid_received = received if received > 0 else raised
+                    total_received += paid_received
+                    if paid_received > 0 and with_tax > paid_received:
+                        total_tds += with_tax - paid_received
                 else:
                     total_outstanding += raised
 
@@ -286,11 +292,24 @@ class InvoiceService:
                 by_status_amounts[status] = round(by_status_amounts.get(status, 0.0) + raised, 2)
 
             if project not in by_project:
-                by_project[project] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0, "count": 0}
+                by_project[project] = {
+                    "raised": 0.0,
+                    "with_tax": 0.0,
+                    "gst": 0.0,
+                    "tds": 0.0,
+                    "received": 0.0,
+                    "outstanding": 0.0,
+                    "count": 0,
+                }
             if not cancelled:
                 by_project[project]["raised"] += raised
+                by_project[project]["with_tax"] += with_tax
+                by_project[project]["gst"] += max(0.0, with_tax - raised)
                 if status == "Paid":
-                    by_project[project]["received"] += raised
+                    paid_received = received if received > 0 else raised
+                    by_project[project]["received"] += paid_received
+                    if paid_received > 0 and with_tax > paid_received:
+                        by_project[project]["tds"] += with_tax - paid_received
                 else:
                     by_project[project]["outstanding"] += raised
             by_project[project]["count"] += 1
@@ -300,7 +319,7 @@ class InvoiceService:
                     "id":          r.get("id"),
                     "invoice_no":  f.get("Invoice Number", ""),
                     "project":     project,
-                    "amount":      with_tax,
+                    "amount":      raised,
                     "raised_date": f.get("Raised Date"),
                     "followup":    f.get("Next followup"),
                     "aging":       aging,
@@ -310,7 +329,7 @@ class InvoiceService:
                     "invoice_no": f.get("Invoice Number", ""),
                     "project":    project,
                     "aging":      aging,
-                    "amount":     with_tax,
+                    "amount":     raised,
                     "currency":   "",
                 })
 
@@ -320,6 +339,8 @@ class InvoiceService:
         return {
             "total_raised":       round(total_raised, 2),
             "total_with_tax":     round(total_with_tax, 2),
+            "total_gst":          round(total_gst, 2),
+            "total_tds":          round(total_tds, 2),
             "total_received":     round(total_received, 2),
             "total_outstanding":  round(total_outstanding, 2),
             "total_invoices":     len(records),
@@ -329,7 +350,7 @@ class InvoiceService:
             "by_project":         by_project,
             "pending_invoices":   pending_invoices[:10],
             "overdue_invoices":   overdue_invoices[:5],
-            "collection_rate":    round((total_received / total_raised * 100), 2) if total_raised > 0 else 0.0,
+            "collection_rate":    round((total_received / total_with_tax * 100), 2) if total_with_tax > 0 else 0.0,
         }
 
     async def get_summary_from_pg(self) -> dict | None:

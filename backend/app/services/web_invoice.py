@@ -525,9 +525,9 @@ class WebInvoiceService:
         records = await self.get_all_invoices()
 
         # ── Per-currency accumulators ──────────────────────────────────────
-        # by_currency[cur] = {raised, with_tax, received, outstanding, count, pending_count}
+        # by_currency[cur] = {raised, with_tax, gst, tds, received, outstanding, count, pending_count}
         def _empty_cur():
-            return {"raised": 0.0, "with_tax": 0.0, "received": 0.0,
+            return {"raised": 0.0, "with_tax": 0.0, "gst": 0.0, "tds": 0.0, "received": 0.0,
                     "outstanding": 0.0, "count": 0, "pending_count": 0}
 
         by_currency: dict[str, dict] = {}
@@ -555,8 +555,12 @@ class WebInvoiceService:
             if not cancelled:
                 cur["raised"]    += raised
                 cur["with_tax"]  += with_tax
+                cur["gst"]       += max(0.0, with_tax - raised)
                 if status == "Paid":
-                    cur["received"]    += raised
+                    paid_received = received if received > 0 else raised
+                    cur["received"] += paid_received
+                    if paid_received > 0 and with_tax > paid_received:
+                        cur["tds"] += with_tax - paid_received
                 else:
                     cur["outstanding"] += raised
                     if status == "Pending":
@@ -566,7 +570,7 @@ class WebInvoiceService:
 
             # ── Per-project totals ──
             if project not in by_project:
-                by_project[project] = {"raised": 0.0, "received": 0.0,
+                by_project[project] = {"raised": 0.0, "with_tax": 0.0, "gst": 0.0, "tds": 0.0, "received": 0.0,
                                        "outstanding": 0.0, "count": 0,
                                        "currencies": set(),
                                        "by_currency": {}}   # per-currency breakdown
@@ -575,17 +579,27 @@ class WebInvoiceService:
                 # Per-currency sub-totals (for multi-currency project cards)
                 pc = by_project[project]["by_currency"]
                 if currency not in pc:
-                    pc[currency] = {"raised": 0.0, "received": 0.0, "outstanding": 0.0}
+                    pc[currency] = {"raised": 0.0, "with_tax": 0.0, "gst": 0.0, "tds": 0.0, "received": 0.0, "outstanding": 0.0}
                 pc[currency]["raised"] += raised
+                pc[currency]["with_tax"] += with_tax
+                pc[currency]["gst"] += max(0.0, with_tax - raised)
                 if status == "Paid":
-                    pc[currency]["received"]    += raised
+                    paid_received = received if received > 0 else raised
+                    pc[currency]["received"] += paid_received
+                    if paid_received > 0 and with_tax > paid_received:
+                        pc[currency]["tds"] += with_tax - paid_received
                 else:
                     pc[currency]["outstanding"] += raised
                 # RS totals kept at top level for backward compat
                 if currency == "RS":
                     by_project[project]["raised"] += raised
+                    by_project[project]["with_tax"] += with_tax
+                    by_project[project]["gst"] += max(0.0, with_tax - raised)
                     if status == "Paid":
-                        by_project[project]["received"]    += raised
+                        paid_received = received if received > 0 else raised
+                        by_project[project]["received"] += paid_received
+                        if paid_received > 0 and with_tax > paid_received:
+                            by_project[project]["tds"] += with_tax - paid_received
                     else:
                         by_project[project]["outstanding"] += raised
             by_project[project]["count"] += 1
@@ -604,7 +618,7 @@ class WebInvoiceService:
                     "id":          r.get("id"),
                     "invoice_no":  f.get("Invoice Number", ""),
                     "project":     project,
-                    "amount":      with_tax,
+                    "amount":      raised,
                     "currency":    currency,
                     "raised_date": f.get("Raised Date"),
                     "followup":    f.get("Next followup"),
@@ -616,7 +630,7 @@ class WebInvoiceService:
                     "invoice_no": f.get("Invoice Number", ""),
                     "project":    project,
                     "aging":      aging,
-                    "amount":     with_tax,
+                    "amount":     raised,
                     "currency":   currency,
                 })
 
@@ -627,9 +641,12 @@ class WebInvoiceService:
         for cur_data in by_currency.values():
             r_ = cur_data["raised"]
             rec_ = cur_data["received"]
-            cur_data["collection_rate"] = round((rec_ / r_ * 100), 2) if r_ > 0 else 0.0
+            gross_ = cur_data["with_tax"]
+            cur_data["collection_rate"] = round((rec_ / gross_ * 100), 2) if gross_ > 0 else 0.0
             cur_data["raised"]       = round(cur_data["raised"],       2)
             cur_data["with_tax"]     = round(cur_data["with_tax"],     2)
+            cur_data["gst"]          = round(cur_data["gst"],          2)
+            cur_data["tds"]          = round(cur_data["tds"],          2)
             cur_data["received"]     = round(cur_data["received"],     2)
             cur_data["outstanding"]  = round(cur_data["outstanding"],  2)
 
@@ -637,10 +654,16 @@ class WebInvoiceService:
         for proj_data in by_project.values():
             proj_data["currencies"] = sorted(proj_data["currencies"])
             proj_data["raised"]      = round(proj_data["raised"],      2)
+            proj_data["with_tax"]    = round(proj_data["with_tax"],    2)
+            proj_data["gst"]         = round(proj_data["gst"],         2)
+            proj_data["tds"]         = round(proj_data["tds"],         2)
             proj_data["received"]    = round(proj_data["received"],    2)
             proj_data["outstanding"] = round(proj_data["outstanding"], 2)
             for cur_amounts in proj_data["by_currency"].values():
                 cur_amounts["raised"]      = round(cur_amounts["raised"],      2)
+                cur_amounts["with_tax"]    = round(cur_amounts["with_tax"],    2)
+                cur_amounts["gst"]         = round(cur_amounts["gst"],         2)
+                cur_amounts["tds"]         = round(cur_amounts["tds"],         2)
                 cur_amounts["received"]    = round(cur_amounts["received"],    2)
                 cur_amounts["outstanding"] = round(cur_amounts["outstanding"], 2)
 
@@ -656,6 +679,8 @@ class WebInvoiceService:
             # RS-primary totals (labelled as such in the frontend)
             "total_raised":      total_raised,
             "total_with_tax":    total_with_tax,
+            "total_gst":         rs.get("gst", 0.0),
+            "total_tds":         rs.get("tds", 0.0),
             "total_received":    total_received,
             "total_outstanding": total_outstanding,
             "collection_rate":   collection_rate,
