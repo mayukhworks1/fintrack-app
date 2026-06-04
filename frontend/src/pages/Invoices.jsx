@@ -1169,6 +1169,7 @@ export default function Invoices() {
   const [manageModal, setManageModal] = useState(false)
   const [associationRecord, setAssociationRecord] = useState(null)
   const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
+  const [tableDensity, setTableDensity] = useState('comfortable')
   const deferredSearch = useDeferredValue(search)
   const resizeRef = useRef(null)
 
@@ -1422,6 +1423,61 @@ export default function Invoices() {
   const overdue = s?.overdue_invoices || []
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
+
+  const clearAllFilters = useCallback(() => {
+    setStatusFilter('')
+    updateFilterParam('status', '')
+    setProjectFilter('')
+    updateFilterParam('project', '')
+    setCategoryFilter('')
+    setRaisedByFilter('')
+    setMonthFilter('')
+    setDateFieldFilter('Raised Date')
+    setDateFrom('')
+    setDateTo('')
+    setAgingBandFilter('')
+    setBillingFilter('all')
+    setOverdueOnly(false)
+    setHasDocsOnly(false)
+    setFollowupDueOnly(false)
+    setSearch('')
+    setFilterConditions([])
+  }, [updateFilterParam])
+
+  const activeFilterChips = useMemo(() => {
+    const chips = []
+    if (search) chips.push({ key: 'search', label: `Search: ${search}`, onClear: () => setSearch('') })
+    if (statusFilter) chips.push({ key: 'status', label: `Status: ${statusFilter}`, onClear: () => { setStatusFilter(''); updateFilterParam('status', '') } })
+    if (projectFilter) chips.push({ key: 'project', label: `Project: ${projectFilter}`, onClear: () => { setProjectFilter(''); updateFilterParam('project', '') } })
+    if (categoryFilter) chips.push({ key: 'category', label: `Category: ${categoryFilter}`, onClear: () => setCategoryFilter('') })
+    if (raisedByFilter) chips.push({ key: 'raised_by', label: `Owner: ${raisedByFilter}`, onClear: () => setRaisedByFilter('') })
+    if (billingFilter !== 'all') chips.push({ key: 'billing', label: `Billing: ${billingFilter === 'retainer' ? 'Retainers' : 'Projects'}`, onClear: () => setBillingFilter('all') })
+    if (monthFilter) chips.push({ key: 'month', label: `Raised: ${monthLabel(monthFilter)}`, onClear: () => setMonthFilter('') })
+    if (dateFrom || dateTo) chips.push({ key: 'date', label: `${dateFieldFilter}: ${dateFrom || 'Start'} to ${dateTo || 'Today'}`, onClear: () => { setDateFrom(''); setDateTo(''); setDateFieldFilter('Raised Date') } })
+    if (agingBandFilter) chips.push({ key: 'aging', label: `Aging: ${agingBandFilter}`, onClear: () => setAgingBandFilter('') })
+    if (overdueOnly) chips.push({ key: 'overdue', label: 'Open collections', onClear: () => setOverdueOnly(false) })
+    if (hasDocsOnly) chips.push({ key: 'docs', label: 'Has documents', onClear: () => setHasDocsOnly(false) })
+    if (followupDueOnly) chips.push({ key: 'followup', label: 'Follow-up due', onClear: () => setFollowupDueOnly(false) })
+    if (activeConditions.length) chips.push({ key: 'advanced', label: `${activeConditions.length} advanced rule${activeConditions.length !== 1 ? 's' : ''}`, onClear: () => setFilterConditions([]) })
+    return chips
+  }, [
+    activeConditions.length,
+    agingBandFilter,
+    billingFilter,
+    categoryFilter,
+    dateFieldFilter,
+    dateFrom,
+    dateTo,
+    followupDueOnly,
+    hasDocsOnly,
+    monthFilter,
+    overdueOnly,
+    projectFilter,
+    raisedByFilter,
+    search,
+    statusFilter,
+    updateFilterParam,
+  ])
 
   const projectSummaryCards = useMemo(() => {
     const entries = Object.entries(s?.by_project || {})
@@ -1678,7 +1734,7 @@ export default function Invoices() {
   }
 
   return (
-    <ExecutiveShell>
+    <ExecutiveShell className="invoice-workspace">
 
       <ExecutiveHero
         eyebrow="Receivables Command Deck"
@@ -2266,31 +2322,53 @@ export default function Invoices() {
             {hasFilters && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />}
           </button>
           {hasFilters && (
-            <button onClick={() => {
-              setStatusFilter('')
-              updateFilterParam('status', '')
-              setProjectFilter('')
-              updateFilterParam('project', '')
-              setCategoryFilter('')
-              setRaisedByFilter('')
-              setMonthFilter('')
-              setDateFieldFilter('Raised Date')
-              setDateFrom('')
-              setDateTo('')
-              setAgingBandFilter('')
-              setBillingFilter('all')
-              setOverdueOnly(false)
-              setHasDocsOnly(false)
-              setFollowupDueOnly(false)
-              setSearch('')
-              setFilterConditions([])
-            }}
+            <button onClick={clearAllFilters}
               className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
               <X size={11} />Clear
             </button>
           )}
           <ExecutiveChip accent>{records.length} result{records.length !== 1 ? 's' : ''}</ExecutiveChip>
         </ExecutiveFilterBar>
+
+        {activeFilterChips.length > 0 && (
+          <div className="invoice-active-filters" aria-label="Active invoice filters">
+            {activeFilterChips.map(chip => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={chip.onClear}
+                className="invoice-filter-chip"
+                title={`Remove ${chip.label}`}
+              >
+                <span>{chip.label}</span>
+                <X size={11} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="invoice-scope-strip" aria-label="Current invoice scope">
+          <div>
+            <span>Scope</span>
+            <strong>{records.length}</strong>
+            <small>of {allRecords.length} invoices</small>
+          </div>
+          <div>
+            <span>Open</span>
+            <strong style={{ color: currentScopeOutstanding ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{fmt(currentScopeOutstanding)}</strong>
+            <small>{records.filter(r => r.fields?.['Payment Status'] === 'Pending').length} pending</small>
+          </div>
+          <div>
+            <span>Due follow-up</span>
+            <strong style={{ color: followupsDueCount ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{followupsDueCount}</strong>
+            <small>today or overdue</small>
+          </div>
+          <div>
+            <span>Missing docs</span>
+            <strong style={{ color: missingDocsCount ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{missingDocsCount}</strong>
+            <small>needs proof</small>
+          </div>
+        </div>
 
         {showFilters && (
           <div className="filter-expanded-panel flex flex-wrap gap-2 animate-slide-down">
@@ -2458,8 +2536,19 @@ export default function Invoices() {
                 const refs = parseAttachments(f['Reference'])
                 const pdfs = parseAttachments(f['Invoice PDF'])
                 const allFiles = [...refs, ...pdfs]
+                const isPending = f['Payment Status'] === 'Pending'
                 return (
-                  <button key={r.id} onClick={() => openView(r)}
+                  <article
+                    key={r.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openView(r)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openView(r)
+                      }
+                    }}
                     className="invoice-mobile-card w-full text-left animate-slide-up">
                     {/* Top: invoice # + status */}
                     <div className="flex items-start justify-between gap-3 mb-3">
@@ -2514,14 +2603,58 @@ export default function Invoices() {
                         <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                       </div>
                     </div>
-                  </button>
+                    <div className="invoice-mobile-actions" onClick={e => e.stopPropagation()}>
+                      {isEditor && isPending && (
+                        <button type="button" onClick={() => openRecordPayment(r)} className="btn-primary">
+                          <CheckCircle2 size={13} />Record payment
+                        </button>
+                      )}
+                      {allFiles.length > 0 && (
+                        <button type="button" onClick={() => setPreviewDocs({ docs: allFiles, index: 0 })} className="btn-ghost">
+                          <Paperclip size={13} />Files ({allFiles.length})
+                        </button>
+                      )}
+                      <button type="button" onClick={() => openView(r)} className="btn-ghost">
+                        <Eye size={13} />Details
+                      </button>
+                    </div>
+                  </article>
                 )
               })
         }
       </div>
 
       {/* ── Desktop table (md+) ── */}
-      <div className="data-table-shell hidden md:block">
+      <div className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' && 'is-compact')}>
+        <div className="invoice-table-toolbar">
+          <div>
+            <p>{records.length} invoices in view</p>
+            <span>{syncing ? 'Refreshing mirror data...' : `Showing full current scope from ${allRecords.length} loaded invoices`}</span>
+          </div>
+          <div className="invoice-table-controls">
+            <div className="invoice-density-toggle" role="group" aria-label="Table density">
+              {['comfortable', 'compact'].map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setTableDensity(mode)}
+                  aria-pressed={tableDensity === mode}
+                  className={tableDensity === mode ? 'active' : ''}
+                >
+                  {mode === 'comfortable' ? 'Comfort' : 'Compact'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setColumnWidths(DEFAULT_INVOICE_COLUMN_WIDTHS)}
+              className="btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '0.45rem 0.7rem' }}
+            >
+              <RotateCcw size={12} />Reset widths
+            </button>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full" style={{ minWidth: 1700, tableLayout: 'fixed' }}>
             <thead>

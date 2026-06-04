@@ -3,7 +3,8 @@ import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
-  ChevronLeft, ChevronRight, ShieldCheck, Activity
+  ChevronLeft, ChevronRight, ShieldCheck, Activity,
+  Plus, Settings, HelpCircle
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -92,21 +93,22 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
     <>
       {/* Logo + collapse/close button */}
       <div
-        className={`flex items-center px-3 py-4 ${collapsed ? 'justify-center' : 'justify-between'}`}
-        style={{ borderBottom: '1px solid var(--border)' }}
+        className={`runey-sidebar-header ${collapsed ? 'is-collapsed' : ''}`}
       >
         {/* Logo — links to dashboard */}
         <Link
           to="/"
           aria-label="FinTrack — go to dashboard"
-          className="flex items-center gap-2.5 min-w-0 rounded-lg"
+          className="runey-brand-link"
           style={{ textDecoration: 'none' }}
         >
-          <BrandIcon size={collapsed ? 28 : 28} />
+          <span className="runey-brand-mark">
+            <BrandIcon size={collapsed ? 28 : 28} />
+          </span>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="font-bold text-sm leading-tight truncate" style={{ color: 'var(--text-1)' }}>FinTrack</p>
-              <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>AI Finance Manager</p>
+              <p className="runey-brand-title">FinTrack</p>
+              <p className="runey-brand-subtitle">AI Finance Manager</p>
             </div>
           )}
         </Link>
@@ -125,16 +127,27 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           <button
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="btn-icon"
-            style={{ padding: '0.3rem' }}
+            className="runey-collapse-button"
           >
             {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
           </button>
         ) : null}
       </div>
 
+      <div className="runey-quick-action">
+        <Link
+          to="/projects/new"
+          className={`runey-new-button ${collapsed ? 'is-collapsed' : ''}`}
+          title={collapsed ? 'New project' : undefined}
+          aria-label={collapsed ? 'New project' : undefined}
+        >
+          <Plus size={collapsed ? 18 : 15} />
+          {!collapsed && <span>New</span>}
+        </Link>
+      </div>
+
       {/* Nav links */}
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
+      <nav className={`runey-nav ${collapsed ? 'is-collapsed' : ''}`} aria-label="Main navigation">
         {nav.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -142,28 +155,17 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
             end={end}
             title={collapsed ? label : undefined}
             aria-label={collapsed ? label : undefined}
-            className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${
-              collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'
-            }`}
-            style={({ isActive }) => isActive
-              ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(47,91,255,0.06)' }
-              : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
-            }
+            className={({ isActive }) => `runey-nav-link ${collapsed ? 'is-collapsed' : ''} ${isActive ? 'active' : ''}`}
           >
             {({ isActive }) => (
               <>
                 <Icon
                   size={15}
                   aria-hidden="true"
-                  style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }}
+                  style={{ flexShrink: 0 }}
                 />
                 {!collapsed && (
-                  <span
-                    className="flex-1 truncate font-medium"
-                    style={{ color: isActive ? 'var(--nav-active-color)' : 'var(--text-2)' }}
-                  >
-                    {label}
-                  </span>
+                  <span className="flex-1 truncate font-medium">{label}</span>
                 )}
               </>
             )}
@@ -174,38 +176,26 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         {isEditor && (
           <>
             {!collapsed && (
-              <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest"
-                style={{ color: 'var(--text-3)' }}>
+              <p className="runey-nav-section">
                 Admin
               </p>
             )}
-            {collapsed && <div className="my-1 mx-2" style={{ borderTop: '1px solid var(--border)' }} />}
+            {collapsed && <div className="runey-nav-divider" />}
             <NavLink
               to="/admin"
               title={collapsed ? 'Admin Panel' : undefined}
               aria-label={collapsed ? 'Admin Panel' : undefined}
-              className={`flex items-center rounded-md text-[13px] font-medium transition-colors ${
-                collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'
-              }`}
-              style={({ isActive }) => isActive
-                ? { background: 'var(--nav-active-bg)', color: 'var(--nav-active-color)', borderLeft: '2px solid var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(47,91,255,0.06)' }
-                : { color: 'var(--text-3)', borderLeft: '2px solid transparent' }
-              }
+              className={({ isActive }) => `runey-nav-link ${collapsed ? 'is-collapsed' : ''} ${isActive ? 'active' : ''}`}
             >
               {({ isActive }) => (
                 <>
                   <ShieldCheck
                     size={15}
                     aria-hidden="true"
-                    style={{ color: isActive ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }}
+                    style={{ flexShrink: 0 }}
                   />
                   {!collapsed && (
-                    <span
-                      className="flex-1 truncate font-medium"
-                      style={{ color: isActive ? 'var(--nav-active-color)' : 'var(--text-2)' }}
-                    >
-                      Admin Panel
-                    </span>
+                    <span className="flex-1 truncate font-medium">Admin Panel</span>
                   )}
                 </>
               )}
@@ -217,66 +207,63 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
       <OfflineBanner collapsed={collapsed} />
 
       {/* Bottom controls */}
-      <div className="p-2" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className={`runey-sidebar-footer ${collapsed ? 'is-collapsed' : ''}`}>
+        <button
+          type="button"
+          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
+          title={collapsed ? 'Settings' : undefined}
+          aria-label={collapsed ? 'Settings' : undefined}
+        >
+          <Settings size={15} aria-hidden="true" />
+          {!collapsed && <span className="flex-1 truncate font-medium">Settings</span>}
+        </button>
+
+        <button
+          type="button"
+          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
+          title={collapsed ? 'Help' : undefined}
+          aria-label={collapsed ? 'Help' : undefined}
+        >
+          <HelpCircle size={15} aria-hidden="true" />
+          {!collapsed && <span className="flex-1 truncate font-medium">Help</span>}
+        </button>
+
         {/* Theme toggle */}
         <button
           onClick={toggle}
-          className={`w-full flex items-center rounded-lg text-sm transition-colors mb-1 ${
-            collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'
-          }`}
-          style={{ color: 'var(--text-2)', background: 'transparent' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
           aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
           title={collapsed ? (dark ? 'Light mode' : 'Dark mode') : undefined}
         >
-          {dark
-            ? <Sun  size={14} style={{ color: '#facc15', flexShrink: 0 }} aria-hidden="true" />
-            : <Moon size={14} style={{ color: '#818cf8', flexShrink: 0 }} aria-hidden="true" />}
+          {dark ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
           {!collapsed && (
             <>
-              <span className="flex-1 text-[13px]" style={{ color: 'var(--text-2)' }}>
+              <span className="flex-1 truncate font-medium">
                 {dark ? 'Light mode' : 'Dark mode'}
               </span>
-              {/* Mini toggle pill */}
-              <div
-                className="w-8 h-4 rounded-full relative flex-shrink-0 transition-all duration-300"
-                style={{ background: dark ? 'rgba(255,255,255,0.10)' : 'rgba(37,99,235,0.25)' }}
-                aria-hidden="true"
-              >
-                <div
-                  className="absolute top-0.5 w-3 h-3 rounded-full transition-all duration-300"
-                  style={{
-                    background: dark ? 'rgba(255,255,255,0.5)' : '#2563eb',
-                    left: dark ? '2px' : 'calc(100% - 14px)',
-                  }}
-                />
-              </div>
             </>
           )}
         </button>
 
-        {/* Sign out */}
         <button
           onClick={logout}
-          className={`w-full flex items-center rounded-lg text-xs transition-colors ${
-            collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'
-          }`}
-          style={{ color: 'var(--text-3)', background: 'transparent' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.06)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
           aria-label="Sign out"
           title={collapsed ? 'Sign out' : undefined}
         >
-          <LogOut size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
-          {!collapsed && <span>Sign out</span>}
+          <LogOut size={15} aria-hidden="true" />
+          {!collapsed && <span className="flex-1 truncate font-medium">Sign out</span>}
         </button>
 
-        {!collapsed && (
-          <p className="text-[10px] text-center mt-2" style={{ color: 'var(--text-3)' }}>
-            Powered by OpenRouter AI
-          </p>
-        )}
+        <div className={`runey-profile ${collapsed ? 'is-collapsed' : ''}`}>
+          <span className="runey-profile-avatar">MJ</span>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p>Mayukh Jain</p>
+              <span>Workspace owner</span>
+            </div>
+          )}
+        </div>
       </div>
     </>
   )
@@ -311,10 +298,10 @@ export default function Layout({ children }) {
     return () => { document.body.style.overflow = '' }
   }, [drawerOpen])
 
-  const sidebarW = collapsed ? 56 : 224
+  const sidebarW = collapsed ? 76 : 200
 
   return (
-    <div className="main-app-theme flex h-screen overflow-hidden">
+    <div className="main-app-theme app-layout-shell flex h-screen overflow-hidden">
 
       {/* ── Skip to content ── */}
       <a
@@ -327,13 +314,10 @@ export default function Layout({ children }) {
 
       {/* ── Desktop sidebar ── */}
       <aside
-        className="hidden lg:flex flex-col flex-shrink-0 relative overflow-hidden"
+        className={`runey-app-sidebar hidden lg:flex flex-col flex-shrink-0 relative overflow-hidden ${collapsed ? 'is-collapsed' : ''}`}
         style={{
           width: sidebarW,
-          background: 'var(--sidebar-bg)',
-          borderRight: '1px solid var(--sidebar-border)',
           transition: 'width 0.2s ease',
-          boxShadow: '0 0 0 1px rgba(15,23,42,0.01)',
         }}
         aria-label="Sidebar navigation"
       >
@@ -353,10 +337,8 @@ export default function Layout({ children }) {
       {/* ── Mobile drawer panel ── */}
       <aside
         id="mobile-nav-drawer"
-        className="lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
+        className="runey-app-sidebar lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
         style={{
-          background: 'var(--sidebar-bg)',
-          borderRight: '1px solid var(--sidebar-border)',
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
           boxShadow: drawerOpen ? '8px 0 28px rgba(15,23,42,0.10)' : 'none',
         }}
