@@ -33,6 +33,24 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class EmailLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class EmailRegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str | None = None
+
+
+class EmailBootstrapRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str | None = None
+    bootstrap_password: str
+
+
 # ── Token helpers ─────────────────────────────────────────────────────────────
 
 def _b64url(b: bytes) -> str:
@@ -158,6 +176,46 @@ async def login(body: LoginRequest, request: Request):
     return {"token": token, "role": role, "expires_in": settings.app_session_ttl}
 
 
+@router.post("/email/login")
+async def email_login(body: EmailLoginRequest, request: Request):
+    """
+    Normal email/password login backed by auth_users/auth_sessions.
+    Additive path: existing password-only login remains available during rollout.
+    """
+    from ..services.auth_master import login_with_email
+    return await login_with_email(body.email, body.password, request)
+
+
+@router.post("/email/register")
+async def email_register(body: EmailRegisterRequest, request: Request):
+    """
+    Create a pending user. Superadmin approval is required before login works.
+    """
+    from ..services.auth_master import create_pending_user
+    result = await create_pending_user(body.email, body.password, body.full_name, request)
+    return {
+        **result,
+        "approval_required": True,
+        "message": "User is pending superadmin approval",
+    }
+
+
+@router.post("/email/bootstrap")
+async def email_bootstrap(body: EmailBootstrapRequest, request: Request):
+    """
+    One-time creation of the first superadmin email/password user.
+    Requires APP_ADMIN_PASSWORD and only works while auth_users is empty.
+    """
+    from ..services.auth_master import bootstrap_superadmin
+    return await bootstrap_superadmin(
+        body.email,
+        body.password,
+        body.full_name,
+        body.bootstrap_password,
+        request,
+    )
+
+
 @router.get("/verify")
 async def verify(authorization: str | None = Header(default=None)):
     """Validate a token and return its role. Used by the frontend on app start."""
@@ -205,6 +263,15 @@ async def logout(authorization: str | None = Header(default=None)):
                        expires_at = NOW()
                  WHERE token_hint = $1
                    AND is_active  = true
+                """,
+                token_hint,
+            )
+            await pool.execute(
+                """
+                UPDATE auth_sessions
+                   SET revoked_at = NOW()
+                 WHERE token_hint = $1
+                   AND revoked_at IS NULL
                 """,
                 token_hint,
             )

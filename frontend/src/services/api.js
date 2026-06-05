@@ -582,6 +582,9 @@ export const api = {
     // Password is sent once over HTTPS, never stored client-side.
     // Only the returned token persists in localStorage.
     login:  (password) => request('/api/auth/login',  { method: 'POST', body: JSON.stringify({ password }) }),
+    emailLogin: (email, password) => request('/api/auth/email/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    emailRegister: (data) => request('/api/auth/email/register', { method: 'POST', body: JSON.stringify(data) }),
+    emailBootstrap: (data) => request('/api/auth/email/bootstrap', { method: 'POST', body: JSON.stringify(data) }),
     verify: ()         => request('/api/auth/verify', {}, 0),
     // Fire-and-forget server-side session invalidation — marks the session as
     // logged_out in login_sessions so the admin panel shows honest status.

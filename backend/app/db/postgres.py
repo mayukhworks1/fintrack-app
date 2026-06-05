@@ -16,6 +16,9 @@ Tables created on first startup:
   status_mirror    — Teable Current Status table replica (tblgdbV6T4Ly9n6YNCU)
   record_history   — field-level change log for mirrored records
   sync_log         — sync run metadata
+  auth_users       — master user identities for email/password + future SSO
+  auth_sessions    — server-side session control plane for new auth
+  auth_events      — security/audit events for auth and approvals
 """
 
 from __future__ import annotations
@@ -480,6 +483,255 @@ ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS record_id VARCHAR(60);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
+
+-- ── Auth master: users, roles, permissions, sessions ─────────────────────
+-- Additive auth control plane. Existing password-role login remains compatible
+-- until the SSO/RBAC rollout is complete.
+CREATE TABLE IF NOT EXISTS auth_users (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    approved_at         TIMESTAMPTZ,
+    disabled_at         TIMESTAMPTZ,
+    email               VARCHAR(320) UNIQUE NOT NULL,
+    email_normalized    VARCHAR(320) UNIQUE NOT NULL,
+    full_name           VARCHAR(255),
+    status              VARCHAR(30)  NOT NULL DEFAULT 'pending_approval',
+    password_hash       TEXT,
+    password_changed_at TIMESTAMPTZ,
+    email_verified_at   TIMESTAMPTZ,
+    approved_by         UUID,
+    metadata            JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    CONSTRAINT auth_users_status_chk CHECK (status IN ('pending_approval', 'active', 'rejected', 'disabled'))
+);
+CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
+
+CREATE TABLE IF NOT EXISTS auth_identities (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          UUID         NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    provider         VARCHAR(30)  NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    email            VARCHAR(320),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_seen_at     TIMESTAMPTZ,
+    raw_profile      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    UNIQUE(provider, provider_user_id)
+);
+CREATE INDEX IF NOT EXISTS ai_user_idx ON auth_identities (user_id);
+
+CREATE TABLE IF NOT EXISTS auth_roles (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_key    VARCHAR(60)  UNIQUE NOT NULL,
+    label       VARCHAR(120) NOT NULL,
+    description TEXT,
+    rank        INTEGER      NOT NULL DEFAULT 100,
+    is_system   BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS auth_permissions (
+    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    permission_key VARCHAR(120) UNIQUE NOT NULL,
+    label          VARCHAR(160) NOT NULL,
+    module_key     VARCHAR(60)  NOT NULL,
+    action_key     VARCHAR(60)  NOT NULL,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS auth_role_permissions (
+    role_id       UUID NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,
+    permission_id UUID NOT NULL REFERENCES auth_permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY(role_id, permission_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth_user_roles (
+    user_id     UUID        NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    role_id     UUID        NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    assigned_by UUID,
+    PRIMARY KEY(user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth_user_scopes (
+    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          UUID        NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    scope_type       VARCHAR(40) NOT NULL DEFAULT 'own',
+    module_key       VARCHAR(60),
+    client_name      VARCHAR(255),
+    project_name     VARCHAR(255),
+    raised_by        VARCHAR(255),
+    can_view_amounts BOOLEAN     NOT NULL DEFAULT TRUE,
+    can_export       BOOLEAN     NOT NULL DEFAULT FALSE,
+    can_share        BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by       UUID,
+    metadata         JSONB       NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS aus_user_idx ON auth_user_scopes (user_id);
+CREATE INDEX IF NOT EXISTS aus_scope_idx ON auth_user_scopes (scope_type, module_key);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID         NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    token_hint    VARCHAR(20)  NOT NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    expires_at    TIMESTAMPTZ  NOT NULL,
+    revoked_at    TIMESTAMPTZ,
+    ip            VARCHAR(45),
+    user_agent    TEXT,
+    os            VARCHAR(100),
+    browser       VARCHAR(100),
+    device        VARCHAR(20),
+    device_label  VARCHAR(255),
+    country       VARCHAR(80),
+    country_code  VARCHAR(4),
+    region        VARCHAR(100),
+    city          VARCHAR(100),
+    isp           VARCHAR(150),
+    metadata      JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS as_token_idx ON auth_sessions (token_hint);
+CREATE INDEX IF NOT EXISTS as_user_idx ON auth_sessions (user_id, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS as_active_idx ON auth_sessions (revoked_at, expires_at DESC);
+
+CREATE TABLE IF NOT EXISTS auth_password_resets (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID        NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    token_hash  TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    ip          VARCHAR(45),
+    user_agent  TEXT
+);
+CREATE INDEX IF NOT EXISTS apr_user_idx ON auth_password_resets (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS auth_events (
+    id             BIGSERIAL    PRIMARY KEY,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    event_type     VARCHAR(80)  NOT NULL,
+    actor_user_id  UUID,
+    target_user_id UUID,
+    role           VARCHAR(60),
+    email          VARCHAR(320),
+    status         VARCHAR(40),
+    ip             VARCHAR(45),
+    user_agent     TEXT,
+    request_id     VARCHAR(50),
+    metadata       JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS ae_created_idx ON auth_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS ae_type_idx ON auth_events (event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS ae_target_idx ON auth_events (target_user_id, created_at DESC);
+
+INSERT INTO auth_roles (role_key, label, description, rank, is_system) VALUES
+  ('superadmin', 'Super Admin', 'Full auth, security, system, data, and audit control.', 1, true),
+  ('admin', 'Admin', 'Business administration and operational control.', 10, true),
+  ('manager', 'Manager', 'Scoped team/client/project operations.', 30, true),
+  ('finance', 'Finance', 'Invoice, tax ledger, reports, and payment operations.', 40, true),
+  ('user', 'User', 'Scoped operational user.', 60, true),
+  ('viewer', 'Viewer', 'Read-only scoped access.', 90, true)
+ON CONFLICT (role_key) DO UPDATE SET
+  label = EXCLUDED.label,
+  description = EXCLUDED.description,
+  rank = EXCLUDED.rank;
+
+INSERT INTO auth_permissions (permission_key, label, module_key, action_key) VALUES
+  ('module.dashboard.view', 'View Dashboard', 'dashboard', 'view'),
+  ('module.projects.view', 'View Projects', 'projects', 'view'),
+  ('module.projects.create', 'Create Projects', 'projects', 'create'),
+  ('module.projects.edit', 'Edit Projects', 'projects', 'edit'),
+  ('module.projects.delete', 'Delete Projects', 'projects', 'delete'),
+  ('module.invoices.view', 'View Invoices', 'invoices', 'view'),
+  ('module.invoices.create', 'Create Invoices', 'invoices', 'create'),
+  ('module.invoices.edit', 'Edit Invoices', 'invoices', 'edit'),
+  ('module.invoices.delete', 'Delete Invoices', 'invoices', 'delete'),
+  ('module.invoices.payment', 'Record Invoice Payments', 'invoices', 'payment'),
+  ('module.tax.view', 'View Tax Ledger', 'tax', 'view'),
+  ('module.tax.export', 'Export Tax Ledger', 'tax', 'export'),
+  ('module.tax.share', 'Share Tax Ledger', 'tax', 'share'),
+  ('module.analytics.view', 'View Analytics', 'analytics', 'view'),
+  ('module.reports.create', 'Create Reports', 'reports', 'create'),
+  ('module.reports.export', 'Export Reports', 'reports', 'export'),
+  ('module.ai.use', 'Use AI Assistant', 'ai', 'use'),
+  ('module.status.view', 'View Status Board', 'status', 'view'),
+  ('module.status.edit', 'Edit Status Board', 'status', 'edit'),
+  ('module.shared.manage', 'Manage Shared Views', 'shared', 'manage'),
+  ('module.admin.view', 'View Admin Panel', 'admin', 'view'),
+  ('module.admin.users.approve', 'Approve Users', 'admin', 'users.approve'),
+  ('module.admin.users.manage', 'Manage Users', 'admin', 'users.manage'),
+  ('module.admin.audit.view', 'View Audit Logs', 'admin', 'audit.view'),
+  ('system.sync.trigger', 'Trigger System Sync', 'system', 'sync.trigger'),
+  ('system.roles.manage', 'Manage Roles and Permissions', 'system', 'roles.manage')
+ON CONFLICT (permission_key) DO UPDATE SET
+  label = EXCLUDED.label,
+  module_key = EXCLUDED.module_key,
+  action_key = EXCLUDED.action_key;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+CROSS JOIN auth_permissions p
+WHERE r.role_key = 'superadmin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.projects.view', 'module.projects.create', 'module.projects.edit',
+  'module.invoices.view', 'module.invoices.create', 'module.invoices.edit', 'module.invoices.payment',
+  'module.tax.view', 'module.tax.export', 'module.analytics.view', 'module.reports.create',
+  'module.reports.export', 'module.ai.use', 'module.status.view', 'module.status.edit',
+  'module.shared.manage', 'module.admin.view', 'module.admin.audit.view', 'system.sync.trigger'
+)
+WHERE r.role_key = 'admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.projects.view', 'module.projects.edit',
+  'module.invoices.view', 'module.invoices.edit', 'module.invoices.payment',
+  'module.tax.view', 'module.analytics.view', 'module.reports.create',
+  'module.ai.use', 'module.status.view', 'module.status.edit'
+)
+WHERE r.role_key = 'manager'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.invoices.view', 'module.invoices.create',
+  'module.invoices.edit', 'module.invoices.payment', 'module.tax.view',
+  'module.tax.export', 'module.reports.create', 'module.reports.export'
+)
+WHERE r.role_key = 'finance'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.projects.view', 'module.invoices.view',
+  'module.status.view', 'module.ai.use'
+)
+WHERE r.role_key = 'user'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.projects.view', 'module.invoices.view',
+  'module.tax.view', 'module.analytics.view', 'module.status.view'
+)
+WHERE r.role_key = 'viewer'
+ON CONFLICT DO NOTHING;
 
 """
 # ---------------------------------------------------------------------------

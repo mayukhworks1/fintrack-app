@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const { login } = useAuth()
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [legacyMode, setLegacyMode] = useState(false)
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -14,16 +16,18 @@ export default function Login() {
 
   const submit = async (e) => {
     e?.preventDefault()
-    if (!password || loading) return
+    if (!password || loading || (!legacyMode && !email)) return
     setLoading(true)
     setError('')
     try {
-      await login(password)
+      await login(legacyMode ? password : { email, password })
       setPassword('')
     } catch (err) {
       const msg = err?.message || 'Login failed'
-      setError(msg.includes('401') || msg.toLowerCase().includes('incorrect')
-        ? 'Incorrect password — please try again'
+      setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
+        ? legacyMode ? 'Incorrect password — please try again' : 'Invalid email or password'
+        : msg.includes('403') || msg.toLowerCase().includes('pending_approval')
+          ? 'Your account is pending superadmin approval'
         : msg)
     } finally {
       setLoading(false)
@@ -62,11 +66,42 @@ export default function Login() {
               Sign in to your workspace
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-              Enter your access password to continue
+              {legacyMode ? 'Temporary legacy access while email auth rolls out' : 'Use your approved email account to continue'}
             </p>
           </div>
 
           <form onSubmit={submit} className="space-y-4" autoComplete="off">
+            {!legacyMode && (
+              <div>
+                <label className="label" htmlFor="ft-email">Email</label>
+                <div className="relative">
+                  <Mail
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: 'var(--text-3)' }}
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="ft-email"
+                    ref={inputRef}
+                    type="email"
+                    name="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setError('') }}
+                    placeholder="you@company.com"
+                    className="input pl-9 pr-3 py-2.5 text-sm rounded-xl"
+                    aria-label="Email"
+                    autoComplete="email"
+                    spellCheck="false"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    disabled={loading}
+                    maxLength={320}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Password field */}
             <div>
               <label className="label" htmlFor="ft-password">Password</label>
@@ -79,7 +114,7 @@ export default function Login() {
                 />
                 <input
                   id="ft-password"
-                  ref={inputRef}
+                  ref={legacyMode ? inputRef : null}
                   type={show ? 'text' : 'password'}
                   name="access-password"
                   value={password}
@@ -136,21 +171,21 @@ export default function Login() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading || !password}
+              disabled={loading || !password || (!legacyMode && !email)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{
                 background: 'var(--accent-btn)',
                 color: 'white',
-                opacity: loading || !password ? 0.55 : 1,
-                cursor: loading || !password ? 'not-allowed' : 'pointer',
-                boxShadow: loading || !password
+                opacity: loading || !password || (!legacyMode && !email) ? 0.55 : 1,
+                cursor: loading || !password || (!legacyMode && !email) ? 'not-allowed' : 'pointer',
+                boxShadow: loading || !password || (!legacyMode && !email)
                   ? 'none'
                   : '0 2px 4px rgba(37,99,235,0.2), 0 6px 16px rgba(37,99,235,0.18)',
                 transform: 'translateY(0)',
                 letterSpacing: '-0.01em',
               }}
               onMouseEnter={e => {
-                if (!loading && password) e.currentTarget.style.background = 'var(--accent-btn-hover)'
+                if (!loading && password && (legacyMode || email)) e.currentTarget.style.background = 'var(--accent-btn-hover)'
               }}
               onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-btn)'}
             >
@@ -166,11 +201,24 @@ export default function Login() {
                 </>
               )}
             </button>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => { setLegacyMode(v => !v); setError(''); setPassword('') }}
+                className="font-semibold"
+                style={{ color: 'var(--accent-btn)' }}
+              >
+                {legacyMode ? 'Use email login' : 'Use legacy password'}
+              </button>
+              {!legacyMode && (
+                <span style={{ color: 'var(--text-3)' }}>Forgot password coming next</span>
+              )}
+            </div>
           </form>
         </div>
 
         <p className="text-[10px] text-center mt-4" style={{ color: 'var(--text-3)' }}>
-          Password verified server-side · Not case-sensitive
+          {legacyMode ? 'Legacy password is temporary during RBAC migration' : 'Email login requires superadmin approval'}
         </p>
       </div>
     </div>

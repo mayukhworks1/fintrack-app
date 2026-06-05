@@ -53,8 +53,12 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('fintrack:auth-expired', onExpired)
   }, [])
 
-  const login = useCallback(async (password) => {
-    const res = await api.auth.login(password)
+  const login = useCallback(async (credentials, maybePassword) => {
+    const email = typeof credentials === 'object' ? credentials?.email : ''
+    const password = typeof credentials === 'object' ? credentials?.password : (maybePassword || credentials)
+    const res = email
+      ? await api.auth.emailLogin(email, password)
+      : await api.auth.login(password)
     if (!res?.token) throw new Error('Login failed')
     setAuthToken(res.token)
     const r = res.role || 'editor'

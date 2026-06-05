@@ -491,4 +491,97 @@ Backend auto-deploys to HF Space on push.
 - 2026-06-04 hardening: backend invoice summaries must never use `Amount Raised` as paid receipt. `total_received` and project received totals use `Amount Received`; pending/overdue amount chips use base `Amount Raised`; GST/TDS totals are separate summary fields.
 - Session/device tracking already uses `X-Client-Hint` plus IP geo; browser GPS is attempted once per secure session and stored as `browserGeo` when the user grants permission. Do not make geolocation blocking for normal app loads.
 
+---
+
+## 2026-06-05 Auth Modernisation Tranche 1
+
+Goal: introduce normal email/password login foundation without breaking the current password-role login or existing Teable/PG/Valkey business flows.
+
+Implemented in this tranche:
+
+- Added PG auth master/control-plane schema in `backend/app/db/postgres.py`.
+- New tables:
+  - `auth_users`
+  - `auth_identities`
+  - `auth_roles`
+  - `auth_permissions`
+  - `auth_role_permissions`
+  - `auth_user_roles`
+  - `auth_user_scopes`
+  - `auth_sessions`
+  - `auth_password_resets`
+  - `auth_events`
+- Seeded system roles:
+  - `superadmin`
+  - `admin`
+  - `manager`
+  - `finance`
+  - `user`
+  - `viewer`
+- Seeded baseline permission keys for dashboard, projects, invoices, tax ledger, analytics, reports, AI, status, shared views, admin, sync, and role management.
+- Added `backend/app/services/auth_master.py`.
+- Password hashing uses built-in `hashlib.pbkdf2_hmac("sha256")` with per-user random salt and 390k iterations. No new dependency was added in this tranche to avoid deployment risk.
+- Added new additive auth endpoints:
+  - `POST /api/auth/email/bootstrap`
+  - `POST /api/auth/email/register`
+  - `POST /api/auth/email/login`
+- Bootstrap rules:
+  - Only works while `auth_users` is empty.
+  - Requires `APP_ADMIN_PASSWORD`.
+  - Creates first active `superadmin` user.
+- Register rules:
+  - Creates users as `pending_approval`.
+  - Does not return an app token.
+  - Login is blocked until approval flow is implemented and the user is active.
+- Email login rules:
+  - Requires active `auth_users.status = 'active'`.
+  - Creates an `auth_sessions` row.
+  - Writes `auth_events`.
+  - Also writes legacy `login_sessions` for current admin/session visibility.
+  - Returns existing compatible HMAC token so current route guards keep working.
+- Compatibility bridge:
+  - `superadmin`/`admin` currently map to legacy frontend/backend role `editor` so existing app modules remain reachable.
+  - Other roles currently map to legacy `viewer` until full RBAC enforcement is implemented.
+  - Existing password-only `/api/auth/login` remains available and unchanged.
+  - Existing logout now also revokes matching `auth_sessions` rows.
+- Frontend login:
+  - `frontend/src/pages/Login.jsx` defaults to email/password login.
+  - Includes a temporary “Use legacy password” toggle so current passwords still work during migration.
+  - `frontend/src/context/AuthContext.jsx` supports both `login({ email, password })` and legacy `login(password)`.
+  - `frontend/src/services/api.js` exposes `emailLogin`, `emailRegister`, and `emailBootstrap`.
+
+Important safety boundary:
+
+- This tranche does **not** enforce new RBAC on business routes yet.
+- This tranche does **not** replace existing route dependencies (`require_editor`, `require_admin`, etc.).
+- This tranche does **not** alter Teable CRUD, sync, invoice math, shared views, or Valkey attribution.
+- This tranche does **not** add Google SSO, Zoho SSO, forgot-password email sending, or approval UI yet.
+
+Validated:
+
+- `python3 -m compileall backend/app`
+- `cd frontend && npm run build`
+- `git diff --check`
+
+Next required tranche:
+
+1. Build admin auth management backend endpoints:
+   - list pending/active/rejected/disabled users
+   - approve user with role
+   - reject user
+   - disable/reactivate user
+   - reset password / force password change
+   - revoke user sessions
+   - list roles/permissions/scopes
+2. Build admin UI tab for user approval and role/scope assignment.
+3. Add forgot-password email service:
+   - SMTP/Resend/Zoho Mail provider decision required
+   - reset token must be hashed in `auth_password_resets`
+   - reset link expiry should be short, ideally 30-60 minutes
+4. Add DB-backed session verification:
+   - current HMAC tokens remain compatible for now
+   - future request auth must check `auth_sessions.revoked_at` and `auth_users.status`
+5. Add full permission and data-scope enforcement endpoint by endpoint.
+6. Only after this is stable, add Google SSO and Zoho SSO identities into `auth_identities`.
+
 **This file is gitignored — local only. Do not commit.**
