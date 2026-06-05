@@ -243,23 +243,49 @@ async def health():
 
 
 @app.get("/api/smtp-test", tags=["health"])
-async def smtp_test(pw: str = ""):
-    """Email diagnostic — pass ?pw=<admin_password>. Shows active backend and config."""
-    from .services.emailer import is_resend_configured, is_smtp_configured
+async def smtp_test(pw: str = "", to: str = ""):
+    """Email diagnostic — pass ?pw=<admin_password>&to=<your_email> to send a real test email."""
+    import urllib.request, urllib.error, json as _json
+    from .services.emailer import is_resend_configured, is_smtp_configured, _resend_key
     if pw != settings.app_admin_password:
         raise HTTPException(status_code=403, detail="Wrong password")
-    return {
+
+    cfg = {
         "resend_configured": is_resend_configured(),
+        "resend_key_set": bool(_resend_key()),
+        "resend_key_prefix": (_resend_key() or "")[:8] + "..." if _resend_key() else None,
         "smtp_configured": is_smtp_configured(),
+        "from_email": settings.smtp_from_email or settings.smtp_username,
         "active_backend": "resend" if is_resend_configured() else ("smtp" if is_smtp_configured() else "none"),
-        "resend_api_key_set": bool(settings.resend_api_key or settings.resendapikey),
-        "smtp_host": settings.smtp_host,
-        "smtp_port": settings.smtp_port,
-        "smtp_username": settings.smtp_username,
-        "smtp_from_email": settings.smtp_from_email,
-        "smtp_use_ssl": settings.smtp_use_ssl,
-        "note": "HF Spaces blocks SMTP ports. Set RESEND_API_KEY to enable email.",
     }
+
+    if not to:
+        return {"config": cfg, "hint": "Add &to=youremail@example.com to send a real test"}
+
+    if not is_resend_configured():
+        return {"ok": False, "reason": "resend_not_configured", "config": cfg}
+
+    payload = _json.dumps({
+        "from": f"{settings.smtp_from_name or 'FinTrack'} <{settings.smtp_from_email or settings.smtp_username}>",
+        "to": [to],
+        "subject": "FinTrack SMTP test",
+        "text": "This is a test email from FinTrack.",
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={"Authorization": f"Bearer {_resend_key()}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = _json.loads(resp.read())
+            return {"ok": True, "resend_response": body, "config": cfg}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        return {"ok": False, "http_status": exc.code, "resend_error": body, "config": cfg}
+    except Exception as exc:
+        return {"ok": False, "reason": type(exc).__name__, "detail": str(exc), "config": cfg}
 
 
 @app.get("/api/admin/smtp-check", tags=["health"])
