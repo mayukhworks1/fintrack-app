@@ -32,6 +32,13 @@ def is_email_configured() -> bool:
 def _send_sync(to: list[str], subject: str, text: str, html: str | None = None) -> None:
     if not is_email_configured():
         raise RuntimeError("SMTP is not configured")
+    logger.info(
+        "Sending email via %s:%s (ssl=%s tls=%s) from=%s to=%s",
+        settings.smtp_host, settings.smtp_port,
+        settings.smtp_use_ssl, settings.smtp_use_tls,
+        settings.smtp_from_email or settings.smtp_username,
+        to,
+    )
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -65,20 +72,20 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
         await asyncio.to_thread(_send_sync, recipients, subject, text, html)
         return {"sent": True, "recipients": recipients}
     except smtplib.SMTPAuthenticationError as exc:
-        logger.warning("Email authentication failed: %s", exc)
-        return {"sent": False, "reason": "smtp_auth_failed"}
+        logger.error("Email authentication failed (check SMTP_USERNAME/SMTP_PASSWORD): %s", exc)
+        return {"sent": False, "reason": "smtp_auth_failed", "detail": str(exc)}
     except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, socket.timeout, TimeoutError) as exc:
-        logger.warning("Email connection failed: %s", exc)
-        return {"sent": False, "reason": "smtp_connection_failed"}
+        logger.error("Email connection failed (check SMTP_HOST/SMTP_PORT/SMTP_USE_SSL): %s", exc)
+        return {"sent": False, "reason": "smtp_connection_failed", "detail": str(exc)}
     except smtplib.SMTPRecipientsRefused as exc:
-        logger.warning("Email recipient refused: %s", exc)
-        return {"sent": False, "reason": "recipient_refused"}
+        logger.error("Email recipient refused: %s", exc)
+        return {"sent": False, "reason": "recipient_refused", "detail": str(exc)}
     except smtplib.SMTPSenderRefused as exc:
-        logger.warning("Email sender refused: %s", exc)
-        return {"sent": False, "reason": "sender_refused"}
+        logger.error("Email sender refused (SMTP_FROM_EMAIL must match account): %s", exc)
+        return {"sent": False, "reason": "sender_refused", "detail": str(exc)}
     except Exception as exc:
-        logger.warning("Email delivery failed: %s", exc)
-        return {"sent": False, "reason": "smtp_error"}
+        logger.error("Email delivery failed (%s): %s", type(exc).__name__, exc)
+        return {"sent": False, "reason": "smtp_error", "detail": str(exc)}
 
 
 def app_origin_from_request(request) -> str:
