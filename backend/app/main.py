@@ -252,7 +252,7 @@ async def smtp_test(pw: str = ""):
         "resend_configured": is_resend_configured(),
         "smtp_configured": is_smtp_configured(),
         "active_backend": "resend" if is_resend_configured() else ("smtp" if is_smtp_configured() else "none"),
-        "resend_api_key_set": bool(settings.resend_api_key),
+        "resend_api_key_set": bool(settings.resend_api_key or settings.resendapikey),
         "smtp_host": settings.smtp_host,
         "smtp_port": settings.smtp_port,
         "smtp_username": settings.smtp_username,

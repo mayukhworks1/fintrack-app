@@ -27,8 +27,12 @@ logger = logging.getLogger("fintrack.email")
 
 # ── Resend (HTTPS API) ────────────────────────────────────────────────────────
 
+def _resend_key() -> str | None:
+    return settings.resend_api_key or settings.resendapikey
+
+
 def is_resend_configured() -> bool:
-    return bool(settings.resend_api_key and (settings.smtp_from_email or settings.smtp_username))
+    return bool(_resend_key() and (settings.smtp_from_email or settings.smtp_username))
 
 
 async def _send_via_resend(to: list[str], subject: str, text: str, html: str | None) -> None:
@@ -48,7 +52,7 @@ async def _send_via_resend(to: list[str], subject: str, text: str, html: str | N
         "https://api.resend.com/emails",
         data=data,
         headers={
-            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Authorization": f"Bearer {_resend_key()}",
             "Content-Type": "application/json",
         },
         method="POST",
