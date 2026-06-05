@@ -7,7 +7,7 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, CalendarDays, User, Tag, ArrowRight, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw,
-  Sparkles, Upload, Loader2, Paperclip
+  Sparkles, Upload, Loader2, Paperclip, Mail
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -745,7 +745,9 @@ function Field({ label, children }) {
 }
 
 function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
+  const { userEmail, authRole, isEmailAuth } = useAuth()
   const isEdit = Boolean(invoice?.id)
+  const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance'].includes(authRole))
   const [form,       setForm]      = useState(EMPTY_FORM)
   const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
@@ -775,13 +777,15 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
   const canSubmit = !saving && (!isEdit || paymentOnly || hasFormChanges)
 
   useEffect(() => {
+    const ownerPatch = ownerLocked ? { raised_by: userEmail } : {}
     if (!invoice && !prefill) {
-      setForm(EMPTY_FORM)
-      setInitialForm(EMPTY_FORM)
+      const next = { ...EMPTY_FORM, ...ownerPatch }
+      setForm(next)
+      setInitialForm(next)
       return
     }
     if (!invoice && prefill) {
-      const next = { ...EMPTY_FORM, ...prefill }
+      const next = { ...EMPTY_FORM, ...prefill, ...ownerPatch }
       setForm(next)
       setInitialForm(next)
       return
@@ -794,7 +798,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
       category:        f['Category']        || '',
       description:     f['Description']     || '',
       milestone:       f['Milestone']       || '',
-      raised_by:       f['Raised By']       || '',
+      raised_by:       ownerLocked ? userEmail : (f['Raised By'] || ''),
       raised_date:     f['Raised Date']   ? String(f['Raised Date']).slice(0, 10)   : '',
       cleared_date:    f['Cleared Date']  ? String(f['Cleared Date']).slice(0, 10)  : '',
       amount_raised:   f['Amount Raised']   ?? '',
@@ -806,10 +810,11 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
       reference:       Array.isArray(f['Reference']) ? f['Reference'] : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
       ...(prefill || {}),
+      ...ownerPatch,
     }
     setForm(next)
     setInitialForm(next)
-  }, [invoice, prefill])
+  }, [invoice, prefill, ownerLocked, userEmail])
 
   useEffect(() => {
     setWorkingRecordId(invoice?.id || null)
@@ -1098,7 +1103,14 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
                   <SuggestInput value={form.milestone} onChange={set('milestone')} options={milestoneOptions} placeholder="Type or select milestone..." listId="invoice-milestone-options" />
                 </Field>
                 <Field label="Raised By">
-                  <SuggestInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Type or select owner..." listId="invoice-raised-by-options" />
+                  {ownerLocked ? (
+                    <div className="input flex items-center gap-2" style={{ color: 'var(--text-1)', background: 'var(--bg-input)' }}>
+                      <Mail size={13} style={{ color: 'var(--accent)' }} />
+                      <span className="truncate">{userEmail}</span>
+                    </div>
+                  ) : (
+                    <SuggestInput value={form.raised_by} onChange={set('raised_by')} options={raisedByOptions} placeholder="Type or select owner..." listId="invoice-raised-by-options" />
+                  )}
                 </Field>
               </div>
               <Field label="Description">

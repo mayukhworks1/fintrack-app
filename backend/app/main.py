@@ -162,6 +162,13 @@ async def request_middleware(request: Request, call_next):
 
         # Non-blocking enqueue — audit_worker batches + inserts asynchronously.
         # enqueue_audit() is synchronous (just queue.put_nowait) so no await needed.
+        auth_extra = {
+            "auth_user_id": getattr(request.state, "auth_user_id", None),
+            "auth_user_email": getattr(request.state, "auth_user_email", None),
+            "auth_role": getattr(request.state, "auth_role", None),
+            "auth_session_id": getattr(request.state, "auth_session_id", None),
+            "is_email_auth": bool(getattr(request.state, "is_email_auth", False)),
+        }
         enqueue_audit(
             role=role,
             token_hint=token_hint,
@@ -177,6 +184,7 @@ async def request_middleware(request: Request, call_next):
             query_params=str(request.url.query)[:500] or None,
             resp_size=int(response.headers.get("content-length") or 0) or None,
             client_hint=request.headers.get("x-client-hint", ""),
+            extra={k: v for k, v in auth_extra.items() if v not in (None, "")},
         )
 
         # Keep login_sessions.last_seen_at fresh (rate-limited in touch_session)

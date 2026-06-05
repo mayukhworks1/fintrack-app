@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..config import settings
-from .deps import require_web_access
+from .deps import require_web_access, owner_scope_email
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -134,12 +134,14 @@ async def add_picklist_option(
 async def upload_attachment(
     record_id: str,
     field_name: str,
+    request: Request,
     file: UploadFile = File(...),
     _role: str = Depends(require_web_access),
 ):
     """Upload a file into a specific attachment field on an existing Teable record."""
     service = WebInvoiceService()
     try:
+        await _assert_web_invoice_owner(service, record_id, request)
         content = await file.read()
         return await service.upload_attachment_to_field(
             record_id=record_id,
@@ -152,20 +154,23 @@ async def upload_attachment(
         raise HTTPException(status_code=400, detail=str(e))
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/summary")
-async def web_invoice_summary(_role: str = Depends(require_web_access)):
+async def web_invoice_summary(request: Request, _role: str = Depends(require_web_access)):
     try:
-        return await WebInvoiceService().get_summary()
+        return await WebInvoiceService().get_summary(raised_by=owner_scope_email(request))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")
 async def list_web_invoices(
+    request: Request,
     status:   Optional[str] = Query(None),
     project:  Optional[str] = Query(None),
     limit:    int           = Query(200, ge=1, le=1000),
@@ -176,7 +181,7 @@ async def list_web_invoices(
 ):
     try:
         return await WebInvoiceService().list_invoices(
-            status=status, project=project,
+            status=status, project=project, raised_by=owner_scope_email(request),
             limit=limit, skip=skip,
             order_by=order_by, order=order,
         )
@@ -185,9 +190,14 @@ async def list_web_invoices(
 
 
 @router.get("/{record_id}")
-async def get_web_invoice(record_id: str, _role: str = Depends(require_web_access)):
+async def get_web_invoice(record_id: str, request: Request, _role: str = Depends(require_web_access)):
     try:
-        return await WebInvoiceService().get_invoice(record_id)
+        svc = WebInvoiceService()
+        record = await svc.get_invoice(record_id)
+        _assert_record_owner(record, request)
+        return record
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 
@@ -196,6 +206,9 @@ async def get_web_invoice(record_id: str, _role: str = Depends(require_web_acces
 async def create_web_invoice(body: WebInvoiceFields, request: Request, role: str = Depends(require_web_access)):
     try:
         fields = body.to_teable_fields()
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            fields["Raised By"] = scoped_email
         _validate_paid_invoice(fields)
         result = await WebInvoiceService().create_invoice(fields)
         new_id = result.get("id") if isinstance(result, dict) else None
@@ -217,13 +230,18 @@ async def update_web_invoice(
     role: str = Depends(require_web_access),
 ):
     try:
+        svc = WebInvoiceService()
+        await _assert_web_invoice_owner(svc, record_id, request)
         fields = body.to_teable_fields()
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            fields["Raised By"] = scoped_email
         _validate_paid_invoice(fields)
         try:
             await record_user_attribution(request, role, record_id)
         except Exception:
             pass
-        return await WebInvoiceService().update_invoice(record_id, fields)
+        return await svc.update_invoice(record_id, fields)
     except HTTPException:
         raise
     except Exception as e:
@@ -233,10 +251,28 @@ async def update_web_invoice(
 @router.delete("/{record_id}", status_code=204)
 async def delete_web_invoice(record_id: str, request: Request, role: str = Depends(require_web_access)):
     try:
+        svc = WebInvoiceService()
+        await _assert_web_invoice_owner(svc, record_id, request)
         try:
             await record_user_attribution(request, role, record_id)
         except Exception:
             pass
-        await WebInvoiceService().delete_invoice(record_id)
+        await svc.delete_invoice(record_id)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _assert_record_owner(record: dict | None, request: Request) -> None:
+    scoped_email = owner_scope_email(request)
+    if scoped_email and (record or {}).get("fields", {}).get("Raised By") != scoped_email:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+
+async def _assert_web_invoice_owner(service: WebInvoiceService, record_id: str, request: Request) -> None:
+    scoped_email = owner_scope_email(request)
+    if not scoped_email:
+        return
+    record = await service.get_invoice(record_id)
+    _assert_record_owner(record, request)

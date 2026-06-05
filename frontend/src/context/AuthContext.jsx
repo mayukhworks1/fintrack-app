@@ -4,6 +4,8 @@ import { api, getAuthToken, setAuthToken, clearAuthToken } from '../services/api
 const AuthContext = createContext(null)
 
 const ROLE_KEY = 'fintrack-auth-role'
+const USER_KEY = 'fintrack-auth-user'
+const AUTH_ROLE_KEY = 'fintrack-auth-master-role'
 
 function getStoredRole() {
   try { return localStorage.getItem(ROLE_KEY) || 'editor' } catch { return 'editor' }
@@ -14,12 +16,28 @@ function setStoredRole(role) {
     else localStorage.removeItem(ROLE_KEY)
   } catch {}
 }
+function getStoredJson(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch { return fallback }
+}
+function setStoredJson(key, value) {
+  try {
+    if (value) localStorage.setItem(key, JSON.stringify(value))
+    else localStorage.removeItem(key)
+  } catch {}
+}
 
 export function AuthProvider({ children }) {
   // 'loading' | 'authed' | 'unauthed'
   const [status, setStatus] = useState(() => (getAuthToken() ? 'loading' : 'unauthed'))
   // 'editor' | 'viewer'
   const [role, setRole] = useState(() => getStoredRole())
+  const [authRole, setAuthRole] = useState(() => {
+    try { return localStorage.getItem(AUTH_ROLE_KEY) || '' } catch { return '' }
+  })
+  const [user, setUser] = useState(() => getStoredJson(USER_KEY, null))
 
   // Verify stored token on mount — also refreshes the role from server
   useEffect(() => {
@@ -32,11 +50,20 @@ export function AuthProvider({ children }) {
           const r = res?.role || 'editor'
           setRole(r)
           setStoredRole(r)
+          setAuthRole(res?.auth_role || '')
+          setStoredJson(USER_KEY, res?.user || null)
+          try {
+            if (res?.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
+            else localStorage.removeItem(AUTH_ROLE_KEY)
+          } catch {}
+          setUser(res?.user || null)
           setStatus('authed')
         }
       } catch {
         clearAuthToken()
         setStoredRole(null)
+        setStoredJson(USER_KEY, null)
+        try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
         if (!cancelled) setStatus('unauthed')
       }
     })()
@@ -47,6 +74,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const onExpired = () => {
       setStoredRole(null)
+      setStoredJson(USER_KEY, null)
+      try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
+      setUser(null)
+      setAuthRole('')
       setStatus('unauthed')
     }
     window.addEventListener('fintrack:auth-expired', onExpired)
@@ -64,6 +95,13 @@ export function AuthProvider({ children }) {
     const r = res.role || 'editor'
     setRole(r)
     setStoredRole(r)
+    setAuthRole(res.auth_role || '')
+    setUser(res.user || null)
+    setStoredJson(USER_KEY, res.user || null)
+    try {
+      if (res.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
+      else localStorage.removeItem(AUTH_ROLE_KEY)
+    } catch {}
     setStatus('authed')
   }, [])
 
@@ -74,7 +112,11 @@ export function AuthProvider({ children }) {
     api.auth.logout().catch(() => {})  // never block logout on network failure
     clearAuthToken()
     setStoredRole(null)
+    setStoredJson(USER_KEY, null)
+    try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
     setRole('editor')
+    setAuthRole('')
+    setUser(null)
     setStatus('unauthed')
   }, [])
 
@@ -82,6 +124,10 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       status,
       role,
+      authRole,
+      user,
+      userEmail: user?.email || '',
+      isEmailAuth: Boolean(user?.email),
       isEditor: role === 'editor',
       isViewer: role === 'viewer',
       isWeb:    role === 'web',

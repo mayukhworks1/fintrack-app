@@ -87,6 +87,10 @@ def _legacy_role_for(role_key: str) -> str:
     # Compatibility bridge for current route guards and frontend routing.
     if role_key in {"superadmin", "admin"}:
         return "editor"
+    if role_key == "web":
+        return "web"
+    if role_key in {"manager", "finance"}:
+        return "editor"
     if role_key == "viewer":
         return "viewer"
     return "viewer"

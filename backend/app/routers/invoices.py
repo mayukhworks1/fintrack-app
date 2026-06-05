@@ -10,7 +10,7 @@ import httpx
 from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
-from .deps import require_auth, require_editor
+from .deps import require_auth, owner_scope_email
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
@@ -85,11 +85,14 @@ class InvoiceFields(BaseModel):
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/summary")
-async def invoice_summary(_role: str = Depends(require_auth)):
+async def invoice_summary(request: Request, _role: str = Depends(require_auth)):
     try:
         svc = InvoiceService()
-        summary = await svc.get_summary()
+        scoped_email = owner_scope_email(request)
+        summary = await svc.get_summary(raised_by=scoped_email)
         if summary is not None:
+            return summary
+        if scoped_email:
             return summary
         return await svc.get_summary_from_pg()
     except Exception as e:
@@ -107,6 +110,7 @@ async def get_invoice_picklists(_role: str = Depends(require_auth)):
 
 @router.get("")
 async def list_invoices(
+    request: Request,
     status:   Optional[str] = Query(None),
     project:  Optional[str] = Query(None),
     limit:    int           = Query(200, ge=1, le=1000),
@@ -117,14 +121,15 @@ async def list_invoices(
 ):
     try:
         svc = InvoiceService()
+        scoped_email = owner_scope_email(request)
         result = await svc.list_invoices(
-            status=status, project=project,
+            status=status, project=project, raised_by=scoped_email,
             limit=limit, skip=skip,
             order_by=order_by, order=order,
         )
         if result is None:
             result = await svc.list_invoices_from_pg(
-                status=status, project=project,
+                status=status, project=project, raised_by=scoped_email,
                 limit=limit, skip=skip,
                 order_by=order_by, order=order,
             )
@@ -134,21 +139,38 @@ async def list_invoices(
 
 
 @router.get("/{record_id}")
-async def get_invoice(record_id: str, _role: str = Depends(require_auth)):
+async def get_invoice(record_id: str, request: Request, _role: str = Depends(require_auth)):
     try:
         svc = InvoiceService()
         record = await svc.get_invoice(record_id)
         if record is None:
             record = await svc.get_invoice_from_pg(record_id)
+        scoped_email = owner_scope_email(request)
+        if scoped_email and (record or {}).get("fields", {}).get("Raised By") != scoped_email:
+            raise HTTPException(status_code=404, detail="Invoice not found")
         return record
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 
 
+def _require_invoice_write(request: Request, role: str) -> None:
+    if role == "editor":
+        return
+    if owner_scope_email(request):
+        return
+    raise HTTPException(status_code=403, detail="This action requires invoice write access")
+
+
 @router.post("", status_code=201)
-async def create_invoice(body: InvoiceFields, request: Request, role: str = Depends(require_editor)):
+async def create_invoice(body: InvoiceFields, request: Request, role: str = Depends(require_auth)):
     try:
+        _require_invoice_write(request, role)
         fields = body.to_teable_fields()
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            fields["Raised By"] = scoped_email
         _validate_paid_invoice(fields)
         result = await InvoiceService().create_invoice(fields)
         new_id = result.get("id") if isinstance(result, dict) else None
@@ -167,10 +189,17 @@ async def create_invoice(body: InvoiceFields, request: Request, role: str = Depe
 @router.patch("/{record_id}")
 async def update_invoice(
     record_id: str, body: InvoiceFields, request: Request,
-    role: str = Depends(require_editor),
+    role: str = Depends(require_auth),
 ):
     try:
+        _require_invoice_write(request, role)
         fields = body.to_teable_fields(include_null_fields={"Raised Date", "Cleared Date", "Next followup"})
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            existing = await InvoiceService().get_invoice(record_id)
+            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+                raise HTTPException(status_code=404, detail="Invoice not found")
+            fields["Raised By"] = scoped_email
         _validate_paid_invoice(fields)
         try:
             await record_user_attribution(request, role, record_id)
@@ -184,13 +213,21 @@ async def update_invoice(
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_invoice(record_id: str, request: Request, role: str = Depends(require_editor)):
+async def delete_invoice(record_id: str, request: Request, role: str = Depends(require_auth)):
     try:
+        _require_invoice_write(request, role)
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            existing = await InvoiceService().get_invoice(record_id)
+            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+                raise HTTPException(status_code=404, detail="Invoice not found")
         try:
             await record_user_attribution(request, role, record_id)
         except Exception:
             pass
         await InvoiceService().delete_invoice(record_id)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -198,7 +235,7 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
 @router.post("/parse")
 async def parse_invoice(
     file: UploadFile = File(...),
-    _role: str = Depends(require_editor),
+    _role: str = Depends(require_auth),
 ):
     """
     Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
@@ -239,12 +276,19 @@ async def parse_invoice(
 async def upload_attachment(
     record_id: str,
     field_name: str,
+    request: Request,
     file: UploadFile = File(...),
-    _role: str = Depends(require_editor),
+    role: str = Depends(require_auth),
 ):
     """Upload a file into a specific attachment field on an existing invoice record."""
     service = InvoiceService()
     try:
+        _require_invoice_write(request, role)
+        scoped_email = owner_scope_email(request)
+        if scoped_email:
+            existing = await service.get_invoice(record_id)
+            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+                raise HTTPException(status_code=404, detail="Invoice not found")
         content = await file.read()
         return await service.upload_attachment_to_field(
             record_id=record_id,
@@ -257,5 +301,7 @@ async def upload_attachment(
         raise HTTPException(status_code=400, detail=str(e))
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

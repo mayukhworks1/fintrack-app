@@ -255,7 +255,59 @@ async def verify(authorization: str | None = Header(default=None)):
     if role is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    return {"valid": True, "role": role}
+    payload: dict = {"valid": True, "role": role}
+    try:
+        from ..db.postgres import get_pool
+        pool = get_pool()
+        if pool:
+            row = await pool.fetchrow(
+                """
+                SELECT
+                    s.id AS session_id,
+                    s.user_id,
+                    s.revoked_at,
+                    s.expires_at,
+                    s.metadata,
+                    u.email,
+                    u.full_name,
+                    u.status,
+                    r.role_key AS auth_role
+                FROM auth_sessions s
+                JOIN auth_users u ON u.id = s.user_id
+                LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+                LEFT JOIN auth_roles r ON r.id = ur.role_id
+                WHERE s.token_hint = $1
+                ORDER BY r.rank ASC NULLS LAST, ur.assigned_at ASC NULLS LAST
+                LIMIT 1
+                """,
+                token[:16],
+            )
+            if row:
+                if row["revoked_at"] is not None:
+                    raise HTTPException(status_code=401, detail="Session has been revoked")
+                expired = await pool.fetchval("SELECT $1::timestamptz <= NOW()", row["expires_at"])
+                if expired:
+                    raise HTTPException(status_code=401, detail="Session has expired")
+                if row["status"] != "active":
+                    raise HTTPException(status_code=403, detail=f"User is {row['status']}")
+                await pool.execute("UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1", row["session_id"])
+                auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
+                payload.update({
+                    "auth_role": auth_role,
+                    "session_id": str(row["session_id"]),
+                    "user": {
+                        "id": str(row["user_id"]),
+                        "email": row["email"],
+                        "full_name": row["full_name"],
+                        "status": row["status"],
+                    },
+                })
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    return payload
 
 
 @router.post("/logout")

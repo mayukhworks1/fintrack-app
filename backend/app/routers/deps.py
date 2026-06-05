@@ -18,7 +18,10 @@ Usage:
 """
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import Depends, Header, HTTPException, Request
+from ..db.postgres import get_pool
 from .auth import verify_token
 
 
@@ -28,7 +31,98 @@ def _get_token(authorization: str | None = Header(default=None)) -> str:
     return authorization.split(" ", 1)[1].strip()
 
 
-def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
+PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance"}
+
+
+async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, Any] | None:
+    """
+    Attach database-backed identity for email/password sessions.
+
+    Legacy password tokens do not have an auth_sessions row and remain supported.
+    Email-auth tokens must have a live, non-revoked session and an active user.
+    """
+    pool = get_pool()
+    if not pool:
+        return None
+    row = await pool.fetchrow(
+        """
+        SELECT
+            s.id AS session_id,
+            s.user_id,
+            s.expires_at,
+            s.revoked_at,
+            s.metadata,
+            u.email,
+            u.full_name,
+            u.status,
+            r.role_key AS auth_role
+        FROM auth_sessions s
+        JOIN auth_users u ON u.id = s.user_id
+        LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+        LEFT JOIN auth_roles r ON r.id = ur.role_id
+        WHERE s.token_hint = $1
+        ORDER BY r.rank ASC NULLS LAST, ur.assigned_at ASC NULLS LAST
+        LIMIT 1
+        """,
+        token_hint[:20],
+    )
+    if not row:
+        return None
+    if row["revoked_at"] is not None:
+        raise HTTPException(status_code=401, detail="Session has been revoked")
+    if row["expires_at"] is not None:
+        # DB-side NOW() comparison avoids timezone/local clock drift.
+        expired = await pool.fetchval("SELECT $1::timestamptz <= NOW()", row["expires_at"])
+        if expired:
+            raise HTTPException(status_code=401, detail="Session has expired")
+    if row["status"] != "active":
+        raise HTTPException(status_code=403, detail=f"User is {row['status']}")
+
+    auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
+    request.state.auth_session_id = str(row["session_id"])
+    request.state.auth_user_id = str(row["user_id"])
+    request.state.auth_user_email = row["email"]
+    request.state.auth_user_name = row["full_name"]
+    request.state.auth_role = auth_role
+    request.state.is_email_auth = True
+    try:
+        await pool.execute("UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1", row["session_id"])
+    except Exception:
+        pass
+    return {
+        "session_id": str(row["session_id"]),
+        "user_id": str(row["user_id"]),
+        "email": row["email"],
+        "full_name": row["full_name"],
+        "auth_role": auth_role,
+    }
+
+
+def get_auth_email(request: Request) -> str | None:
+    value = getattr(request.state, "auth_user_email", None)
+    return str(value).strip().lower() if value else None
+
+
+def get_auth_role(request: Request) -> str | None:
+    value = getattr(request.state, "auth_role", None)
+    return str(value).strip().lower() if value else None
+
+
+def owner_scope_email(request: Request) -> str | None:
+    """
+    Email-auth users outside privileged roles are scoped to their own Raised By.
+    Legacy password users return None for backwards compatibility.
+    """
+    email = get_auth_email(request)
+    if not email:
+        return None
+    auth_role = get_auth_role(request) or ""
+    if auth_role in PRIVILEGED_AUTH_ROLES:
+        return None
+    return email
+
+
+async def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
     """
     Accepts any valid token (editor / viewer / web / all / admin).
     Stores role + token_hint on request.state for the audit middleware.
@@ -40,6 +134,8 @@ def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
     # Store on state so audit middleware can read them after the response
     request.state.role       = role
     request.state.token_hint = token[:16]
+    request.state.is_email_auth = False
+    await _attach_auth_session(request, token[:16])
     return role
 
 

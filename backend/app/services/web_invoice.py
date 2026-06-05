@@ -294,12 +294,13 @@ class WebInvoiceService:
         self,
         status: Optional[str] = None,
         project: Optional[str] = None,
+        raised_by: Optional[str] = None,
         limit: int = 200,
         skip: int = 0,
         order_by: str = "Raised Date",
         order: str = "desc",
     ) -> dict:
-        cache_key = f"webinv:list:{status}:{project}:{limit}:{skip}:{order_by}:{order}"
+        cache_key = f"webinv:list:{status}:{project}:{raised_by}:{limit}:{skip}:{order_by}:{order}"
 
         async def _load():
             params: dict[str, Any] = {
@@ -320,6 +321,12 @@ class WebInvoiceService:
                     "operator": "is",
                     "value": project,
                 })
+            if raised_by:
+                filter_set.append({
+                    "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
+                    "operator": "is",
+                    "value": raised_by,
+                })
             if filter_set:
                 params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
             field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
@@ -332,9 +339,15 @@ class WebInvoiceService:
             records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
             return {"records": records, "total": data.get("total", 0)}
 
+        # Owner-scoped views are security-sensitive and should reflect CRUD
+        # immediately. Keep cache only for legacy/full-workspace reads.
+        if raised_by:
+            return await _load()
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
-    async def get_all_invoices(self) -> list[dict]:
+    async def get_all_invoices(self, raised_by: Optional[str] = None) -> list[dict]:
+        cache_key = "webinv:all" if not raised_by else f"webinv:all:raised_by:{raised_by}"
+
         async def _load():
             records, skip = [], 0
             async with httpx.AsyncClient(timeout=30) as client:
@@ -348,6 +361,15 @@ class WebInvoiceService:
                             "order": "desc",
                         }]),
                     }
+                    if raised_by:
+                        params["filter"] = json.dumps({
+                            "conjunction": "and",
+                            "filterSet": [{
+                                "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
+                                "operator": "is",
+                                "value": raised_by,
+                            }],
+                        })
                     res = await client.get(self._record_url, params=params, headers=self._headers)
                     res.raise_for_status()
                     batch = res.json().get("records", [])
@@ -356,7 +378,9 @@ class WebInvoiceService:
                         break
                     skip += 1000
             return [_apply_runtime_invoice_derivatives(r) for r in records]
-        return await cache.get_or_set("webinv:all", ttl=_TTL_ALL, loader=_load)
+        if raised_by:
+            return await _load()
+        return await cache.get_or_set(cache_key, ttl=_TTL_ALL, loader=_load)
 
     async def get_invoice(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
@@ -517,12 +541,13 @@ class WebInvoiceService:
             "formula_dependency_ready": mode == "numeric",
         }
 
-    async def get_summary(self) -> dict:
-        cached = cache.get("webinv:summary")
+    async def get_summary(self, raised_by: Optional[str] = None) -> dict:
+        cache_key = "webinv:summary" if not raised_by else f"webinv:summary:raised_by:{raised_by}"
+        cached = cache.get(cache_key) if not raised_by else None
         if cached is not None:
             return cached
 
-        records = await self.get_all_invoices()
+        records = await self.get_all_invoices(raised_by=raised_by)
 
         # ── Per-currency accumulators ──────────────────────────────────────
         # by_currency[cur] = {raised, with_tax, gst, tds, received, outstanding, count, pending_count}
@@ -694,7 +719,8 @@ class WebInvoiceService:
             "pending_invoices": pending_invoices[:10],
             "overdue_invoices": overdue_invoices[:5],
         }
-        cache.set("webinv:summary", summary, ttl=_TTL_SUMMARY)
+        if not raised_by:
+            cache.set(cache_key, summary, ttl=_TTL_SUMMARY)
         return summary
 
 

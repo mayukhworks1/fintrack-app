@@ -831,7 +831,9 @@ function InvoiceDrawer({
   canEditPicklists,
   onPicklistPermissionError,
 }) {
+  const { userEmail, authRole, isEmailAuth } = useAuth()
   const isEdit = Boolean(invoice?.id)
+  const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance'].includes(authRole))
   const [form,       setForm]       = useState(EMPTY_FORM)
   const [saving,     setSaving]     = useState(false)
   const [deleting,   setDeleting]   = useState(false)
@@ -846,11 +848,13 @@ function InvoiceDrawer({
   const currentRecordId = invoice?.id || workingRecordId
 
   useEffect(() => {
-    if (!invoice && !draft) { setForm(EMPTY_FORM); return }
+    const ownerPatch = ownerLocked ? { raised_by: userEmail } : {}
+    if (!invoice && !draft) { setForm({ ...EMPTY_FORM, ...ownerPatch }); return }
     if (!invoice && draft) {
       setForm({
         ...EMPTY_FORM,
         ...draft,
+        ...ownerPatch,
       })
       return
     }
@@ -861,7 +865,7 @@ function InvoiceDrawer({
       category:        f['Category']        || '',
       description:     f['Description']     || '',
       milestone:       f['Milestone']       || '',
-      raised_by:       f['Raised By']       || '',
+      raised_by:       ownerLocked ? userEmail : (f['Raised By'] || ''),
       raised_date:     f['Raised Date']   ? String(f['Raised Date']).slice(0, 10)   : '',
       cleared_date:    f['Cleared Date']  ? String(f['Cleared Date']).slice(0, 10)  : '',
       amount_raised:   f['Amount Raised']   ?? '',
@@ -874,7 +878,7 @@ function InvoiceDrawer({
       reference:       Array.isArray(f['Reference'])   ? f['Reference']   : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
     })
-  }, [invoice, draft])
+  }, [invoice, draft, ownerLocked, userEmail])
 
   useEffect(() => {
     setWorkingRecordId(invoice?.id || null)
@@ -1042,9 +1046,16 @@ function InvoiceDrawer({
                 canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
             </FieldRow>
             <FieldRow label="Raised By">
-              <PicklistSelect fieldName="Raised By" value={form.raised_by} onChange={set('raised_by')}
-                options={picklists?.['Raised By'] || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
-                canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
+              {ownerLocked ? (
+                <div className="input flex items-center gap-2" style={{ color: 'var(--text-1)', background: 'var(--bg-input)' }}>
+                  <Mail size={13} style={{ color: 'var(--accent)' }} />
+                  <span className="truncate">{userEmail}</span>
+                </div>
+              ) : (
+                <PicklistSelect fieldName="Raised By" value={form.raised_by} onChange={set('raised_by')}
+                  options={picklists?.['Raised By'] || []} onOptionsUpdate={onOptionsUpdate} placeholder="Select…"
+                  canAddOptions={canEditPicklists} onPermissionError={onPicklistPermissionError} />
+              )}
             </FieldRow>
           </div>
           <FieldRow label="Description">
