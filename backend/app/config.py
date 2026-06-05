@@ -39,10 +39,11 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
-    # ── Transactional email / Zoho SMTP ────────────────────────────────────
-    # For Zoho use env values such as:
-    # SMTP_HOST=smtp.zoho.in (India) or smtp.zoho.com
-    # SMTP_PORT=465 with SMTP_USE_SSL=true, or 587 with SMTP_USE_TLS=true.
+    # ── Transactional email ─────────────────────────────────────────────────
+    # HF Spaces blocks SMTP ports — use Resend instead:
+    #   RESEND_API_KEY=re_xxxx  (resend.com, verify worksmayukh.space domain)
+    # SMTP is kept as a local/self-hosted fallback only.
+    resend_api_key: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: int = 465
     smtp_username: Optional[str] = None

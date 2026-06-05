@@ -244,37 +244,22 @@ async def health():
 
 @app.get("/api/smtp-test", tags=["health"])
 async def smtp_test(pw: str = ""):
-    """Open SMTP diagnostic — pass ?pw=<admin_password> to authenticate."""
-    import smtplib, socket as _socket, ssl as _ssl, traceback as _tb
-    from .services.emailer import is_email_configured
+    """Email diagnostic — pass ?pw=<admin_password>. Shows active backend and config."""
+    from .services.emailer import is_resend_configured, is_smtp_configured
     if pw != settings.app_admin_password:
         raise HTTPException(status_code=403, detail="Wrong password")
-    cfg = {
+    return {
+        "resend_configured": is_resend_configured(),
+        "smtp_configured": is_smtp_configured(),
+        "active_backend": "resend" if is_resend_configured() else ("smtp" if is_smtp_configured() else "none"),
+        "resend_api_key_set": bool(settings.resend_api_key),
         "smtp_host": settings.smtp_host,
         "smtp_port": settings.smtp_port,
         "smtp_username": settings.smtp_username,
         "smtp_from_email": settings.smtp_from_email,
         "smtp_use_ssl": settings.smtp_use_ssl,
-        "smtp_use_tls": settings.smtp_use_tls,
-        "smtp_password_set": bool(settings.smtp_password),
-        "configured": is_email_configured(),
+        "note": "HF Spaces blocks SMTP ports. Set RESEND_API_KEY to enable email.",
     }
-    if not is_email_configured():
-        return {"ok": False, "reason": "smtp_not_configured", "config": cfg}
-    try:
-        if settings.smtp_use_ssl:
-            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-                smtp.login(settings.smtp_username, settings.smtp_password)
-        else:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-                smtp.ehlo()
-                if settings.smtp_use_tls:
-                    smtp.starttls()
-                    smtp.ehlo()
-                smtp.login(settings.smtp_username, settings.smtp_password)
-        return {"ok": True, "config": cfg}
-    except Exception as exc:
-        return {"ok": False, "reason": type(exc).__name__, "detail": str(exc), "traceback": _tb.format_exc(), "config": cfg}
 
 
 @app.get("/api/admin/smtp-check", tags=["health"])

@@ -1,8 +1,11 @@
 """Transactional email delivery.
 
-Configured by environment variables so production can use Zoho SMTP without
-committing credentials. The service returns structured delivery results instead
-of raising secrets or SMTP internals into public API responses.
+Supports two backends, tried in order:
+  1. Resend API  — if RESEND_API_KEY is set (works on HF Spaces, no SMTP ports needed)
+  2. SMTP        — fallback for self-hosted / local use
+
+HF Spaces blocks outbound SMTP ports (465/587), so Resend is the required
+backend in production.
 """
 
 from __future__ import annotations
@@ -22,7 +25,46 @@ from ..config import settings
 logger = logging.getLogger("fintrack.email")
 
 
-def is_email_configured() -> bool:
+# ── Resend (HTTPS API) ────────────────────────────────────────────────────────
+
+def is_resend_configured() -> bool:
+    return bool(settings.resend_api_key and (settings.smtp_from_email or settings.smtp_username))
+
+
+async def _send_via_resend(to: list[str], subject: str, text: str, html: str | None) -> None:
+    import urllib.request, urllib.error, json
+    from_addr = formataddr((settings.smtp_from_name or "FinTrack", settings.smtp_from_email or settings.smtp_username or ""))
+    payload = {
+        "from": from_addr,
+        "to": to,
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
+
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read()
+            logger.info("Resend delivered to %s: %s", to, body)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        raise RuntimeError(f"Resend HTTP {exc.code}: {body}") from exc
+
+
+# ── SMTP (direct) ─────────────────────────────────────────────────────────────
+
+def is_smtp_configured() -> bool:
     return bool(
         settings.smtp_host
         and settings.smtp_username
@@ -31,17 +73,17 @@ def is_email_configured() -> bool:
     )
 
 
-def _send_sync(to: list[str], subject: str, text: str, html: str | None = None) -> None:
-    if not is_email_configured():
-        raise RuntimeError("SMTP is not configured")
+def is_email_configured() -> bool:
+    return is_resend_configured() or is_smtp_configured()
+
+
+def _send_smtp_sync(to: list[str], subject: str, text: str, html: str | None) -> None:
     logger.info(
-        "Sending email via %s:%s (ssl=%s tls=%s) from=%s to=%s",
+        "Sending via SMTP %s:%s (ssl=%s tls=%s) from=%s to=%s",
         settings.smtp_host, settings.smtp_port,
         settings.smtp_use_ssl, settings.smtp_use_tls,
-        settings.smtp_from_email or settings.smtp_username,
-        to,
+        settings.smtp_from_email or settings.smtp_username, to,
     )
-
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = formataddr((settings.smtp_from_name or "FinTrack", settings.smtp_from_email or settings.smtp_username or ""))
@@ -64,32 +106,39 @@ def _send_sync(to: list[str], subject: str, text: str, html: str | None = None) 
             smtp.send_message(msg)
 
 
+# ── Public API ────────────────────────────────────────────────────────────────
+
 async def send_email(to: str | Iterable[str], subject: str, text: str, html: str | None = None) -> dict:
     recipients = [x.strip() for x in ([to] if isinstance(to, str) else list(to)) if x and x.strip()]
     if not recipients:
         return {"sent": False, "reason": "no_recipient"}
     if not is_email_configured():
-        return {"sent": False, "reason": "smtp_not_configured"}
+        return {"sent": False, "reason": "email_not_configured"}
+
+    # Prefer Resend (works on HF Spaces); fall back to SMTP
+    if is_resend_configured():
+        try:
+            await _send_via_resend(recipients, subject, text, html)
+            return {"sent": True, "recipients": recipients, "backend": "resend"}
+        except Exception as exc:
+            logger.error("Resend delivery failed: %s\n%s", exc, traceback.format_exc())
+            return {"sent": False, "reason": "resend_error", "detail": str(exc)}
+
+    # SMTP fallback
     try:
-        await asyncio.to_thread(_send_sync, recipients, subject, text, html)
-        return {"sent": True, "recipients": recipients}
+        await asyncio.to_thread(_send_smtp_sync, recipients, subject, text, html)
+        return {"sent": True, "recipients": recipients, "backend": "smtp"}
     except smtplib.SMTPAuthenticationError as exc:
-        logger.error("SMTP auth failed (wrong password or need App Password): %s", exc)
+        logger.error("SMTP auth failed: %s", exc)
         return {"sent": False, "reason": "smtp_auth_failed", "detail": str(exc)}
     except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, socket.timeout, TimeoutError) as exc:
-        logger.error("SMTP connection failed (check host/port/ssl): %s", exc)
+        logger.error("SMTP connection failed: %s", exc)
         return {"sent": False, "reason": "smtp_connection_failed", "detail": str(exc)}
     except ssl.SSLError as exc:
         logger.error("SMTP SSL error: %s", exc)
         return {"sent": False, "reason": "ssl_error", "detail": str(exc)}
-    except smtplib.SMTPRecipientsRefused as exc:
-        logger.error("SMTP recipient refused: %s", exc)
-        return {"sent": False, "reason": "recipient_refused", "detail": str(exc)}
-    except smtplib.SMTPSenderRefused as exc:
-        logger.error("SMTP sender refused: %s", exc)
-        return {"sent": False, "reason": "sender_refused", "detail": str(exc)}
     except smtplib.SMTPException as exc:
-        logger.error("SMTP protocol error (%s): %s", type(exc).__name__, exc)
+        logger.error("SMTP error (%s): %s", type(exc).__name__, exc)
         return {"sent": False, "reason": f"smtp_{type(exc).__name__}", "detail": str(exc)}
     except Exception as exc:
         logger.error("Email delivery failed (%s): %s\n%s", type(exc).__name__, exc, traceback.format_exc())
