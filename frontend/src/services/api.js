@@ -598,8 +598,9 @@ export const api = {
     forgotPassword: (email) => request('/api/auth/email/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
     resetPassword: (token, password) => request('/api/auth/email/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
     verify: ()         => request('/api/auth/verify', {}, 0),
-    // Fire-and-forget server-side session invalidation — marks the session as
-    // logged_out in login_sessions so the admin panel shows honest status.
     logout: ()         => request('/api/auth/logout', { method: 'POST' }, 0),
+    getProfile:      ()       => request('/api/auth/profile'),
+    updateProfile:   (data)   => request('/api/auth/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+    changePassword:  (data)   => request('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
   },
 }

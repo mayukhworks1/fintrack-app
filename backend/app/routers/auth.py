@@ -60,6 +60,15 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
+class UpdateProfileRequest(BaseModel):
+    full_name: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ── Token helpers ─────────────────────────────────────────────────────────────
 
 def _b64url(b: bytes) -> str:
@@ -359,3 +368,129 @@ async def logout(authorization: str | None = Header(default=None)):
         pass   # never let DB errors break logout — client still discards token
 
     return {"logged_out": True}
+
+
+def _user_id_from_token(authorization: str | None) -> str | None:
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    return token[:16]
+
+
+@router.get("/profile")
+async def get_profile(authorization: str | None = Header(default=None)):
+    """Return the current user's profile. Requires an active email-auth session."""
+    token_hint = _user_id_from_token(authorization)
+    if not token_hint:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from ..db.postgres import get_pool
+        pool = get_pool()
+        if not pool:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        row = await pool.fetchrow(
+            """
+            SELECT u.id::text, u.email, u.full_name, u.status, u.created_at,
+                   u.approved_at, r.role_key,
+                   COUNT(DISTINCT s.id) FILTER (WHERE s.revoked_at IS NULL AND s.expires_at > NOW()) AS active_sessions,
+                   MAX(s.last_seen_at) AS last_seen_at
+            FROM auth_sessions s
+            JOIN auth_users u ON u.id = s.user_id
+            LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+            LEFT JOIN auth_roles r ON r.id = ur.role_id
+            WHERE s.token_hint = $1 AND s.revoked_at IS NULL
+            GROUP BY u.id, u.email, u.full_name, u.status, u.created_at, u.approved_at, r.role_key
+            LIMIT 1
+            """,
+            token_hint,
+        )
+        if not row:
+            raise HTTPException(status_code=401, detail="Session not found")
+        return {
+            "id": row["id"],
+            "email": row["email"],
+            "full_name": row["full_name"],
+            "status": row["status"],
+            "role": row["role_key"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "approved_at": row["approved_at"].isoformat() if row["approved_at"] else None,
+            "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
+            "active_sessions": int(row["active_sessions"] or 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.patch("/profile")
+async def update_profile(body: UpdateProfileRequest, authorization: str | None = Header(default=None)):
+    """Update the current user's display name."""
+    token_hint = _user_id_from_token(authorization)
+    if not token_hint:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from ..db.postgres import get_pool
+        pool = get_pool()
+        if not pool:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        user_id = await pool.fetchval(
+            "SELECT user_id FROM auth_sessions WHERE token_hint = $1 AND revoked_at IS NULL LIMIT 1",
+            token_hint,
+        )
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Session not found")
+        full_name = (body.full_name or "").strip() or None
+        row = await pool.fetchrow(
+            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2 RETURNING full_name, email",
+            full_name,
+            user_id,
+        )
+        return {"ok": True, "full_name": row["full_name"], "email": row["email"]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/change-password")
+async def change_password(body: ChangePasswordRequest, authorization: str | None = Header(default=None)):
+    """Change the current user's password. Requires the current password."""
+    token_hint = _user_id_from_token(authorization)
+    if not token_hint:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from ..db.postgres import get_pool
+        from ..services.auth_master import verify_password, hash_password, validate_password
+        pool = get_pool()
+        if not pool:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        row = await pool.fetchrow(
+            """
+            SELECT u.id, u.password_hash
+            FROM auth_sessions s JOIN auth_users u ON u.id = s.user_id
+            WHERE s.token_hint = $1 AND s.revoked_at IS NULL LIMIT 1
+            """,
+            token_hint,
+        )
+        if not row:
+            raise HTTPException(status_code=401, detail="Session not found")
+        if not row["password_hash"] or not verify_password(body.current_password, row["password_hash"]):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        new_hash = hash_password(validate_password(body.new_password))
+        await pool.execute(
+            "UPDATE auth_users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
+            new_hash, row["id"],
+        )
+        # revoke all other sessions except current
+        await pool.execute(
+            "UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1 AND token_hint != $2 AND revoked_at IS NULL",
+            row["id"], token_hint,
+        )
+        return {"ok": True, "message": "Password changed. Other sessions have been revoked."}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

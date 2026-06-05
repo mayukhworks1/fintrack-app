@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   LayoutDashboard, ScrollText, Users, MessageSquareText,
   RefreshCw, Database, FileText, Clock, LogOut,
@@ -3595,7 +3595,19 @@ const TABS = [
 
 export default function AdminDashboard({ embedded = false }) {
   const { logout } = useAuth()
-  const [tab, setTab] = useState('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const validTabIds = TABS.map(t => t.id)
+  const tabFromUrl = searchParams.get('tab')
+  const activeTab = validTabIds.includes(tabFromUrl) ? tabFromUrl : 'overview'
+
+  const setTab = useCallback((id) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('tab', id)
+      return next
+    }, { replace: false })
+  }, [setSearchParams])
+
   const [historyDrilldown, setHistoryDrilldown] = useState(null)
   const [invoiceDrilldown, setInvoiceDrilldown] = useState(null)
 
@@ -3609,7 +3621,7 @@ export default function AdminDashboard({ embedded = false }) {
       token: Date.now(),
     })
     setTab('history')
-  }, [])
+  }, [setTab])
 
   const openInvoiceDrilldown = useCallback((source, teableId) => {
     setInvoiceDrilldown({
@@ -3618,7 +3630,7 @@ export default function AdminDashboard({ embedded = false }) {
       token: Date.now(),
     })
     setTab('invoices')
-  }, [])
+  }, [setTab])
 
   const tabBar = (
     <div className={`flex overflow-x-auto gap-0.5 px-2 py-2 ${embedded ? 'rounded-xl border mb-4' : 'sticky top-[49px] z-10'}`}
@@ -3628,11 +3640,11 @@ export default function AdminDashboard({ embedded = false }) {
       {TABS.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => setTab(id)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
-          style={tab === id
+          style={activeTab === id
             ? { background: 'rgba(220,38,38,0.10)', color: '#dc2626' }
             : { color: 'var(--text-3)', background: 'transparent' }}
-          onMouseEnter={e => { if (tab !== id) e.currentTarget.style.background = 'var(--bg-input)' }}
-          onMouseLeave={e => { if (tab !== id) e.currentTarget.style.background = 'transparent' }}>
+          onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.background = 'var(--bg-input)' }}
+          onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.background = 'transparent' }}>
           <Icon size={12} />
           {label}
         </button>
@@ -3642,19 +3654,19 @@ export default function AdminDashboard({ embedded = false }) {
 
   const content = (
     <>
-      {tab === 'overview'     && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
-      {tab === 'audit'        && <AuditLogTab />}
-      {tab === 'sessions'     && <SessionsTab />}
-      {tab === 'auth-users'   && <AuthUsersTab />}
-      {tab === 'chats'        && <ChatsTab />}
-      {tab === 'ai-runs'      && <AiRunsTab />}
-      {tab === 'insights'     && <InsightsTab />}
-      {tab === 'sync'         && <SyncLogTab />}
-      {tab === 'projects'     && <ProjectsMirrorTab />}
-      {tab === 'invoices'     && <InvoicesTab drilldown={invoiceDrilldown} />}
-      {tab === 'history'      && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
-      {tab === 'shared'       && <SharedLinksTab />}
-      {tab === 'hflogs'       && <HfLogsTab />}
+      {activeTab === 'overview'     && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
+      {activeTab === 'audit'        && <AuditLogTab />}
+      {activeTab === 'sessions'     && <SessionsTab />}
+      {activeTab === 'auth-users'   && <AuthUsersTab />}
+      {activeTab === 'chats'        && <ChatsTab />}
+      {activeTab === 'ai-runs'      && <AiRunsTab />}
+      {activeTab === 'insights'     && <InsightsTab />}
+      {activeTab === 'sync'         && <SyncLogTab />}
+      {activeTab === 'projects'     && <ProjectsMirrorTab />}
+      {activeTab === 'invoices'     && <InvoicesTab drilldown={invoiceDrilldown} />}
+      {activeTab === 'history'      && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
+      {activeTab === 'shared'       && <SharedLinksTab />}
+      {activeTab === 'hflogs'       && <HfLogsTab />}
     </>
   )
 

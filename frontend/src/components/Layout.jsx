@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark
+  Plus, Landmark, UserCircle2
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -82,7 +82,12 @@ function OfflineBanner({ collapsed }) {
 
 function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
-  const { logout, isEditor } = useAuth()
+  const { logout, isEditor, user } = useAuth()
+
+  const displayName = user?.full_name || user?.email?.split('@')[0] || 'My Account'
+  const initials = user?.full_name
+    ? user.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+    : (user?.email || 'U')[0].toUpperCase()
   const location = useLocation()
 
   // Close mobile drawer on navigation
@@ -226,6 +231,16 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           )}
         </button>
 
+        <NavLink
+          to="/profile"
+          title={collapsed ? 'Profile' : undefined}
+          aria-label={collapsed ? 'Profile' : undefined}
+          className={({ isActive }) => `runey-nav-link ${collapsed ? 'is-collapsed' : ''} ${isActive ? 'active' : ''}`}
+        >
+          <UserCircle2 size={15} aria-hidden="true" style={{ flexShrink: 0 }} />
+          {!collapsed && <span className="flex-1 truncate font-medium">Profile</span>}
+        </NavLink>
+
         <button
           onClick={logout}
           className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
@@ -236,15 +251,23 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           {!collapsed && <span className="flex-1 truncate font-medium">Sign out</span>}
         </button>
 
-        <div className={`runey-profile ${collapsed ? 'is-collapsed' : ''}`}>
-          <span className="runey-profile-avatar">MJ</span>
+        <Link
+          to="/profile"
+          className={`runey-profile ${collapsed ? 'is-collapsed' : ''}`}
+          style={{ textDecoration: 'none' }}
+          title={collapsed ? displayName : undefined}
+        >
+          <span className="runey-profile-avatar" style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: '#fff', fontSize: 11, fontWeight: 700,
+          }}>{initials}</span>
           {!collapsed && (
             <div className="min-w-0">
-              <p>Mayukh Jain</p>
-              <span>Workspace owner</span>
+              <p className="truncate">{displayName}</p>
+              <span className="truncate">{user?.email ? user.email : 'Workspace owner'}</span>
             </div>
           )}
-        </div>
+        </Link>
       </div>
     </>
   )

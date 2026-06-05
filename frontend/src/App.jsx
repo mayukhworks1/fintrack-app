@@ -54,6 +54,7 @@ const StatusBoard   = lazyWithReload(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazyWithReload(() => import('./pages/WebInvoices'))
 const TaxLedger     = lazyWithReload(() => import('./pages/TaxLedger'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
+const Profile       = lazyWithReload(() => import('./pages/Profile'))
 
 const WARM_IMPORTERS = [
   () => import('./pages/Projects'),
@@ -154,6 +155,7 @@ export default function App() {
               <Route path="/report"       element={<Report />} />
               <Route path="/status"       element={<StatusBoard />} />
               <Route path="/admin"        element={<AdminDashboard embedded={true} />} />
+              <Route path="/profile"      element={<Profile />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>
           </Suspense>
