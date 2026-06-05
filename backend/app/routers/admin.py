@@ -461,6 +461,13 @@ async def admin_approve_auth_user(
                 role=role_key,
                 metadata={"reason": body.reason},
             )
+    try:
+        from ..services.auth_master import send_user_approved_email
+        delivery = await send_user_approved_email(user["email"], request)
+        if not delivery.get("sent"):
+            logger.warning("Approval email was not sent for %s: %s", user["email"], delivery.get("reason"))
+    except Exception as exc:
+        logger.warning("Approval email failed for %s: %s", user["email"], exc)
     return {"status": "active", "role_key": role_key, "message": "User approved"}
 
 
@@ -592,6 +599,13 @@ async def admin_reactivate_auth_user(
                 role=role_key,
                 metadata={"reason": body.reason},
             )
+    try:
+        from ..services.auth_master import send_user_approved_email
+        delivery = await send_user_approved_email(user["email"], request)
+        if not delivery.get("sent"):
+            logger.warning("Reactivation email was not sent for %s: %s", user["email"], delivery.get("reason"))
+    except Exception as exc:
+        logger.warning("Reactivation email failed for %s: %s", user["email"], exc)
     return {"status": "active", "role_key": role_key, "message": "User reactivated"}
 
 

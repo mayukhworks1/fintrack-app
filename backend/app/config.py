@@ -39,6 +39,21 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
+    # ── Transactional email / Zoho SMTP ────────────────────────────────────
+    # For Zoho use env values such as:
+    # SMTP_HOST=smtp.zoho.in (India) or smtp.zoho.com
+    # SMTP_PORT=465 with SMTP_USE_SSL=true, or 587 with SMTP_USE_TLS=true.
+    smtp_host: Optional[str] = None
+    smtp_port: int = 465
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: Optional[str] = None
+    smtp_from_name: str = "FinTrack"
+    smtp_use_tls: bool = False
+    smtp_use_ssl: bool = True
+    auth_admin_notify_email: Optional[str] = None
+    password_reset_ttl_minutes: int = 30
+
     # ── Admin dashboard password ────────────────────────────────────────────
     # Full PostgreSQL dashboard access.  Set APP_ADMIN_PASSWORD in HF secrets
     # to override the default.

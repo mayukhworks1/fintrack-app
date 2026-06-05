@@ -51,6 +51,15 @@ class EmailBootstrapRequest(BaseModel):
     bootstrap_password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
 # ── Token helpers ─────────────────────────────────────────────────────────────
 
 def _b64url(b: bytes) -> str:
@@ -214,6 +223,25 @@ async def email_bootstrap(body: EmailBootstrapRequest, request: Request):
         body.bootstrap_password,
         request,
     )
+
+
+@router.post("/email/forgot-password")
+async def email_forgot_password(body: ForgotPasswordRequest, request: Request):
+    """
+    Send a password reset link if the account exists and is active.
+    Response is intentionally generic to prevent account enumeration.
+    """
+    from ..services.auth_master import create_password_reset
+    return await create_password_reset(body.email, request)
+
+
+@router.post("/email/reset-password")
+async def email_reset_password(body: ResetPasswordRequest, request: Request):
+    """
+    Consume a password reset token, update password, and revoke active sessions.
+    """
+    from ..services.auth_master import reset_password_with_token
+    return await reset_password_with_token(body.token, body.password, request)
 
 
 @router.get("/verify")

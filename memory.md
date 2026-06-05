@@ -139,6 +139,12 @@ Server-side logout: `POST /api/auth/logout` marks `is_active=false, expires_at=N
 - Password hashing uses PBKDF2-SHA256 with per-password salt in `backend/app/services/auth_master.py`.
 - Email auth sessions are stored in `auth_sessions` and also mirrored into legacy `login_sessions` for current admin/session visibility compatibility.
 - Frontend login defaults to email/password and keeps a “legacy password” toggle for fallback during rollout.
+- Forgot/reset password is implemented through Zoho-compatible SMTP config:
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_USE_SSL`, `SMTP_USE_TLS`
+  - `AUTH_ADMIN_NOTIFY_EMAIL` receives pending-user notifications.
+  - `PASSWORD_RESET_TTL_MINUTES` controls reset-token expiry.
+- Password reset tokens are random, stored only as SHA-256 hashes in `auth_password_resets`, single-use, expiry-bound, and revoke active `auth_sessions` after reset.
+- Approval/reactivation attempts to email the user, but SMTP delivery failure does not rollback admin approval; failures are logged.
 
 ### Admin auth management (current local tranche)
 - Backend endpoints added in `backend/app/routers/admin.py`:
@@ -154,7 +160,7 @@ Server-side logout: `POST /api/auth/logout` marks `is_active=false, expires_at=N
 - All auth admin mutations write `auth_events` in the same DB transaction as the user/session state change.
 - `api.admin.authUsers()` bypasses the short frontend GET cache (`fresh: true`) so approval/disable/revoke actions reload live rows without browser refresh.
 - This tranche does **not** yet enforce per-module/scoped RBAC on business data routes. Existing legacy route access remains intact intentionally.
-- Validation so far: `python3 -m compileall backend/app`, `frontend npm run build`, `git diff --check`, and `backend/.venv/bin/python -c "from app.main import app; print(app.title)"` pass.
+- Validation so far: `python3 -m compileall backend/app`, `frontend npm run build`, `git diff --check`, `backend/.venv/bin/python -c "from app.main import app; print(app.title)"`, and direct PBKDF2 `hash_password/verify_password` smoke checks pass after SMTP/reset additions.
 - Production push gate still should include a live admin Auth Users smoke test after deployment because these endpoints depend on the real PostgreSQL auth tables and request auth context.
 
 ---

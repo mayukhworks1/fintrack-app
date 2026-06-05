@@ -1,25 +1,43 @@
 import { useState, useRef, useEffect } from 'react'
 import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { api } from '../services/api'
 
 export default function Login() {
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
   const [legacyMode, setLegacyMode] = useState(false)
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [mailing, setMailing] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
   const submit = async (e) => {
     e?.preventDefault()
-    if (!password || loading || (!legacyMode && !email)) return
+    if (!password || loading || (!legacyMode && !email && !resetToken)) return
+    if (resetToken && password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
     setLoading(true)
     setError('')
+    setNotice('')
     try {
+      if (resetToken) {
+        const res = await api.auth.resetPassword(resetToken, password)
+        setNotice(res.message || 'Password updated. Please sign in again.')
+        setPassword('')
+        setConfirmPassword('')
+        window.history.replaceState({}, '', '/login')
+        return
+      }
       await login(legacyMode ? password : { email, password })
       setPassword('')
     } catch (err) {
@@ -31,6 +49,24 @@ export default function Login() {
         : msg)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const requestReset = async () => {
+    if (!email || mailing) {
+      setError('Enter your email first')
+      return
+    }
+    setMailing(true)
+    setError('')
+    setNotice('')
+    try {
+      const res = await api.auth.forgotPassword(email)
+      setNotice(res.message || 'If the account is active, a password reset email has been sent.')
+    } catch (err) {
+      setError(err?.message || 'Could not request password reset')
+    } finally {
+      setMailing(false)
     }
   }
 
@@ -63,15 +99,17 @@ export default function Login() {
         >
           <div className="mb-6">
             <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
-              Sign in to your workspace
+              {resetToken ? 'Reset your password' : 'Sign in to your workspace'}
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-              {legacyMode ? 'Temporary legacy access while email auth rolls out' : 'Use your approved email account to continue'}
+              {resetToken
+                ? 'Set a new password for your approved email account'
+                : legacyMode ? 'Temporary legacy access while email auth rolls out' : 'Use your approved email account to continue'}
             </p>
           </div>
 
           <form onSubmit={submit} className="space-y-4" autoComplete="off">
-            {!legacyMode && (
+            {!legacyMode && !resetToken && (
               <div>
                 <label className="label" htmlFor="ft-email">Email</label>
                 <div className="relative">
@@ -150,6 +188,31 @@ export default function Login() {
               </div>
             </div>
 
+            {resetToken && (
+              <div>
+                <label className="label" htmlFor="ft-password-confirm">Confirm password</label>
+                <div className="relative">
+                  <Lock
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: 'var(--text-3)' }}
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="ft-password-confirm"
+                    type={show ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
+                    placeholder="Repeat your new password"
+                    className="input pl-9 pr-3 py-2.5 text-sm rounded-xl"
+                    autoComplete="new-password"
+                    disabled={loading}
+                    maxLength={128}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Error */}
             {error && (
               <div
@@ -168,57 +231,95 @@ export default function Login() {
               </div>
             )}
 
+            {notice && (
+              <div
+                className="flex items-center gap-2 text-xs px-3 py-2.5 rounded-xl"
+                style={{
+                  background: 'rgba(22,163,74,0.10)',
+                  border: '1px solid rgba(22,163,74,0.22)',
+                  color: '#16a34a',
+                }}
+                role="status"
+                aria-live="polite"
+              >
+                <Mail size={12} className="flex-shrink-0" />
+                <span>{notice}</span>
+              </div>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading || !password || (!legacyMode && !email)}
+              disabled={loading || !password || (!legacyMode && !email && !resetToken) || (resetToken && !confirmPassword)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{
                 background: 'var(--accent-btn)',
                 color: 'white',
-                opacity: loading || !password || (!legacyMode && !email) ? 0.55 : 1,
-                cursor: loading || !password || (!legacyMode && !email) ? 'not-allowed' : 'pointer',
-                boxShadow: loading || !password || (!legacyMode && !email)
+                opacity: loading || !password || (!legacyMode && !email && !resetToken) || (resetToken && !confirmPassword) ? 0.55 : 1,
+                cursor: loading || !password || (!legacyMode && !email && !resetToken) || (resetToken && !confirmPassword) ? 'not-allowed' : 'pointer',
+                boxShadow: loading || !password || (!legacyMode && !email && !resetToken) || (resetToken && !confirmPassword)
                   ? 'none'
                   : '0 2px 4px rgba(37,99,235,0.2), 0 6px 16px rgba(37,99,235,0.18)',
                 transform: 'translateY(0)',
                 letterSpacing: '-0.01em',
               }}
               onMouseEnter={e => {
-                if (!loading && password && (legacyMode || email)) e.currentTarget.style.background = 'var(--accent-btn-hover)'
+                if (!loading && password && (legacyMode || email || resetToken)) e.currentTarget.style.background = 'var(--accent-btn-hover)'
               }}
               onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-btn)'}
             >
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  Signing in…
+                  {resetToken ? 'Updating…' : 'Signing in…'}
                 </>
               ) : (
                 <>
-                  Sign in
+                  {resetToken ? 'Update password' : 'Sign in'}
                   <ArrowRight size={14} aria-hidden="true" />
                 </>
               )}
             </button>
-            <div className="flex items-center justify-between gap-3 text-xs">
+            {!resetToken && (
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setLegacyMode(v => !v); setError(''); setNotice(''); setPassword('') }}
+                  className="font-semibold"
+                  style={{ color: 'var(--accent-btn)' }}
+                >
+                  {legacyMode ? 'Use email login' : 'Use legacy password'}
+                </button>
+                {!legacyMode && (
+                  <button
+                    type="button"
+                    onClick={requestReset}
+                    disabled={mailing}
+                    className="font-semibold"
+                    style={{ color: mailing ? 'var(--text-3)' : 'var(--accent-btn)' }}
+                  >
+                    {mailing ? 'Sending…' : 'Forgot password?'}
+                  </button>
+                )}
+              </div>
+            )}
+            {resetToken && notice && (
               <button
                 type="button"
-                onClick={() => { setLegacyMode(v => !v); setError(''); setPassword('') }}
-                className="font-semibold"
+                onClick={() => window.location.assign('/login')}
+                className="w-full text-xs font-semibold"
                 style={{ color: 'var(--accent-btn)' }}
               >
-                {legacyMode ? 'Use email login' : 'Use legacy password'}
+                Go to sign in
               </button>
-              {!legacyMode && (
-                <span style={{ color: 'var(--text-3)' }}>Forgot password coming next</span>
-              )}
-            </div>
+            )}
           </form>
         </div>
 
         <p className="text-[10px] text-center mt-4" style={{ color: 'var(--text-3)' }}>
-          {legacyMode ? 'Legacy password is temporary during RBAC migration' : 'Email login requires superadmin approval'}
+          {resetToken
+            ? 'Reset links are single-use and expire automatically'
+            : legacyMode ? 'Legacy password is temporary during RBAC migration' : 'Email login requires superadmin approval'}
         </p>
       </div>
     </div>
