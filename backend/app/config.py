@@ -39,22 +39,13 @@ class Settings(BaseSettings):
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
-    # ── Transactional email ─────────────────────────────────────────────────
-    # HF Spaces blocks SMTP ports — use Resend instead:
-    #   RESEND_API_KEY=re_xxxx  (resend.com, verify worksmayukh.space domain)
-    # SMTP is kept as a local/self-hosted fallback only.
-    brevo_api_key: Optional[str] = None   # reads from BREVO_API_KEY
-    brevoapikey: Optional[str] = None     # HF Spaces secret name (no underscores allowed)
-    resend_api_key: Optional[str] = None
-    resendapikey: Optional[str] = None
-    smtp_host: Optional[str] = None
-    smtp_port: int = 465
-    smtp_username: Optional[str] = None
-    smtp_password: Optional[str] = None
+    # ── Transactional email (Brevo) ─────────────────────────────────────────
+    # HF Spaces blocks SMTP ports — Brevo HTTPS API is used instead.
+    # Set BREVOAPIKEY in HF Space secrets.
+    brevoapikey: Optional[str] = None
+    smtp_username: Optional[str] = None   # fallback sender address only
     smtp_from_email: Optional[str] = None
     smtp_from_name: str = "FinTrack"
-    smtp_use_tls: bool = False
-    smtp_use_ssl: bool = True
     auth_admin_notify_email: Optional[str] = None
     password_reset_ttl_minutes: int = 30
 

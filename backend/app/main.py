@@ -244,72 +244,20 @@ async def health():
 
 @app.get("/api/smtp-test", tags=["health"])
 async def smtp_test(pw: str = "", to: str = ""):
-    """Email diagnostic — pass ?pw=<admin_password>&to=<your_email> to send a real test email."""
-    import urllib.request, urllib.error, json as _json
-    from .services.emailer import is_brevo_configured, is_resend_configured, is_smtp_configured, _brevo_key, _resend_key
+    """Email diagnostic — pass ?pw=<admin_password>&to=<your_email> to send a real test."""
+    from .services.emailer import is_email_configured, send_email
     if pw != settings.app_admin_password:
         raise HTTPException(status_code=403, detail="Wrong password")
-
-    active = "brevo" if is_brevo_configured() else ("resend" if is_resend_configured() else ("smtp" if is_smtp_configured() else "none"))
     cfg = {
-        "active_backend": active,
-        "brevo_configured": is_brevo_configured(),
-        "brevo_key_set": bool(_brevo_key()),
-        "resend_configured": is_resend_configured(),
-        "resend_key_set": bool(_resend_key()),
-        "smtp_configured": is_smtp_configured(),
+        "configured": is_email_configured(),
+        "brevo_key_set": bool(settings.brevoapikey),
         "from_email": settings.smtp_from_email or settings.smtp_username,
     }
-
     if not to:
         return {"config": cfg, "hint": "Add &to=youremail@example.com to send a real test"}
-
-    if active == "none":
-        return {"ok": False, "reason": "no_backend_configured", "config": cfg}
-
-    from .services.emailer import send_email
     result = await send_email(to, "FinTrack email test", "This is a test email from FinTrack.")
     return {"result": result, "config": cfg}
 
-
-@app.get("/api/admin/smtp-check", tags=["health"])
-async def smtp_check(_: str = Depends(require_auth)):
-    """Diagnose SMTP configuration without sending a real email."""
-    from .services.emailer import is_email_configured
-    import smtplib, socket as _socket, ssl as _ssl
-    cfg = {
-        "smtp_host": settings.smtp_host,
-        "smtp_port": settings.smtp_port,
-        "smtp_username": settings.smtp_username,
-        "smtp_from_email": settings.smtp_from_email,
-        "smtp_from_name": settings.smtp_from_name,
-        "smtp_use_ssl": settings.smtp_use_ssl,
-        "smtp_use_tls": settings.smtp_use_tls,
-        "smtp_password_set": bool(settings.smtp_password),
-        "configured": is_email_configured(),
-    }
-    if not is_email_configured():
-        return {"ok": False, "reason": "smtp_not_configured", "config": cfg}
-    try:
-        if settings.smtp_use_ssl:
-            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-                smtp.login(settings.smtp_username, settings.smtp_password)
-                banner = smtp.ehlo_resp
-        else:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-                smtp.ehlo()
-                if settings.smtp_use_tls:
-                    smtp.starttls()
-                    smtp.ehlo()
-                smtp.login(settings.smtp_username, settings.smtp_password)
-                banner = smtp.ehlo_resp
-        return {"ok": True, "config": cfg, "banner": str(banner)}
-    except smtplib.SMTPAuthenticationError as exc:
-        return {"ok": False, "reason": "auth_failed", "detail": str(exc), "config": cfg}
-    except (_socket.timeout, TimeoutError) as exc:
-        return {"ok": False, "reason": "timeout", "detail": str(exc), "config": cfg}
-    except Exception as exc:
-        return {"ok": False, "reason": type(exc).__name__, "detail": str(exc), "config": cfg}
 
 
 @app.post("/api/admin/pg-reconnect", tags=["health"])
