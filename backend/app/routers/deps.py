@@ -55,6 +55,7 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
             u.email,
             u.full_name,
             u.status,
+            u.teable_email,
             r.role_key AS auth_role
         FROM auth_sessions s
         JOIN auth_users u ON u.id = s.user_id
@@ -79,12 +80,15 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
         raise HTTPException(status_code=403, detail=f"User is {row['status']}")
 
     auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
-    request.state.auth_session_id = str(row["session_id"])
-    request.state.auth_user_id = str(row["user_id"])
-    request.state.auth_user_email = row["email"]
-    request.state.auth_user_name = row["full_name"]
-    request.state.auth_role = auth_role
-    request.state.is_email_auth = True
+    request.state.auth_session_id  = str(row["session_id"])
+    request.state.auth_user_id     = str(row["user_id"])
+    request.state.auth_user_email  = row["email"]
+    request.state.auth_user_name   = row["full_name"]
+    # teable_email: admin-configured override for "Raised By" matching in Teable.
+    # Falls back to the login email if not set.
+    request.state.auth_teable_email = row["teable_email"] or row["email"]
+    request.state.auth_role        = auth_role
+    request.state.is_email_auth    = True
     try:
         await pool.execute("UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1", row["session_id"])
     except Exception:
@@ -111,16 +115,26 @@ def get_auth_role(request: Request) -> str | None:
 
 def owner_scope_email(request: Request) -> str | None:
     """
-    Email-auth users outside privileged roles are scoped to their own Raised By.
-    Legacy password users return None for backwards compatibility.
+    Returns the email to use for filtering Teable "Raised By" records.
+
+    Priority:
+      1. teable_email (admin-configured override — allows login email to differ from Teable email)
+      2. login email (auth_user_email)
+    Returns None for:
+      - Legacy password-only sessions (backwards compatibility — they see all records)
+      - Privileged roles (superadmin, admin, manager, finance — full access)
     """
-    email = get_auth_email(request)
-    if not email:
-        return None
+    if not getattr(request.state, "is_email_auth", False):
+        return None  # legacy password — see all records
     auth_role = get_auth_role(request) or ""
     if auth_role in PRIVILEGED_AUTH_ROLES:
-        return None
-    return email
+        return None  # privileged — full access
+    # Use the Teable-specific email override if set, otherwise fall back to login email
+    teable_email = getattr(request.state, "auth_teable_email", None)
+    if teable_email:
+        return str(teable_email).strip()
+    email = get_auth_email(request)
+    return email if email else None
 
 
 async def require_auth(request: Request, token: str = Depends(_get_token)) -> str:

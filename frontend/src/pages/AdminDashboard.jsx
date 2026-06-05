@@ -135,7 +135,7 @@ function roleBadge(role) {
   return <Badge color={map[role] || 'default'}>{role || 'anon'}</Badge>
 }
 
-function EditableName({ value, saving, onSave }) {
+function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name — click to set' }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(value)
   if (editing) {
@@ -144,13 +144,14 @@ function EditableName({ value, saving, onSave }) {
         <input
           autoFocus
           value={val}
+          placeholder={placeholder}
           onChange={e => setVal(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter') { onSave(val); setEditing(false) }
             if (e.key === 'Escape') { setVal(value); setEditing(false) }
           }}
           className="text-[11px] px-1.5 py-0.5 rounded border outline-none"
-          style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)', width: 130 }}
+          style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)', width: 160 }}
         />
         <button onClick={() => { onSave(val); setEditing(false) }}
           className="text-[10px] px-1.5 py-0.5 rounded"
@@ -166,9 +167,9 @@ function EditableName({ value, saving, onSave }) {
       className="text-[11px] cursor-pointer hover:underline"
       style={{ color: 'var(--text-3)' }}
       onClick={() => { setVal(value); setEditing(true) }}
-      title="Click to edit name"
+      title="Click to edit"
     >
-      {saving ? 'Saving…' : (value || <em style={{ opacity: 0.5 }}>No name — click to set</em>)}
+      {saving ? 'Saving…' : (value || <em style={{ opacity: 0.55 }}>{emptyLabel}</em>)}
     </span>
   )
 }
@@ -1698,15 +1699,31 @@ function AuthUsersTab() {
   }, [smtpTo])
 
   const deleteUser = useCallback(async (row) => {
-    if (!window.confirm(`Permanently delete ${row.email}? This cannot be undone.`)) return
+    const isActive = row.status === 'active'
+    const msg = isActive
+      ? `Delete ACTIVE user ${row.email}? This will immediately revoke their sessions and cannot be undone.`
+      : `Permanently delete ${row.email}? This cannot be undone.`
+    if (!window.confirm(msg)) return
     setActingId(`${row.id}:delete`)
     setMessage('')
     try {
-      await api.admin.deleteAuthUser(row.id)
-      setMessage(`User ${row.email} deleted permanently.`)
+      await api.admin.deleteAuthUser(row.id, isActive)
+      setMessage(`User ${row.email} deleted.`)
       await load()
     } catch (e) {
       setMessage(e.message || 'Delete failed')
+    } finally {
+      setActingId('')
+    }
+  }, [load])
+
+  const updateTeableEmail = useCallback(async (row, teableEmail) => {
+    setActingId(`${row.id}:teable`)
+    try {
+      await api.admin.setTeableEmail(row.id, { teable_email: teableEmail || null })
+      await load()
+    } catch (e) {
+      setMessage(e.message || 'Teable email update failed')
     } finally {
       setActingId('')
     }
@@ -1765,13 +1782,11 @@ function AuthUsersTab() {
             {busy('disable') ? 'Working…' : 'Disable'}
           </button>
         )}
-        {row.status !== 'active' && (
-          <button onClick={() => deleteUser(row)} disabled={!!actingId}
-            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
-            <Trash2 size={11} /> {busy('delete') ? 'Deleting…' : 'Delete'}
-          </button>
-        )}
+        <button onClick={() => deleteUser(row)} disabled={!!actingId}
+          className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+          style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+          <Trash2 size={11} /> {busy('delete') ? 'Deleting…' : 'Delete'}
+        </button>
         {row.active_session_count > 0 && (
           <button onClick={() => act(row, 'revoke')} disabled={!!actingId}
             className="text-[11px] px-2 py-1 rounded-lg border"
@@ -1907,7 +1922,7 @@ function AuthUsersTab() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['User','Status','Roles','Sessions','Activity','Created','Last seen','Actions'].map(h => (
+                      {['User','Teable Email','Status','Roles','Sessions','Activity','Created','Last seen','Actions'].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
                           style={{ color: 'var(--text-2)' }}>{h}</th>
                       ))}
@@ -1925,6 +1940,16 @@ function AuthUsersTab() {
                             value={row.full_name || ''}
                             saving={actingId === `${row.id}:name`}
                             onSave={name => updateName(row, name)}
+                          />
+                        </td>
+                        <td className="px-3 py-2 min-w-[200px]">
+                          <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-3)' }}>Raised By match:</div>
+                          <EditableName
+                            value={row.teable_email || ''}
+                            saving={actingId === `${row.id}:teable`}
+                            onSave={v => updateTeableEmail(row, v)}
+                            placeholder={row.email}
+                            emptyLabel="= login email (click to override)"
                           />
                         </td>
                         <td className="px-3 py-2"><AuthStatusBadge status={row.status} /></td>

@@ -540,11 +540,17 @@ CREATE TABLE IF NOT EXISTS auth_users (
     password_changed_at TIMESTAMPTZ,
     email_verified_at   TIMESTAMPTZ,
     approved_by         UUID,
+    -- Optional override: the email stored in Teable's "Raised By" field.
+    -- When set, ownership scoping uses this email instead of the login email.
+    -- Allows login as mayukh@gmail.com while matching Teable records for mayukh@worksmayukh.space.
+    teable_email        VARCHAR(320),
     metadata            JSONB        NOT NULL DEFAULT '{}'::jsonb,
     CONSTRAINT auth_users_status_chk CHECK (status IN ('pending_approval', 'active', 'rejected', 'disabled'))
 );
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS teable_email VARCHAR(320);
 CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
+CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);
 
 CREATE TABLE IF NOT EXISTS auth_identities (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

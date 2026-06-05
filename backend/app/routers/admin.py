@@ -408,7 +408,7 @@ async def admin_auth_users(
             GROUP BY (extra->>'auth_user_id')::uuid
         )
         SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
-               u.approved_at, u.disabled_at, u.email_verified_at,
+               u.approved_at, u.disabled_at, u.email_verified_at, u.teable_email,
                COALESCE(role_agg.roles, ARRAY[]::text[]) AS roles,
                COALESCE(session_agg.session_count, 0) AS session_count,
                COALESCE(session_agg.active_session_count, 0) AS active_session_count,
@@ -806,15 +806,57 @@ async def admin_update_auth_user_name(
     return {"ok": True, "full_name": user["full_name"]}
 
 
-@router.delete("/auth/users/{user_id}")
-async def admin_delete_auth_user(
+class AuthUserTeableEmail(BaseModel):
+    teable_email: Optional[str] = None
+
+
+@router.patch("/auth/users/{user_id}/teable-email")
+async def admin_set_teable_email(
     user_id: str,
+    body: AuthUserTeableEmail,
     request: Request,
     actor_role: str = Depends(require_admin),
 ):
     """
+    Set the Teable 'Raised By' email for a user.
+    This controls which records they see in the web invoice module.
+    Leave blank to use their login email.
+    """
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    teable_email = (body.teable_email or "").strip() or None
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "UPDATE auth_users SET teable_email = $1, updated_at = NOW() WHERE id = $2::uuid "
+            "RETURNING id::text AS id, email, teable_email, status",
+            teable_email,
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        await _write_auth_admin_event(
+            conn, request,
+            event_type="admin_user_teable_email_set",
+            actor_role=actor_role,
+            target_user_id=user_id,
+            email=user["email"],
+            status=user["status"],
+            metadata={"teable_email": teable_email},
+        )
+    return {"ok": True, "teable_email": user["teable_email"]}
+
+
+@router.delete("/auth/users/{user_id}")
+async def admin_delete_auth_user(
+    user_id: str,
+    request: Request,
+    force: bool = False,
+    actor_role: str = Depends(require_admin),
+):
+    """
     Permanently delete a user and all related records.
-    Only allowed for disabled or rejected users (not active) as a safeguard.
+    Use force=true to delete an active user (will revoke all their sessions first).
     """
     pool = get_pool()
     if not pool:
@@ -827,24 +869,31 @@ async def admin_delete_auth_user(
             )
             if not user:
                 raise HTTPException(status_code=404, detail="Auth user not found")
-            if user["status"] == "active":
+            if user["status"] == "active" and not force:
                 raise HTTPException(
                     status_code=409,
-                    detail="Cannot delete an active user. Disable them first."
+                    detail="User is active. Disable them first, or pass force=true to delete immediately."
                 )
-            # Cascade delete all related records
-            await conn.execute("DELETE FROM auth_sessions WHERE user_id = $1::uuid", user_id)
-            await conn.execute("DELETE FROM auth_user_roles WHERE user_id = $1::uuid", user_id)
-            await conn.execute("DELETE FROM auth_identities WHERE user_id = $1::uuid", user_id)
-            await conn.execute("DELETE FROM auth_password_resets WHERE user_id = $1::uuid", user_id)
-            await conn.execute(
-                "INSERT INTO auth_events (event_type, actor_role, target_user_id, email, status, ip, user_agent, metadata) VALUES ($1,$2,$3::uuid,$4,$5,$6,$7,$8::jsonb)",
-                "admin_user_deleted", actor_role, user_id, user["email"], user["status"],
-                request.client.host if request.client else None,
-                request.headers.get("user-agent", ""),
-                json.dumps({"deleted_by": actor_role}),
-            )
-            await conn.execute("DELETE FROM auth_users WHERE id = $1::uuid", user_id)
+            # Log the deletion event before deleting (so it survives)
+            try:
+                await conn.execute(
+                    """INSERT INTO auth_events
+                       (event_type, actor_role, target_user_id, email, status, ip, user_agent, metadata)
+                       VALUES ($1,$2,$3::uuid,$4,$5,$6,$7,$8::jsonb)""",
+                    "admin_user_deleted", actor_role, user_id, user["email"], user["status"],
+                    request.client.host if request.client else None,
+                    request.headers.get("user-agent", ""),
+                    json.dumps({"deleted_by": actor_role, "forced": force}),
+                )
+            except Exception:
+                pass  # Don't block delete if event write fails
+            # Cascade delete in dependency order
+            await conn.execute("DELETE FROM auth_sessions         WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_user_roles       WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_user_scopes      WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_identities       WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_password_resets  WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_users            WHERE id = $1::uuid", user_id)
     return {"deleted": True, "email": user["email"]}
 
 
