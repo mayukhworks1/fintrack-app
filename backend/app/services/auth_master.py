@@ -232,8 +232,8 @@ async def create_admin_invited_user(
                     email, email_normalized, full_name, status, approved_at,
                     email_verified_at, metadata, updated_at
                 )
-                VALUES ($1, $2, $3, $4, CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END,
-                        CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END,
+                VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'active' THEN NOW() ELSE NULL END,
+                        CASE WHEN $4::text = 'active' THEN NOW() ELSE NULL END,
                         $5::jsonb, NOW())
                 RETURNING id::text AS id, email, status
                 """,
