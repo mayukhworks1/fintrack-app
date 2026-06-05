@@ -278,7 +278,7 @@ async def create_admin_invited_user(
         origin = app_origin_from_request(request)
         if status == "active":
             invite_path = "/login"
-            invite_params = urlencode({'reset_token': token, 'invite': '1'})
+            invite_params = urlencode({'reset_token': token, 'invite': '1', 'email': email_orig})
             invite_url = f"{origin}{invite_path}?{invite_params}" if origin else f"{invite_path}?{invite_params}"
             delivery = await send_email(
                 email_orig,

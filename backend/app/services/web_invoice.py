@@ -324,8 +324,8 @@ class WebInvoiceService:
             if raised_by:
                 filter_set.append({
                     "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
-                    "operator": "is",
-                    "value": raised_by,
+                    "operator": "contains",
+                    "value": raised_by.lower(),
                 })
             if filter_set:
                 params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
@@ -337,6 +337,10 @@ class WebInvoiceService:
                 res.raise_for_status()
                 data = res.json()
             records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
+            # Python-side case-insensitive safety filter for ownership scoping
+            if raised_by:
+                email_lc = raised_by.lower()
+                records = [r for r in records if r.get("fields", {}).get("Raised By", "").lower() == email_lc]
             return {"records": records, "total": data.get("total", 0)}
 
         # Owner-scoped views are security-sensitive and should reflect CRUD
@@ -377,7 +381,12 @@ class WebInvoiceService:
                     if len(batch) < 1000:
                         break
                     skip += 1000
-            return [_apply_runtime_invoice_derivatives(r) for r in records]
+            result = [_apply_runtime_invoice_derivatives(r) for r in records]
+            # Python-side case-insensitive safety filter for ownership scoping
+            if raised_by:
+                email_lc = raised_by.lower()
+                result = [r for r in result if r.get("fields", {}).get("Raised By", "").lower() == email_lc]
+            return result
         if raised_by:
             return await _load()
         return await cache.get_or_set(cache_key, ttl=_TTL_ALL, loader=_load)

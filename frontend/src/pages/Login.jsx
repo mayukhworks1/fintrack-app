@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 
 export default function Login() {
   const { login } = useAuth()
-  const [email, setEmail] = useState('')
+  const navigate = useNavigate()
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
   const [isInvite]   = useState(() => new URLSearchParams(window.location.search).get('invite') === '1')
+  const [inviteEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [legacyMode, setLegacyMode] = useState(false)
   const [registerMode, setRegisterMode] = useState(false)
   const [show, setShow] = useState(false)
@@ -38,10 +41,20 @@ export default function Login() {
     setNotice('')
     try {
       if (resetToken) {
-        const res = await api.auth.resetPassword(resetToken, password)
-        setNotice(res.message || 'Password updated. Please sign in again.')
+        await api.auth.resetPassword(resetToken, password)
         setPassword('')
         setConfirmPassword('')
+        // For invite flow: try to auto-login if email is known
+        if (isInvite && email) {
+          try {
+            await login({ email, password })
+            navigate('/', { replace: true })
+            return
+          } catch {
+            // fall through to manual sign-in
+          }
+        }
+        setNotice(isInvite ? 'Password set! You can now sign in.' : 'Password updated. Please sign in.')
         window.history.replaceState({}, '', '/login')
         return
       }
@@ -58,6 +71,7 @@ export default function Login() {
       }
       await login(legacyMode ? password : { email, password })
       setPassword('')
+      navigate('/', { replace: true })
     } catch (err) {
       const msg = err?.message || 'Login failed'
       setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
@@ -133,6 +147,14 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4">
+            {/* Show email read-only on invite so user knows whose account this is */}
+            {resetToken && isInvite && email && (
+              <div className="rounded-xl px-3 py-2.5 text-sm flex items-center gap-2"
+                style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: 'var(--text-2)' }}>
+                <Mail size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
+                {email}
+              </div>
+            )}
             {!legacyMode && !resetToken && (
               <div>
                 <label className="label" htmlFor="ft-email">Email</label>
