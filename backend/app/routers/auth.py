@@ -392,32 +392,43 @@ async def get_profile(authorization: str | None = Header(default=None)):
             raise HTTPException(status_code=503, detail="Database unavailable")
         row = await pool.fetchrow(
             """
-            SELECT u.id::text, u.email, u.full_name, u.status, u.created_at,
-                   u.approved_at, r.role_key,
-                   COUNT(DISTINCT s.id) FILTER (WHERE s.revoked_at IS NULL AND s.expires_at > NOW()) AS active_sessions,
-                   MAX(s.last_seen_at) AS last_seen_at
+            SELECT
+                u.id::text,
+                u.email,
+                u.full_name,
+                u.status,
+                u.created_at,
+                u.approved_at,
+                u.password_changed_at,
+                ARRAY_AGG(DISTINCT r.role_key ORDER BY r.role_key) FILTER (WHERE r.role_key IS NOT NULL) AS roles,
+                COUNT(DISTINCT s.id) FILTER (WHERE s.revoked_at IS NULL AND s.expires_at > NOW()) AS active_sessions,
+                COUNT(DISTINCT s.id) AS total_sessions,
+                MAX(s.last_seen_at) AS last_seen_at
             FROM auth_sessions s
             JOIN auth_users u ON u.id = s.user_id
             LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
             LEFT JOIN auth_roles r ON r.id = ur.role_id
-            WHERE s.token_hint = $1 AND s.revoked_at IS NULL
-            GROUP BY u.id, u.email, u.full_name, u.status, u.created_at, u.approved_at, r.role_key
-            LIMIT 1
+            WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+            GROUP BY u.id, u.email, u.full_name, u.status, u.created_at, u.approved_at, u.password_changed_at
             """,
             token_hint,
         )
         if not row:
-            raise HTTPException(status_code=401, detail="Session not found")
+            raise HTTPException(status_code=401, detail="Session not found or expired")
+        roles = list(row["roles"] or [])
         return {
-            "id": row["id"],
-            "email": row["email"],
-            "full_name": row["full_name"],
-            "status": row["status"],
-            "role": row["role_key"],
-            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-            "approved_at": row["approved_at"].isoformat() if row["approved_at"] else None,
-            "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
-            "active_sessions": int(row["active_sessions"] or 0),
+            "id":                   row["id"],
+            "email":                row["email"],
+            "full_name":            row["full_name"],
+            "status":               row["status"],
+            "role":                 roles[0] if roles else None,
+            "roles":                roles,
+            "created_at":           row["created_at"].isoformat() if row["created_at"] else None,
+            "approved_at":          row["approved_at"].isoformat() if row["approved_at"] else None,
+            "last_seen_at":         row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
+            "password_changed_at":  row["password_changed_at"].isoformat() if row["password_changed_at"] else None,
+            "active_sessions":      int(row["active_sessions"] or 0),
+            "total_sessions":       int(row["total_sessions"] or 0),
         }
     except HTTPException:
         raise

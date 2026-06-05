@@ -1118,27 +1118,30 @@ async def admin_stats(_: str = Depends(require_admin)):
 
 @router.get("/audit-log")
 async def admin_audit_log(
-    limit:      int           = Query(100, ge=1, le=1000),
-    offset:     int           = Query(0,   ge=0),
-    role:       Optional[str] = Query(None),
-    method:     Optional[str] = Query(None),
-    roles:      Optional[str] = Query(None, description="Comma-separated roles: editor,admin"),
-    methods:    Optional[str] = Query(None, description="Comma-separated methods: GET,POST"),
-    devices:    Optional[str] = Query(None, description="Comma-separated devices: desktop,mobile"),
-    status:     Optional[int] = Query(None),
-    status_min: Optional[int] = Query(None, description="Min HTTP status (e.g. 400)"),
-    status_max: Optional[int] = Query(None, description="Max HTTP status (e.g. 499)"),
-    ip:         Optional[str] = Query(None, description="IP prefix or exact match"),
-    path:       Optional[str] = Query(None, description="Path substring (case-insensitive)"),
-    country:    Optional[str] = Query(None, description="Country code or name substring"),
-    city:       Optional[str] = Query(None, description="City substring"),
-    isp:        Optional[str] = Query(None, description="ISP / org substring"),
-    device:     Optional[str] = Query(None, description="desktop | mobile | tablet"),
-    browser:    Optional[str] = Query(None, description="Browser substring"),
-    os_name:    Optional[str] = Query(None, alias="os", description="OS substring"),
-    from_ts:    Optional[str] = Query(None, description="ISO datetime range start"),
-    to_ts:      Optional[str] = Query(None, description="ISO datetime range end"),
-    _:          str           = Depends(require_admin),
+    limit:       int           = Query(100, ge=1, le=1000),
+    offset:      int           = Query(0,   ge=0),
+    role:        Optional[str] = Query(None),
+    method:      Optional[str] = Query(None),
+    roles:       Optional[str] = Query(None, description="Comma-separated roles: editor,admin"),
+    methods:     Optional[str] = Query(None, description="Comma-separated methods: GET,POST"),
+    devices:     Optional[str] = Query(None, description="Comma-separated devices: desktop,mobile"),
+    status:      Optional[int] = Query(None),
+    status_min:  Optional[int] = Query(None, description="Min HTTP status (e.g. 400)"),
+    status_max:  Optional[int] = Query(None, description="Max HTTP status (e.g. 499)"),
+    status_class:Optional[str] = Query(None, description="Status class: 2xx, 3xx, 4xx, 5xx"),
+    ip:          Optional[str] = Query(None, description="IP prefix or exact match"),
+    path:        Optional[str] = Query(None, description="Path substring (case-insensitive)"),
+    country:     Optional[str] = Query(None, description="Country code or name substring"),
+    city:        Optional[str] = Query(None, description="City substring"),
+    isp:         Optional[str] = Query(None, description="ISP / org substring"),
+    device:      Optional[str] = Query(None, description="desktop | mobile | tablet"),
+    browser:     Optional[str] = Query(None, description="Browser substring"),
+    os_name:     Optional[str] = Query(None, alias="os", description="OS substring"),
+    user_email:  Optional[str] = Query(None, description="Email of the authenticated user (case-insensitive)"),
+    from_ts:     Optional[str] = Query(None, description="ISO datetime range start"),
+    to_ts:       Optional[str] = Query(None, description="ISO datetime range end"),
+    errors_only: bool          = Query(False, description="Only 4xx/5xx responses"),
+    _:           str           = Depends(require_admin),
 ):
     """
     Paginated audit log with rich filters.
@@ -1159,61 +1162,76 @@ async def admin_audit_log(
         params.append(value)
         idx += 1
 
+    # Validate conflicting status params
+    if status and (status_min or status_max):
+        raise HTTPException(status_code=422, detail="Use either 'status' (exact) or 'status_min'/'status_max' (range), not both")
+
     if roles:
         rl = [r.strip() for r in roles.split(',') if r.strip()]
         if rl:
-            phs = ','.join(f'${idx+i}' for i in range(len(rl))); params.extend(rl); where.append(f"role IN ({phs})"); idx += len(rl)
-    elif role:      _add("role = ?", role)
+            phs = ','.join(f'${idx+i}' for i in range(len(rl))); params.extend(rl); where.append(f"al.role IN ({phs})"); idx += len(rl)
+    elif role:
+        _add("al.role = ?", role)
     if methods:
         ml = [m.strip().upper() for m in methods.split(',') if m.strip()]
         if ml:
-            phs = ','.join(f'${idx+i}' for i in range(len(ml))); params.extend(ml); where.append(f"method IN ({phs})"); idx += len(ml)
-    elif method:    _add("method = ?", method.upper())
-    if status:      _add("status = ?",                     status)
-    if status_min:  _add("status >= ?",                    status_min)
-    if status_max:  _add("status <= ?",                    status_max)
-    if ip:          _add("ip LIKE ?",                      ip + "%")
-    if path:        _add("path ILIKE ?",                   f"%{path}%")
+            phs = ','.join(f'${idx+i}' for i in range(len(ml))); params.extend(ml); where.append(f"al.method IN ({phs})"); idx += len(ml)
+    elif method:
+        _add("al.method = ?", method.upper())
+    # Status filtering: exact takes priority, then class, then range
+    if status:
+        _add("al.status = ?", status)
+    elif status_class:
+        cls = status_class.lower().replace("xx", "").strip()
+        if cls in ("2", "3", "4", "5"):
+            base = int(cls) * 100
+            where.append(f"al.status >= ${idx} AND al.status < ${idx+1}")
+            params += [base, base + 100]; idx += 2
+    else:
+        if status_min: _add("al.status >= ?", status_min)
+        if status_max: _add("al.status <= ?", status_max)
+    if errors_only:
+        where.append("al.status >= 400")
+    if ip:          _add("al.ip LIKE ?",          ip + "%")
+    if path:        _add("al.path ILIKE ?",        f"%{path}%")
     if country:
-        # Match either 2-letter code or full name
-        where.append(f"(country_code ILIKE ${idx} OR country ILIKE ${idx+1})")
-        params += [country, f"%{country}%"]
-        idx += 2
-    if city:        _add("city ILIKE ?",                   f"%{city}%")
+        where.append(f"(al.country_code ILIKE ${idx} OR al.country ILIKE ${idx+1})")
+        params += [country, f"%{country}%"]; idx += 2
+    if city:        _add("al.city ILIKE ?",        f"%{city}%")
     if isp:
-        where.append(f"(isp ILIKE ${idx} OR org ILIKE ${idx+1})")
-        params += [f"%{isp}%", f"%{isp}%"]
-        idx += 2
+        where.append(f"(al.isp ILIKE ${idx} OR al.org ILIKE ${idx+1})")
+        params += [f"%{isp}%", f"%{isp}%"]; idx += 2
     if devices:
         dl = [d.strip().lower() for d in devices.split(',') if d.strip()]
         if dl:
-            phs = ','.join(f'${idx+i}' for i in range(len(dl))); params.extend(dl); where.append(f"device IN ({phs})"); idx += len(dl)
-    elif device:    _add("device = ?", device.lower())
-    if browser:     _add("browser ILIKE ?",                f"%{browser}%")
-    if os_name:     _add("os ILIKE ?",                     f"%{os_name}%")
+            phs = ','.join(f'${idx+i}' for i in range(len(dl))); params.extend(dl); where.append(f"al.device IN ({phs})"); idx += len(dl)
+    elif device:    _add("al.device = ?",          device.lower())
+    if browser:     _add("al.browser ILIKE ?",     f"%{browser}%")
+    if os_name:     _add("al.os ILIKE ?",          f"%{os_name}%")
+    if user_email:  _add("al.user_email ILIKE ?",  f"%{user_email.strip()}%")
     if from_ts:
-        try:    _add("ts >= ?", datetime.fromisoformat(from_ts))
-        except ValueError: pass
+        try:    _add("al.ts >= ?", datetime.fromisoformat(from_ts.replace("Z", "+00:00")))
+        except ValueError: raise HTTPException(status_code=422, detail=f"Invalid from_ts: {from_ts}")
     if to_ts:
-        try:    _add("ts <= ?", datetime.fromisoformat(to_ts))
-        except ValueError: pass
+        try:    _add("al.ts <= ?", datetime.fromisoformat(to_ts.replace("Z", "+00:00")))
+        except ValueError: raise HTTPException(status_code=422, detail=f"Invalid to_ts: {to_ts}")
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
-    total = await pool.fetchval(f"SELECT COUNT(*) FROM audit_log {where_sql}", *params)
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM audit_log al {where_sql}", *params)
     rows  = await pool.fetch(
         f"""
-        SELECT al.id, al.ts, al.role, al.token_hint, al.method, al.path, al.status, al.duration_ms,
-               al.request_id, al.ip, al.user_agent, al.os, al.browser, al.device,
+        SELECT al.id, al.ts, al.role, al.token_hint,
+               al.method, al.path, al.status, al.duration_ms, al.request_id,
+               al.ip, al.user_agent, al.os, al.browser, al.device,
                al.country, al.country_code, al.region, al.city, al.isp,
                al.lat, al.lon, al.timezone, al.org,
                al.referer, al.body_size, al.query_params, al.resp_size,
-               al.extra::text AS extra,
-               u.email AS user_email,
-               u.full_name AS user_name
+               al.user_id::text AS user_id,
+               al.user_email,
+               al.user_name,
+               al.extra::text AS extra
         FROM audit_log al
-        LEFT JOIN auth_sessions s ON s.token_hint = al.token_hint AND al.token_hint IS NOT NULL
-        LEFT JOIN auth_users u ON u.id = s.user_id
         {where_sql}
         ORDER BY al.ts DESC
         LIMIT ${idx} OFFSET ${idx+1}

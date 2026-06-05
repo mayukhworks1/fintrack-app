@@ -163,11 +163,12 @@ async def request_middleware(request: Request, call_next):
         # Non-blocking enqueue — audit_worker batches + inserts asynchronously.
         # enqueue_audit() is synchronous (just queue.put_nowait) so no await needed.
         auth_extra = {
-            "auth_user_id": getattr(request.state, "auth_user_id", None),
+            "auth_user_id":    getattr(request.state, "auth_user_id",    None),
             "auth_user_email": getattr(request.state, "auth_user_email", None),
-            "auth_role": getattr(request.state, "auth_role", None),
+            "auth_user_name":  getattr(request.state, "auth_user_name",  None),
+            "auth_role":       getattr(request.state, "auth_role",       None),
             "auth_session_id": getattr(request.state, "auth_session_id", None),
-            "is_email_auth": bool(getattr(request.state, "is_email_auth", False)),
+            "is_email_auth":   bool(getattr(request.state, "is_email_auth", False)),
         }
         enqueue_audit(
             role=role,

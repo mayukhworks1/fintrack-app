@@ -735,19 +735,37 @@ function AuditLogTab() {
   const [filterStatus, setStat]    = useState('')
 
   // ── Advanced filters ───────────────────────────────────────────────────────
-  const [showAdv,      setShowAdv] = useState(false)
-  const [filterIp,     setIp]      = useState('')
-  const [filterPath,   setPath]    = useState('')
-  const [filterCountry,setCountry] = useState('')
-  const [filterCity,   setCity]    = useState('')
-  const [filterIsp,    setIsp]     = useState('')
-  const [filterDevice, setDevice]  = useState([])
-  const [filterBrowser,setBrowser] = useState('')
-  const [filterOs,     setOs]      = useState('')
-  const [filterFrom,   setFrom]    = useState('')
-  const [filterTo,     setTo]      = useState('')
-  const [statusMin,    setStMin]   = useState('')
-  const [statusMax,    setStMax]   = useState('')
+  const [showAdv,        setShowAdv]  = useState(false)
+  const [filterIp,       setIp]       = useState('')
+  const [filterPath,     setPath]     = useState('')
+  const [filterCountry,  setCountry]  = useState('')
+  const [filterCity,     setCity]     = useState('')
+  const [filterIsp,      setIsp]      = useState('')
+  const [filterDevice,   setDevice]   = useState([])
+  const [filterBrowser,  setBrowser]  = useState('')
+  const [filterOs,       setOs]       = useState('')
+  const [filterFrom,     setFrom]     = useState('')
+  const [filterTo,       setTo]       = useState('')
+  const [statusMin,      setStMin]    = useState('')
+  const [statusMax,      setStMax]    = useState('')
+  const [filterUserEmail,setUserEmail]= useState('')
+  const [statusClass,    setStClass]  = useState('')  // '2xx'|'3xx'|'4xx'|'5xx'|''
+  const [errorsOnly,     setErrOnly]  = useState(false)
+
+  // ── Time preset helpers ────────────────────────────────────────────────────
+  const applyTimePreset = useCallback((preset) => {
+    const now = new Date()
+    const fmt = (d) => d.toISOString()
+    const presets = {
+      '1h':  () => { setFrom(fmt(new Date(now - 3600_000)));     setTo('') },
+      '24h': () => { setFrom(fmt(new Date(now - 86400_000)));    setTo('') },
+      '7d':  () => { setFrom(fmt(new Date(now - 7*86400_000)));  setTo('') },
+      '30d': () => { setFrom(fmt(new Date(now - 30*86400_000))); setTo('') },
+      'all': () => { setFrom(''); setTo('') },
+    }
+    presets[preset]?.()
+    setOffset(0); setFullRows(null)
+  }, [])
 
   // ── Client-side advanced filter builder ───────────────────────────────────
   const [filterConditions, setFilterConditions] = useState([])
@@ -765,24 +783,27 @@ function AuditLogTab() {
   const basicFilters = [filterStatus]
 
   const buildAuditParams = useCallback((take, skip) => ({
-    limit: take,
-    offset: skip,
-    roles:      filterRole.length   ? filterRole.join(',')   : undefined,
-    methods:    filterMethod.length ? filterMethod.join(',') : undefined,
-    devices:    filterDevice.length ? filterDevice.join(',') : undefined,
-    status:     filterStatus  || undefined,
-    status_min: statusMin     || undefined,
-    status_max: statusMax     || undefined,
-    ip:         filterIp      || undefined,
-    path:       filterPath    || undefined,
-    country:    filterCountry || undefined,
-    city:       filterCity    || undefined,
-    isp:        filterIsp     || undefined,
-    browser:    filterBrowser || undefined,
-    os:         filterOs      || undefined,
-    from_ts:    filterFrom    || undefined,
-    to_ts:      filterTo      || undefined,
-  }), [filterRole, filterMethod, filterDevice, filterStatus, statusMin, statusMax, filterIp, filterPath, filterCountry, filterCity, filterIsp, filterBrowser, filterOs, filterFrom, filterTo])
+    limit:        take,
+    offset:       skip,
+    roles:        filterRole.length   ? filterRole.join(',')   : undefined,
+    methods:      filterMethod.length ? filterMethod.join(',') : undefined,
+    devices:      filterDevice.length ? filterDevice.join(',') : undefined,
+    status:       (!statusClass && !statusMin && !statusMax) ? (filterStatus || undefined) : undefined,
+    status_min:   (!statusClass && filterStatus === '') ? (statusMin || undefined) : undefined,
+    status_max:   (!statusClass && filterStatus === '') ? (statusMax || undefined) : undefined,
+    status_class: statusClass   || undefined,
+    errors_only:  errorsOnly    || undefined,
+    ip:           filterIp      || undefined,
+    path:         filterPath    || undefined,
+    country:      filterCountry || undefined,
+    city:         filterCity    || undefined,
+    isp:          filterIsp     || undefined,
+    browser:      filterBrowser || undefined,
+    os:           filterOs      || undefined,
+    user_email:   filterUserEmail || undefined,
+    from_ts:      filterFrom    || undefined,
+    to_ts:        filterTo      || undefined,
+  }), [filterRole, filterMethod, filterDevice, filterStatus, statusMin, statusMax, statusClass, errorsOnly, filterIp, filterPath, filterCountry, filterCity, filterIsp, filterBrowser, filterOs, filterUserEmail, filterFrom, filterTo])
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -811,15 +832,16 @@ function AuditLogTab() {
     setRole([]); setMeth([]); setStat(''); setIp(''); setPath('')
     setCountry(''); setCity(''); setIsp(''); setDevice([]); setBrowser('')
     setOs(''); setFrom(''); setTo(''); setStMin(''); setStMax('')
+    setStClass(''); setErrOnly(false); setUserEmail('')
     setFilterConditions([])
     setFullRows(null)
     setOffset(0)
   }
 
   useEffect(() => { setOffset(0) }, [filterRole, filterMethod, filterStatus,
-    statusMin, statusMax, filterIp, filterPath, filterCountry,
+    statusMin, statusMax, statusClass, errorsOnly, filterIp, filterPath, filterCountry,
     filterCity, filterIsp, filterDevice, filterBrowser, filterOs,
-    filterFrom, filterTo, filterConditions, limit])
+    filterUserEmail, filterFrom, filterTo, filterConditions, limit])
 
   useEffect(() => { setFullRows(null) }, [buildAuditParams])
 
@@ -893,7 +915,7 @@ function AuditLogTab() {
     finally { setPurging(false) }
   }
 
-  const hasAnyFilter = advCount > 0 || filterRole.length > 0 || filterMethod.length > 0 || basicFilters.some(Boolean)
+  const hasAnyFilter = advCount > 0 || filterRole.length > 0 || filterMethod.length > 0 || basicFilters.some(Boolean) || filterUserEmail || statusClass || errorsOnly || filterFrom || filterTo
 
   return (
     <div className="space-y-3">
@@ -908,17 +930,46 @@ function AuditLogTab() {
 
       {/* ── Basic filter bar ─────────────────────────────────────────────── */}
       <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+
+        {/* Time presets */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Time:</span>
+          {['1h','24h','7d','30d','all'].map(p => (
+            <button key={p} onClick={() => applyTimePreset(p)}
+              className="text-[11px] px-2 py-0.5 rounded-md border transition-colors"
+              style={{
+                background: (p === 'all' && !filterFrom && !filterTo) || (filterFrom && p !== 'all') ? 'var(--bg-input)' : 'transparent',
+                borderColor: 'var(--border)', color: 'var(--text-2)',
+              }}>
+              {p === 'all' ? 'All time' : `Last ${p}`}
+            </button>
+          ))}
+          {filterFrom && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>from {new Date(filterFrom).toLocaleString('en-IN', {dateStyle:'short', timeStyle:'short'})}</span>}
+        </div>
+
         <div className="flex flex-wrap gap-2 items-end">
           <FMulti label="Role" selected={filterRole} onChange={setRole} width={140}
             opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
           <FMulti label="Method" selected={filterMethod} onChange={setMeth} width={130}
             opts={[['GET','GET'],['POST','POST'],['PATCH','PATCH'],['DELETE','DELETE']]} />
-          <FSel label="Status" value={filterStatus} onChange={setStat}
-            opts={[['','All statuses'],['200','200 OK'],['201','201 Created'],['204','204 No Content'],
-                   ['400','400 Bad Req'],['401','401 Unauth'],['403','403 Forbidden'],
-                   ['404','404 Not Found'],['422','422 Unprocessable'],['500','500 Server Err']]} />
+          <FSel label="Status" value={statusClass || filterStatus} onChange={v => {
+            if (['2xx','3xx','4xx','5xx'].includes(v)) { setStClass(v); setStat('') }
+            else { setStClass(''); setStat(v) }
+          }}
+            opts={[
+              ['','All statuses'],
+              ['2xx','2xx Success'],['3xx','3xx Redirect'],['4xx','4xx Client Error'],['5xx','5xx Server Error'],
+              ['200','200 OK'],['201','201 Created'],['204','204 No Content'],
+              ['400','400 Bad Request'],['401','401 Unauthorized'],['403','403 Forbidden'],
+              ['404','404 Not Found'],['422','422 Unprocessable'],['500','500 Internal Error'],
+            ]} />
+          <FPill label="User email" value={filterUserEmail} onChange={setUserEmail} placeholder="user@…" />
           <FSel label="Limit" value={String(limit)} onChange={v => setLimit(Number(v))}
             opts={[['50','50'],['100','100'],['200','200'],['500','500'],['1000','1000']]} />
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" style={{ color: 'var(--text-2)' }}>
+            <input type="checkbox" checked={errorsOnly} onChange={e => setErrOnly(e.target.checked)} />
+            Errors only
+          </label>
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
@@ -3663,58 +3714,108 @@ function InsightsTab() {
 
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 
+// Top-level tabs — grouped by concern
 const TABS = [
-  { id: 'overview',      label: 'Overview',      icon: LayoutDashboard  },
-  { id: 'audit',         label: 'Audit Log',     icon: ScrollText        },
-  { id: 'sessions',      label: 'Sessions',      icon: Users             },
-  { id: 'auth-users',    label: 'Auth Users',    icon: ShieldAlert       },
-  { id: 'chats',         label: 'AI Chats',      icon: MessageSquareText },
-  { id: 'ai-runs',       label: 'AI Runs',       icon: Zap               },
-  { id: 'insights',      label: 'Insights',      icon: BarChart2         },
-  { id: 'sync',          label: 'Sync Log',      icon: RefreshCw         },
-  { id: 'projects',      label: 'Projects',      icon: Database          },
-  { id: 'invoices',      label: 'Invoices',      icon: FileText          },
-  { id: 'history',       label: 'History',       icon: History           },
-  { id: 'shared',        label: 'Shared',        icon: Link2             },
-  { id: 'hflogs',        label: 'HF Logs',       icon: Terminal          },
+  { id: 'overview',  label: 'Overview',        icon: LayoutDashboard  },
+  { id: 'requests',  label: 'Requests',         icon: ScrollText       }, // was "Audit Log"
+  { id: 'users',     label: 'Users & Sessions', icon: ShieldAlert      }, // merged Auth Users + Sessions
+  { id: 'ai',        label: 'AI',               icon: MessageSquareText}, // merged Chats + Runs
+  { id: 'insights',  label: 'Insights',         icon: BarChart2        },
+  { id: 'sync',      label: 'Sync',             icon: RefreshCw        },
+  { id: 'projects',  label: 'Projects',         icon: Database         },
+  { id: 'invoices',  label: 'Invoices',         icon: FileText         },
+  { id: 'history',   label: 'History',          icon: History          },
+  { id: 'shared',    label: 'Shared',           icon: Link2            },
+  { id: 'hflogs',    label: 'HF Logs',          icon: Terminal         },
 ]
+
+// Sub-tabs for composite tabs
+const SUB_TABS = {
+  users: [
+    { id: 'auth-users', label: 'Users',    icon: ShieldAlert },
+    { id: 'sessions',   label: 'Sessions', icon: Users       },
+  ],
+  ai: [
+    { id: 'chats',   label: 'Chats', icon: MessageSquareText },
+    { id: 'ai-runs', label: 'Runs',  icon: Zap               },
+  ],
+}
+
+// Map old tab ids to new for backwards compat with stored URLs
+const TAB_ALIAS = {
+  'audit': 'requests', 'audit-log': 'requests',
+  'auth-users': 'users', 'sessions': 'users',
+  'chats': 'ai', 'ai-runs': 'ai',
+}
+
+function SubTabBar({ tabs, active, onSelect }) {
+  return (
+    <div className="flex gap-1 mb-3 p-1 rounded-xl w-fit"
+      style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button key={id} onClick={() => onSelect(id)}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+          style={active === id
+            ? { background: 'var(--card-bg)', color: 'var(--text-1)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+            : { color: 'var(--text-3)', background: 'transparent' }}>
+          <Icon size={11} />{label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function AdminDashboard({ embedded = false }) {
   const { logout } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const validTabIds = TABS.map(t => t.id)
-  const tabFromUrl = searchParams.get('tab')
-  const activeTab = validTabIds.includes(tabFromUrl) ? tabFromUrl : 'overview'
 
-  const setTab = useCallback((id) => {
+  const validTabIds = TABS.map(t => t.id)
+  const rawTab = searchParams.get('tab') || 'overview'
+  // Resolve aliases (old URLs still work)
+  const activeTab = validTabIds.includes(rawTab) ? rawTab : (TAB_ALIAS[rawTab] ? TAB_ALIAS[rawTab] : 'overview')
+  // Sub-tab state: stored in ?sub= param
+  const rawSub  = searchParams.get('sub') || ''
+  const activeSub = rawSub || ''
+
+  const setTab = useCallback((id, sub) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
       next.set('tab', id)
+      if (sub) next.set('sub', sub)
+      else next.delete('sub')
       return next
     }, { replace: false })
   }, [setSearchParams])
+
+  const setSub = useCallback((sub) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('sub', sub)
+      return next
+    }, { replace: false })
+  }, [setSearchParams])
+
+  // Resolve which sub-tab to show for composite tabs
+  const effectiveSub = useMemo(() => {
+    const subs = SUB_TABS[activeTab]
+    if (!subs) return null
+    const valid = subs.map(s => s.id)
+    // If URL has a valid sub, use it; also honour old aliases
+    if (valid.includes(activeSub)) return activeSub
+    if (TAB_ALIAS[rawTab] === activeTab && valid.includes(rawTab)) return rawTab
+    return valid[0]
+  }, [activeTab, activeSub, rawTab])
 
   const [historyDrilldown, setHistoryDrilldown] = useState(null)
   const [invoiceDrilldown, setInvoiceDrilldown] = useState(null)
 
   const openHistoryDrilldown = useCallback((sourceTable, label) => {
-    setHistoryDrilldown({
-      sourceTable,
-      label,
-      conditions: [
-        { field: 'change_type', op: 'is', value: 'delete' },
-      ],
-      token: Date.now(),
-    })
+    setHistoryDrilldown({ sourceTable, label, conditions: [{ field: 'change_type', op: 'is', value: 'delete' }], token: Date.now() })
     setTab('history')
   }, [setTab])
 
   const openInvoiceDrilldown = useCallback((source, teableId) => {
-    setInvoiceDrilldown({
-      source: source || 'all',
-      teable_id: teableId,
-      token: Date.now(),
-    })
+    setInvoiceDrilldown({ source: source || 'all', teable_id: teableId, token: Date.now() })
     setTab('invoices')
   }, [setTab])
 
@@ -3740,19 +3841,29 @@ export default function AdminDashboard({ embedded = false }) {
 
   const content = (
     <>
-      {activeTab === 'overview'     && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
-      {activeTab === 'audit'        && <AuditLogTab />}
-      {activeTab === 'sessions'     && <SessionsTab />}
-      {activeTab === 'auth-users'   && <AuthUsersTab />}
-      {activeTab === 'chats'        && <ChatsTab />}
-      {activeTab === 'ai-runs'      && <AiRunsTab />}
-      {activeTab === 'insights'     && <InsightsTab />}
-      {activeTab === 'sync'         && <SyncLogTab />}
-      {activeTab === 'projects'     && <ProjectsMirrorTab />}
-      {activeTab === 'invoices'     && <InvoicesTab drilldown={invoiceDrilldown} />}
-      {activeTab === 'history'      && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
-      {activeTab === 'shared'       && <SharedLinksTab />}
-      {activeTab === 'hflogs'       && <HfLogsTab />}
+      {activeTab === 'overview'  && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
+      {activeTab === 'requests'  && <AuditLogTab />}
+      {activeTab === 'users'     && (
+        <>
+          <SubTabBar tabs={SUB_TABS.users} active={effectiveSub} onSelect={setSub} />
+          {effectiveSub === 'auth-users' && <AuthUsersTab />}
+          {effectiveSub === 'sessions'   && <SessionsTab />}
+        </>
+      )}
+      {activeTab === 'ai'        && (
+        <>
+          <SubTabBar tabs={SUB_TABS.ai} active={effectiveSub} onSelect={setSub} />
+          {effectiveSub === 'chats'   && <ChatsTab />}
+          {effectiveSub === 'ai-runs' && <AiRunsTab />}
+        </>
+      )}
+      {activeTab === 'insights'  && <InsightsTab />}
+      {activeTab === 'sync'      && <SyncLogTab />}
+      {activeTab === 'projects'  && <ProjectsMirrorTab />}
+      {activeTab === 'invoices'  && <InvoicesTab drilldown={invoiceDrilldown} />}
+      {activeTab === 'history'   && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
+      {activeTab === 'shared'    && <SharedLinksTab />}
+      {activeTab === 'hflogs'    && <HfLogsTab />}
     </>
   )
 

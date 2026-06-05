@@ -301,7 +301,34 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
     try:
         records = []
         for item in items:
-            geo = item.get("geo", {}) or {}
+            geo   = item.get("geo", {}) or {}
+            extra = item.get("extra", {}) or {}
+            bg    = extra.get("browser_geo", {}) or {}
+
+            def _lat(d, fallback):
+                v = d.get("lat")
+                return v if isinstance(v, (int, float)) else fallback
+
+            def _lon(d, fallback):
+                v = d.get("lon")
+                return v if isinstance(v, (int, float)) else fallback
+
+            # Prefer browser geo over IP geo for lat/lon
+            lat = _lat(bg, _lat(geo, None))
+            lon = _lon(bg, _lon(geo, None))
+
+            # Identity fields — populated for email-auth sessions
+            raw_uid = extra.get("auth_user_id")
+            user_id = None
+            if raw_uid:
+                try:
+                    import uuid as _uuid
+                    user_id = str(_uuid.UUID(str(raw_uid)))
+                except Exception:
+                    user_id = None
+            user_email = (extra.get("auth_user_email") or "")[:320] or None
+            user_name  = (extra.get("auth_user_name")  or "")[:255] or None
+
             records.append((
                 item.get("role"),
                 (item.get("token_hint") or "")[:20] or None,
@@ -315,26 +342,22 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 item.get("os_str",  "Unknown")[:100],
                 item.get("browser", "Unknown")[:100],
                 item.get("device",  "desktop")[:20],
-                geo.get("country",      "")[:80]  or None,
-                geo.get("country_code", "")[:4]   or None,
-                geo.get("region",       "")[:100] or None,
-                geo.get("city",         "")[:100] or None,
-                geo.get("isp",          "")[:150] or None,
-                # Extended geo — prefer browser geolocation when the user has
-                # granted it, otherwise fall back to IP-derived geo.
-                (item.get("extra", {}).get("browser_geo", {}) or {}).get("lat")
-                  if isinstance((item.get("extra", {}).get("browser_geo", {}) or {}).get("lat"), (int, float))
-                  else (geo.get("lat") if isinstance(geo.get("lat"),  (int, float)) else None),
-                (item.get("extra", {}).get("browser_geo", {}) or {}).get("lon")
-                  if isinstance((item.get("extra", {}).get("browser_geo", {}) or {}).get("lon"), (int, float))
-                  else (geo.get("lon") if isinstance(geo.get("lon"),  (int, float)) else None),
+                (geo.get("country",      "") or "")[:80]  or None,
+                (geo.get("country_code", "") or "")[:4]   or None,
+                (geo.get("region",       "") or "")[:100] or None,
+                (geo.get("city",         "") or "")[:100] or None,
+                (geo.get("isp",          "") or "")[:150] or None,
+                lat, lon,
                 (geo.get("timezone") or "")[:50]  or None,
                 (geo.get("org")      or "")[:200] or None,
                 (item.get("referer")      or "")[:500] or None,
                 item.get("body_size"),
                 (item.get("query_params") or "")[:500] or None,
                 item.get("resp_size"),
-                json.dumps(item.get("extra") or {}),   # JSONB — must be JSON string
+                user_id,
+                user_email,
+                user_name,
+                json.dumps(extra),   # JSONB — must be JSON string
             ))
 
         await pool.executemany(
@@ -346,6 +369,7 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 country, country_code, region, city, isp,
                 lat, lon, timezone, org,
                 referer, body_size, query_params, resp_size,
+                user_id, user_email, user_name,
                 extra
             ) VALUES (
                 $1,  $2,
@@ -354,7 +378,8 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
                 $13, $14, $15, $16, $17,
                 $18, $19, $20, $21,
                 $22, $23, $24, $25,
-                $26::jsonb
+                $26::uuid, $27, $28,
+                $29::jsonb
             )
             """,
             records,

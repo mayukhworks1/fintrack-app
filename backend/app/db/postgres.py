@@ -59,12 +59,51 @@ CREATE TABLE IF NOT EXISTS audit_log (
     city         VARCHAR(100),
     isp          VARCHAR(150),
 
+    lat          DOUBLE PRECISION,
+    lon          DOUBLE PRECISION,
+    timezone     VARCHAR(60),
+    org          VARCHAR(200),
+    referer      VARCHAR(500),
+    body_size    INTEGER,
+    query_params VARCHAR(500),
+    resp_size    INTEGER,
+
+    -- Identity columns — populated for email-auth sessions; NULL for legacy tokens
+    user_id      UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    user_email   VARCHAR(320),
+    user_name    VARCHAR(255),
+
     extra        JSONB        NOT NULL DEFAULT '{}'::jsonb
 );
-CREATE INDEX IF NOT EXISTS al_ts_idx   ON audit_log (ts DESC);
-CREATE INDEX IF NOT EXISTS al_role_idx ON audit_log (role, ts DESC);
-CREATE INDEX IF NOT EXISTS al_ip_idx   ON audit_log (ip,   ts DESC);
-CREATE INDEX IF NOT EXISTS al_path_idx ON audit_log (path, ts DESC);
+-- Add new columns to existing installs (idempotent)
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS lat          DOUBLE PRECISION;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS lon          DOUBLE PRECISION;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS timezone     VARCHAR(60);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS org          VARCHAR(200);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS referer      VARCHAR(500);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS body_size    INTEGER;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS query_params VARCHAR(500);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS resp_size    INTEGER;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_id      UUID;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_email   VARCHAR(320);
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_name    VARCHAR(255);
+-- Constraint only if auth_users exists (safe on new installs)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'audit_log' AND constraint_name = 'audit_log_user_id_fkey'
+  ) THEN
+    ALTER TABLE audit_log ADD CONSTRAINT audit_log_user_id_fkey
+      FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS al_ts_idx      ON audit_log (ts DESC);
+CREATE INDEX IF NOT EXISTS al_role_idx    ON audit_log (role, ts DESC);
+CREATE INDEX IF NOT EXISTS al_ip_idx      ON audit_log (ip,   ts DESC);
+CREATE INDEX IF NOT EXISTS al_path_idx    ON audit_log (path, ts DESC);
+CREATE INDEX IF NOT EXISTS al_user_idx    ON audit_log (user_id, ts DESC);
+CREATE INDEX IF NOT EXISTS al_email_idx   ON audit_log (user_email, ts DESC);
+CREATE INDEX IF NOT EXISTS al_status_idx  ON audit_log (status, ts DESC);
 
 -- ── Login sessions ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS login_sessions (
