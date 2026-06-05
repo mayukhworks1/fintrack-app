@@ -34,8 +34,9 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..db.postgres import get_pool
@@ -44,6 +45,12 @@ from .deps import require_admin
 
 logger = logging.getLogger("fintrack.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+class AuthUserDecision(BaseModel):
+    role_key: Optional[str] = Field(default=None, max_length=60)
+    reason: Optional[str] = Field(default=None, max_length=500)
+    full_name: Optional[str] = Field(default=None, max_length=255)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -65,6 +72,46 @@ def _no_db():
     return JSONResponse(
         status_code=503,
         content={"error": "PostgreSQL unavailable"},
+    )
+
+
+def _client_ip(request: Request) -> str:
+    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        value = request.headers.get(header, "")
+        if value:
+            return value.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+async def _write_auth_admin_event(
+    db,
+    request: Request,
+    *,
+    event_type: str,
+    actor_role: str,
+    target_user_id: str | None,
+    email: str | None,
+    status: str | None,
+    role: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    await db.execute(
+        """
+        INSERT INTO auth_events (
+            event_type, target_user_id, role, email, status, ip, user_agent,
+            request_id, metadata
+        )
+        VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::jsonb)
+        """,
+        event_type,
+        target_user_id,
+        role or actor_role,
+        email,
+        status,
+        _client_ip(request),
+        request.headers.get("user-agent", ""),
+        getattr(request.state, "request_id", None),
+        json.dumps({"actor_role": actor_role, **(metadata or {})}),
     )
 
 
@@ -246,6 +293,346 @@ async def admin_insight_exports(
         *params,
     )
     return {"exports": [_row_to_dict(row) for row in rows], "total": len(rows)}
+
+
+# ── Auth master controls ──────────────────────────────────────────────────────
+
+@router.get("/auth/roles")
+async def admin_auth_roles(_: str = Depends(require_admin)):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    rows = await pool.fetch(
+        """
+        SELECT r.id::text AS id, r.role_key, r.label, r.description, r.rank, r.is_system,
+               COUNT(rp.permission_id)::int AS permission_count
+        FROM auth_roles r
+        LEFT JOIN auth_role_permissions rp ON rp.role_id = r.id
+        GROUP BY r.id
+        ORDER BY r.rank ASC, r.role_key ASC
+        """
+    )
+    return {"roles": [_row_to_dict(row) for row in rows], "total": len(rows)}
+
+
+@router.get("/auth/users")
+async def admin_auth_users(
+    status: Optional[str] = Query(None),
+    role_key: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    where = ["1=1"]
+    params: list = []
+    idx = 1
+    if status:
+        where.append(f"u.status = ${idx}")
+        params.append(status)
+        idx += 1
+    if role_key:
+        where.append(
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM auth_user_roles urx
+                JOIN auth_roles rx ON rx.id = urx.role_id
+                WHERE urx.user_id = u.id AND rx.role_key = ${idx}
+            )
+            """
+        )
+        params.append(role_key)
+        idx += 1
+    if search:
+        where.append(f"(u.email ILIKE ${idx} OR COALESCE(u.full_name, '') ILIKE ${idx})")
+        params.append(f"%{search.strip()}%")
+        idx += 1
+    where_sql = " AND ".join(where)
+
+    total = await pool.fetchval(f"SELECT COUNT(*) FROM auth_users u WHERE {where_sql}", *params)
+    rows = await pool.fetch(
+        f"""
+        WITH role_agg AS (
+            SELECT ur.user_id, ARRAY_AGG(r.role_key ORDER BY r.rank ASC, r.role_key ASC) AS roles
+            FROM auth_user_roles ur
+            JOIN auth_roles r ON r.id = ur.role_id
+            GROUP BY ur.user_id
+        ),
+        session_agg AS (
+            SELECT user_id,
+                   COUNT(*)::int AS session_count,
+                   COUNT(*) FILTER (WHERE revoked_at IS NULL AND expires_at > NOW())::int AS active_session_count,
+                   MAX(last_seen_at) AS last_seen_at
+            FROM auth_sessions
+            GROUP BY user_id
+        ),
+        event_agg AS (
+            SELECT target_user_id AS user_id, MAX(created_at) AS last_event_at
+            FROM auth_events
+            WHERE target_user_id IS NOT NULL
+            GROUP BY target_user_id
+        )
+        SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
+               u.approved_at, u.disabled_at, u.email_verified_at,
+               COALESCE(role_agg.roles, ARRAY[]::text[]) AS roles,
+               COALESCE(session_agg.session_count, 0) AS session_count,
+               COALESCE(session_agg.active_session_count, 0) AS active_session_count,
+               session_agg.last_seen_at,
+               event_agg.last_event_at
+        FROM auth_users u
+        LEFT JOIN role_agg ON role_agg.user_id = u.id
+        LEFT JOIN session_agg ON session_agg.user_id = u.id
+        LEFT JOIN event_agg ON event_agg.user_id = u.id
+        WHERE {where_sql}
+        ORDER BY
+          CASE u.status
+            WHEN 'pending_approval' THEN 0
+            WHEN 'active' THEN 1
+            WHEN 'disabled' THEN 2
+            WHEN 'rejected' THEN 3
+            ELSE 4
+          END,
+          u.created_at DESC
+        LIMIT ${idx} OFFSET ${idx + 1}
+        """,
+        *params,
+        limit,
+        offset,
+    )
+    return {"rows": [_row_to_dict(row) for row in rows], "total": int(total or 0), "limit": limit, "offset": offset}
+
+
+async def _get_role_id(conn, role_key: str):
+    role_id = await conn.fetchval("SELECT id FROM auth_roles WHERE role_key = $1", role_key)
+    if not role_id:
+        raise HTTPException(status_code=422, detail=f"Unknown auth role: {role_key}")
+    return role_id
+
+
+@router.patch("/auth/users/{user_id}/approve")
+async def admin_approve_auth_user(
+    user_id: str,
+    body: AuthUserDecision,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    role_key = body.role_key or "user"
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            role_id = await _get_role_id(conn, role_key)
+            user = await conn.fetchrow(
+                """
+                UPDATE auth_users
+                SET status = 'active',
+                    approved_at = COALESCE(approved_at, NOW()),
+                    disabled_at = NULL,
+                    full_name = COALESCE(NULLIF($2, ''), full_name),
+                    updated_at = NOW()
+                WHERE id = $1::uuid
+                RETURNING id::text AS id, email, status
+                """,
+                user_id,
+                (body.full_name or "").strip(),
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            await conn.execute("DELETE FROM auth_user_roles WHERE user_id = $1::uuid", user_id)
+            await conn.execute(
+                "INSERT INTO auth_user_roles (user_id, role_id) VALUES ($1::uuid, $2)",
+                user_id,
+                role_id,
+            )
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_user_approved",
+                actor_role=actor_role,
+                target_user_id=user_id,
+                email=user["email"],
+                status=user["status"],
+                role=role_key,
+                metadata={"reason": body.reason},
+            )
+    return {"status": "active", "role_key": role_key, "message": "User approved"}
+
+
+@router.patch("/auth/users/{user_id}/reject")
+async def admin_reject_auth_user(
+    user_id: str,
+    body: AuthUserDecision,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            user = await conn.fetchrow(
+                """
+                UPDATE auth_users
+                SET status = 'rejected', disabled_at = NOW(), updated_at = NOW()
+                WHERE id = $1::uuid
+                RETURNING id::text AS id, email, status
+                """,
+                user_id,
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            await conn.execute(
+                "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1::uuid",
+                user_id,
+            )
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_user_rejected",
+                actor_role=actor_role,
+                target_user_id=user_id,
+                email=user["email"],
+                status=user["status"],
+                metadata={"reason": body.reason},
+            )
+    return {"status": "rejected", "message": "User rejected and sessions revoked"}
+
+
+@router.patch("/auth/users/{user_id}/disable")
+async def admin_disable_auth_user(
+    user_id: str,
+    body: AuthUserDecision,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            user = await conn.fetchrow(
+                """
+                UPDATE auth_users
+                SET status = 'disabled', disabled_at = NOW(), updated_at = NOW()
+                WHERE id = $1::uuid
+                RETURNING id::text AS id, email, status
+                """,
+                user_id,
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            await conn.execute(
+                "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1::uuid",
+                user_id,
+            )
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_user_disabled",
+                actor_role=actor_role,
+                target_user_id=user_id,
+                email=user["email"],
+                status=user["status"],
+                metadata={"reason": body.reason},
+            )
+    return {"status": "disabled", "message": "User disabled and sessions revoked"}
+
+
+@router.patch("/auth/users/{user_id}/reactivate")
+async def admin_reactivate_auth_user(
+    user_id: str,
+    body: AuthUserDecision,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    role_key = body.role_key
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            role_id = await _get_role_id(conn, role_key) if role_key else None
+            user = await conn.fetchrow(
+                """
+                UPDATE auth_users
+                SET status = 'active',
+                    approved_at = COALESCE(approved_at, NOW()),
+                    disabled_at = NULL,
+                    full_name = COALESCE(NULLIF($2, ''), full_name),
+                    updated_at = NOW()
+                WHERE id = $1::uuid
+                RETURNING id::text AS id, email, status
+                """,
+                user_id,
+                (body.full_name or "").strip(),
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            if role_id:
+                await conn.execute("DELETE FROM auth_user_roles WHERE user_id = $1::uuid", user_id)
+                await conn.execute(
+                    "INSERT INTO auth_user_roles (user_id, role_id) VALUES ($1::uuid, $2)",
+                    user_id,
+                    role_id,
+                )
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_user_reactivated",
+                actor_role=actor_role,
+                target_user_id=user_id,
+                email=user["email"],
+                status=user["status"],
+                role=role_key,
+                metadata={"reason": body.reason},
+            )
+    return {"status": "active", "role_key": role_key, "message": "User reactivated"}
+
+
+@router.post("/auth/users/{user_id}/sessions/revoke")
+async def admin_revoke_auth_user_sessions(
+    user_id: str,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow("SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid", user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Auth user not found")
+        count = await conn.fetchval(
+            """
+            WITH changed AS (
+              UPDATE auth_sessions
+              SET revoked_at = NOW()
+              WHERE user_id = $1::uuid
+                AND revoked_at IS NULL
+                AND expires_at > NOW()
+              RETURNING id
+            )
+            SELECT COUNT(*) FROM changed
+            """,
+            user_id,
+        )
+        await _write_auth_admin_event(
+            conn,
+            request,
+            event_type="admin_user_sessions_revoked",
+            actor_role=actor_role,
+            target_user_id=user_id,
+            email=user["email"],
+            status=user["status"],
+            metadata={"revoked_count": int(count or 0)},
+        )
+    return {"revoked": int(count or 0), "message": f"Revoked {int(count or 0)} active auth session(s)"}
 
 
 # ── Manual sync trigger ───────────────────────────────────────────────────────

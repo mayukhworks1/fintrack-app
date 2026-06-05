@@ -1,7 +1,7 @@
 # FinTrack — Project Memory
 
-> Last updated: 2026-06-04  
-> Commit baseline: `82b5a9f` on `main`  
+> Last updated: 2026-06-05
+> Commit baseline: `1c0c516` on `main`
 > Author: Mayukh · mayukhj2407@gmail.com
 
 ---
@@ -114,8 +114,9 @@ fintrack-app/
 
 ---
 
-## Authentication & RBAC (5 roles)
+## Authentication & RBAC
 
+### Legacy password roles (still active)
 | Role | Env var | Access |
 |------|---------|--------|
 | `editor` | `APP_PASSWORD` | Full CRUD, AI, admin panel via `/admin` |
@@ -130,6 +131,31 @@ Token format: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7 day TT
 Server-side logout: `POST /api/auth/logout` marks `is_active=false, expires_at=NOW()`.
 
 **Public routes**: `/view/:token` is checked BEFORE the auth gate in `App.jsx`.
+
+### Email/password auth foundation (additive; not full RBAC enforcement yet)
+- `POST /api/auth/email/bootstrap` creates first `superadmin` only when `APP_ADMIN_PASSWORD` is provided and no auth users exist.
+- `POST /api/auth/email/register` creates users in `pending_approval`.
+- `POST /api/auth/email/login` only allows users with `status='active'`; pending/rejected/disabled users are blocked.
+- Password hashing uses PBKDF2-SHA256 with per-password salt in `backend/app/services/auth_master.py`.
+- Email auth sessions are stored in `auth_sessions` and also mirrored into legacy `login_sessions` for current admin/session visibility compatibility.
+- Frontend login defaults to email/password and keeps a “legacy password” toggle for fallback during rollout.
+
+### Admin auth management (current local tranche)
+- Backend endpoints added in `backend/app/routers/admin.py`:
+  - `GET /api/admin/auth/roles`
+  - `GET /api/admin/auth/users`
+  - `PATCH /api/admin/auth/users/{user_id}/approve`
+  - `PATCH /api/admin/auth/users/{user_id}/reject`
+  - `PATCH /api/admin/auth/users/{user_id}/disable`
+  - `PATCH /api/admin/auth/users/{user_id}/reactivate`
+  - `POST /api/admin/auth/users/{user_id}/sessions/revoke`
+- Frontend admin tab added: `Admin Panel → Auth Users`.
+- Admin can filter users by status/role/search, assign a master role on approval/reactivation, disable users, reject pending users, and revoke active email-auth sessions.
+- All auth admin mutations write `auth_events` in the same DB transaction as the user/session state change.
+- `api.admin.authUsers()` bypasses the short frontend GET cache (`fresh: true`) so approval/disable/revoke actions reload live rows without browser refresh.
+- This tranche does **not** yet enforce per-module/scoped RBAC on business data routes. Existing legacy route access remains intact intentionally.
+- Validation so far: `python3 -m compileall backend/app`, `frontend npm run build`, `git diff --check`, and `backend/.venv/bin/python -c "from app.main import app; print(app.title)"` pass.
+- Production push gate still should include a live admin Auth Users smoke test after deployment because these endpoints depend on the real PostgreSQL auth tables and request auth context.
 
 ---
 

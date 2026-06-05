@@ -552,6 +552,13 @@ export const api = {
     // sessions: booleans (active_only) are explicitly stringified so false→"false" reaches FastAPI
     sessions:      (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => { if (v != null) q.set(k, String(v)) }); return request(`/api/admin/sessions?${q}`) },
     purgeSessions: ({ days } = {}) => { const q = new URLSearchParams(); if (days != null) q.set('older_than_days', days); return request(`/api/admin/sessions/purge?${q}`, { method: 'DELETE' }) },
+    authRoles:     ()           => request('/api/admin/auth/roles'),
+    authUsers:     (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/auth/users?${q}`, { fresh: true }) },
+    approveAuthUser: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/approve`, { method: 'PATCH', body: JSON.stringify(data) }),
+    rejectAuthUser:  (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/reject`, { method: 'PATCH', body: JSON.stringify(data) }),
+    disableAuthUser: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/disable`, { method: 'PATCH', body: JSON.stringify(data) }),
+    reactivateAuthUser: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/reactivate`, { method: 'PATCH', body: JSON.stringify(data) }),
+    revokeAuthUserSessions: (id) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/sessions/revoke`, { method: 'POST' }),
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
     aiGenerations: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/ai-generations?${q}`) },

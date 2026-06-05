@@ -1468,6 +1468,242 @@ function SessionsTab() {
   )
 }
 
+function AuthStatusBadge({ status }) {
+  const color = status === 'active' ? 'green'
+    : status === 'pending_approval' ? 'amber'
+    : status === 'disabled' || status === 'rejected' ? 'red'
+    : 'default'
+  const label = status === 'pending_approval' ? 'pending approval' : (status || 'unknown').replaceAll('_', ' ')
+  return <Badge color={color}>{label}</Badge>
+}
+
+function AuthUsersTab() {
+  const [data, setData] = useState(null)
+  const [roles, setRoles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(50)
+  const [statusFilter, setStatusFilter] = useState([])
+  const [roleFilter, setRoleFilter] = useState([])
+  const [search, setSearch] = useState('')
+  const [roleByUser, setRoleByUser] = useState({})
+  const [actingId, setActingId] = useState('')
+  const [message, setMessage] = useState('')
+
+  const roleOpts = useMemo(
+    () => roles.map(r => [r.role_key, `${r.label || r.role_key}`]),
+    [roles],
+  )
+
+  const loadRoles = useCallback(async () => {
+    const res = await api.admin.authRoles()
+    setRoles(res.roles || [])
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await api.admin.authUsers({
+        limit,
+        offset,
+        status: statusFilter[0] || undefined,
+        role_key: roleFilter[0] || undefined,
+        search: search || undefined,
+      })
+      setData(res)
+      setRoleByUser(prev => {
+        const next = { ...prev }
+        for (const row of res.rows || []) {
+          if (!next[row.id]) next[row.id] = row.roles?.[0] || 'user'
+        }
+        return next
+      })
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [limit, offset, statusFilter, roleFilter, search])
+
+  useEffect(() => { loadRoles().catch(e => setError(e.message)) }, [loadRoles])
+  useEffect(() => { setOffset(0) }, [limit, statusFilter, roleFilter, search])
+  useEffect(() => { load() }, [load])
+
+  const act = useCallback(async (row, action) => {
+    const role_key = roleByUser[row.id] || row.roles?.[0] || 'user'
+    if (action === 'reject' && !window.confirm(`Reject ${row.email}? They will not be able to sign in.`)) return
+    if (action === 'disable' && !window.confirm(`Disable ${row.email} and revoke active sessions?`)) return
+    if (action === 'revoke' && !window.confirm(`Revoke active sessions for ${row.email}?`)) return
+    setActingId(`${row.id}:${action}`)
+    setMessage('')
+    try {
+      if (action === 'approve') await api.admin.approveAuthUser(row.id, { role_key })
+      else if (action === 'reject') await api.admin.rejectAuthUser(row.id, { reason: 'Rejected from admin auth users tab' })
+      else if (action === 'disable') await api.admin.disableAuthUser(row.id, { reason: 'Disabled from admin auth users tab' })
+      else if (action === 'reactivate') await api.admin.reactivateAuthUser(row.id, { role_key })
+      else if (action === 'revoke') await api.admin.revokeAuthUserSessions(row.id)
+      setMessage('Auth user updated. Event written to auth_events.')
+      await load()
+    } catch (e) {
+      setMessage(e.message || 'Auth action failed')
+    } finally {
+      setActingId('')
+    }
+  }, [load, roleByUser])
+
+  const renderActions = (row) => {
+    const busy = (name) => actingId === `${row.id}:${name}`
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select
+          value={roleByUser[row.id] || row.roles?.[0] || 'user'}
+          onChange={e => setRoleByUser(prev => ({ ...prev, [row.id]: e.target.value }))}
+          className="text-[11px] px-2 py-1 rounded-lg border outline-none"
+          style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)' }}>
+          {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        {row.status !== 'active' && (
+          <button onClick={() => act(row, row.status === 'pending_approval' ? 'approve' : 'reactivate')} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border"
+            style={{ color: '#16a34a', borderColor: 'rgba(22,163,74,0.28)', background: 'rgba(22,163,74,0.08)' }}>
+            {busy('approve') || busy('reactivate') ? 'Working…' : row.status === 'pending_approval' ? 'Approve' : 'Reactivate'}
+          </button>
+        )}
+        {row.status === 'pending_approval' && (
+          <button onClick={() => act(row, 'reject')} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border"
+            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+            {busy('reject') ? 'Working…' : 'Reject'}
+          </button>
+        )}
+        {row.status === 'active' && (
+          <button onClick={() => act(row, 'disable')} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border"
+            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+            {busy('disable') ? 'Working…' : 'Disable'}
+          </button>
+        )}
+        {row.active_session_count > 0 && (
+          <button onClick={() => act(row, 'revoke')} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border"
+            style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
+            {busy('revoke') ? 'Revoking…' : 'Revoke sessions'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border p-3 text-[11px]"
+        style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+        <p className="font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Auth control plane</p>
+        <p style={{ color: 'var(--text-3)' }}>
+          New email/password users stay pending until approved here. Role changes and session revocations are logged in PostgreSQL auth_events.
+        </p>
+      </div>
+
+      <FilterBar
+        count={statusFilter.length + roleFilter.length + (search ? 1 : 0)}
+        onReset={() => { setStatusFilter([]); setRoleFilter([]); setSearch('') }}
+        rightSlot={<>
+          <FSel label="Limit" value={String(limit)} onChange={v => setLimit(Number(v))}
+            opts={[['25','25'],['50','50'],['100','100']]} />
+          <button onClick={load} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </>}>
+        <FMulti label="Status" selected={statusFilter} onChange={setStatusFilter} width={180}
+          opts={[
+            ['pending_approval', 'Pending approval'],
+            ['active', 'Active'],
+            ['disabled', 'Disabled'],
+            ['rejected', 'Rejected'],
+          ]} />
+        <FMulti label="Role" selected={roleFilter} onChange={setRoleFilter} width={170}
+          opts={roleOpts} />
+        <FPill label="Search" value={search} onChange={setSearch} placeholder="email or name…" width={220} />
+      </FilterBar>
+
+      {data && (
+        <div className="text-xs flex flex-wrap gap-2" style={{ color: 'var(--text-3)' }}>
+          <span>{data.total.toLocaleString()} user{data.total !== 1 ? 's' : ''}</span>
+          {message && <span style={{ color: message.includes('failed') || message.includes('Unknown') ? '#dc2626' : '#16a34a' }}>{message}</span>}
+        </div>
+      )}
+
+      {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
+        <>
+          {(data?.rows || []).length === 0 ? <Empty label="No auth users match these filters" /> : (
+            <>
+              <div className="md:hidden space-y-2">
+                {(data?.rows || []).map(row => (
+                  <div key={`auth-m-${row.id}`} className="card p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{row.full_name || 'No name'} · joined {relTime(row.created_at)}</p>
+                      </div>
+                      <AuthStatusBadge status={row.status} />
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(row.roles || []).length ? row.roles.map(r => <Badge key={r} color="indigo">{r}</Badge>) : <Badge>No role</Badge>}
+                      <Badge color={row.active_session_count > 0 ? 'green' : 'default'}>{row.active_session_count || 0} active sessions</Badge>
+                    </div>
+                    {renderActions(row)}
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                      {['User','Status','Roles','Sessions','Created','Last seen','Actions'].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
+                          style={{ color: 'var(--text-2)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.rows || []).map(row => (
+                      <tr key={row.id} className="border-b transition-colors"
+                        style={{ borderColor: 'var(--border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}>
+                        <td className="px-3 py-2 min-w-[220px]">
+                          <div className="font-semibold" style={{ color: 'var(--text-1)' }}>{row.email}</div>
+                          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>{row.full_name || 'No name'}</div>
+                        </td>
+                        <td className="px-3 py-2"><AuthStatusBadge status={row.status} /></td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {(row.roles || []).length ? row.roles.map(r => <Badge key={r} color="indigo">{r}</Badge>) : <Badge>No role</Badge>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                          <b>{row.active_session_count || 0}</b> active · {row.session_count || 0} total
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{ts(row.created_at)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{relTime(row.last_seen_at)}</td>
+                        <td className="px-3 py-2 min-w-[320px]">{renderActions(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          <Pager total={data?.total || 0} limit={limit} offset={offset} onPage={setOffset} />
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Tab: AI Chats ─────────────────────────────────────────────────────────────
 
 function ChatsTab() {
@@ -3229,6 +3465,7 @@ const TABS = [
   { id: 'overview',      label: 'Overview',      icon: LayoutDashboard  },
   { id: 'audit',         label: 'Audit Log',     icon: ScrollText        },
   { id: 'sessions',      label: 'Sessions',      icon: Users             },
+  { id: 'auth-users',    label: 'Auth Users',    icon: ShieldAlert       },
   { id: 'chats',         label: 'AI Chats',      icon: MessageSquareText },
   { id: 'ai-runs',       label: 'AI Runs',       icon: Zap               },
   { id: 'insights',      label: 'Insights',      icon: BarChart2         },
@@ -3292,6 +3529,7 @@ export default function AdminDashboard({ embedded = false }) {
       {tab === 'overview'     && <OverviewTab onOpenHistoryDrilldown={openHistoryDrilldown} />}
       {tab === 'audit'        && <AuditLogTab />}
       {tab === 'sessions'     && <SessionsTab />}
+      {tab === 'auth-users'   && <AuthUsersTab />}
       {tab === 'chats'        && <ChatsTab />}
       {tab === 'ai-runs'      && <AiRunsTab />}
       {tab === 'insights'     && <InsightsTab />}
