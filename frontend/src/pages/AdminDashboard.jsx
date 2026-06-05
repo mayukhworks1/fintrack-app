@@ -135,6 +135,44 @@ function roleBadge(role) {
   return <Badge color={map[role] || 'default'}>{role || 'anon'}</Badge>
 }
 
+function EditableName({ value, saving, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value)
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { onSave(val); setEditing(false) }
+            if (e.key === 'Escape') { setVal(value); setEditing(false) }
+          }}
+          className="text-[11px] px-1.5 py-0.5 rounded border outline-none"
+          style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)', width: 130 }}
+        />
+        <button onClick={() => { onSave(val); setEditing(false) }}
+          className="text-[10px] px-1.5 py-0.5 rounded"
+          style={{ background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>✓</button>
+        <button onClick={() => { setVal(value); setEditing(false) }}
+          className="text-[10px] px-1.5 py-0.5 rounded"
+          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>✕</button>
+      </span>
+    )
+  }
+  return (
+    <span
+      className="text-[11px] cursor-pointer hover:underline"
+      style={{ color: 'var(--text-3)' }}
+      onClick={() => { setVal(value); setEditing(true) }}
+      title="Click to edit name"
+    >
+      {saving ? 'Saving…' : (value || <em style={{ opacity: 0.5 }}>No name — click to set</em>)}
+    </span>
+  )
+}
+
 function statusBadge(status) {
   if (!status) return <Badge>—</Badge>
   if (status < 300) return <Badge color="green">{status}</Badge>
@@ -1057,7 +1095,7 @@ function AuditLogTab() {
             <table className="w-full text-xs">
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                  {['Time','Role','Method','Path','Status','ms','IP · Location','OS / Browser','ISP · Org','Sizes'].map(h => (
+                  {['Time','User','Role','Method','Path','Status','ms','IP · Location','OS / Browser','ISP · Org','Sizes'].map(h => (
                     <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
                       style={{ color: 'var(--text-2)', fontSize: 11 }}>{h}</th>
                   ))}
@@ -1076,6 +1114,16 @@ function AuditLogTab() {
                         {/* Time */}
                         <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 10 }}>
                           {ts(row.ts)}
+                        </td>
+
+                        {/* User */}
+                        <td className="px-3 py-2 max-w-[160px]">
+                          {row.user_email ? (
+                            <div>
+                              <div className="truncate font-medium" style={{ color: 'var(--text-1)', fontSize: 11 }} title={row.user_email}>{row.user_email}</div>
+                              {row.user_name && <div className="truncate" style={{ color: 'var(--text-3)', fontSize: 10 }}>{row.user_name}</div>}
+                            </div>
+                          ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
                         </td>
 
                         {/* Role */}
@@ -1598,6 +1646,33 @@ function AuthUsersTab() {
     }
   }, [smtpTo])
 
+  const deleteUser = useCallback(async (row) => {
+    if (!window.confirm(`Permanently delete ${row.email}? This cannot be undone.`)) return
+    setActingId(`${row.id}:delete`)
+    setMessage('')
+    try {
+      await api.admin.deleteAuthUser(row.id)
+      setMessage(`User ${row.email} deleted permanently.`)
+      await load()
+    } catch (e) {
+      setMessage(e.message || 'Delete failed')
+    } finally {
+      setActingId('')
+    }
+  }, [load])
+
+  const updateName = useCallback(async (row, name) => {
+    setActingId(`${row.id}:name`)
+    try {
+      await api.admin.updateAuthUserName(row.id, { full_name: name })
+      await load()
+    } catch (e) {
+      setMessage(e.message || 'Name update failed')
+    } finally {
+      setActingId('')
+    }
+  }, [load])
+
   const renderActions = (row) => {
     const busy = (name) => actingId === `${row.id}:${name}`
     return (
@@ -1637,6 +1712,13 @@ function AuthUsersTab() {
             className="text-[11px] px-2 py-1 rounded-lg border"
             style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
             {busy('disable') ? 'Working…' : 'Disable'}
+          </button>
+        )}
+        {row.status !== 'active' && (
+          <button onClick={() => deleteUser(row)} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+            <Trash2 size={11} /> {busy('delete') ? 'Deleting…' : 'Delete'}
           </button>
         )}
         {row.active_session_count > 0 && (
@@ -1788,7 +1870,11 @@ function AuthUsersTab() {
                         onMouseLeave={e => e.currentTarget.style.background = ''}>
                         <td className="px-3 py-2 min-w-[220px]">
                           <div className="font-semibold" style={{ color: 'var(--text-1)' }}>{row.email}</div>
-                          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>{row.full_name || 'No name'}</div>
+                          <EditableName
+                            value={row.full_name || ''}
+                            saving={actingId === `${row.id}:name`}
+                            onSave={name => updateName(row, name)}
+                          />
                         </td>
                         <td className="px-3 py-2"><AuthStatusBadge status={row.status} /></td>
                         <td className="px-3 py-2">

@@ -561,6 +561,8 @@ export const api = {
     reactivateAuthUser: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/reactivate`, { method: 'PATCH', body: JSON.stringify(data) }),
     updateAuthUserRole: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/role`, { method: 'PATCH', body: JSON.stringify(data) }),
     revokeAuthUserSessions: (id) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/sessions/revoke`, { method: 'POST' }),
+    updateAuthUserName: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/name`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteAuthUser: (id) => request(`/api/admin/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     testSmtp: (data = {}) => request('/api/admin/auth/smtp/test', { method: 'POST', body: JSON.stringify(data) }),
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),

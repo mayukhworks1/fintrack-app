@@ -771,6 +771,84 @@ async def admin_revoke_auth_user_sessions(
     return {"revoked": int(count or 0), "message": f"Revoked {int(count or 0)} active auth session(s)"}
 
 
+class AuthUserNameUpdate(BaseModel):
+    full_name: Optional[str] = None
+
+
+@router.patch("/auth/users/{user_id}/name")
+async def admin_update_auth_user_name(
+    user_id: str,
+    body: AuthUserNameUpdate,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    """Update a user's display name from the admin panel."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2::uuid RETURNING id::text AS id, email, full_name, status",
+            (body.full_name or "").strip() or None,
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="Auth user not found")
+        await _write_auth_admin_event(
+            conn, request,
+            event_type="admin_user_name_updated",
+            actor_role=actor_role,
+            target_user_id=user_id,
+            email=user["email"],
+            status=user["status"],
+            metadata={"full_name": user["full_name"]},
+        )
+    return {"ok": True, "full_name": user["full_name"]}
+
+
+@router.delete("/auth/users/{user_id}")
+async def admin_delete_auth_user(
+    user_id: str,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    """
+    Permanently delete a user and all related records.
+    Only allowed for disabled or rejected users (not active) as a safeguard.
+    """
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            user = await conn.fetchrow(
+                "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
+                user_id,
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            if user["status"] == "active":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot delete an active user. Disable them first."
+                )
+            # Cascade delete all related records
+            await conn.execute("DELETE FROM auth_sessions WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_user_roles WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_identities WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_password_resets WHERE user_id = $1::uuid", user_id)
+            await conn.execute(
+                "INSERT INTO auth_events (event_type, actor_role, target_user_id, email, status, ip, user_agent, metadata) VALUES ($1,$2,$3::uuid,$4,$5,$6,$7,$8::jsonb)",
+                "admin_user_deleted", actor_role, user_id, user["email"], user["status"],
+                request.client.host if request.client else None,
+                request.headers.get("user-agent", ""),
+                json.dumps({"deleted_by": actor_role}),
+            )
+            await conn.execute("DELETE FROM auth_users WHERE id = $1::uuid", user_id)
+    return {"deleted": True, "email": user["email"]}
+
+
+
 @router.post("/auth/smtp/test")
 async def admin_test_smtp(
     body: AuthSmtpTest,
@@ -1125,14 +1203,19 @@ async def admin_audit_log(
     total = await pool.fetchval(f"SELECT COUNT(*) FROM audit_log {where_sql}", *params)
     rows  = await pool.fetch(
         f"""
-        SELECT id, ts, role, token_hint, method, path, status, duration_ms,
-               request_id, ip, user_agent, os, browser, device,
-               country, country_code, region, city, isp,
-               lat, lon, timezone, org,
-               referer, body_size, query_params, resp_size,
-               extra::text AS extra
-        FROM audit_log {where_sql}
-        ORDER BY ts DESC
+        SELECT al.id, al.ts, al.role, al.token_hint, al.method, al.path, al.status, al.duration_ms,
+               al.request_id, al.ip, al.user_agent, al.os, al.browser, al.device,
+               al.country, al.country_code, al.region, al.city, al.isp,
+               al.lat, al.lon, al.timezone, al.org,
+               al.referer, al.body_size, al.query_params, al.resp_size,
+               al.extra::text AS extra,
+               u.email AS user_email,
+               u.full_name AS user_name
+        FROM audit_log al
+        LEFT JOIN auth_sessions s ON s.token_hint = al.token_hint AND al.token_hint IS NOT NULL
+        LEFT JOIN auth_users u ON u.id = s.user_id
+        {where_sql}
+        ORDER BY al.ts DESC
         LIMIT ${idx} OFFSET ${idx+1}
         """,
         *params, limit, offset,

@@ -10,6 +10,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
+  const [isInvite]   = useState(() => new URLSearchParams(window.location.search).get('invite') === '1')
   const [legacyMode, setLegacyMode] = useState(false)
   const [registerMode, setRegisterMode] = useState(false)
   const [show, setShow] = useState(false)
@@ -116,18 +117,22 @@ export default function Login() {
         >
           <div className="mb-6">
             <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
-              {resetToken ? 'Reset your password' : registerMode ? 'Create your account' : 'Sign in to your workspace'}
+              {resetToken
+                ? (isInvite ? 'Set your password' : 'Reset your password')
+                : registerMode ? 'Create your account' : 'Sign in to your workspace'}
             </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
               {resetToken
-                ? 'Set a new password for your approved email account'
+                ? (isInvite
+                    ? 'Choose a password to activate your account'
+                    : 'Enter a new password for your account')
                 : registerMode
                   ? 'Request access. A superadmin must approve you before login works.'
                   : legacyMode ? 'Temporary legacy access while email auth rolls out' : 'Use your approved email account to continue'}
             </p>
           </div>
 
-          <form onSubmit={submit} className="space-y-4" autoComplete="off">
+          <form onSubmit={submit} className="space-y-4">
             {!legacyMode && !resetToken && (
               <div>
                 <label className="label" htmlFor="ft-email">Email</label>
@@ -202,7 +207,7 @@ export default function Login() {
                   aria-label="Password"
                   aria-invalid={!!error}
                   aria-describedby={error ? 'login-error' : undefined}
-                  autoComplete="current-password"
+                  autoComplete={resetToken || registerMode ? 'new-password' : 'current-password'}
                   spellCheck="false"
                   autoCapitalize="off"
                   autoCorrect="off"
@@ -332,11 +337,11 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  {resetToken ? 'Updating…' : registerMode ? 'Creating…' : 'Signing in…'}
+                  {resetToken ? (isInvite ? 'Setting up…' : 'Updating…') : registerMode ? 'Creating…' : 'Signing in…'}
                 </>
               ) : (
                 <>
-                  {resetToken ? 'Update password' : registerMode ? 'Create account' : 'Sign in'}
+                  {resetToken ? (isInvite ? 'Set password & sign in' : 'Update password') : registerMode ? 'Create account' : 'Sign in'}
                   <ArrowRight size={14} aria-hidden="true" />
                 </>
               )}
@@ -391,7 +396,7 @@ export default function Login() {
 
         <p className="text-[10px] text-center mt-4" style={{ color: 'var(--text-3)' }}>
           {resetToken
-            ? 'Reset links are single-use and expire automatically'
+            ? (isInvite ? 'Invite links are single-use and expire automatically' : 'Reset links are single-use and expire automatically')
             : registerMode
               ? 'New accounts stay pending until a superadmin approves access'
               : legacyMode ? 'Legacy password is temporary during RBAC migration' : 'Email login requires superadmin approval'}

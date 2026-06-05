@@ -151,6 +151,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
     pool = get_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL is required for email login")
+    email_orig = (email or "").strip()  # preserve original case for Teable matching
     email_norm = normalize_email(email)
     password = validate_password(password)
     password_hash = hash_password(password)
@@ -164,7 +165,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
             VALUES ($1, $2, $3, 'pending_approval', $4, NOW())
             RETURNING id, status
             """,
-            email_norm,
+            email_orig,
             email_norm,
             (full_name or "").strip() or None,
             password_hash,
@@ -177,7 +178,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
             """,
             row["id"],
             email_norm,
-            email_norm,
+            email_orig,
         )
     await _write_auth_event("password_register_pending", request, target_user_id=str(row["id"]), email=email_norm, status=row["status"])
     if settings.auth_admin_notify_email:
@@ -208,6 +209,7 @@ async def create_admin_invited_user(
     pool = get_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL is required for auth users")
+    email_orig = (email or "").strip()  # original case for Teable matching
     email_norm = normalize_email(email)
     role_key = (role_key or "user").strip().lower()
     status = (status or "active").strip().lower()
@@ -237,7 +239,7 @@ async def create_admin_invited_user(
                         $5::jsonb, NOW())
                 RETURNING id::text AS id, email, status
                 """,
-                email_norm,
+                email_orig,
                 email_norm,
                 (full_name or "").strip() or None,
                 status,
@@ -251,7 +253,7 @@ async def create_admin_invited_user(
                 """,
                 row["id"],
                 email_norm,
-                email_norm,
+                email_orig,
             )
             await conn.execute(
                 "INSERT INTO auth_user_roles (user_id, role_id) VALUES ($1::uuid, $2)",
@@ -276,20 +278,23 @@ async def create_admin_invited_user(
         origin = app_origin_from_request(request)
         if status == "active":
             invite_path = "/login"
-            invite_url = f"{origin}{invite_path}?{urlencode({'reset_token': token})}" if origin else f"{invite_path}?{urlencode({'reset_token': token})}"
+            invite_params = urlencode({'reset_token': token, 'invite': '1'})
+            invite_url = f"{origin}{invite_path}?{invite_params}" if origin else f"{invite_path}?{invite_params}"
             delivery = await send_email(
-                email_norm,
+                email_orig,
                 "You are invited to FinTrack",
                 (
+                    f"Hi{' ' + (full_name or '').strip() if full_name else ''},\n\n"
                     f"You have been invited to FinTrack with role: {role_key}.\n\n"
-                    f"Set your password here. This link expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
+                    f"Click below to set your password and sign in. This link expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
                     f"{invite_url}\n\n"
-                    f"If you were not expecting this, ignore this email."
+                    f"If you were not expecting this, you can safely ignore this email."
                 ),
                 html=(
-                    f"<p>You have been invited to FinTrack with role: <b>{role_key}</b>.</p>"
-                    f"<p><a href=\"{invite_url}\">Set password and sign in</a></p>"
-                    f"<p>This link expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+                    f"<p>Hi{' <b>' + (full_name or '').strip() + '</b>' if full_name else ''},</p>"
+                    f"<p>You have been invited to <b>FinTrack</b> with role: <b>{role_key}</b>.</p>"
+                    f"<p><a href=\"{invite_url}\" style=\"display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600\">Set password &amp; sign in</a></p>"
+                    f"<p style=\"color:#888;font-size:12px\">This link expires in {settings.password_reset_ttl_minutes} minutes. If you were not expecting this, you can safely ignore this email.</p>"
                 ),
             )
         else:

@@ -99,8 +99,9 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
 
 
 def get_auth_email(request: Request) -> str | None:
+    # Return original-case email — Teable field matching is case-sensitive
     value = getattr(request.state, "auth_user_email", None)
-    return str(value).strip().lower() if value else None
+    return str(value).strip() if value else None
 
 
 def get_auth_role(request: Request) -> str | None:

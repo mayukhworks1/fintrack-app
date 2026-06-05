@@ -36,6 +36,12 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
         "to": [{"email": addr} for addr in recipients],
         "subject": subject,
         "textContent": text,
+        "headers": {
+            "X-Priority": "1",
+            "X-Mailer": "FinTrack",
+            "X-Category": "transactional",
+        },
+        "tags": ["transactional"],
     }
     if html:
         payload["htmlContent"] = html
