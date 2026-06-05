@@ -53,6 +53,24 @@ class AuthUserDecision(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=255)
 
 
+class AuthUserCreate(BaseModel):
+    email: str = Field(..., max_length=320)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    role_key: str = Field(default="user", max_length=60)
+    status: str = Field(default="active", max_length=30)
+    send_invite: bool = True
+
+
+class AuthUserRoleUpdate(BaseModel):
+    role_key: str = Field(..., max_length=60)
+    reason: Optional[str] = Field(default=None, max_length=500)
+    revoke_sessions: bool = True
+
+
+class AuthSmtpTest(BaseModel):
+    to: Optional[str] = Field(default=None, max_length=320)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _row_to_dict(row) -> dict:
@@ -95,15 +113,17 @@ async def _write_auth_admin_event(
     role: str | None = None,
     metadata: dict | None = None,
 ) -> None:
+    actor_user_id = getattr(request.state, "auth_user_id", None)
     await db.execute(
         """
         INSERT INTO auth_events (
-            event_type, target_user_id, role, email, status, ip, user_agent,
+            event_type, actor_user_id, target_user_id, role, email, status, ip, user_agent,
             request_id, metadata
         )
-        VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::jsonb)
+        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10::jsonb)
         """,
         event_type,
+        actor_user_id,
         target_user_id,
         role or actor_role,
         email,
@@ -372,10 +392,20 @@ async def admin_auth_users(
             GROUP BY user_id
         ),
         event_agg AS (
-            SELECT target_user_id AS user_id, MAX(created_at) AS last_event_at
+            SELECT target_user_id AS user_id,
+                   MAX(created_at) AS last_event_at,
+                   COUNT(*)::int AS auth_event_count
             FROM auth_events
             WHERE target_user_id IS NOT NULL
             GROUP BY target_user_id
+        ),
+        audit_agg AS (
+            SELECT (extra->>'auth_user_id')::uuid AS user_id,
+                   COUNT(*)::int AS audit_request_count,
+                   MAX(ts) AS last_request_at
+            FROM audit_log
+            WHERE extra ? 'auth_user_id'
+            GROUP BY (extra->>'auth_user_id')::uuid
         )
         SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
                u.approved_at, u.disabled_at, u.email_verified_at,
@@ -383,11 +413,15 @@ async def admin_auth_users(
                COALESCE(session_agg.session_count, 0) AS session_count,
                COALESCE(session_agg.active_session_count, 0) AS active_session_count,
                session_agg.last_seen_at,
-               event_agg.last_event_at
+               event_agg.last_event_at,
+               COALESCE(event_agg.auth_event_count, 0) AS auth_event_count,
+               COALESCE(audit_agg.audit_request_count, 0) AS audit_request_count,
+               audit_agg.last_request_at
         FROM auth_users u
         LEFT JOIN role_agg ON role_agg.user_id = u.id
         LEFT JOIN session_agg ON session_agg.user_id = u.id
         LEFT JOIN event_agg ON event_agg.user_id = u.id
+        LEFT JOIN audit_agg ON audit_agg.user_id = u.id
         WHERE {where_sql}
         ORDER BY
           CASE u.status
@@ -405,6 +439,29 @@ async def admin_auth_users(
         offset,
     )
     return {"rows": [_row_to_dict(row) for row in rows], "total": int(total or 0), "limit": limit, "offset": offset}
+
+
+@router.post("/auth/users")
+async def admin_create_auth_user(
+    body: AuthUserCreate,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    from ..services.auth_master import create_admin_invited_user
+
+    result = await create_admin_invited_user(
+        email=body.email,
+        full_name=body.full_name,
+        role_key=body.role_key,
+        status=body.status,
+        send_invite=body.send_invite,
+        request=request,
+        actor_role=actor_role,
+    )
+    return {
+        **result,
+        "message": "User created" + (" and invite email queued" if body.send_invite else ""),
+    }
 
 
 async def _get_role_id(conn, role_key: str):
@@ -609,6 +666,71 @@ async def admin_reactivate_auth_user(
     return {"status": "active", "role_key": role_key, "message": "User reactivated"}
 
 
+@router.patch("/auth/users/{user_id}/role")
+async def admin_update_auth_user_role(
+    user_id: str,
+    body: AuthUserRoleUpdate,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    role_key = (body.role_key or "").strip().lower()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            role_id = await _get_role_id(conn, role_key)
+            user = await conn.fetchrow(
+                "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
+                user_id,
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="Auth user not found")
+            await conn.execute("DELETE FROM auth_user_roles WHERE user_id = $1::uuid", user_id)
+            await conn.execute(
+                "INSERT INTO auth_user_roles (user_id, role_id) VALUES ($1::uuid, $2)",
+                user_id,
+                role_id,
+            )
+            revoked = 0
+            if body.revoke_sessions:
+                revoked = await conn.fetchval(
+                    """
+                    WITH changed AS (
+                      UPDATE auth_sessions
+                      SET revoked_at = NOW()
+                      WHERE user_id = $1::uuid
+                        AND revoked_at IS NULL
+                        AND expires_at > NOW()
+                      RETURNING id
+                    )
+                    SELECT COUNT(*) FROM changed
+                    """,
+                    user_id,
+                )
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_user_role_updated",
+                actor_role=actor_role,
+                target_user_id=user_id,
+                email=user["email"],
+                status=user["status"],
+                role=role_key,
+                metadata={
+                    "reason": body.reason,
+                    "revoked_sessions": int(revoked or 0),
+                    "revoke_sessions": body.revoke_sessions,
+                },
+            )
+    return {
+        "status": user["status"],
+        "role_key": role_key,
+        "revoked_sessions": int(revoked or 0),
+        "message": "User role updated; active sessions revoked" if body.revoke_sessions else "User role updated",
+    }
+
+
 @router.post("/auth/users/{user_id}/sessions/revoke")
 async def admin_revoke_auth_user_sessions(
     user_id: str,
@@ -647,6 +769,45 @@ async def admin_revoke_auth_user_sessions(
             metadata={"revoked_count": int(count or 0)},
         )
     return {"revoked": int(count or 0), "message": f"Revoked {int(count or 0)} active auth session(s)"}
+
+
+@router.post("/auth/smtp/test")
+async def admin_test_smtp(
+    body: AuthSmtpTest,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    from ..services.emailer import is_email_configured, send_email
+
+    to_email = (body.to or getattr(request.state, "auth_user_email", None) or settings.auth_admin_notify_email or settings.smtp_from_email or "").strip()
+    configured = is_email_configured()
+    delivery = {"sent": False, "reason": "smtp_not_configured"}
+    if configured and to_email:
+        delivery = await send_email(
+            to_email,
+            "FinTrack SMTP test",
+            "This is a FinTrack SMTP test email. If you received it, password reset and invite emails can be delivered.",
+            html="<p>This is a FinTrack SMTP test email.</p><p>If you received it, password reset and invite emails can be delivered.</p>",
+        )
+    pool = get_pool()
+    if pool:
+        async with pool.acquire() as conn:
+            await _write_auth_admin_event(
+                conn,
+                request,
+                event_type="admin_smtp_test",
+                actor_role=actor_role,
+                target_user_id=getattr(request.state, "auth_user_id", None),
+                email=to_email or None,
+                status="sent" if delivery.get("sent") else "failed",
+                metadata={"configured": configured, "reason": delivery.get("reason")},
+            )
+    return {
+        "configured": configured,
+        "delivery": delivery,
+        "to": to_email or None,
+        "message": "SMTP test email sent" if delivery.get("sent") else f"SMTP test failed: {delivery.get('reason')}",
+    }
 
 
 # ── Manual sync trigger ───────────────────────────────────────────────────────

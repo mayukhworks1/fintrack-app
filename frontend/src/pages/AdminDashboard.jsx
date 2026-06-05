@@ -26,7 +26,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, History,
   ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle,
   Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
-  SlidersHorizontal, Calendar, Terminal, Download
+  SlidersHorizontal, Calendar, Terminal, Download, UserPlus, Mail, Save
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -1490,6 +1490,15 @@ function AuthUsersTab() {
   const [roleByUser, setRoleByUser] = useState({})
   const [actingId, setActingId] = useState('')
   const [message, setMessage] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [smtpTo, setSmtpTo] = useState('')
+  const [newUser, setNewUser] = useState({
+    email: '',
+    full_name: '',
+    role_key: 'user',
+    status: 'active',
+    send_invite: true,
+  })
 
   const roleOpts = useMemo(
     () => roles.map(r => [r.role_key, `${r.label || r.role_key}`]),
@@ -1535,6 +1544,7 @@ function AuthUsersTab() {
     if (action === 'reject' && !window.confirm(`Reject ${row.email}? They will not be able to sign in.`)) return
     if (action === 'disable' && !window.confirm(`Disable ${row.email} and revoke active sessions?`)) return
     if (action === 'revoke' && !window.confirm(`Revoke active sessions for ${row.email}?`)) return
+    if (action === 'role' && !window.confirm(`Change ${row.email} role to ${role_key}? Their active sessions will be revoked so the new role applies safely.`)) return
     setActingId(`${row.id}:${action}`)
     setMessage('')
     try {
@@ -1542,6 +1552,7 @@ function AuthUsersTab() {
       else if (action === 'reject') await api.admin.rejectAuthUser(row.id, { reason: 'Rejected from admin auth users tab' })
       else if (action === 'disable') await api.admin.disableAuthUser(row.id, { reason: 'Disabled from admin auth users tab' })
       else if (action === 'reactivate') await api.admin.reactivateAuthUser(row.id, { role_key })
+      else if (action === 'role') await api.admin.updateAuthUserRole(row.id, { role_key, reason: 'Role changed from admin auth users tab', revoke_sessions: true })
       else if (action === 'revoke') await api.admin.revokeAuthUserSessions(row.id)
       setMessage('Auth user updated. Event written to auth_events.')
       await load()
@@ -1551,6 +1562,41 @@ function AuthUsersTab() {
       setActingId('')
     }
   }, [load, roleByUser])
+
+  const createUser = useCallback(async (e) => {
+    e?.preventDefault()
+    if (!newUser.email.trim()) return
+    setActingId('create-user')
+    setMessage('')
+    try {
+      const res = await api.admin.createAuthUser({
+        ...newUser,
+        email: newUser.email.trim(),
+        full_name: newUser.full_name.trim() || undefined,
+      })
+      setMessage(res.message || 'User created')
+      setNewUser({ email: '', full_name: '', role_key: 'user', status: 'active', send_invite: true })
+      setShowCreate(false)
+      await load()
+    } catch (e) {
+      setMessage(e.message || 'User creation failed')
+    } finally {
+      setActingId('')
+    }
+  }, [load, newUser])
+
+  const testSmtp = useCallback(async () => {
+    setActingId('smtp-test')
+    setMessage('')
+    try {
+      const res = await api.admin.testSmtp({ to: smtpTo.trim() || undefined })
+      setMessage(res.message || 'SMTP checked')
+    } catch (e) {
+      setMessage(e.message || 'SMTP test failed')
+    } finally {
+      setActingId('')
+    }
+  }, [smtpTo])
 
   const renderActions = (row) => {
     const busy = (name) => actingId === `${row.id}:${name}`
@@ -1565,6 +1611,13 @@ function AuthUsersTab() {
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+        {row.status === 'active' && (roleByUser[row.id] || row.roles?.[0] || 'user') !== (row.roles?.[0] || 'user') && (
+          <button onClick={() => act(row, 'role')} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
+            <Save size={11} /> {busy('role') ? 'Saving…' : 'Save role'}
+          </button>
+        )}
         {row.status !== 'active' && (
           <button onClick={() => act(row, row.status === 'pending_approval' ? 'approve' : 'reactivate')} disabled={!!actingId}
             className="text-[11px] px-2 py-1 rounded-lg border"
@@ -1601,11 +1654,65 @@ function AuthUsersTab() {
     <div className="space-y-3">
       <div className="rounded-xl border p-3 text-[11px]"
         style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
-        <p className="font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Auth control plane</p>
-        <p style={{ color: 'var(--text-3)' }}>
-          New email/password users stay pending until approved here. Role changes and session revocations are logged in PostgreSQL auth_events.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Auth control plane</p>
+            <p style={{ color: 'var(--text-3)' }}>
+              Create, invite, approve, change roles, revoke sessions, and trace each user through auth_events plus request audit logs.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setShowCreate(v => !v)} className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
+              <UserPlus size={12} /> {showCreate ? 'Close create' : 'Create / invite user'}
+            </button>
+            <input
+              value={smtpTo}
+              onChange={e => setSmtpTo(e.target.value)}
+              placeholder="test email optional"
+              className="input text-xs px-3 py-1.5 rounded-lg w-44"
+            />
+            <button onClick={testSmtp} disabled={actingId === 'smtp-test'} className="btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
+              <Mail size={12} /> {actingId === 'smtp-test' ? 'Testing…' : 'Test SMTP'}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {showCreate && (
+        <form onSubmit={createUser} className="rounded-xl border p-3 grid grid-cols-1 md:grid-cols-[1.2fr_1fr_180px_170px_auto] gap-2 items-end"
+          style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+            Email
+            <input value={newUser.email} onChange={e => setNewUser(v => ({ ...v, email: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="name@company.com" type="email" required />
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+            Full name
+            <input value={newUser.full_name} onChange={e => setNewUser(v => ({ ...v, full_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="User profile name" />
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+            Role
+            <select value={newUser.role_key} onChange={e => setNewUser(v => ({ ...v, role_key: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
+              {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+            Status
+            <select value={newUser.status} onChange={e => setNewUser(v => ({ ...v, status: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
+              <option value="active">Active + invite</option>
+              <option value="pending_approval">Pending approval</option>
+            </select>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+              <input type="checkbox" checked={newUser.send_invite} onChange={e => setNewUser(v => ({ ...v, send_invite: e.target.checked }))} />
+              Send email
+            </label>
+            <button type="submit" disabled={actingId === 'create-user'} className="btn-primary text-xs px-3 py-2">
+              {actingId === 'create-user' ? 'Creating…' : 'Create user'}
+            </button>
+          </div>
+        </form>
+      )}
 
       <FilterBar
         count={statusFilter.length + roleFilter.length + (search ? 1 : 0)}
@@ -1653,7 +1760,12 @@ function AuthUsersTab() {
                     <div className="flex flex-wrap gap-1">
                       {(row.roles || []).length ? row.roles.map(r => <Badge key={r} color="indigo">{r}</Badge>) : <Badge>No role</Badge>}
                       <Badge color={row.active_session_count > 0 ? 'green' : 'default'}>{row.active_session_count || 0} active sessions</Badge>
+                      <Badge color="blue">{row.audit_request_count || 0} requests</Badge>
+                      <Badge color="purple">{row.auth_event_count || 0} auth events</Badge>
                     </div>
+                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      Last request {relTime(row.last_request_at)} · Last auth event {relTime(row.last_event_at)}
+                    </p>
                     {renderActions(row)}
                   </div>
                 ))}
@@ -1662,7 +1774,7 @@ function AuthUsersTab() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['User','Status','Roles','Sessions','Created','Last seen','Actions'].map(h => (
+                      {['User','Status','Roles','Sessions','Activity','Created','Last seen','Actions'].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
                           style={{ color: 'var(--text-2)' }}>{h}</th>
                       ))}
@@ -1686,6 +1798,10 @@ function AuthUsersTab() {
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                           <b>{row.active_session_count || 0}</b> active · {row.session_count || 0} total
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                          <b>{row.audit_request_count || 0}</b> requests · {row.auth_event_count || 0} auth events
+                          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>Last request {relTime(row.last_request_at)}</div>
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{ts(row.created_at)}</td>
                         <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{relTime(row.last_seen_at)}</td>

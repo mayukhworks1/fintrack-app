@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+import socket
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Iterable
@@ -63,6 +64,18 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
     try:
         await asyncio.to_thread(_send_sync, recipients, subject, text, html)
         return {"sent": True, "recipients": recipients}
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.warning("Email authentication failed: %s", exc)
+        return {"sent": False, "reason": "smtp_auth_failed"}
+    except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, socket.timeout, TimeoutError) as exc:
+        logger.warning("Email connection failed: %s", exc)
+        return {"sent": False, "reason": "smtp_connection_failed"}
+    except smtplib.SMTPRecipientsRefused as exc:
+        logger.warning("Email recipient refused: %s", exc)
+        return {"sent": False, "reason": "recipient_refused"}
+    except smtplib.SMTPSenderRefused as exc:
+        logger.warning("Email sender refused: %s", exc)
+        return {"sent": False, "reason": "sender_refused"}
     except Exception as exc:
         logger.warning("Email delivery failed: %s", exc)
         return {"sent": False, "reason": "smtp_error"}

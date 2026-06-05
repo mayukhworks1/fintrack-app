@@ -617,3 +617,194 @@ Next required tranche:
 6. Only after this is stable, add Google SSO and Zoho SSO identities into `auth_identities`.
 
 **This file is gitignored — local only. Do not commit.**
+
+---
+
+## 2026-06-05 Auth Modernisation Tranche 3
+
+Goal: harden the email/password auth path so it can safely support RBAC, ownership-scoped invoices, and admin audit visibility before production rollout.
+
+Implemented locally in this tranche:
+
+- `backend/app/routers/deps.py`
+  - `require_auth` is now async and still accepts legacy HMAC tokens.
+  - If the token belongs to an email/password login, it now checks `auth_sessions`, `auth_users.status`, expiry, and revocation on every protected request.
+  - Revoked/expired/disabled email-auth sessions now fail server-side instead of only being hidden in the UI.
+  - Request state now carries:
+    - `auth_session_id`
+    - `auth_user_id`
+    - `auth_user_email`
+    - `auth_user_name`
+    - `auth_role`
+    - `is_email_auth`
+  - Added `owner_scope_email(request)` helper. Email-auth users outside `superadmin/admin/manager/finance` are scoped to their own email for invoice ownership.
+
+- `backend/app/routers/auth.py`
+  - `/api/auth/verify` now returns `user`, `auth_role`, and `session_id` for DB-backed sessions.
+  - `/api/auth/verify` rejects revoked, expired, inactive, or disabled email-auth sessions.
+  - Legacy password-role tokens still return only `{ valid, role }`.
+
+- `backend/app/main.py`
+  - Request audit `extra` now records email-auth identity context:
+    - `auth_user_id`
+    - `auth_user_email`
+    - `auth_role`
+    - `auth_session_id`
+    - `is_email_auth`
+
+- `backend/app/db/postgres.py`
+  - Added system role `web` (`Web Invoice User`) for scoped web-invoice access.
+  - Added baseline invoice permissions for `web`.
+
+- `backend/app/services/auth_master.py`
+  - Legacy route mapping now maps:
+    - `superadmin/admin/manager/finance` -> `editor`
+    - `web` -> `web`
+    - `viewer` -> `viewer`
+    - `user` remains `viewer` until explicit module-level policy is finalized.
+
+- `backend/app/services/invoice.py`
+  - Added Teable-side `Raised By` filter to `list_invoices`.
+  - Added scoped `raised_by` support for full invoice fetches used by summaries.
+  - Added PG fallback filtering by `fields->>'Raised By'`.
+  - Summary cache keys are separated by owner email to avoid cross-user data leakage.
+
+- `backend/app/services/web_invoice.py`
+  - Added Teable-side `Raised By` filter to list/full-summary reads.
+  - Owner-scoped web invoice reads bypass the short shared list cache so CRUD reflects faster and cached payloads cannot leak across users.
+  - Summary cache is only used for unscoped/full-workspace reads.
+
+- `backend/app/routers/invoices.py`
+  - Main invoice list/summary/get now apply `owner_scope_email`.
+  - Scoped email users can create/update/delete/upload only their own records.
+  - For scoped email users, writes always overwrite `Raised By` with the verified session email.
+  - Existing editor/legacy users keep full access.
+
+- `backend/app/routers/web_invoices.py`
+  - Web invoice list/summary/get now apply `owner_scope_email`.
+  - Scoped email users can create/update/delete/upload only records where `Raised By` equals their verified email.
+  - For scoped email users, writes always overwrite `Raised By` with the verified session email.
+  - Existing `web`/`all` legacy users keep full access until migration is complete.
+
+- `frontend/src/context/AuthContext.jsx`
+  - Stores `user`, `userEmail`, `authRole`, and `isEmailAuth` after email login or verify.
+  - Clears DB-backed auth identity on logout/expiry.
+
+- `frontend/src/pages/Invoices.jsx`
+  - Email-auth scoped users see `Raised By` as a locked, non-editable email field.
+  - Admin/manager/finance/legacy users retain the current selectable owner input.
+
+- `frontend/src/pages/WebInvoices.jsx`
+  - Same locked `Raised By` email behavior for scoped web invoice users.
+
+Validated locally:
+
+- `python3 -m compileall backend/app`
+- `cd backend && .venv/bin/python -c "from app.main import app; print(app.title, app.version)"`
+- `cd frontend && npm run build`
+- `git diff --check`
+
+Still required from user before production rollout:
+
+1. Zoho SMTP env values:
+   - `SMTP_HOST`
+   - `SMTP_PORT`
+   - `SMTP_USERNAME`
+   - `SMTP_PASSWORD` (Zoho app password, not normal mailbox password)
+   - `SMTP_FROM_EMAIL`
+   - `SMTP_FROM_NAME`
+   - `SMTP_USE_SSL` or `SMTP_USE_TLS`
+   - `AUTH_ADMIN_NOTIFY_EMAIL`
+2. Confirm `FRONTEND_URL` for reset links.
+3. Confirm first production `superadmin` email.
+4. Confirm whether Teable `Raised By` in both invoice tables is now text/email field. If it is still single-select, the backend can only write emails that already exist as options or the Teable token needs schema permission to add options.
+5. Confirm role policy:
+   - `web` role: web invoices only, owner-scoped by email.
+   - `finance` role: all invoices/tax/report operations.
+   - `manager` role: scoped team/client/project operations.
+   - `user` role: current mapping is viewer until explicit edit permissions are approved.
+6. Confirm whether existing legacy password users remain enabled during migration or should be disabled once email auth is proven.
+
+Next safe tranche:
+
+1. Add role/scope editor UI in Admin Auth Users.
+2. Add permission/scopes enforcement by permission key, not only legacy role bridge.
+3. Add Google SSO and Zoho SSO into `auth_identities`.
+4. Add stricter CORS origins based on `FRONTEND_URL`.
+5. Add route smoke tests for auth verify, revoked session, scoped invoice list, and scoped invoice write rejection.
+
+## 2026-06-05 Auth/RBAC Completion Pass
+
+User reported the auth rollout still felt incomplete:
+
+- Superadmin must be able to create/invite users from Admin Panel.
+- Users need profile records and approval lifecycle.
+- Forgot-password email was not visibly working.
+- Legacy password login must remain alive in parallel.
+- Audit/user tracking must tie users to device, OS, browser, IP, geo/GPS if granted, sessions, and actions.
+- Superadmin role changes from Auth Users must actually persist.
+
+Implemented locally:
+
+- `backend/app/services/emailer.py`
+  - SMTP errors are now categorized without leaking credentials:
+    - `smtp_auth_failed`
+    - `smtp_connection_failed`
+    - `recipient_refused`
+    - `sender_refused`
+    - fallback `smtp_error`
+  - This makes Zoho SMTP diagnosis actionable from logs/admin UI.
+
+- `backend/app/services/auth_master.py`
+  - Added `create_admin_invited_user(...)`.
+  - Admin-created users can be `active` or `pending_approval`.
+  - Active invited users receive a set-password/reset-token email.
+  - User is inserted into `auth_users`, `auth_identities`, `auth_user_roles`.
+  - Creation/invite delivery metadata is written to `auth_events`.
+
+- `backend/app/routers/admin.py`
+  - Added request models:
+    - `AuthUserCreate`
+    - `AuthUserRoleUpdate`
+    - `AuthSmtpTest`
+  - `_write_auth_admin_event(...)` now stores `actor_user_id` when the actor is an email-auth admin/superadmin.
+  - `GET /api/admin/auth/users` now returns:
+    - `auth_event_count`
+    - `audit_request_count`
+    - `last_request_at`
+    - existing session/activity fields
+  - Added `POST /api/admin/auth/users` for create/invite.
+  - Added `PATCH /api/admin/auth/users/{user_id}/role` for active user role changes.
+  - Role changes revoke active DB-backed auth sessions by default because HMAC route-role is embedded in the token; user must sign in again for the new role to be trustworthy.
+  - Added `POST /api/admin/auth/smtp/test` to send a test email from production config and log the result to `auth_events`.
+
+- `frontend/src/services/api.js`
+  - Added admin methods:
+    - `createAuthUser`
+    - `updateAuthUserRole`
+    - `testSmtp`
+
+- `frontend/src/pages/AdminDashboard.jsx`
+  - Auth Users tab now has a real Create / Invite User panel.
+  - Superadmin/admin can choose email, full name, role, status, and whether to send invite email.
+  - Added SMTP test button with optional recipient.
+  - Active-user role dropdown now shows a `Save role` button when changed.
+  - `Save role` calls backend and revokes active sessions.
+  - User cards/table show request count, auth event count, last request, sessions.
+
+Validated locally:
+
+- `python3 -m compileall backend/app`
+- `cd backend && ./.venv/bin/python -c "import app.main; print('backend import ok')"`
+- `cd frontend && npm run build`
+- `git diff --check`
+
+Important production notes:
+
+- Legacy password login remains active.
+- Email/password auth is additive and still uses DB-backed sessions.
+- If forgot-password emails still do not arrive, first use Admin Panel -> Auth Users -> `Test SMTP`.
+- If test returns `smtp_auth_failed`, check Zoho app password and username/from email match.
+- If test returns `smtp_connection_failed`, check `SMTP_HOST`, port, SSL/TLS flags, and Hugging Face outbound SMTP support.
+- Role changes revoke sessions intentionally; user must log in again.
+- `APP_ADMIN_PASSWORD` remains the bootstrap password for `/api/auth/email/bootstrap`.

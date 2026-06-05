@@ -194,6 +194,124 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
     return {"created": True, "status": row["status"]}
 
 
+async def create_admin_invited_user(
+    *,
+    email: str,
+    full_name: str | None,
+    role_key: str,
+    status: str,
+    send_invite: bool,
+    request: Request,
+    actor_role: str,
+) -> dict[str, Any]:
+    """Create a user from Admin Panel and optionally email a set-password invite."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is required for auth users")
+    email_norm = normalize_email(email)
+    role_key = (role_key or "user").strip().lower()
+    status = (status or "active").strip().lower()
+    if status not in {"active", "pending_approval"}:
+        raise HTTPException(status_code=422, detail="Status must be active or pending_approval")
+
+    token = secrets.token_urlsafe(36)
+    token_hash = _hash_reset_token(token)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_ttl_minutes)
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            existing = await conn.fetchrow("SELECT id, status FROM auth_users WHERE email_normalized = $1", email_norm)
+            if existing:
+                raise HTTPException(status_code=409, detail="User already exists")
+            role_id = await conn.fetchval("SELECT id FROM auth_roles WHERE role_key = $1", role_key)
+            if not role_id:
+                raise HTTPException(status_code=422, detail=f"Unknown auth role: {role_key}")
+            row = await conn.fetchrow(
+                """
+                INSERT INTO auth_users (
+                    email, email_normalized, full_name, status, approved_at,
+                    email_verified_at, metadata, updated_at
+                )
+                VALUES ($1, $2, $3, $4, CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END,
+                        CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END,
+                        $5::jsonb, NOW())
+                RETURNING id::text AS id, email, status
+                """,
+                email_norm,
+                email_norm,
+                (full_name or "").strip() or None,
+                status,
+                json.dumps({"created_by": actor_role, "created_from": "admin_panel"}),
+            )
+            await conn.execute(
+                """
+                INSERT INTO auth_identities (user_id, provider, provider_user_id, email)
+                VALUES ($1::uuid, 'password', $2, $3)
+                ON CONFLICT (provider, provider_user_id) DO NOTHING
+                """,
+                row["id"],
+                email_norm,
+                email_norm,
+            )
+            await conn.execute(
+                "INSERT INTO auth_user_roles (user_id, role_id) VALUES ($1::uuid, $2)",
+                row["id"],
+                role_id,
+            )
+            if status == "active" and send_invite:
+                await conn.execute(
+                    """
+                    INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
+                    VALUES ($1::uuid, $2, $3, $4, $5)
+                    """,
+                    row["id"],
+                    token_hash,
+                    expires_at,
+                    _client_ip(request),
+                    request.headers.get("user-agent", ""),
+                )
+
+    delivery = {"sent": False, "reason": "invite_not_requested"}
+    if send_invite:
+        origin = app_origin_from_request(request)
+        if status == "active":
+            invite_path = "/login"
+            invite_url = f"{origin}{invite_path}?{urlencode({'reset_token': token})}" if origin else f"{invite_path}?{urlencode({'reset_token': token})}"
+            delivery = await send_email(
+                email_norm,
+                "You are invited to FinTrack",
+                (
+                    f"You have been invited to FinTrack with role: {role_key}.\n\n"
+                    f"Set your password here. This link expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
+                    f"{invite_url}\n\n"
+                    f"If you were not expecting this, ignore this email."
+                ),
+                html=(
+                    f"<p>You have been invited to FinTrack with role: <b>{role_key}</b>.</p>"
+                    f"<p><a href=\"{invite_url}\">Set password and sign in</a></p>"
+                    f"<p>This link expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+                ),
+            )
+        else:
+            delivery = await send_email(
+                email_norm,
+                "FinTrack account created",
+                "Your FinTrack account has been created and is pending superadmin approval.",
+                html="<p>Your FinTrack account has been created and is pending superadmin approval.</p>",
+            )
+
+    await _write_auth_event(
+        "admin_user_created",
+        request,
+        target_user_id=row["id"],
+        role=role_key,
+        email=email_norm,
+        status=status,
+        metadata={"actor_role": actor_role, "invite_sent": delivery.get("sent"), "invite_reason": delivery.get("reason")},
+    )
+    return {"created": True, "id": row["id"], "email": email_norm, "status": status, "role_key": role_key, "invite": delivery}
+
+
 async def bootstrap_superadmin(email: str, password: str, full_name: str | None, bootstrap_password: str, request: Request) -> dict[str, Any]:
     pool = get_pool()
     if not pool:
