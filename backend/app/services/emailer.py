@@ -25,6 +25,49 @@ from ..config import settings
 logger = logging.getLogger("fintrack.email")
 
 
+# ── Brevo (HTTPS API, works from HF Spaces) ───────────────────────────────────
+
+def _brevo_key() -> str | None:
+    return settings.brevo_api_key or settings.brevoapikey
+
+
+def is_brevo_configured() -> bool:
+    return bool(_brevo_key() and (settings.smtp_from_email or settings.smtp_username))
+
+
+async def _send_via_brevo(to: list[str], subject: str, text: str, html: str | None) -> None:
+    import urllib.request, urllib.error, json
+    from_email = settings.smtp_from_email or settings.smtp_username or ""
+    from_name = settings.smtp_from_name or "FinTrack"
+    payload: dict = {
+        "sender": {"name": from_name, "email": from_email},
+        "to": [{"email": addr} for addr in to],
+        "subject": subject,
+        "textContent": text,
+    }
+    if html:
+        payload["htmlContent"] = html
+
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=data,
+        headers={
+            "api-key": _brevo_key(),
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read()
+            logger.info("Brevo delivered to %s: %s", to, body)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        raise RuntimeError(f"Brevo HTTP {exc.code}: {body}") from exc
+
+
 # ── Resend (HTTPS API) ────────────────────────────────────────────────────────
 
 def _resend_key() -> str | None:
@@ -78,7 +121,7 @@ def is_smtp_configured() -> bool:
 
 
 def is_email_configured() -> bool:
-    return is_resend_configured() or is_smtp_configured()
+    return is_brevo_configured() or is_resend_configured() or is_smtp_configured()
 
 
 def _send_smtp_sync(to: list[str], subject: str, text: str, html: str | None) -> None:
@@ -119,7 +162,16 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
     if not is_email_configured():
         return {"sent": False, "reason": "email_not_configured"}
 
-    # Prefer Resend (works on HF Spaces); fall back to SMTP
+    # Brevo first (most reliable from HF Spaces)
+    if is_brevo_configured():
+        try:
+            await _send_via_brevo(recipients, subject, text, html)
+            return {"sent": True, "recipients": recipients, "backend": "brevo"}
+        except Exception as exc:
+            logger.error("Brevo delivery failed: %s\n%s", exc, traceback.format_exc())
+            return {"sent": False, "reason": "brevo_error", "detail": str(exc)}
+
+    # Resend fallback
     if is_resend_configured():
         try:
             await _send_via_resend(recipients, subject, text, html)

@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     # HF Spaces blocks SMTP ports — use Resend instead:
     #   RESEND_API_KEY=re_xxxx  (resend.com, verify worksmayukh.space domain)
     # SMTP is kept as a local/self-hosted fallback only.
-    resend_api_key: Optional[str] = None  # reads from RESEND_API_KEY or RESENDAPIKEY
-    resendapikey: Optional[str] = None    # HF Spaces doesn't allow underscores in new secrets
+    brevo_api_key: Optional[str] = None   # reads from BREVO_API_KEY
+    brevoapikey: Optional[str] = None     # HF Spaces secret name (no underscores allowed)
+    resend_api_key: Optional[str] = None
+    resendapikey: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: int = 465
     smtp_username: Optional[str] = None
