@@ -90,7 +90,15 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     request.state.auth_role        = auth_role
     request.state.is_email_auth    = True
     try:
-        await pool.execute("UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1", row["session_id"])
+        await pool.execute(
+            """
+            UPDATE auth_sessions
+               SET last_seen_at = NOW(),
+                   request_count = COALESCE(request_count, 0) + 1
+             WHERE id = $1
+            """,
+            row["session_id"],
+        )
     except Exception:
         pass
     return {

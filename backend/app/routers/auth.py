@@ -326,7 +326,15 @@ async def verify(authorization: str | None = Header(default=None)):
                     raise HTTPException(status_code=401, detail="Session has expired")
                 if row["status"] != "active":
                     raise HTTPException(status_code=403, detail=f"User is {row['status']}")
-                await pool.execute("UPDATE auth_sessions SET last_seen_at = NOW() WHERE id = $1", row["session_id"])
+                await pool.execute(
+                    """
+                    UPDATE auth_sessions
+                       SET last_seen_at = NOW(),
+                           request_count = COALESCE(request_count, 0) + 1
+                     WHERE id = $1
+                    """,
+                    row["session_id"],
+                )
                 auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
                 payload.update({
                     "auth_role": auth_role,

@@ -89,7 +89,7 @@ ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_email   VARCHAR(320);
 ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_name    VARCHAR(255);
 -- Constraint only if auth_users exists (safe on new installs)
 DO $$ BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.auth_users') IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM information_schema.table_constraints
     WHERE table_name = 'audit_log' AND constraint_name = 'audit_log_user_id_fkey'
   ) THEN
@@ -552,6 +552,16 @@ CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC)
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
 CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);
 
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'audit_log' AND constraint_name = 'audit_log_user_id_fkey'
+  ) THEN
+    ALTER TABLE audit_log ADD CONSTRAINT audit_log_user_id_fkey
+      FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS auth_identities (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id          UUID         NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -635,8 +645,22 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     region        VARCHAR(100),
     city          VARCHAR(100),
     isp           VARCHAR(150),
+    request_count INTEGER      NOT NULL DEFAULT 1,
     metadata      JSONB        NOT NULL DEFAULT '{}'::jsonb
 );
+-- Older deployments may already have auth_sessions without newer tracking columns.
+-- Keep this additive so admin timeline/session views never break on missing columns.
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS os            VARCHAR(100);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS browser       VARCHAR(100);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS device        VARCHAR(20);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS device_label  VARCHAR(255);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS country       VARCHAR(80);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS country_code  VARCHAR(4);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS region        VARCHAR(100);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS city          VARCHAR(100);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS isp           VARCHAR(150);
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS request_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS metadata      JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS as_token_idx ON auth_sessions (token_hint);
 CREATE INDEX IF NOT EXISTS as_user_idx ON auth_sessions (user_id, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS as_active_idx ON auth_sessions (revoked_at, expires_at DESC);
