@@ -26,7 +26,8 @@ import {
   CheckCircle2, XCircle, AlertCircle, History,
   ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle,
   Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
-  SlidersHorizontal, Calendar, Terminal, Download, UserPlus, Mail, Save
+  SlidersHorizontal, Calendar, Terminal, Download, UserPlus, Mail, Save,
+  SendHorizontal, KeyRound, ServerCrash, CheckSquare
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -1586,6 +1587,7 @@ function AuthUsersTab() {
   const [limit, setLimit] = useState(50)
   const [statusFilter, setStatusFilter] = useState([])
   const [roleFilter, setRoleFilter] = useState([])
+  const [timelineUserId, setTimelineUserId] = useState(null)
   const [search, setSearch] = useState('')
   const [roleByUser, setRoleByUser] = useState({})
   const [actingId, setActingId] = useState('')
@@ -1729,6 +1731,30 @@ function AuthUsersTab() {
     }
   }, [load])
 
+  const resendInvite = useCallback(async (row) => {
+    if (!window.confirm(`Resend invite email to ${row.email}?`)) return
+    setActingId(`${row.id}:invite`)
+    setMessage('')
+    try {
+      const res = await api.admin.resendInvite(row.id)
+      setMessage(res.delivery?.sent ? `Invite sent to ${row.email}` : `Invite failed: ${res.delivery?.reason || res.delivery?.detail || 'unknown'}`)
+    } catch (e) { setMessage(e.message || 'Resend failed') }
+    finally { setActingId('') }
+  }, [])
+
+  const forcePasswordReset = useCallback(async (row) => {
+    if (!window.confirm(`Force password reset for ${row.email}? This will revoke all their active sessions.`)) return
+    setActingId(`${row.id}:forcereset`)
+    setMessage('')
+    try {
+      const res = await api.admin.forcePasswordReset(row.id)
+      setMessage(res.delivery?.sent
+        ? `Reset email sent. ${res.sessions_revoked} session(s) revoked.`
+        : `Sessions revoked but email failed: ${res.delivery?.reason || ''}`)
+    } catch (e) { setMessage(e.message || 'Force reset failed') }
+    finally { setActingId('') }
+  }, [])
+
   const updateName = useCallback(async (row, name) => {
     setActingId(`${row.id}:name`)
     try {
@@ -1782,6 +1808,26 @@ function AuthUsersTab() {
             {busy('disable') ? 'Working…' : 'Disable'}
           </button>
         )}
+        {/* Invite actions — available for active/pending users */}
+        {(row.status === 'active' || row.status === 'pending_approval') && (
+          <button onClick={() => resendInvite(row)} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
+            <SendHorizontal size={11} /> {busy('invite') ? 'Sending…' : 'Resend invite'}
+          </button>
+        )}
+        {row.status === 'active' && (
+          <button onClick={() => forcePasswordReset(row)} disabled={!!actingId}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
+            <KeyRound size={11} /> {busy('forcereset') ? 'Working…' : 'Force reset'}
+          </button>
+        )}
+        <button onClick={() => setTimelineUserId(row.id)} disabled={!!actingId}
+          className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+          style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+          <Clock size={11} /> Timeline
+        </button>
         <button onClick={() => deleteUser(row)} disabled={!!actingId}
           className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
           style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
@@ -1800,6 +1846,9 @@ function AuthUsersTab() {
 
   return (
     <div className="space-y-3">
+      {timelineUserId && (
+        <UserTimelineDrawer userId={timelineUserId} onClose={() => setTimelineUserId(null)} />
+      )}
       <div className="rounded-xl border p-3 text-[11px]"
         style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1820,7 +1869,7 @@ function AuthUsersTab() {
               className="input text-xs px-3 py-1.5 rounded-lg w-44"
             />
             <button onClick={testSmtp} disabled={actingId === 'smtp-test'} className="btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
-              <Mail size={12} /> {actingId === 'smtp-test' ? 'Testing…' : 'Test SMTP'}
+              <Mail size={12} /> {actingId === 'smtp-test' ? 'Sending…' : 'Test email'}
             </button>
           </div>
         </div>
@@ -3737,14 +3786,222 @@ function InsightsTab() {
   )
 }
 
+// ── Deployment Health Tab ─────────────────────────────────────────────────────
+
+function DeploymentHealthTab() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try { setData(await api.admin.deploymentHealth()) }
+    catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const checks = data ? [
+    { key: 'postgres', label: 'PostgreSQL',    icon: Database,      detail: data.postgres?.detail },
+    { key: 'valkey',   label: 'Valkey / Redis', icon: Activity,      detail: data.valkey?.detail },
+    { key: 'teable',   label: 'Teable API',    icon: Link2,         detail: data.teable?.detail },
+    { key: 'email',    label: 'Email (Brevo)',  icon: Mail,          detail: data.email?.detail },
+    { key: 'env',      label: 'Env Variables', icon: ServerCrash,   detail: data.env?.ok
+        ? 'All required vars set'
+        : 'Missing: ' + Object.entries(data.env?.checks || {}).filter(([,v]) => !v).map(([k]) => k).join(', ') },
+  ] : []
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>System Health</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Live readiness check for all backend services</p>
+        </div>
+        <button onClick={load} disabled={loading}
+          className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Recheck
+        </button>
+      </div>
+
+      {loading && !data && <Skeleton rows={5} />}
+      {error && <Err msg={error} onRetry={load} />}
+
+      {data && (
+        <>
+          <div className={`rounded-xl border p-3 flex items-center gap-3`}
+            style={{ borderColor: data.overall ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)', background: data.overall ? 'rgba(22,163,74,0.06)' : 'rgba(220,38,38,0.06)' }}>
+            {data.overall
+              ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+              : <XCircle size={18} style={{ color: '#dc2626', flexShrink: 0 }} />}
+            <div>
+              <p className="text-sm font-semibold" style={{ color: data.overall ? '#16a34a' : '#dc2626' }}>
+                {data.overall ? 'All systems operational' : 'One or more systems need attention'}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {checks.map(({ key, label, icon: Icon, detail }) => {
+              const ok = data[key]?.ok
+              return (
+                <div key={key} className="rounded-xl border p-3 flex items-center gap-3"
+                  style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: ok ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)' }}>
+                    <Icon size={14} style={{ color: ok ? '#16a34a' : '#dc2626' }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{label}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{detail || '—'}</p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {ok
+                      ? <Badge color="green">OK</Badge>
+                      : <Badge color="red">Fail</Badge>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {data.env && !data.env.ok && (
+            <div className="rounded-xl border p-3" style={{ borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.05)' }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: '#dc2626' }}>Missing environment variables</p>
+              <div className="space-y-1">
+                {Object.entries(data.env.checks || {}).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2 text-xs">
+                    {v ? <CheckCircle2 size={11} style={{ color: '#16a34a' }} /> : <XCircle size={11} style={{ color: '#dc2626' }} />}
+                    <code style={{ color: v ? 'var(--text-2)' : '#dc2626' }}>{k}</code>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── User Timeline Drawer ──────────────────────────────────────────────────────
+
+function UserTimelineDrawer({ userId, onClose }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!userId) return
+    setLoading(true); setError(null)
+    api.admin.userTimeline(userId).then(setData).catch(e => setError(e.message)).finally(() => setLoading(false))
+  }, [userId])
+
+  const EVENT_COLORS = {
+    password_login:            'green',
+    email_login:               'green',
+    password_register_pending: 'amber',
+    admin_invite_resent:       'blue',
+    admin_user_approved:       'green',
+    admin_user_rejected:       'red',
+    admin_user_disabled:       'red',
+    admin_user_deleted:        'red',
+    admin_force_password_reset:'amber',
+    admin_user_role_updated:   'indigo',
+    admin_user_teable_email_set:'purple',
+    admin_user_sessions_revoked:'amber',
+    password_reset_requested:  'amber',
+    password_reset_completed:  'green',
+    login_failed:              'red',
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-end"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="h-full w-full max-w-xl flex flex-col overflow-hidden"
+        style={{ background: 'var(--bg-base)', borderLeft: '1px solid var(--border)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
+          style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+          <div>
+            <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>
+              {data?.user?.email || 'User Timeline'}
+            </p>
+            {data?.user?.full_name && (
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>{data.user.full_name}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-red-50" style={{ color: 'var(--text-3)' }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Stats strip */}
+        {data && (
+          <div className="flex gap-4 px-4 py-2 border-b text-xs flex-shrink-0"
+            style={{ borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.timeline?.length}</b> events</span>
+            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.sessions?.length}</b> sessions</span>
+            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.audit_request_count?.toLocaleString()}</b> API requests</span>
+            {data.user?.teable_email && (
+              <span style={{ color: '#7c3aed' }}>Teable: {data.user.teable_email}</span>
+            )}
+          </div>
+        )}
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loading && <Skeleton rows={6} />}
+          {error && <Err msg={error} onRetry={() => {}} />}
+          {data && data.timeline.length === 0 && <Empty label="No events recorded yet" />}
+          {data && data.timeline.map(ev => (
+            <div key={ev.id} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                  style={{ background: EVENT_COLORS[ev.event_type] === 'green' ? '#16a34a'
+                    : EVENT_COLORS[ev.event_type] === 'red' ? '#dc2626'
+                    : EVENT_COLORS[ev.event_type] === 'amber' ? '#d97706'
+                    : EVENT_COLORS[ev.event_type] === 'blue' ? '#2563eb'
+                    : EVENT_COLORS[ev.event_type] === 'purple' ? '#7c3aed'
+                    : '#6366f1' }} />
+                <div className="flex-1 w-px my-1" style={{ background: 'var(--border)' }} />
+              </div>
+              <div className="pb-2 min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge color={EVENT_COLORS[ev.event_type] || 'default'}>
+                    {ev.event_type.replaceAll('_', ' ')}
+                  </Badge>
+                  <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+                    {ts(ev.created_at)}
+                  </span>
+                </div>
+                {ev.actor_email && (
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    by {ev.actor_name || ev.actor_email}
+                  </p>
+                )}
+                {ev.ip && (
+                  <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{ev.ip}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 
 // Top-level tabs — grouped by concern
 const TABS = [
   { id: 'overview',  label: 'Overview',        icon: LayoutDashboard  },
-  { id: 'requests',  label: 'Requests',         icon: ScrollText       }, // was "Audit Log"
-  { id: 'users',     label: 'Users & Sessions', icon: ShieldAlert      }, // merged Auth Users + Sessions
-  { id: 'ai',        label: 'AI',               icon: MessageSquareText}, // merged Chats + Runs
+  { id: 'requests',  label: 'Requests',         icon: ScrollText       },
+  { id: 'users',     label: 'Users & Sessions', icon: ShieldAlert      },
+  { id: 'ai',        label: 'AI',               icon: MessageSquareText},
   { id: 'insights',  label: 'Insights',         icon: BarChart2        },
   { id: 'sync',      label: 'Sync',             icon: RefreshCw        },
   { id: 'projects',  label: 'Projects',         icon: Database         },
@@ -3752,6 +4009,7 @@ const TABS = [
   { id: 'history',   label: 'History',          icon: History          },
   { id: 'shared',    label: 'Shared',           icon: Link2            },
   { id: 'hflogs',    label: 'HF Logs',          icon: Terminal         },
+  { id: 'deploy',    label: 'System Health',    icon: ServerCrash      },
 ]
 
 // Sub-tabs for composite tabs
@@ -3889,6 +4147,7 @@ export default function AdminDashboard({ embedded = false }) {
       {activeTab === 'history'   && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
       {activeTab === 'shared'    && <SharedLinksTab />}
       {activeTab === 'hflogs'    && <HfLogsTab />}
+      {activeTab === 'deploy'    && <DeploymentHealthTab />}
     </>
   )
 

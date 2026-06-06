@@ -897,6 +897,295 @@ async def admin_delete_auth_user(
     return {"deleted": True, "email": user["email"]}
 
 
+# ── User timeline ─────────────────────────────────────────────────────────────
+
+@router.get("/auth/users/{user_id}/timeline")
+async def admin_user_timeline(
+    user_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    _: str = Depends(require_admin),
+):
+    """Full chronological event timeline for a user: logins, invites, role changes, resets, etc."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id::text, email, full_name, status, teable_email FROM auth_users WHERE id = $1::uuid",
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        events = await conn.fetch(
+            """
+            SELECT
+                ae.id, ae.created_at, ae.event_type, ae.role, ae.email,
+                ae.status, ae.ip, ae.user_agent, ae.metadata::text AS metadata,
+                actor.email AS actor_email, actor.full_name AS actor_name
+            FROM auth_events ae
+            LEFT JOIN auth_users actor ON actor.id = ae.actor_user_id
+            WHERE ae.target_user_id = $1::uuid OR ae.email = $2
+            ORDER BY ae.created_at DESC
+            LIMIT $3
+            """,
+            user_id, user["email"], limit,
+        )
+        sessions = await conn.fetch(
+            """
+            SELECT id::text, created_at, last_seen_at, expires_at, revoked_at,
+                   ip, os, browser, device, country, city, device_label, request_count
+            FROM auth_sessions
+            WHERE user_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            user_id,
+        )
+        audit_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM audit_log WHERE user_id = $1::uuid",
+            user_id,
+        )
+
+    timeline = []
+    for e in events:
+        d = _row_to_dict(e)
+        try:
+            d["metadata"] = json.loads(d.get("metadata") or "{}")
+        except Exception:
+            d["metadata"] = {}
+        timeline.append(d)
+
+    return {
+        "user": _row_to_dict(user),
+        "timeline": timeline,
+        "sessions": [_row_to_dict(s) for s in sessions],
+        "audit_request_count": int(audit_count or 0),
+    }
+
+
+# ── Resend invite ─────────────────────────────────────────────────────────────
+
+@router.post("/auth/users/{user_id}/resend-invite")
+async def admin_resend_invite(
+    user_id: str,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    """Generate a fresh invite link and email it to the user."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    import secrets as _secrets
+    from ..services.auth_master import _hash_reset_token
+    from ..services.emailer import send_email, app_origin_from_request
+    from urllib.parse import urlencode
+    from datetime import datetime, timezone, timedelta
+
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id::text AS id, email, full_name, status FROM auth_users WHERE id = $1::uuid",
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user["status"] not in ("active", "pending_approval"):
+            raise HTTPException(status_code=409, detail="Can only resend invite to active or pending users")
+
+        # Revoke old reset tokens and create a fresh one
+        await conn.execute(
+            "UPDATE auth_password_resets SET used_at = NOW() WHERE user_id = $1::uuid AND used_at IS NULL",
+            user_id,
+        )
+        token = _secrets.token_urlsafe(36)
+        token_hash = _hash_reset_token(token)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_ttl_minutes)
+        await conn.execute(
+            """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
+               VALUES ($1::uuid, $2, $3, $4, $5)""",
+            user_id, token_hash, expires_at,
+            request.client.host if request.client else None,
+            request.headers.get("user-agent", ""),
+        )
+        await _write_auth_admin_event(
+            conn, request,
+            event_type="admin_invite_resent",
+            actor_role=actor_role,
+            target_user_id=user_id,
+            email=user["email"],
+            status=user["status"],
+        )
+
+    origin = app_origin_from_request(request)
+    invite_params = urlencode({"reset_token": token, "invite": "1", "email": user["email"]})
+    invite_url = f"{origin}/login?{invite_params}" if origin else f"/login?{invite_params}"
+
+    delivery = await send_email(
+        user["email"],
+        "Your FinTrack invite link (refreshed)",
+        (
+            f"Hi{' ' + (user['full_name'] or '').strip() if user['full_name'] else ''},\n\n"
+            f"Here is your refreshed FinTrack invite link. It expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
+            f"{invite_url}\n\nIf you were not expecting this, ignore this email."
+        ),
+        html=(
+            f"<p>Hi{' <b>' + (user['full_name'] or '') + '</b>' if user['full_name'] else ''},</p>"
+            f"<p>Here is your refreshed <b>FinTrack</b> invite link.</p>"
+            f"<p><a href=\"{invite_url}\" style=\"display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;"
+            f"border-radius:8px;text-decoration:none;font-weight:600\">Set password &amp; sign in</a></p>"
+            f"<p style=\"color:#888;font-size:12px\">Expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+        ),
+    )
+    return {"ok": True, "delivery": delivery, "invite_url": invite_url if not delivery.get("sent") else None}
+
+
+# ── Force password reset ──────────────────────────────────────────────────────
+
+@router.post("/auth/users/{user_id}/force-password-reset")
+async def admin_force_password_reset(
+    user_id: str,
+    request: Request,
+    actor_role: str = Depends(require_admin),
+):
+    """Revoke all sessions and send a password-reset link to the user."""
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+    import secrets as _secrets
+    from ..services.auth_master import _hash_reset_token
+    from ..services.emailer import send_email, app_origin_from_request
+    from urllib.parse import urlencode
+    from datetime import datetime, timezone, timedelta
+
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id::text AS id, email, full_name, status FROM auth_users WHERE id = $1::uuid",
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user["status"] != "active":
+            raise HTTPException(status_code=409, detail="Can only force reset for active users")
+
+        # Revoke all active sessions
+        revoked = await conn.fetchval(
+            "WITH changed AS (UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL RETURNING id) SELECT COUNT(*) FROM changed",
+            user_id,
+        )
+        token = _secrets.token_urlsafe(36)
+        token_hash = _hash_reset_token(token)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_ttl_minutes)
+        await conn.execute(
+            """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
+               VALUES ($1::uuid, $2, $3, $4, $5)""",
+            user_id, token_hash, expires_at,
+            request.client.host if request.client else None,
+            request.headers.get("user-agent", ""),
+        )
+        await _write_auth_admin_event(
+            conn, request,
+            event_type="admin_force_password_reset",
+            actor_role=actor_role,
+            target_user_id=user_id,
+            email=user["email"],
+            status=user["status"],
+            metadata={"sessions_revoked": int(revoked or 0)},
+        )
+
+    origin = app_origin_from_request(request)
+    reset_params = urlencode({"reset_token": token, "email": user["email"]})
+    reset_url = f"{origin}/login?{reset_params}" if origin else f"/login?{reset_params}"
+
+    delivery = await send_email(
+        user["email"],
+        "Reset your FinTrack password (admin-initiated)",
+        (
+            f"An admin has requested a password reset for your FinTrack account.\n\n"
+            f"All your active sessions have been revoked. Use this link to set a new password:\n\n"
+            f"{reset_url}\n\nThis link expires in {settings.password_reset_ttl_minutes} minutes."
+        ),
+        html=(
+            f"<p>An admin has requested a password reset for your FinTrack account.</p>"
+            f"<p>All your active sessions have been revoked.</p>"
+            f"<p><a href=\"{reset_url}\" style=\"display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;"
+            f"border-radius:8px;text-decoration:none;font-weight:600\">Reset password</a></p>"
+            f"<p style=\"color:#888;font-size:12px\">Expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+        ),
+    )
+    return {"ok": True, "sessions_revoked": int(revoked or 0), "delivery": delivery}
+
+
+# ── Deployment health ─────────────────────────────────────────────────────────
+
+@router.get("/deployment-health")
+async def deployment_health(_: str = Depends(require_admin)):
+    """Full system readiness check for the deployment checklist."""
+    from ..db.postgres import get_pool as _pg, get_init_error
+    from ..db import valkey as _vk
+    from ..services.emailer import is_email_configured
+    from ..config import settings as s
+
+    results: dict = {}
+
+    # PostgreSQL
+    pool = _pg()
+    if pool:
+        try:
+            await pool.fetchval("SELECT 1")
+            results["postgres"] = {"ok": True, "detail": "Connected"}
+        except Exception as exc:
+            results["postgres"] = {"ok": False, "detail": str(exc)}
+    else:
+        results["postgres"] = {"ok": False, "detail": get_init_error() or "Not configured"}
+
+    # Valkey / Redis
+    try:
+        vk = _vk.get_client()
+        if vk:
+            await vk.ping()
+            results["valkey"] = {"ok": True, "detail": "Connected"}
+        else:
+            results["valkey"] = {"ok": False, "detail": "Not configured (VALKEY_URL missing)"}
+    except Exception as exc:
+        results["valkey"] = {"ok": False, "detail": str(exc)}
+
+    # Teable
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                f"{s.teable_base_url}/api/table/{s.teable_table_id}/record",
+                headers={"Authorization": f"Bearer {s.teable_api_token}"},
+                params={"take": 1},
+            )
+            if r.status_code < 400:
+                results["teable"] = {"ok": True, "detail": f"HTTP {r.status_code}"}
+            else:
+                results["teable"] = {"ok": False, "detail": f"HTTP {r.status_code}"}
+    except Exception as exc:
+        results["teable"] = {"ok": False, "detail": str(exc)}
+
+    # Email (Brevo)
+    results["email"] = {
+        "ok": is_email_configured(),
+        "detail": "Brevo configured" if is_email_configured() else "BREVOAPIKEY not set",
+    }
+
+    # Env vars
+    env_checks = {
+        "POSTGRES_URL":  bool(s.postgres_url),
+        "TEABLE_API_TOKEN": bool(s.teable_api_token),
+        "APP_SECRET":    s.app_secret != "fintrack-dev-secret-change-me",
+        "BREVOAPIKEY":   bool(s.brevoapikey),
+        "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
+    }
+    results["env"] = {
+        "ok": all(env_checks.values()),
+        "checks": env_checks,
+    }
+
+    results["overall"] = all(v.get("ok") for v in results.values() if isinstance(v, dict))
+    return results
+
 
 @router.post("/auth/smtp/test")
 async def admin_test_smtp(

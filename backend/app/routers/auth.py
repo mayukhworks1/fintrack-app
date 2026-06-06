@@ -22,11 +22,19 @@ import base64
 import hashlib
 import hmac
 import time
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from ..config import settings
+from .deps import require_auth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+async def _require_email_auth(request: Request, role: str = Depends(require_auth)) -> str:
+    """Dependency: valid token + must be an email-auth session (not legacy password)."""
+    if not getattr(request.state, "is_email_auth", False):
+        raise HTTPException(status_code=403, detail="This endpoint requires email authentication")
+    return role
 
 
 class LoginRequest(BaseModel):
@@ -370,19 +378,10 @@ async def logout(authorization: str | None = Header(default=None)):
     return {"logged_out": True}
 
 
-def _user_id_from_token(authorization: str | None) -> str | None:
-    token = ""
-    if authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-    if not token:
-        return None
-    return token[:16]
-
-
 @router.get("/profile")
-async def get_profile(authorization: str | None = Header(default=None)):
+async def get_profile(request: Request, _role: str = Depends(_require_email_auth)):
     """Return the current user's profile. Requires an active email-auth session."""
-    token_hint = _user_id_from_token(authorization)
+    token_hint = getattr(request.state, "token_hint", None)
     if not token_hint:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
@@ -437,28 +436,23 @@ async def get_profile(authorization: str | None = Header(default=None)):
 
 
 @router.patch("/profile")
-async def update_profile(body: UpdateProfileRequest, authorization: str | None = Header(default=None)):
+async def update_profile(body: UpdateProfileRequest, request: Request, _role: str = Depends(_require_email_auth)):
     """Update the current user's display name."""
-    token_hint = _user_id_from_token(authorization)
-    if not token_hint:
+    user_id = getattr(request.state, "auth_user_id", None)
+    if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         from ..db.postgres import get_pool
         pool = get_pool()
         if not pool:
             raise HTTPException(status_code=503, detail="Database unavailable")
-        user_id = await pool.fetchval(
-            "SELECT user_id FROM auth_sessions WHERE token_hint = $1 AND revoked_at IS NULL LIMIT 1",
-            token_hint,
-        )
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Session not found")
         full_name = (body.full_name or "").strip() or None
         row = await pool.fetchrow(
-            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2 RETURNING full_name, email",
-            full_name,
-            user_id,
+            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2::uuid RETURNING full_name, email",
+            full_name, user_id,
         )
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
         return {"ok": True, "full_name": row["full_name"], "email": row["email"]}
     except HTTPException:
         raise
@@ -467,10 +461,11 @@ async def update_profile(body: UpdateProfileRequest, authorization: str | None =
 
 
 @router.post("/change-password")
-async def change_password(body: ChangePasswordRequest, authorization: str | None = Header(default=None)):
-    """Change the current user's password. Requires the current password."""
-    token_hint = _user_id_from_token(authorization)
-    if not token_hint:
+async def change_password(body: ChangePasswordRequest, request: Request, _role: str = Depends(_require_email_auth)):
+    """Change the current user's password. Requires current password verification."""
+    user_id   = getattr(request.state, "auth_user_id",  None)
+    token_hint = getattr(request.state, "token_hint",   None)
+    if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         from ..db.postgres import get_pool
@@ -479,27 +474,24 @@ async def change_password(body: ChangePasswordRequest, authorization: str | None
         if not pool:
             raise HTTPException(status_code=503, detail="Database unavailable")
         row = await pool.fetchrow(
-            """
-            SELECT u.id, u.password_hash
-            FROM auth_sessions s JOIN auth_users u ON u.id = s.user_id
-            WHERE s.token_hint = $1 AND s.revoked_at IS NULL LIMIT 1
-            """,
-            token_hint,
+            "SELECT id, password_hash FROM auth_users WHERE id = $1::uuid",
+            user_id,
         )
         if not row:
-            raise HTTPException(status_code=401, detail="Session not found")
+            raise HTTPException(status_code=404, detail="User not found")
         if not row["password_hash"] or not verify_password(body.current_password, row["password_hash"]):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         new_hash = hash_password(validate_password(body.new_password))
         await pool.execute(
-            "UPDATE auth_users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
-            new_hash, row["id"],
+            "UPDATE auth_users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2::uuid",
+            new_hash, user_id,
         )
-        # revoke all other sessions except current
-        await pool.execute(
-            "UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1 AND token_hint != $2 AND revoked_at IS NULL",
-            row["id"], token_hint,
-        )
+        # Revoke all OTHER active sessions — keep the current one alive
+        if token_hint:
+            await pool.execute(
+                "UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND token_hint != $2 AND revoked_at IS NULL",
+                user_id, token_hint,
+            )
         return {"ok": True, "message": "Password changed. Other sessions have been revoked."}
     except HTTPException:
         raise

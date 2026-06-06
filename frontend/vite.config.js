@@ -21,16 +21,22 @@ export default defineConfig({
     },
   },
   build: {
-    // Split heavy 3rd-party libs into their own chunks so the app shell stays small
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'icons':        ['lucide-react'],
-          'charts':       ['recharts'],
+        manualChunks(id) {
+          // Core React — every user
+          if (id.includes('node_modules/react/') ||
+              id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/react-router-dom/') ||
+              id.includes('node_modules/scheduler/')) return 'react-vendor'
+          // Split recharts from its d3 deps so each is cacheable independently
+          if (id.includes('node_modules/d3-'))      return 'charts-d3'
+          if (id.includes('node_modules/recharts')) return 'charts-recharts'
+          // Icons — large but shared across pages
+          if (id.includes('node_modules/lucide-react')) return 'icons'
         },
       },
     },
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 500,
   },
 })

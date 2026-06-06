@@ -4,9 +4,9 @@ import { Loader2 } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
-import Dashboard from './pages/Dashboard'           // eager — landing route
-import Login from './pages/Login'                   // eager — auth gate
-import AdminDashboard from './pages/AdminDashboard' // eager — admin role
+import Dashboard from './pages/Dashboard'  // eager — landing route
+import Login from './pages/Login'          // eager — auth gate
+const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
 
 /* Lazy-loaded routes — split into separate chunks for snappier initial paint */
@@ -119,7 +119,9 @@ export default function App() {
   if (isAdmin) {
     return (
       <ErrorBoundary>
-        <AdminDashboard />
+        <Suspense fallback={<RouteFallback />}>
+          <AdminDashboard />
+        </Suspense>
         <VercelAnalytics />
       </ErrorBoundary>
     )
