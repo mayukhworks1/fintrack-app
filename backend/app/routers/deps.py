@@ -182,12 +182,25 @@ def require_all(role: str = Depends(require_auth)) -> str:
     return role
 
 
-def require_admin(role: str = Depends(require_auth)) -> str:
+async def require_admin(request: Request, role: str = Depends(require_auth)) -> str:
     """
-    Requires 'admin' OR 'editor' role — both get full PostgreSQL dashboard access.
-    'editor' is the master/owner role in the regular app.
-    'admin' is obtained via the dedicated Master@2026 password.
+    Admin access gate — hardened to check DB auth_role for email-auth sessions.
+
+    Allowed:
+      • Legacy 'admin' password (Master@2026) — HMAC role == 'admin'
+      • Email-auth users with auth_role 'superadmin' or 'admin' in the DB
+
+    Blocked:
+      • Legacy 'editor' password — editors must use email auth + admin role to
+        access admin endpoints (legacy editor bypass removed per hardening).
     """
-    if role not in ("admin", "editor"):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return role
+    is_email = getattr(request.state, "is_email_auth", False)
+    if is_email:
+        auth_role = getattr(request.state, "auth_role", "") or ""
+        if auth_role in ("superadmin", "admin"):
+            return role
+        raise HTTPException(status_code=403, detail="Admin access requires superadmin or admin role")
+    # Legacy token path — only the dedicated admin password is accepted
+    if role == "admin":
+        return role
+    raise HTTPException(status_code=403, detail="Admin access required")

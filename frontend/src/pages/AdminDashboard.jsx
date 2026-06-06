@@ -3938,16 +3938,32 @@ function UserTimelineDrawer({ userId, onClose }) {
           </button>
         </div>
 
-        {/* Stats strip */}
+        {/* Stats strip + export */}
         {data && (
-          <div className="flex gap-4 px-4 py-2 border-b text-xs flex-shrink-0"
+          <div className="flex items-center justify-between gap-2 px-4 py-2 border-b text-xs flex-shrink-0"
             style={{ borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
-            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.timeline?.length}</b> events</span>
-            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.sessions?.length}</b> sessions</span>
-            <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.audit_request_count?.toLocaleString()}</b> API requests</span>
-            {data.user?.teable_email && (
-              <span style={{ color: '#7c3aed' }}>Teable: {data.user.teable_email}</span>
-            )}
+            <div className="flex gap-4 flex-wrap">
+              <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.timeline?.length}</b> events</span>
+              <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.sessions?.length}</b> sessions</span>
+              <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.audit_request_count?.toLocaleString()}</b> API requests</span>
+              {data.user?.teable_email && (
+                <span style={{ color: '#7c3aed' }}>Teable: {data.user.teable_email}</span>
+              )}
+            </div>
+            <div className="flex gap-1 flex-shrink-0">
+              <a href={api.admin.userTimelineExportUrl(userId, 'csv')}
+                download
+                className="text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1"
+                style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--card-bg)', textDecoration: 'none' }}>
+                <Download size={10} /> CSV
+              </a>
+              <a href={api.admin.userTimelineExportUrl(userId, 'json')}
+                download
+                className="text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1"
+                style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--card-bg)', textDecoration: 'none' }}>
+                <Download size={10} /> JSON
+              </a>
+            </div>
           </div>
         )}
 

@@ -9,3 +9,5 @@ pypdf==4.3.1
 reportlab==4.2.2
 asyncpg==0.29.0
 redis[asyncio]==5.0.8
+pytest==8.3.4
+pytest-asyncio==0.24.0

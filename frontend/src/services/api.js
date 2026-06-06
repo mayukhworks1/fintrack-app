@@ -565,12 +565,12 @@ export const api = {
     setTeableEmail: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/teable-email`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteAuthUser:       (id, force = false) => request(`/api/admin/auth/users/${encodeURIComponent(id)}?force=${force}`, { method: 'DELETE' }),
     userTimeline:         (id, p = {})  => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && q.set(k,v)); return request(`/api/admin/auth/users/${encodeURIComponent(id)}/timeline?${q}`) },
+    userTimelineExportUrl:(id, fmt='csv') => `${typeof window !== 'undefined' ? '' : ''}/api/admin/auth/users/${encodeURIComponent(id)}/timeline/export?fmt=${fmt}`,
     resendInvite:         (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/resend-invite`, { method: 'POST' }),
     forcePasswordReset:   (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/force-password-reset`, { method: 'POST' }),
     deploymentHealth:     ()            => request('/api/admin/deployment-health'),
-    testEmail: (data = {}) => request('/api/admin/auth/smtp/test', { method: 'POST', body: JSON.stringify(data) }),
-    // keep old name for compat
-    testSmtp: (data = {}) => request('/api/admin/auth/smtp/test', { method: 'POST', body: JSON.stringify(data) }),
+    testEmail: (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }),
+    testSmtp:  (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }), // alias
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
     aiGenerations: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/ai-generations?${q}`) },

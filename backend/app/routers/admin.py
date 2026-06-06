@@ -874,19 +874,22 @@ async def admin_delete_auth_user(
                     status_code=409,
                     detail="User is active. Disable them first, or pass force=true to delete immediately."
                 )
-            # Log the deletion event before deleting (so it survives)
-            try:
-                await conn.execute(
-                    """INSERT INTO auth_events
-                       (event_type, actor_role, target_user_id, email, status, ip, user_agent, metadata)
-                       VALUES ($1,$2,$3::uuid,$4,$5,$6,$7,$8::jsonb)""",
-                    "admin_user_deleted", actor_role, user_id, user["email"], user["status"],
-                    request.client.host if request.client else None,
-                    request.headers.get("user-agent", ""),
-                    json.dumps({"deleted_by": actor_role, "forced": force}),
-                )
-            except Exception:
-                pass  # Don't block delete if event write fails
+            # Write deletion audit event — uses correct `role` column (not actor_role).
+            # Must succeed: if audit write fails we abort the whole transaction so
+            # deletes are never silent. A separate pool connection avoids FK conflicts.
+            await conn.execute(
+                """INSERT INTO auth_events
+                   (event_type, role, target_user_id, email, status, ip, user_agent, metadata)
+                   VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, $8::jsonb)""",
+                "admin_user_deleted",
+                actor_role,
+                user_id,
+                user["email"],
+                user["status"],
+                request.client.host if request.client else None,
+                request.headers.get("user-agent", ""),
+                json.dumps({"deleted_by": actor_role, "forced": force}),
+            )
             # Cascade delete in dependency order
             await conn.execute("DELETE FROM auth_sessions         WHERE user_id = $1::uuid", user_id)
             await conn.execute("DELETE FROM auth_user_roles       WHERE user_id = $1::uuid", user_id)
@@ -961,6 +964,80 @@ async def admin_user_timeline(
         "sessions": [_row_to_dict(s) for s in sessions],
         "audit_request_count": int(audit_count or 0),
     }
+
+
+@router.get("/auth/users/{user_id}/timeline/export")
+async def admin_user_timeline_export(
+    user_id: str,
+    fmt: str = Query("csv", description="csv or json"),
+    _: str = Depends(require_admin),
+):
+    """Export a user's full auth event timeline as CSV or JSON."""
+    from fastapi.responses import Response
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    user = await pool.fetchrow(
+        "SELECT id::text, email, full_name FROM auth_users WHERE id = $1::uuid",
+        user_id,
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    events = await pool.fetch(
+        """
+        SELECT ae.created_at, ae.event_type, ae.role, ae.email, ae.status,
+               ae.ip, ae.user_agent, ae.metadata::text AS metadata,
+               actor.email AS actor_email
+        FROM auth_events ae
+        LEFT JOIN auth_users actor ON actor.id = ae.actor_user_id
+        WHERE ae.target_user_id = $1::uuid OR ae.email = $2
+        ORDER BY ae.created_at DESC
+        LIMIT 5000
+        """,
+        user_id, user["email"],
+    )
+
+    safe_email = (user["email"] or "user").replace("@", "_at_").replace(".", "_")
+    filename = f"timeline_{safe_email}.{fmt}"
+
+    if fmt == "json":
+        rows = []
+        for e in events:
+            d = _row_to_dict(e)
+            try:
+                d["metadata"] = json.loads(d.get("metadata") or "{}")
+            except Exception:
+                d["metadata"] = {}
+            rows.append(d)
+        return Response(
+            content=json.dumps({"user": _row_to_dict(user), "events": rows}, default=str),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # CSV
+    import csv, io
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["timestamp", "event_type", "role", "email", "status", "ip", "actor_email", "metadata"])
+    for e in events:
+        writer.writerow([
+            e["created_at"].isoformat() if e["created_at"] else "",
+            e["event_type"] or "",
+            e["role"] or "",
+            e["email"] or "",
+            e["status"] or "",
+            e["ip"] or "",
+            e["actor_email"] or "",
+            e["metadata"] or "",
+        ])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Resend invite ─────────────────────────────────────────────────────────────
@@ -1187,23 +1264,25 @@ async def deployment_health(_: str = Depends(require_admin)):
     return results
 
 
-@router.post("/auth/smtp/test")
-async def admin_test_smtp(
+@router.post("/auth/email/test")
+@router.post("/auth/smtp/test")   # keep old path for backwards compat
+async def admin_test_email(
     body: AuthSmtpTest,
     request: Request,
     actor_role: str = Depends(require_admin),
 ):
+    """Send a test email via the configured provider (Brevo) to verify delivery works."""
     from ..services.emailer import is_email_configured, send_email
 
     to_email = (body.to or getattr(request.state, "auth_user_email", None) or settings.auth_admin_notify_email or settings.smtp_from_email or "").strip()
     configured = is_email_configured()
-    delivery = {"sent": False, "reason": "smtp_not_configured"}
+    delivery = {"sent": False, "reason": "email_not_configured"}
     if configured and to_email:
         delivery = await send_email(
             to_email,
-            "FinTrack SMTP test",
-            "This is a FinTrack SMTP test email. If you received it, password reset and invite emails can be delivered.",
-            html="<p>This is a FinTrack SMTP test email.</p><p>If you received it, password reset and invite emails can be delivered.</p>",
+            "FinTrack email delivery test",
+            "This is a FinTrack email test. If you received it, invite and password reset emails will deliver correctly.",
+            html="<p>This is a <b>FinTrack</b> email delivery test.</p><p>If you received it, invite and password reset emails will deliver correctly.</p>",
         )
     pool = get_pool()
     if pool:
@@ -1211,7 +1290,7 @@ async def admin_test_smtp(
             await _write_auth_admin_event(
                 conn,
                 request,
-                event_type="admin_smtp_test",
+                event_type="admin_email_test",
                 actor_role=actor_role,
                 target_user_id=getattr(request.state, "auth_user_id", None),
                 email=to_email or None,
@@ -1222,7 +1301,7 @@ async def admin_test_smtp(
         "configured": configured,
         "delivery": delivery,
         "to": to_email or None,
-        "message": "SMTP test email sent" if delivery.get("sent") else f"SMTP test failed: {delivery.get('reason')}",
+        "message": "Email sent successfully" if delivery.get("sent") else f"Email delivery failed: {delivery.get('reason')}",
     }
 
 
