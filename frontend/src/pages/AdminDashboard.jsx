@@ -277,6 +277,98 @@ function StatBox({ label, value, sub, color, accent }) {
   )
 }
 
+function DeploymentChecklist() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try { setData(await api.admin.deploymentHealth({ fresh: true })) }
+    catch (e) { setError(e.message || 'Deployment health failed') }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const checks = useMemo(() => {
+    if (!data) return []
+    return [
+      ['PostgreSQL', data.postgres],
+      ['Teable', data.teable],
+      ['Valkey', data.valkey],
+      ['Email', data.email],
+      ['OpenRouter', data.openrouter],
+      ['Auth Sessions', data.auth_sessions],
+      ['Cron Jobs', data.cron_jobs],
+      ['Sync Freshness', data.sync_freshness],
+      ['Failed Webhooks', data.failed_webhooks],
+      ['Environment', data.env],
+    ]
+  }, [data])
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+            Production Health
+          </h3>
+          {data?.deployment && (
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+              Version {data.deployment.version || '—'} · commit {data.deployment.commit || 'unknown'} · {data.deployment.hf_space_id || 'space unknown'}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+        >
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+
+      {loading && !data ? <StatSkeleton /> : error ? <Err msg={error} onRetry={load} /> : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          {checks.map(([label, item]) => {
+            const ok = Boolean(item?.ok)
+            return (
+              <div key={label} className="card min-w-0 space-y-2" style={{ borderLeft: `3px solid ${ok ? '#16a34a' : '#dc2626'}` }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{label}</p>
+                  <Badge color={ok ? 'green' : 'red'}>{ok ? 'OK' : 'Check'}</Badge>
+                </div>
+                <p className="text-[11px] leading-relaxed min-h-[32px]" style={{ color: 'var(--text-3)' }} title={item?.detail || ''}>
+                  {item?.detail || 'No detail'}
+                </p>
+                {label === 'Sync Freshness' && item?.stale_sources?.length > 0 && (
+                  <p className="text-[11px]" style={{ color: '#d97706' }}>Stale: {item.stale_sources.join(', ')}</p>
+                )}
+                {label === 'Teable' && item?.tables && (
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(item.tables).map(([name, table]) => (
+                      <Badge key={name} color={table?.ok ? 'green' : 'red'}>{name}</Badge>
+                    ))}
+                  </div>
+                )}
+                {label === 'Environment' && item?.checks && (
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(item.checks).map(([name, value]) => (
+                      <Badge key={name} color={value ? 'green' : 'red'}>{name}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function OverviewTab({ onOpenHistoryDrilldown }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -302,6 +394,8 @@ function OverviewTab({ onOpenHistoryDrilldown }) {
 
   return (
     <div className="space-y-6">
+      <DeploymentChecklist />
+
       {/* Requests */}
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>

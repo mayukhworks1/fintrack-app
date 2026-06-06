@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    app_version: str = "2.3.0"
+    git_commit_sha: Optional[str] = None
     teable_api_token: Optional[str] = None
     teable_base_url: str = "https://app.teable.ai"
     teable_table_id: str = "tbl4fi155DuWlh40By3"

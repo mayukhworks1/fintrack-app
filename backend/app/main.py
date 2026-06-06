@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="FinTrack API",
     description="AI-powered project finance tracker backed by Teable",
-    version="2.3.0",
+    version=settings.app_version,
     lifespan=lifespan,
 )
 

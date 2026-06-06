@@ -808,3 +808,94 @@ Important production notes:
 - If test returns `smtp_connection_failed`, check `SMTP_HOST`, port, SSL/TLS flags, and Hugging Face outbound SMTP support.
 - Role changes revoke sessions intentionally; user must log in again.
 - `APP_ADMIN_PASSWORD` remains the bootstrap password for `/api/auth/email/bootstrap`.
+
+## 2026-06-06 Production Health / Safety Pass
+
+User requested these next hardening areas:
+
+- Production Health Screen in Admin for PostgreSQL, Teable, Valkey, Email, OpenRouter, auth sessions, cron jobs, sync freshness, failed webhooks, latest deployment version.
+- Real-time CRUD confidence and audit traceability.
+- Admin audit investigation improvements.
+- Performance guardrails: lazy loading, chart splitting, cached dashboard summaries, stale-while-refresh.
+- Runey-style UI consistency.
+- One production checklist command before push/deploy.
+
+Implemented in this pass:
+
+- `backend/app/config.py`
+  - Added `app_version` env-backed setting, default `2.3.0`.
+  - Added optional `git_commit_sha` env-backed setting for deployment metadata.
+
+- `backend/app/main.py`
+  - FastAPI version now uses `settings.app_version`, so health/admin can reflect configured deployment version.
+
+- `backend/app/routers/admin.py`
+  - Expanded `GET /api/admin/deployment-health`.
+  - It now reports:
+    - PostgreSQL connectivity.
+    - Valkey connectivity.
+    - Teable table reachability for projects, invoices, web invoices, status.
+    - Email provider config.
+    - OpenRouter config/model.
+    - Auth session counts: active, revoked, expired, last seen.
+    - Sync freshness by source with stale/failed source lists.
+    - Cron/background-job freshness inferred from recent sync output.
+    - Failed webhook count in the last 24h.
+    - Environment checks.
+    - Deployment version, commit, frontend URL, HF space id.
+  - Added `_health_item(...)` helper to keep health payloads consistent.
+  - Added `_git_commit_sha(...)` best-effort helper using env first, then local git fallback.
+
+- `frontend/src/services/api.js`
+  - `api.admin.deploymentHealth(opts)` now accepts request options, allowing fresh bypass.
+
+- `frontend/src/pages/AdminDashboard.jsx`
+  - Added `DeploymentChecklist` component in Admin Overview.
+  - Shows live health cards for PostgreSQL, Teable, Valkey, Email, OpenRouter, Auth Sessions, Cron Jobs, Sync Freshness, Failed Webhooks, and Environment.
+  - Shows deployment version/commit/HF space id.
+  - Includes a manual Refresh button.
+  - Uses existing Admin card/badge styling for UI consistency.
+
+- `scripts/production_check.sh`
+  - New one-command production checklist:
+    - backend import smoke
+    - backend smoke tests
+    - frontend tests
+    - frontend production build
+    - optional live health check via `HEALTH_URL=https://.../health`
+
+- `backend/tests/smoke_test.py`
+  - Added smoke coverage for the health payload helper.
+
+Validation run:
+
+- `./scripts/production_check.sh`
+  - Backend import OK.
+  - Backend smoke tests: `18 passed`.
+  - Frontend tests: `15 passed`.
+  - Frontend build OK.
+  - Live health endpoint skipped because `HEALTH_URL` was not set.
+
+Current performance notes:
+
+- Route-level lazy loading already exists in `frontend/src/App.jsx`.
+- Vite already splits `recharts` and `d3` into separate chart chunks in `frontend/vite.config.js`.
+- Build output still shows large page chunks:
+  - `WebInvoices`
+  - `AdminDashboard`
+  - `StatusBoard`
+  - `Invoices`
+  - `charts-recharts`
+- Next safe performance tranche should avoid broad rewrites and instead:
+  - lazy-load chart-heavy subcomponents inside page bodies;
+  - add cached dashboard summary endpoints where missing;
+  - use stale-while-refresh hooks consistently on heavy pages;
+  - keep mutation paths fresh-only and optimistic.
+
+Still pending from the user's larger request:
+
+- Full optimistic CRUD reconciliation across all invoice/project/web-invoice forms.
+- Stronger admin audit investigation UI for record-level direct open links from request logs, not only record history.
+- More granular before/after change display in audit-log itself.
+- Full Runey-style sidebar/theme unification across every module.
+- Live health check should be run with `HEALTH_URL` before production push when production API is reachable.

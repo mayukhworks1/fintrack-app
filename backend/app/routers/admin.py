@@ -30,6 +30,8 @@ GET /api/admin/record-history       — field-level change log
 import asyncio
 import json
 import logging
+import os
+import subprocess
 from datetime import datetime
 from typing import Optional
 
@@ -99,6 +101,31 @@ def _client_ip(request: Request) -> str:
         if value:
             return value.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+def _git_commit_sha() -> str | None:
+    """Best-effort deployment commit detection without making health depend on git."""
+    for key in ("GIT_COMMIT_SHA", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"):
+        value = (os.getenv(key) or "").strip()
+        if value:
+            return value[:12]
+    configured = (settings.git_commit_sha or "").strip()
+    if configured:
+        return configured[:12]
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=os.getcwd(),
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=1,
+        ).strip()
+    except Exception:
+        return None
+
+
+def _health_item(ok: bool, detail: str, **extra) -> dict:
+    return {"ok": bool(ok), "detail": detail, **extra}
 
 
 async def _write_auth_admin_event(
@@ -1200,52 +1227,175 @@ async def deployment_health(_: str = Depends(require_admin)):
     from ..db import valkey as _vk
     from ..services.emailer import is_email_configured
     from ..config import settings as s
+    from ..db.sync import _BASE_PARAMS, _all_tokens
 
     results: dict = {}
+    pool = _pg()
 
     # PostgreSQL
-    pool = _pg()
     if pool:
         try:
             await pool.fetchval("SELECT 1")
-            results["postgres"] = {"ok": True, "detail": "Connected"}
+            results["postgres"] = _health_item(True, "Connected")
         except Exception as exc:
-            results["postgres"] = {"ok": False, "detail": str(exc)}
+            results["postgres"] = _health_item(False, str(exc))
     else:
-        results["postgres"] = {"ok": False, "detail": get_init_error() or "Not configured"}
+        results["postgres"] = _health_item(False, get_init_error() or "Not configured")
 
     # Valkey / Redis
     try:
         vk = _vk.get_client()
         if vk:
             await vk.ping()
-            results["valkey"] = {"ok": True, "detail": "Connected"}
+            results["valkey"] = _health_item(True, "Connected")
         else:
-            results["valkey"] = {"ok": False, "detail": "Not configured (VALKEY_URL missing)"}
+            results["valkey"] = _health_item(False, "Not configured (VALKEY_URL missing)")
     except Exception as exc:
-        results["valkey"] = {"ok": False, "detail": str(exc)}
+        results["valkey"] = _health_item(False, str(exc))
 
-    # Teable
-    try:
-        import httpx
+    # Teable — check every configured operational table with any configured token.
+    teable_tables = {
+        "projects": s.teable_table_id,
+        "invoices": s.teable_invoice_table_id,
+        "web_invoices": s.teable_web_invoice_table_id,
+        "status": s.teable_status_table_id,
+    }
+    table_checks: dict[str, dict] = {}
+    tokens = _all_tokens()
+    async def _check_teable_table(name: str, table_id: str | None):
+        if not table_id:
+            table_checks[name] = _health_item(False, "Table ID not configured")
+            return
+        if not tokens:
+            table_checks[name] = _health_item(False, "No Teable token configured")
+            return
+        best_error = "No successful token"
         async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(
-                f"{s.teable_base_url}/api/table/{s.teable_table_id}/record",
-                headers={"Authorization": f"Bearer {s.teable_api_token}"},
-                params={"take": 1},
-            )
-            if r.status_code < 400:
-                results["teable"] = {"ok": True, "detail": f"HTTP {r.status_code}"}
-            else:
-                results["teable"] = {"ok": False, "detail": f"HTTP {r.status_code}"}
+            for token in tokens:
+                try:
+                    r = await client.get(
+                        f"{s.teable_base_url.rstrip('/')}/api/table/{table_id}/record",
+                        headers={"Authorization": f"Bearer {token}"},
+                        params={**_BASE_PARAMS, "take": 1},
+                    )
+                    if r.status_code < 400:
+                        table_checks[name] = _health_item(True, f"HTTP {r.status_code}", table_id=table_id)
+                        return
+                    best_error = f"HTTP {r.status_code}"
+                except Exception as exc:
+                    best_error = str(exc)[:180]
+        table_checks[name] = _health_item(False, best_error, table_id=table_id)
+
+    try:
+        await asyncio.gather(*[_check_teable_table(name, table_id) for name, table_id in teable_tables.items()])
+        results["teable"] = _health_item(
+            all(item.get("ok") for item in table_checks.values()),
+            "All configured tables reachable" if all(item.get("ok") for item in table_checks.values()) else "One or more tables failed",
+            tables=table_checks,
+        )
     except Exception as exc:
-        results["teable"] = {"ok": False, "detail": str(exc)}
+        results["teable"] = _health_item(False, str(exc), tables=table_checks)
 
     # Email (Brevo)
     results["email"] = {
         "ok": is_email_configured(),
         "detail": "Brevo configured" if is_email_configured() else "BREVOAPIKEY not set",
     }
+
+    results["openrouter"] = _health_item(
+        bool(s.openrouter_api_key),
+        f"Configured model: {s.openrouter_model}" if s.openrouter_api_key else "OPENROUTER_API_KEY not set",
+        model=s.openrouter_model,
+    )
+
+    if pool:
+        try:
+            auth_row = await pool.fetchrow(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE revoked_at IS NULL AND expires_at > NOW())::int AS active,
+                  COUNT(*) FILTER (WHERE revoked_at IS NOT NULL)::int AS revoked,
+                  COUNT(*) FILTER (WHERE expires_at <= NOW() AND revoked_at IS NULL)::int AS expired,
+                  MAX(last_seen_at) AS last_seen_at
+                FROM auth_sessions
+                """
+            )
+            results["auth_sessions"] = _health_item(
+                True,
+                f"{int(auth_row['active'] or 0)} active sessions",
+                active=int(auth_row["active"] or 0),
+                revoked=int(auth_row["revoked"] or 0),
+                expired=int(auth_row["expired"] or 0),
+                last_seen_at=auth_row["last_seen_at"].isoformat() if auth_row["last_seen_at"] else None,
+            )
+        except Exception as exc:
+            results["auth_sessions"] = _health_item(False, str(exc))
+
+        try:
+            sync_rows = await pool.fetch(
+                """
+                SELECT DISTINCT ON (source)
+                       source, synced_at, total, created, updated, unchanged, duration_ms, error
+                FROM sync_log
+                ORDER BY source, synced_at DESC NULLS LAST
+                """
+            )
+            sync_by_source = {}
+            stale_sources = []
+            failed_sources = []
+            for row in sync_rows:
+                item = _row_to_dict(row)
+                source = item.get("source") or "unknown"
+                sync_by_source[source] = item
+                if item.get("error"):
+                    failed_sources.append(source)
+                synced_at = row["synced_at"]
+                if synced_at is None or (datetime.now(tz=synced_at.tzinfo) - synced_at).total_seconds() > 900:
+                    stale_sources.append(source)
+            required_sources = {"projects", "invoices", "web_invoices", "status"}
+            seen_sources = set(sync_by_source)
+            missing_sources = sorted(required_sources - seen_sources)
+            stale_sources.extend(missing_sources)
+            results["sync_freshness"] = _health_item(
+                not stale_sources and not failed_sources,
+                "Mirror sync is fresh" if not stale_sources and not failed_sources else "Stale/missing/error sync sources found",
+                sources=sync_by_source,
+                stale_sources=sorted(set(stale_sources)),
+                failed_sources=sorted(set(failed_sources)),
+            )
+            results["cron_jobs"] = _health_item(
+                not stale_sources,
+                "Background sync/aging jobs have recent sync output" if not stale_sources else "One or more background jobs may be stale",
+                expected_jobs=["teable-sync", "invoice-aging-refresh", "audit-worker"],
+                sync_backed=True,
+                stale_sources=sorted(set(stale_sources)),
+            )
+        except Exception as exc:
+            results["sync_freshness"] = _health_item(False, str(exc))
+            results["cron_jobs"] = _health_item(False, str(exc))
+
+        try:
+            failed_webhooks = await pool.fetchval(
+                """
+                SELECT COUNT(*)::int
+                FROM audit_log
+                WHERE path ILIKE '/api/webhooks/%'
+                  AND status >= 400
+                  AND ts > NOW() - INTERVAL '24 hours'
+                """
+            )
+            results["failed_webhooks"] = _health_item(
+                int(failed_webhooks or 0) == 0,
+                f"{int(failed_webhooks or 0)} failed webhook requests in 24h",
+                failed_24h=int(failed_webhooks or 0),
+            )
+        except Exception as exc:
+            results["failed_webhooks"] = _health_item(False, str(exc))
+    else:
+        results["auth_sessions"] = _health_item(False, "PostgreSQL unavailable")
+        results["sync_freshness"] = _health_item(False, "PostgreSQL unavailable")
+        results["cron_jobs"] = _health_item(False, "PostgreSQL unavailable")
+        results["failed_webhooks"] = _health_item(False, "PostgreSQL unavailable")
 
     # Env vars
     env_checks = {
@@ -1254,13 +1404,21 @@ async def deployment_health(_: str = Depends(require_admin)):
         "APP_SECRET":    s.app_secret != "fintrack-dev-secret-change-me",
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
+        "OPENROUTER_API_KEY": bool(s.openrouter_api_key),
     }
     results["env"] = {
         "ok": all(env_checks.values()),
         "checks": env_checks,
     }
 
-    results["overall"] = all(v.get("ok") for v in results.values() if isinstance(v, dict))
+    results["deployment"] = {
+        "ok": True,
+        "version": s.app_version,
+        "commit": _git_commit_sha(),
+        "frontend_url": s.frontend_url,
+        "hf_space_id": s.hf_space_id,
+    }
+    results["overall"] = all(v.get("ok") for v in results.values() if isinstance(v, dict) and "ok" in v)
     return results
 
 

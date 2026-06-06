@@ -248,3 +248,17 @@ class TestAuditUtils:
         assert os_ == "Unknown"
         assert browser == "Unknown"
         assert device == "desktop"
+
+
+class TestAdminHealthUtils:
+    """Unit-level: deployment health helper payloads."""
+
+    def test_health_item_shape(self):
+        try:
+            from app.routers.admin import _health_item
+        except Exception:
+            pytest.skip("Cannot import admin router")
+        item = _health_item(True, "Connected", latency_ms=12)
+        assert item["ok"] is True
+        assert item["detail"] == "Connected"
+        assert item["latency_ms"] == 12
