@@ -25,13 +25,32 @@ import time
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from ..config import settings
-from .deps import require_auth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-async def _require_email_auth(request: Request, role: str = Depends(require_auth)) -> str:
-    """Dependency: valid token + must be an email-auth session (not legacy password)."""
+async def _require_email_auth(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> str:
+    """
+    Dependency for profile/change-password endpoints.
+    Validates the token, attaches session state, then enforces email-auth.
+    Uses a local import to avoid the auth↔deps circular import.
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    role = verify_token(token)
+    if role is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    request.state.role = role
+    request.state.token_hint = token[:16]
+    request.state.is_email_auth = False
+    # Local import — deps imports verify_token from this module so we cannot
+    # import deps at module level without creating a circular dependency.
+    from .deps import _attach_auth_session
+    await _attach_auth_session(request, token[:16])
     if not getattr(request.state, "is_email_auth", False):
         raise HTTPException(status_code=403, detail="This endpoint requires email authentication")
     return role
