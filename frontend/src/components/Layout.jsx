@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, UserCircle2
+  Plus, Landmark
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -230,16 +230,6 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
             </>
           )}
         </button>
-
-        <NavLink
-          to="/profile"
-          title={collapsed ? 'Profile' : undefined}
-          aria-label={collapsed ? 'Profile' : undefined}
-          className={({ isActive }) => `runey-nav-link ${collapsed ? 'is-collapsed' : ''} ${isActive ? 'active' : ''}`}
-        >
-          <UserCircle2 size={15} aria-hidden="true" style={{ flexShrink: 0 }} />
-          {!collapsed && <span className="flex-1 truncate font-medium">Profile</span>}
-        </NavLink>
 
         <button
           onClick={logout}

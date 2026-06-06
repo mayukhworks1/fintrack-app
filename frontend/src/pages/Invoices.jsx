@@ -179,8 +179,8 @@ const DEFAULT_INVOICE_COLUMN_WIDTHS = {
   project: 300,
   category: 150,
   milestone: 150,
-  raised_by: 130,
-  raised_date: 110,
+  raised_by: 220,
+  raised_date: 120,
   amount_raised: 130,
   amount_with_tax: 130,
   amount_received: 130,
@@ -3128,10 +3128,11 @@ export default function Invoices() {
                             <span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Category'] || '—'}</span>
                           </td>
                           <td className="tbl-cell" style={{ width: columnWidths.milestone }}><span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Milestone'] || '—'}</span></td>
-                          <td className="tbl-cell" style={{ width: columnWidths.raised_by }}>
+                          <td className="tbl-cell min-w-0" style={{ width: columnWidths.raised_by, overflow: 'hidden' }}>
                             {f['Raised By']
-                              ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                                  <User size={9} />{f['Raised By']}
+                              ? <span className="inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" title={f['Raised By']} style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
+                                  <User size={9} style={{ flexShrink: 0 }} />
+                                  <span className="min-w-0 truncate">{f['Raised By']}</span>
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
