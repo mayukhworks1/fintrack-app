@@ -3,9 +3,12 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
+    // happy-dom is ESM-native; jsdom causes ERR_REQUIRE_ESM via html-encoding-sniffer
+    environment: 'happy-dom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    // Exclude node_modules from transformation except packages that need it
+    server: { deps: { inline: ['@testing-library/jest-dom'] } },
   },
   plugins: [react()],
   server: {

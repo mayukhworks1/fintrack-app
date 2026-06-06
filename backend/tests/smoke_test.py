@@ -135,8 +135,8 @@ class TestEmailer:
         except Exception:
             pytest.skip("Cannot import emailer")
         monkeypatch.setattr(settings, "brevoapikey", None, raising=False)
-        monkeypatch.setattr(settings, "resend_api_key", None, raising=False)
-        monkeypatch.setattr(settings, "resendapikey", None, raising=False)
+        monkeypatch.setattr(settings, "smtp_from_email", None, raising=False)
+        monkeypatch.setattr(settings, "smtp_username", None, raising=False)
         assert not emailer.is_email_configured()
 
     def test_configured_with_key(self, monkeypatch):
