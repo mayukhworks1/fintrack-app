@@ -1880,16 +1880,15 @@ export default function Invoices() {
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
 
-  // Open new drawer automatically when navigated here with ?new=1
+  // Open new drawer when navigated here with ?new=1 (works even if already on /invoices)
   useEffect(() => {
     if (searchParams.get('new') === '1') {
-      openNew()
+      setDrawer({ mode: 'new', invoice: null })
       const next = new URLSearchParams(searchParams)
       next.delete('new')
       setSearchParams(next, { replace: true })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
   const openRecordPayment = r => setDrawer({
     mode: 'payment',
     invoice: r,

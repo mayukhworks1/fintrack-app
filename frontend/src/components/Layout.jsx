@@ -15,23 +15,25 @@ import { useAuth } from '../context/AuthContext'
 const NEW_OPTIONS = [
   {
     id: 'invoice',
-    label: 'New Invoice',
-    sub: 'Raise an invoice for a client',
+    label: 'Invoice',
+    sub: 'Raise & track a client payment',
     icon: Receipt,
     to: '/invoices?new=1',
     accent: '#7d95ff',
     accentBg: 'rgba(125,149,255,0.12)',
     accentBorder: 'rgba(125,149,255,0.22)',
+    badge: '↵ Enter',
   },
   {
     id: 'project',
-    label: 'New Project',
-    sub: 'Start tracking a new engagement',
+    label: 'Project',
+    sub: 'Start a new client engagement',
     icon: Layers,
     to: '/projects/new',
     accent: '#84e254',
     accentBg: 'rgba(132,226,84,0.10)',
     accentBorder: 'rgba(132,226,84,0.20)',
+    badge: null,
   },
 ]
 
@@ -82,7 +84,13 @@ function NewQuickAction({ collapsed }) {
   // Close on outside click / Escape
   useEffect(() => {
     if (!open) return
-    const onKey = (e) => { if (e.key === 'Escape') closePopover() }
+    const onKey = (e) => {
+      if (e.key === 'Escape') { closePopover(); return }
+      if (e.key === 'Enter') {
+        const opt = NEW_OPTIONS.find(o => o.id === hovered)
+        if (opt) pick(opt)
+      }
+    }
     const onDown = (e) => {
       if (btnRef.current?.contains(e.target)) return
       closePopover()
@@ -177,15 +185,15 @@ function NewQuickAction({ collapsed }) {
                 {opt.sub}
               </p>
             </div>
-            {opt.id === 'invoice' && (
+            {opt.badge && (
               <span style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                fontSize: 9, fontWeight: 600, letterSpacing: '0.04em',
                 padding: '3px 7px', borderRadius: 8,
                 color: opt.accent, background: opt.accentBg,
                 border: `1px solid ${opt.accentBorder}`,
-                flexShrink: 0,
+                flexShrink: 0, fontFamily: 'monospace',
               }}>
-                Default
+                {opt.badge}
               </span>
             )}
           </button>
@@ -250,15 +258,16 @@ function BrandIcon({ size = 28 }) {
   )
 }
 
-const nav = [
-  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true },
-  { to: '/projects',  label: 'Projects',     icon: FolderKanban },
-  { to: '/invoices',  label: 'Invoices',     icon: Receipt },
-  { to: '/tax',        label: 'Tax Ledger',   icon: Landmark },
-  { to: '/analytics', label: 'Analytics',    icon: BarChart3 },
-  { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText },
-  { to: '/report',    label: 'Report',       icon: FileText },
-  { to: '/status',    label: 'Status Board', icon: Activity },
+// roles that can see each nav item
+const NAV_ITEMS = [
+  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true,  roles: ['editor','viewer'] },
+  { to: '/projects',  label: 'Projects',     icon: FolderKanban,                roles: ['editor','viewer'] },
+  { to: '/invoices',  label: 'Invoices',     icon: Receipt,                     roles: ['editor','viewer'] },
+  { to: '/tax',       label: 'Tax Ledger',   icon: Landmark,                    roles: ['editor'] },
+  { to: '/analytics', label: 'Analytics',    icon: BarChart3,                   roles: ['editor','viewer'] },
+  { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText,           roles: ['editor'] },
+  { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'] },
+  { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'] },
 ]
 
 function OfflineBanner({ collapsed }) {
@@ -286,7 +295,8 @@ function OfflineBanner({ collapsed }) {
 
 function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
-  const { logout, isEditor, user } = useAuth()
+  const { logout, isEditor, isViewer, role, user } = useAuth()
+  const visibleNav = NAV_ITEMS.filter(item => item.roles.includes(role))
 
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'My Account'
   const initials = user?.full_name
@@ -344,11 +354,12 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         ) : null}
       </div>
 
-      <NewQuickAction collapsed={collapsed} />
+      {/* Only editors can create things */}
+      {isEditor && <NewQuickAction collapsed={collapsed} />}
 
       {/* Nav links */}
       <nav className={`runey-nav ${collapsed ? 'is-collapsed' : ''}`} aria-label="Main navigation">
-        {nav.map(({ to, label, icon: Icon, end }) => (
+        {visibleNav.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
