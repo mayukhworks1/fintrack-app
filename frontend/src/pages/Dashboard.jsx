@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -7,6 +7,7 @@ import {
   ArrowRight, Flame, Activity, ShieldCheck
 } from 'lucide-react'
 import EmptyState from '../components/EmptyState'
+import InvoiceActivityChart from '../components/InvoiceActivityChart'
 import ProjectCard from '../components/ProjectCard'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
@@ -249,6 +250,16 @@ export default function Dashboard() {
 
   const { data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchAll, 5_000)
   const updatedLabel = useRelativeTime(lastUpdated)
+
+  // Invoice records for the activity timeline chart
+  const [invoiceRecords, setInvoiceRecords] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    api.invoices.list({ limit: 400, order_by: 'Raised Date', order: 'desc' })
+      .then(r => { if (!cancelled) setInvoiceRecords(r?.records || []) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const s      = data?.summary
   const recent = data?.records || []
@@ -568,6 +579,28 @@ export default function Dashboard() {
           }
         </div>
       </section>
+      )}
+
+      {/* ── Invoice activity timeline ── */}
+      {invoiceRecords.length > 0 && (
+        <section aria-label="Invoice activity timeline">
+          <div className="card overflow-hidden" style={{ padding: 0 }}>
+            <div className="flex items-center justify-between px-5 pt-4 pb-2">
+              <div>
+                <p className="text-sm font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>Invoice activity</p>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  Cumulative billing · bar height = amount ·
+                  <span className="inline-flex items-center gap-1 ml-1">
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid
+                    <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#fb7185' }} />overdue
+                    <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#94a3b8' }} />pending
+                  </span>
+                </p>
+              </div>
+            </div>
+            <InvoiceActivityChart records={invoiceRecords} days={60} className="px-2 pb-1" />
+          </div>
+        </section>
       )}
 
       {/* ── Middle row ── */}

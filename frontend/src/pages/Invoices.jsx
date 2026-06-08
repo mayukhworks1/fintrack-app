@@ -22,6 +22,7 @@ import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLink
 import clsx from 'clsx'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
+import InvoiceActivityChart from '../components/InvoiceActivityChart'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Dropdown options are derived live from invoice records — no hardcoded fallbacks
@@ -2008,6 +2009,26 @@ export default function Invoices() {
           />
         </ExecutiveStatGrid>
       </ExecutiveHero>
+
+      {/* ── Invoice activity chart ── */}
+      {allRecords.length > 0 && (
+        <div className="card overflow-hidden" style={{ padding: 0 }}>
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div>
+              <p className="text-sm font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>Invoice activity · last 60 days</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                Cumulative billing · bar height = amount ·&nbsp;
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid&nbsp;
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#fb7185' }} />overdue&nbsp;
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />pending
+                </span>
+              </p>
+            </div>
+          </div>
+          <InvoiceActivityChart records={allRecords} days={60} className="px-2 pb-1" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_340px] gap-4">
         <ExecutivePanel
