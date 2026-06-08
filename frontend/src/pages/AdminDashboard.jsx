@@ -282,14 +282,21 @@ function DeploymentChecklist() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts = {}) => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.deploymentHealth({ fresh: true })) }
-    catch (e) { setError(e.message || 'Deployment health failed') }
-    finally { setLoading(false) }
+    try { setData(await api.admin.deploymentHealth({ fresh: true, timeout: 6000, ...opts })) }
+    catch (e) {
+      if (e?.name === 'AbortError') return
+      setError(e.message || 'Deployment health failed')
+    }
+    finally { if (!opts.signal?.aborted) setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const controller = new AbortController()
+    load({ signal: controller.signal })
+    return () => controller.abort()
+  }, [load])
 
   const checks = useMemo(() => {
     if (!data) return []
@@ -376,16 +383,28 @@ function OverviewTab({ onOpenHistoryDrilldown }) {
 
   const load = useCallback(async (opts = {}) => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.stats(opts)) }
-    catch (e) { setError(e.message) }
-    finally { setLoading(false) }
+    try { setData(await api.admin.stats({ timeout: 6000, ...opts })) }
+    catch (e) {
+      if (e?.name === 'AbortError') return
+      setError(e.message)
+    }
+    finally { if (!opts.signal?.aborted) setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const controller = new AbortController()
+    load({ signal: controller.signal })
+    return () => controller.abort()
+  }, [load])
 
-  if (loading) return <StatSkeleton />
-  if (error)   return <Err msg={error} onRetry={load} />
-  if (!data)   return null
+  if (!data) {
+    return (
+      <div className="space-y-6">
+        <DeploymentChecklist />
+        {loading ? <StatSkeleton /> : error ? <Err msg={error} onRetry={() => load({ fresh: true })} /> : null}
+      </div>
+    )
+  }
 
   const total24h = data.audit_24h || 0
   const err4xx   = data.audit_4xx_24h || 0
