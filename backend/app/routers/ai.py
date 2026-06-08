@@ -154,11 +154,12 @@ def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
         lines.append(
             f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
             f"{f.get('Category','?')} | {f.get('Payment Status','?')} | "
+            f"Raised By: {f.get('Raised By','?')} | "
             f"Raised: ₹{float(f.get('Amount Raised') or 0):,.0f} | "
             f"Tax: ₹{float(f.get('Amount with Tax') or 0):,.0f} | "
             f"Received: ₹{float(f.get('Amount Received') or 0):,.0f} | "
             f"Outstanding: ₹{float(f.get('Outstanding Amount') or 0):,.0f} | "
-            f"Raised: {f.get('Raised Date','?')} | "
+            f"Raised Date: {f.get('Raised Date','?')} | "
             f"Aging: {f.get('Agening (Days)','0')} days"
         )
     return "\n".join(lines)
@@ -183,6 +184,7 @@ def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 6
         lines.append(
             f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
             f"{f.get('Payment Status','?')} | "
+            f"Raised By: {f.get('Raised By','?')} | "
             f"Raised ₹{float(f.get('Amount Raised') or 0):,.0f} | "
             f"Tax ₹{float(f.get('Amount with Tax') or 0):,.0f} | "
             f"Received ₹{float(f.get('Amount Received') or 0):,.0f} | "
