@@ -160,6 +160,26 @@ def _safe_redirect_path(value: str | None) -> str:
     return path[:300] or "/"
 
 
+def _admin_user_review_links(request: Request, user_id: str) -> dict[str, str]:
+    origin = app_origin_from_request(request)
+    if not origin:
+        origin = settings.frontend_url.rstrip("/") if settings.frontend_url and settings.frontend_url != "*" else ""
+    base = f"{origin}/admin" if origin else "/admin"
+    return {
+        "review": f"{base}?tab=users&subtab=auth-users&user={user_id}",
+        "approve": f"{base}?tab=users&subtab=auth-users&user={user_id}&decision=approve",
+        "reject": f"{base}?tab=users&subtab=auth-users&user={user_id}&decision=reject",
+    }
+
+
+def _button_html(href: str, label: str, bg: str) -> str:
+    return (
+        f'<a href="{href}" style="display:inline-block;margin:4px 6px 4px 0;'
+        f'padding:11px 18px;background:{bg};color:#ffffff;border-radius:10px;'
+        f'text-decoration:none;font-weight:700">{label}</a>'
+    )
+
+
 async def create_oauth_state(provider: str, redirect_to: str | None, request: Request) -> str:
     """Create a short-lived, one-time OAuth state stored in PostgreSQL."""
     pool = get_pool()
@@ -323,6 +343,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
         )
     await _write_auth_event("password_register_pending", request, target_user_id=str(row["id"]), email=email_norm, status=row["status"])
     if settings.auth_admin_notify_email:
+        links = _admin_user_review_links(request, str(row["id"]))
         await send_email(
             settings.auth_admin_notify_email,
             "FinTrack user pending approval",
@@ -330,9 +351,33 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
                 f"A new FinTrack user is pending approval.\n\n"
                 f"Email: {email_norm}\n"
                 f"Name: {(full_name or '').strip() or '-'}\n\n"
-                f"Open Admin Panel -> Auth Users to approve or reject."
+                f"Review: {links['review']}\n"
+                f"Approve: {links['approve']}\n"
+                f"Reject: {links['reject']}\n\n"
+                f"You must be signed in as superadmin/admin to approve or reject."
+            ),
+            html=(
+                "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
+                "<h2 style=\"margin:0 0 8px\">FinTrack user pending approval</h2>"
+                f"<p><b>Email:</b> {email_norm}<br><b>Name:</b> {(full_name or '').strip() or '-'}</p>"
+                f"{_button_html(links['approve'], 'Approve user', '#16a34a')}"
+                f"{_button_html(links['reject'], 'Reject user', '#dc2626')}"
+                f"{_button_html(links['review'], 'Review in Admin', '#2563eb')}"
+                "<p style=\"font-size:12px;color:#6b7280\">These buttons open the Admin Panel. Final action still requires an authenticated admin session.</p>"
+                "</div>"
             ),
         )
+    await send_email(
+        email_orig,
+        "Your FinTrack account is pending approval",
+        "Your FinTrack account has been created and is waiting for superadmin approval. You will receive another email after approval.",
+        html=(
+            "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
+            "<h2 style=\"margin:0 0 8px\">FinTrack account received</h2>"
+            "<p>Your account is waiting for superadmin approval. You will receive another email after approval.</p>"
+            "</div>"
+        ),
+    )
     return {"created": True, "status": row["status"]}
 
 
@@ -588,9 +633,9 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         """
                         INSERT INTO auth_users (
                             email, email_normalized, full_name, status,
-                            email_verified_at, metadata, updated_at
+                            email_verified_at, teable_email, metadata, updated_at
                         )
-                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $4::jsonb, NOW())
+                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $1, $4::jsonb, NOW())
                         RETURNING id, email, full_name, status
                         """,
                         email_orig,
@@ -652,6 +697,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
             metadata={"provider_user_id": provider_user_id},
         )
         if created_pending and settings.auth_admin_notify_email:
+            links = _admin_user_review_links(request, str(user["id"]))
             await send_email(
                 settings.auth_admin_notify_email,
                 "FinTrack Google user pending approval",
@@ -659,7 +705,32 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                     f"A Google SSO user is pending approval.\n\n"
                     f"Email: {email_norm}\n"
                     f"Name: {full_name or '-'}\n\n"
-                    f"Open Admin Panel -> Users & Sessions to approve or reject."
+                    f"Review: {links['review']}\n"
+                    f"Approve: {links['approve']}\n"
+                    f"Reject: {links['reject']}\n\n"
+                    f"You must be signed in as superadmin/admin to approve or reject."
+                ),
+                html=(
+                    "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
+                    "<h2 style=\"margin:0 0 8px\">Google SSO user pending approval</h2>"
+                    f"<p><b>Email:</b> {email_norm}<br><b>Name:</b> {full_name or '-'}</p>"
+                    f"{_button_html(links['approve'], 'Approve user', '#16a34a')}"
+                    f"{_button_html(links['reject'], 'Reject user', '#dc2626')}"
+                    f"{_button_html(links['review'], 'Review in Admin', '#2563eb')}"
+                    "<p style=\"font-size:12px;color:#6b7280\">These buttons open the Admin Panel. Final action still requires an authenticated admin session.</p>"
+                    "</div>"
+                ),
+            )
+        if created_pending:
+            await send_email(
+                email_orig,
+                "Your FinTrack Google sign-in is pending approval",
+                "Your Google sign-in was received and is waiting for superadmin approval. You will receive another email after approval.",
+                html=(
+                    "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
+                    "<h2 style=\"margin:0 0 8px\">FinTrack approval pending</h2>"
+                    "<p>Your Google sign-in was received and is waiting for superadmin approval.</p>"
+                    "</div>"
                 ),
             )
         raise HTTPException(status_code=403, detail=f"User is {user['status']}")

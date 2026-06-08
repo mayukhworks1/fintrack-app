@@ -141,6 +141,8 @@ export default function App() {
     )
   }
 
+  const { isViewer } = useAuth()
+
   return (
     <>
       <Layout>
@@ -151,12 +153,12 @@ export default function App() {
               <Route path="/projects"     element={<Projects />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/invoices"     element={<Invoices />} />
-              <Route path="/tax"          element={<TaxLedger />} />
+              <Route path="/tax"          element={isViewer ? <ViewerGuard /> : <TaxLedger />} />
               <Route path="/analytics"    element={<Analytics />} />
-              <Route path="/ai"           element={<AIAssistant />} />
-              <Route path="/report"       element={<Report />} />
+              <Route path="/ai"           element={isViewer ? <ViewerGuard /> : <AIAssistant />} />
+              <Route path="/report"       element={isViewer ? <ViewerGuard /> : <Report />} />
               <Route path="/status"       element={<StatusBoard />} />
-              <Route path="/admin"        element={<AdminDashboard embedded={true} />} />
+              <Route path="/admin"        element={isViewer ? <ViewerGuard /> : <AdminDashboard embedded={true} />} />
               <Route path="/profile"      element={<Profile />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>
@@ -165,6 +167,17 @@ export default function App() {
       </Layout>
       <VercelAnalytics />
     </>
+  )
+}
+
+function ViewerGuard() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <p className="text-5xl mb-4">🔒</p>
+      <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Access restricted</p>
+      <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>You don't have permission to view this page.</p>
+      <Link to="/" className="btn-primary">Go to dashboard</Link>
+    </div>
   )
 }
 

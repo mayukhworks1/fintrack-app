@@ -223,10 +223,13 @@ export default function TaxLedger() {
   }, [selectedPeriodKey, useCustom, customFrom, customTo])
 
   // Period invoices by Raised Date. Tax calculations below use paid invoices only.
+  // GST/TDS only applies to INR/RS invoices — exclude foreign-currency records.
   const periodInvoices = useMemo(() =>
     allInvoices.filter(r => {
       const f = r.fields || {}
       if (f['Payment Status'] === 'Cancelled') return false
+      const cur = (f['Currency'] || 'RS').toString().trim().toUpperCase()
+      if (cur !== 'RS' && cur !== 'INR') return false
       return inPeriod(f['Raised Date'], period.from, period.to)
     }),
   [allInvoices, period])
