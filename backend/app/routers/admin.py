@@ -364,6 +364,7 @@ async def admin_auth_roles(_: str = Depends(require_admin)):
 
 @router.get("/auth/users")
 async def admin_auth_users(
+    user_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     role_key: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
@@ -378,6 +379,10 @@ async def admin_auth_users(
     where = ["1=1"]
     params: list = []
     idx = 1
+    if user_id:
+        where.append(f"u.id = ${idx}::uuid")
+        params.append(user_id)
+        idx += 1
     if status:
         where.append(f"u.status = ${idx}")
         params.append(status)
@@ -396,7 +401,7 @@ async def admin_auth_users(
         params.append(role_key)
         idx += 1
     if search:
-        where.append(f"(u.email ILIKE ${idx} OR COALESCE(u.full_name, '') ILIKE ${idx})")
+        where.append(f"(u.email ILIKE ${idx} OR COALESCE(u.full_name, '') ILIKE ${idx} OR COALESCE(u.teable_email, '') ILIKE ${idx})")
         params.append(f"%{search.strip()}%")
         idx += 1
     where_sql = " AND ".join(where)
@@ -436,6 +441,7 @@ async def admin_auth_users(
         )
         SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
                u.approved_at, u.disabled_at, u.email_verified_at, u.teable_email,
+               u.phone, u.job_title, u.department, u.company, u.location, u.timezone,
                COALESCE(role_agg.roles, ARRAY[]::text[]) AS roles,
                COALESCE(session_agg.session_count, 0) AS session_count,
                COALESCE(session_agg.active_session_count, 0) AS active_session_count,
@@ -1481,11 +1487,21 @@ async def admin_test_email(
                 status="sent" if delivery.get("sent") else "failed",
                 metadata={"configured": configured, "reason": delivery.get("reason")},
             )
+    reason  = delivery.get("reason", "unknown")
+    detail  = delivery.get("detail", "")
+    if delivery.get("sent"):
+        msg = "Email sent successfully"
+    elif reason == "email_not_configured":
+        msg = "Email not configured — set BREVOAPIKEY and SMTP_FROM_EMAIL in HF Space secrets"
+    elif reason == "no_recipient":
+        msg = "No recipient address — set AUTH_ADMIN_NOTIFY_EMAIL or pass 'to' in the request body"
+    else:
+        msg = f"Email delivery failed: {detail or reason}"
     return {
         "configured": configured,
         "delivery": delivery,
         "to": to_email or None,
-        "message": "Email sent successfully" if delivery.get("sent") else f"Email delivery failed: {delivery.get('reason')}",
+        "message": msg,
     }
 
 

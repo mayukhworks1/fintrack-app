@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import logging
 import traceback
-import urllib.error
-import urllib.request
-import json
 from typing import Iterable
+
+import httpx
 
 from ..config import settings
 
@@ -30,15 +29,16 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
         return {"sent": False, "reason": "email_not_configured"}
 
     from_email = settings.smtp_from_email or settings.smtp_username or ""
-    from_name = settings.smtp_from_name or "FinTrack"
+    from_name  = settings.smtp_from_name or "FinTrack"
+
     payload: dict = {
-        "sender": {"name": from_name, "email": from_email},
-        "to": [{"email": addr} for addr in recipients],
-        "subject": subject,
+        "sender":      {"name": from_name, "email": from_email},
+        "to":          [{"email": addr} for addr in recipients],
+        "subject":     subject,
         "textContent": text,
         "headers": {
             "X-Priority": "1",
-            "X-Mailer": "FinTrack",
+            "X-Mailer":   "FinTrack",
             "X-Category": "transactional",
         },
         "tags": ["transactional"],
@@ -46,26 +46,28 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
     if html:
         payload["htmlContent"] = html
 
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        "https://api.brevo.com/v3/smtp/email",
-        data=data,
-        headers={
-            "api-key": settings.brevoapikey,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            resp.read()
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                json=payload,
+                headers={
+                    "api-key":      settings.brevoapikey,
+                    "Content-Type": "application/json",
+                    "Accept":       "application/json",
+                },
+            )
+        if resp.is_success:
             logger.info("Brevo delivered to %s", recipients)
             return {"sent": True, "recipients": recipients, "backend": "brevo"}
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode(errors="replace")
-        logger.error("Brevo HTTP %s: %s", exc.code, body)
-        return {"sent": False, "reason": "brevo_error", "detail": f"HTTP {exc.code}: {body}"}
+        # Surface the full Brevo error so admins can diagnose
+        body = resp.text
+        logger.error("Brevo HTTP %s: %s", resp.status_code, body)
+        return {
+            "sent":   False,
+            "reason": "brevo_error",
+            "detail": f"HTTP {resp.status_code}: {body}",
+        }
     except Exception as exc:
         logger.error("Brevo delivery failed (%s): %s\n%s", type(exc).__name__, exc, traceback.format_exc())
         return {"sent": False, "reason": type(exc).__name__, "detail": str(exc)}
