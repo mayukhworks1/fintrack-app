@@ -1,4 +1,5 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
@@ -36,28 +37,44 @@ const NEW_OPTIONS = [
 
 function NewQuickAction({ collapsed }) {
   const [open, setOpen] = useState(false)
-  const [hovered, setHovered] = useState('invoice') // invoice selected by default
+  const [hovered, setHovered] = useState('invoice')
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
-  const ref = useRef(null)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
   const navigate = useNavigate()
 
   const openPopover = useCallback(() => {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    const POPOVER_W = 272
+    const POPOVER_H = 190 // approx
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    // Prefer below the button; fall back to above if not enough room
+    let top = rect.bottom + 8
+    if (top + POPOVER_H > vh - 12) top = rect.top - POPOVER_H - 8
+
+    // Prefer left-aligned with button; clamp to viewport
+    let left = rect.left
+    if (left + POPOVER_W > vw - 12) left = vw - POPOVER_W - 12
+    if (left < 12) left = 12
+
+    setPopoverPos({ top, left })
     setHovered('invoice')
-    setOpen(true)
     setMounted(true)
-    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    requestAnimationFrame(() => requestAnimationFrame(() => { setOpen(true); setVisible(true) }))
   }, [])
 
   const closePopover = useCallback(() => {
     setVisible(false)
-    setTimeout(() => { setOpen(false); setMounted(false) }, 220)
+    setOpen(false)
+    setTimeout(() => setMounted(false), 240)
   }, [])
 
   const pick = useCallback((opt) => {
     closePopover()
-    // If navigating to invoices with ?new=1, we navigate then trigger the drawer
-    // The Invoices page should listen for this query param
     navigate(opt.to)
   }, [closePopover, navigate])
 
@@ -65,114 +82,122 @@ function NewQuickAction({ collapsed }) {
   useEffect(() => {
     if (!open) return
     const onKey = (e) => { if (e.key === 'Escape') closePopover() }
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) closePopover() }
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target)) return
+      closePopover()
+    }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onClick)
-    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown, { passive: true })
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+    }
   }, [open, closePopover])
 
+  const popover = mounted && createPortal(
+    <div
+      role="dialog"
+      aria-label="Create new"
+      style={{
+        position: 'fixed',
+        top: popoverPos.top,
+        left: popoverPos.left,
+        zIndex: 99999,
+        width: 272,
+        background: 'linear-gradient(160deg, #1c2030 0%, #161a26 100%)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        borderRadius: 20,
+        boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.3)',
+        padding: '8px',
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'scale(1) translateY(0)' : 'scale(0.94) translateY(-6px)',
+        transformOrigin: 'top left',
+        transition: 'opacity 0.22s ease, transform 0.22s cubic-bezier(.34,1.56,.64,1)',
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+    >
+      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', padding: '6px 10px 8px', userSelect: 'none' }}>
+        Create new
+      </p>
+
+      {NEW_OPTIONS.map((opt) => {
+        const Icon = opt.icon
+        const isHov = hovered === opt.id
+        return (
+          <button
+            key={opt.id}
+            onClick={() => pick(opt)}
+            onMouseEnter={() => setHovered(opt.id)}
+            onFocus={() => setHovered(opt.id)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 12px',
+              borderRadius: 14,
+              border: `1px solid ${isHov ? opt.accentBorder : 'transparent'}`,
+              background: isHov ? opt.accentBg : 'transparent',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 0.15s, border-color 0.15s, transform 0.15s',
+              transform: isHov ? 'translateX(3px)' : 'translateX(0)',
+              marginBottom: 2,
+            }}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: isHov ? opt.accentBg : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${isHov ? opt.accentBorder : 'rgba(255,255,255,0.08)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'background 0.15s, border-color 0.15s',
+            }}>
+              <Icon size={18} style={{ color: isHov ? opt.accent : 'rgba(255,255,255,0.4)', transition: 'color 0.15s' }} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: isHov ? opt.accent : 'rgba(255,255,255,0.9)', margin: 0, transition: 'color 0.15s' }}>
+                {opt.label}
+              </p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '2px 0 0', lineHeight: 1.35 }}>
+                {opt.sub}
+              </p>
+            </div>
+            {opt.id === 'invoice' && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                padding: '3px 7px', borderRadius: 8,
+                color: opt.accent, background: opt.accentBg,
+                border: `1px solid ${opt.accentBorder}`,
+                flexShrink: 0,
+              }}>
+                Default
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>,
+    document.body
+  )
+
   return (
-    <div className="runey-quick-action" ref={ref} style={{ position: 'relative' }}>
+    <div className="runey-quick-action">
       <button
+        ref={btnRef}
         onClick={open ? closePopover : openPopover}
         className={`runey-new-button ${collapsed ? 'is-collapsed' : ''}`}
         title={collapsed ? 'Create new…' : undefined}
         aria-label={collapsed ? 'Create new' : undefined}
         aria-expanded={open}
-        style={{ position: 'relative' }}
       >
         <Plus size={collapsed ? 18 : 15}
           style={{ transition: 'transform 0.25s cubic-bezier(.34,1.56,.64,1)', transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }} />
         {!collapsed && <span>New</span>}
       </button>
-
-      {mounted && (
-        <div
-          role="dialog"
-          aria-label="Create new"
-          style={{
-            position: 'absolute',
-            left: collapsed ? 56 : 0,
-            bottom: collapsed ? 'auto' : 'calc(100% + 8px)',
-            top: collapsed ? 0 : 'auto',
-            zIndex: 9999,
-            width: 260,
-            background: 'var(--card-bg, #1a1e2a)',
-            border: '1px solid var(--card-border, rgba(255,255,255,0.10))',
-            borderRadius: 20,
-            boxShadow: '0 24px 60px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.2)',
-            padding: '8px',
-            opacity: visible ? 1 : 0,
-            transform: visible
-              ? 'scale(1) translateY(0)'
-              : (collapsed ? 'scale(0.92) translateX(-8px)' : 'scale(0.92) translateY(8px)'),
-            transformOrigin: collapsed ? 'left top' : 'bottom left',
-            transition: 'opacity 0.22s ease, transform 0.22s cubic-bezier(.34,1.56,.64,1)',
-            pointerEvents: visible ? 'auto' : 'none',
-          }}
-        >
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3, #7f8a9c)', padding: '6px 8px 8px', userSelect: 'none' }}>
-            What would you like to create?
-          </p>
-
-          {NEW_OPTIONS.map((opt) => {
-            const Icon = opt.icon
-            const isHov = hovered === opt.id
-            return (
-              <button
-                key={opt.id}
-                onClick={() => pick(opt)}
-                onMouseEnter={() => setHovered(opt.id)}
-                onFocus={() => setHovered(opt.id)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '10px 12px',
-                  borderRadius: 14,
-                  border: `1px solid ${isHov ? opt.accentBorder : 'transparent'}`,
-                  background: isHov ? opt.accentBg : 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.15s, border-color 0.15s, transform 0.12s',
-                  transform: isHov ? 'translateX(2px)' : 'translateX(0)',
-                  marginBottom: 2,
-                }}
-              >
-                <div style={{
-                  width: 38, height: 38, borderRadius: 12,
-                  background: isHov ? opt.accentBg : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${isHov ? opt.accentBorder : 'rgba(255,255,255,0.08)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'background 0.15s, border-color 0.15s',
-                }}>
-                  <Icon size={17} style={{ color: isHov ? opt.accent : 'var(--text-3, #7f8a9c)', transition: 'color 0.15s' }} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: isHov ? opt.accent : 'var(--text-1, #f4f7fb)', margin: 0, transition: 'color 0.15s' }}>
-                    {opt.label}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--text-3, #7f8a9c)', margin: '2px 0 0', lineHeight: 1.3 }}>
-                    {opt.sub}
-                  </p>
-                </div>
-                {opt.id === 'invoice' && (
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                    padding: '2px 6px', borderRadius: 6,
-                    color: opt.accent, background: opt.accentBg,
-                    flexShrink: 0, marginLeft: 'auto',
-                  }}>
-                    Default
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {popover}
     </div>
   )
 }
