@@ -1,8 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail, Clock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
+
+const OAUTH_ERROR_MESSAGES = {
+  pending_approval: 'Your account is awaiting superadmin approval. You'll be notified once it's activated.',
+  disabled:         'Your account has been disabled. Contact your administrator for help.',
+  rejected:         'Your account request was not approved. Contact your administrator if you think this is a mistake.',
+  google_error:     'Google sign-in failed. Please try again or use email login.',
+}
 
 export default function Login() {
   const { login, acceptToken } = useAuth()
@@ -22,6 +29,7 @@ export default function Login() {
   const [googleEnabled, setGoogleEnabled] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [pendingApproval, setPendingApproval] = useState(false)
   const inputRef = useRef(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -38,9 +46,12 @@ export default function Login() {
     const params = new URLSearchParams(window.location.search)
     const oauthError = params.get('oauth_error')
     if (oauthError) {
-      const message = params.get('message') || 'Google sign-in failed'
-      setError(oauthError === 'pending_approval' ? 'Your account is pending superadmin approval' : message)
       window.history.replaceState({}, '', '/login')
+      if (oauthError === 'pending_approval') {
+        setPendingApproval(true)
+        return
+      }
+      setError(OAUTH_ERROR_MESSAGES[oauthError] || params.get('message') || 'Google sign-in failed')
       return
     }
     const hash = window.location.hash?.replace(/^#/, '')
@@ -127,11 +138,17 @@ export default function Login() {
       navigate('/', { replace: true })
     } catch (err) {
       const msg = err?.message || 'Login failed'
-      setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
-        ? legacyMode ? 'Incorrect password — please try again' : 'Invalid email or password'
-        : msg.includes('403') || msg.toLowerCase().includes('pending_approval')
-          ? 'Your account is pending superadmin approval'
-        : msg)
+      if (msg.includes('403') || msg.toLowerCase().includes('pending_approval')) {
+        setPendingApproval(true)
+      } else {
+        setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
+          ? legacyMode ? 'Incorrect password — please try again' : 'Invalid email or password'
+          : msg.toLowerCase().includes('disabled')
+            ? OAUTH_ERROR_MESSAGES.disabled
+            : msg.toLowerCase().includes('rejected')
+              ? OAUTH_ERROR_MESSAGES.rejected
+              : msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -153,6 +170,56 @@ export default function Login() {
     } finally {
       setMailing(false)
     }
+  }
+
+  if (pendingApproval) {
+    return (
+      <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm animate-fade-in">
+          <div className="flex items-center justify-center gap-2.5 mb-8">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
+            >
+              <TrendingUp size={16} className="text-white" aria-hidden="true" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
+              FinTrack
+            </span>
+          </div>
+          <div
+            className="rounded-2xl p-7 text-center"
+            style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--card-border)',
+              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}
+            >
+              <Clock size={26} style={{ color: '#f59e0b' }} />
+            </div>
+            <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+              Account pending approval
+            </h1>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Your account has been created and is awaiting superadmin approval.
+              You'll be able to sign in once it's activated — usually within 24 hours.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPendingApproval(false)}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}
+            >
+              Back to sign in
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
