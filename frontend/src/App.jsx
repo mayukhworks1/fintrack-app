@@ -75,7 +75,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { status, isWeb, isAll, isAdmin } = useAuth()
+  const { status, isWeb, isAll, isAdmin, isViewer } = useAuth()
   const location = useLocation()
 
   useEffect(() => {
@@ -140,8 +140,6 @@ export default function App() {
       </ErrorBoundary>
     )
   }
-
-  const { isViewer } = useAuth()
 
   return (
     <>
