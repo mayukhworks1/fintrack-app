@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, acceptToken } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [fullName, setFullName] = useState('')
@@ -19,11 +19,64 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mailing, setMailing] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api.auth.providers()
+      .then((res) => { if (!cancelled) setGoogleEnabled(Boolean(res?.google)) })
+      .catch(() => { if (!cancelled) setGoogleEnabled(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const oauthError = params.get('oauth_error')
+    if (oauthError) {
+      const message = params.get('message') || 'Google sign-in failed'
+      setError(oauthError === 'pending_approval' ? 'Your account is pending superadmin approval' : message)
+      window.history.replaceState({}, '', '/login')
+      return
+    }
+    const hash = window.location.hash?.replace(/^#/, '')
+    if (!hash) return
+    const fragment = new URLSearchParams(hash)
+    const token = fragment.get('oauth_token')
+    if (!token) return
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError('')
+      setNotice('')
+      try {
+        await acceptToken(token)
+        const next = fragment.get('oauth_next') || '/'
+        window.history.replaceState({}, '', '/login')
+        if (!cancelled) navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true })
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message || 'Google sign-in failed')
+          window.history.replaceState({}, '', '/login')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [acceptToken, navigate])
+
+  const startGoogleLogin = () => {
+    if (loading) return
+    setError('')
+    setNotice('')
+    const next = '/'
+    window.location.assign(api.auth.googleStartUrl(next))
+  }
 
   const submit = async (e) => {
     e?.preventDefault()
@@ -147,6 +200,38 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4">
+            {googleEnabled && !resetToken && !registerMode && !legacyMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={startGoogleLogin}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                  style={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--text-1)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                    style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
+                    aria-hidden="true"
+                  >
+                    G
+                  </span>
+                  Continue with Google
+                </button>
+                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>
+                  <span className="h-px flex-1" style={{ background: 'var(--card-border)' }} />
+                  or
+                  <span className="h-px flex-1" style={{ background: 'var(--card-border)' }} />
+                </div>
+              </>
+            )}
+
             {/* Show email read-only on invite so user knows whose account this is */}
             {resetToken && isInvite && email && (
               <div className="rounded-xl px-3 py-2.5 text-sm flex items-center gap-2"

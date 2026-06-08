@@ -1308,6 +1308,16 @@ async def deployment_health(_: str = Depends(require_admin)):
         model=s.openrouter_model,
     )
 
+    google_sso_ok = bool(s.google_client_id and s.google_client_secret and s.frontend_url and s.frontend_url != "*")
+    results["google_sso"] = _health_item(
+        google_sso_ok,
+        "Google OAuth configured" if google_sso_ok else "Google OAuth is not fully configured",
+        client_id_present=bool(s.google_client_id),
+        client_secret_present=bool(s.google_client_secret),
+        redirect_uri=s.google_redirect_uri or "auto",
+        frontend_url=s.frontend_url,
+    )
+
     if pool:
         try:
             auth_row = await pool.fetchrow(
@@ -1405,6 +1415,8 @@ async def deployment_health(_: str = Depends(require_admin)):
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
         "OPENROUTER_API_KEY": bool(s.openrouter_api_key),
+        "GOOGLE_CLIENT_ID": bool(s.google_client_id),
+        "GOOGLE_CLIENT_SECRET": bool(s.google_client_secret),
     }
     env_guidance = {
         "POSTGRES_URL": "Required for PG mirror, audit logs, auth users, sessions, reports, and admin dashboards.",
@@ -1413,6 +1425,8 @@ async def deployment_health(_: str = Depends(require_admin)):
         "BREVOAPIKEY": "Required for invite, reset-password, and email test delivery.",
         "FRONTEND_URL": "Required for correct reset/invite links and OAuth redirects.",
         "OPENROUTER_API_KEY": "Required for AI assistant and report generation.",
+        "GOOGLE_CLIENT_ID": "Required for Google SSO. Use a Google OAuth Web Client.",
+        "GOOGLE_CLIENT_SECRET": "Required for Google SSO token exchange. Keep it secret.",
     }
     missing_env = [name for name, ok in env_checks.items() if not ok]
     results["env"] = {

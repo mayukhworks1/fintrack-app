@@ -677,6 +677,20 @@ CREATE TABLE IF NOT EXISTS auth_password_resets (
 );
 CREATE INDEX IF NOT EXISTS apr_user_idx ON auth_password_resets (user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS auth_oauth_states (
+    state_hash  TEXT        PRIMARY KEY,
+    provider    VARCHAR(30) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    ip          VARCHAR(45),
+    user_agent  TEXT,
+    redirect_to TEXT,
+    metadata    JSONB       NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS aos_provider_idx ON auth_oauth_states (provider, created_at DESC);
+CREATE INDEX IF NOT EXISTS aos_expires_idx ON auth_oauth_states (expires_at DESC);
+
 CREATE TABLE IF NOT EXISTS auth_events (
     id             BIGSERIAL    PRIMARY KEY,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

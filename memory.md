@@ -1,7 +1,7 @@
 # FinTrack — Project Memory
 
-> Last updated: 2026-06-05
-> Commit baseline: `1c0c516` on `main`
+> Last updated: 2026-06-08
+> Commit baseline: Google SSO implementation in progress on `main`
 > Author: Mayukh · mayukhj2407@gmail.com
 
 ---
@@ -162,6 +162,23 @@ Server-side logout: `POST /api/auth/logout` marks `is_active=false, expires_at=N
 - This tranche does **not** yet enforce per-module/scoped RBAC on business data routes. Existing legacy route access remains intact intentionally.
 - Validation so far: `python3 -m compileall backend/app`, `frontend npm run build`, `git diff --check`, `backend/.venv/bin/python -c "from app.main import app; print(app.title)"`, and direct PBKDF2 `hash_password/verify_password` smoke checks pass after SMTP/reset additions.
 - Production push gate still should include a live admin Auth Users smoke test after deployment because these endpoints depend on the real PostgreSQL auth tables and request auth context.
+
+### Google SSO foundation (additive)
+- Backend Google OAuth endpoints:
+  - `GET /api/auth/providers` is public and returns `{ google: boolean }`; frontend only shows the Google button when configured.
+  - `GET /api/auth/google/start?next=/` starts Google OAuth.
+  - `GET /api/auth/google/callback` exchanges Google code, verifies tokeninfo (`aud`, `iss`, verified email), then creates a normal FinTrack token/session.
+- Google OAuth state is one-time and PostgreSQL-backed in `auth_oauth_states`; state is hashed, expires in 10 minutes, and is marked `used_at` on callback.
+- Google identities are stored in `auth_identities` with `provider='google'` and linked to `auth_users`.
+- Existing users are linked by normalized email; brand-new Google users are created as `pending_approval` and cannot log in until superadmin approves them.
+- Google login writes `auth_sessions`, legacy `login_sessions`, and `auth_events` (`google_register_pending`, `google_login_blocked`, `google_login_success`).
+- Frontend `Login.jsx` has “Continue with Google”; callback token arrives in URL fragment, is verified through `/api/auth/verify`, persisted in AuthContext, then removed from URL.
+- Required production secrets:
+  - `GOOGLE_CLIENT_ID`
+  - `GOOGLE_CLIENT_SECRET`
+  - `GOOGLE_REDIRECT_URI=https://mayukhj24-fintrack-api.hf.space/api/auth/google/callback`
+  - `FRONTEND_URL=https://twfintracker.worksmayukh.space` or the exact live frontend origin.
+- Admin deployment health now includes Google SSO evidence and env checks for Google client ID/secret.
 
 ---
 

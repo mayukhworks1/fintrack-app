@@ -105,6 +105,35 @@ export function AuthProvider({ children }) {
     setStatus('authed')
   }, [])
 
+  const acceptToken = useCallback(async (token) => {
+    if (!token) throw new Error('Missing login token')
+    try {
+      setAuthToken(token)
+      const res = await api.auth.verify()
+      const r = res?.role || 'editor'
+      setRole(r)
+      setStoredRole(r)
+      setAuthRole(res?.auth_role || '')
+      setUser(res?.user || null)
+      setStoredJson(USER_KEY, res?.user || null)
+      try {
+        if (res?.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
+        else localStorage.removeItem(AUTH_ROLE_KEY)
+      } catch {}
+      setStatus('authed')
+      return res
+    } catch (err) {
+      clearAuthToken()
+      setStoredRole(null)
+      setStoredJson(USER_KEY, null)
+      try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
+      setAuthRole('')
+      setUser(null)
+      setStatus('unauthed')
+      throw err
+    }
+  }, [])
+
   const logout = useCallback(() => {
     // Fire server-side session invalidation first (fire-and-forget).
     // The backend marks is_active=false so the admin panel shows "Logged out"
@@ -134,6 +163,7 @@ export function AuthProvider({ children }) {
       isAll:    role === 'all',
       isAdmin:  role === 'admin',
       login,
+      acceptToken,
       logout,
     }}>
       {children}

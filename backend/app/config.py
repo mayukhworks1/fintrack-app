@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     auth_admin_notify_email: Optional[str] = None
     password_reset_ttl_minutes: int = 30
 
+    # ── Google OAuth / SSO ─────────────────────────────────────────────────
+    # Add a Google OAuth Web Client with redirect URI:
+    #   https://<api-host>/api/auth/google/callback
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: Optional[str] = None
+
     # ── Admin dashboard password ────────────────────────────────────────────
     # Full PostgreSQL dashboard access.  Set APP_ADMIN_PASSWORD in HF secrets
     # to override the default.

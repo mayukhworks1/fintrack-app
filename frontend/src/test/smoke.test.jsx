@@ -14,12 +14,15 @@ import { dirname, resolve } from 'node:path'
 
 const mockLogin = vi.fn()
 const mockLogout = vi.fn()
+const mockAcceptToken = vi.fn()
 
 vi.mock('../services/api', () => ({
   api: {
     auth: {
       login:          vi.fn(),
       emailLogin:     vi.fn(),
+      providers:      vi.fn().mockResolvedValue({ google: true }),
+      googleStartUrl:  vi.fn((next = '/') => `/api/auth/google/start?next=${encodeURIComponent(next)}`),
       verify:         vi.fn().mockResolvedValue({ valid: true, role: 'editor' }),
       logout:         vi.fn().mockResolvedValue({}),
       forgotPassword: vi.fn(),
@@ -64,6 +67,7 @@ vi.mock('../context/AuthContext', () => ({
     isAll: false,
     isAdmin: false,
     login: mockLogin,
+    acceptToken: mockAcceptToken,
     logout: mockLogout,
   }),
   AuthProvider: ({ children }) => children,
@@ -176,6 +180,8 @@ describe('api service structure', () => {
     const { api } = await import('../services/api')
     expect(typeof api.auth.login).toBe('function')
     expect(typeof api.auth.emailLogin).toBe('function')
+    expect(typeof api.auth.providers).toBe('function')
+    expect(typeof api.auth.googleStartUrl).toBe('function')
     expect(typeof api.auth.forgotPassword).toBe('function')
     expect(typeof api.auth.verify).toBe('function')
     expect(typeof api.auth.getProfile).toBe('function')

@@ -75,6 +75,10 @@ def _hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _hash_oauth_state(state: str) -> str:
+    return hashlib.sha256(state.encode()).hexdigest()
+
+
 def _client_ip(request: Request) -> str:
     for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
         value = request.headers.get(header, "")
@@ -145,6 +149,143 @@ async def _primary_role(user_id: str) -> str:
         user_id,
     )
     return row["role_key"] if row else "viewer"
+
+
+def _safe_redirect_path(value: str | None) -> str:
+    path = (value or "/").strip()
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    if "\n" in path or "\r" in path:
+        return "/"
+    return path[:300] or "/"
+
+
+async def create_oauth_state(provider: str, redirect_to: str | None, request: Request) -> str:
+    """Create a short-lived, one-time OAuth state stored in PostgreSQL."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is required for OAuth")
+    state = secrets.token_urlsafe(36)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    await pool.execute(
+        """
+        INSERT INTO auth_oauth_states (
+            state_hash, provider, expires_at, ip, user_agent, redirect_to, metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        """,
+        _hash_oauth_state(state),
+        provider,
+        expires_at,
+        _client_ip(request),
+        request.headers.get("user-agent", "")[:500],
+        _safe_redirect_path(redirect_to),
+        json.dumps({}),
+    )
+    return state
+
+
+async def consume_oauth_state(state: str, provider: str, request: Request) -> str:
+    """Validate and consume a one-time OAuth state. Returns safe redirect path."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is required for OAuth")
+    if not state or len(state) < 24:
+        await _write_auth_event(f"{provider}_oauth_state_failed", request, status="invalid_state")
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                SELECT redirect_to
+                FROM auth_oauth_states
+                WHERE state_hash = $1
+                  AND provider = $2
+                  AND used_at IS NULL
+                  AND expires_at > NOW()
+                FOR UPDATE
+                """,
+                _hash_oauth_state(state),
+                provider,
+            )
+            if not row:
+                await _write_auth_event(f"{provider}_oauth_state_failed", request, status="invalid_or_expired_state")
+                raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+            await conn.execute(
+                "UPDATE auth_oauth_states SET used_at = NOW() WHERE state_hash = $1",
+                _hash_oauth_state(state),
+            )
+    return _safe_redirect_path(row["redirect_to"])
+
+
+async def _create_session_for_user(
+    user: Any,
+    request: Request,
+    *,
+    login_method: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create the compatibility token plus auth_sessions row for any auth method."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is required for login")
+    auth_role = await _primary_role(str(user["id"]))
+    legacy_role = _legacy_role_for(auth_role)
+    from ..routers.auth import make_token
+    token = make_token(role=legacy_role)
+    token_hint = token[:16]
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.app_session_ttl)
+
+    ua = request.headers.get("user-agent", "")
+    os_str, browser, device = parse_ua(ua)
+    hint = parse_client_hint(request.headers.get("x-client-hint", ""))
+    device_label = build_device_label(os_str, browser, device, hint)
+    session_metadata = {"auth_role": auth_role, "login_method": login_method}
+    session_metadata.update(metadata or {})
+
+    async with pool.acquire() as conn:
+        session_id = await conn.fetchval(
+            """
+            INSERT INTO auth_sessions (
+                user_id, token_hint, expires_at, ip, user_agent, os, browser,
+                device, device_label, metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+            RETURNING id
+            """,
+            user["id"],
+            token_hint,
+            expires_at,
+            _client_ip(request),
+            ua[:500],
+            os_str,
+            browser,
+            device,
+            device_label,
+            json.dumps(session_metadata),
+        )
+
+    await log_login(
+        role=legacy_role,
+        token_hint=token_hint,
+        ip=_client_ip(request),
+        user_agent=ua,
+        ttl_secs=settings.app_session_ttl,
+        client_hint=request.headers.get("x-client-hint", ""),
+    )
+    return {
+        "token": token,
+        "role": legacy_role,
+        "auth_role": auth_role,
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "status": user["status"],
+        },
+        "session_id": str(session_id),
+        "expires_in": settings.app_session_ttl,
+    }
 
 
 async def create_pending_user(email: str, password: str, full_name: str | None, request: Request) -> dict[str, Any]:
@@ -386,70 +527,154 @@ async def login_with_email(email: str, password: str, request: Request) -> dict[
         await _write_auth_event("password_login_blocked", request, target_user_id=str(user["id"]), email=email_norm, status=user["status"])
         raise HTTPException(status_code=403, detail=f"User is {user['status']}")
 
-    auth_role = await _primary_role(str(user["id"]))
-    legacy_role = _legacy_role_for(auth_role)
-    from ..routers.auth import make_token
-    token = make_token(role=legacy_role)
-    token_hint = token[:16]
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.app_session_ttl)
-
-    ua = request.headers.get("user-agent", "")
-    os_str, browser, device = parse_ua(ua)
-    hint = parse_client_hint(request.headers.get("x-client-hint", ""))
-    device_label = build_device_label(os_str, browser, device, hint)
-
-    async with pool.acquire() as conn:
-        session_id = await conn.fetchval(
-            """
-            INSERT INTO auth_sessions (
-                user_id, token_hint, expires_at, ip, user_agent, os, browser,
-                device, device_label, metadata
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-            RETURNING id
-            """,
-            user["id"],
-            token_hint,
-            expires_at,
-            _client_ip(request),
-            ua[:500],
-            os_str,
-            browser,
-            device,
-            device_label,
-            json.dumps({"auth_role": auth_role, "login_method": "password"}),
-        )
-
-    await log_login(
-        role=legacy_role,
-        token_hint=token_hint,
-        ip=_client_ip(request),
-        user_agent=ua,
-        ttl_secs=settings.app_session_ttl,
-        client_hint=request.headers.get("x-client-hint", ""),
-    )
+    session = await _create_session_for_user(user, request, login_method="password")
     await _write_auth_event(
         "password_login_success",
         request,
         target_user_id=str(user["id"]),
-        role=auth_role,
+        role=session["auth_role"],
         email=email_norm,
         status="active",
-        metadata={"legacy_role": legacy_role, "session_id": str(session_id)},
+        metadata={"legacy_role": session["role"], "session_id": session["session_id"]},
     )
-    return {
-        "token": token,
-        "role": legacy_role,
-        "auth_role": auth_role,
-        "user": {
-            "id": str(user["id"]),
-            "email": user["email"],
-            "full_name": user["full_name"],
-            "status": user["status"],
-        },
-        "session_id": str(session_id),
-        "expires_in": settings.app_session_ttl,
-    }
+    return session
+
+
+async def login_with_google_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
+    """
+    Link or create a Google identity, then create a normal auth session.
+    New Google users are always pending until a superadmin approves them.
+    """
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="PostgreSQL is required for Google login")
+    provider_user_id = str(profile.get("sub") or "").strip()
+    email_orig = str(profile.get("email") or "").strip()
+    email_norm = normalize_email(email_orig)
+    verified_raw = profile.get("email_verified")
+    email_verified = verified_raw is True or str(verified_raw).lower() == "true"
+    full_name = str(profile.get("name") or "").strip() or None
+    picture = str(profile.get("picture") or "").strip() or None
+    if not provider_user_id:
+        await _write_auth_event("google_login_failed", request, email=email_norm, status="missing_subject")
+        raise HTTPException(status_code=400, detail="Google profile is missing subject")
+    if not email_verified:
+        await _write_auth_event("google_login_failed", request, email=email_norm, status="email_not_verified")
+        raise HTTPException(status_code=403, detail="Google email is not verified")
+
+    created_pending = False
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            user = await conn.fetchrow(
+                """
+                SELECT u.id, u.email, u.full_name, u.status
+                FROM auth_identities i
+                JOIN auth_users u ON u.id = i.user_id
+                WHERE i.provider = 'google' AND i.provider_user_id = $1
+                """,
+                provider_user_id,
+            )
+            if not user:
+                user = await conn.fetchrow(
+                    """
+                    SELECT id, email, full_name, status
+                    FROM auth_users
+                    WHERE email_normalized = $1
+                    """,
+                    email_norm,
+                )
+                if not user:
+                    user = await conn.fetchrow(
+                        """
+                        INSERT INTO auth_users (
+                            email, email_normalized, full_name, status,
+                            email_verified_at, metadata, updated_at
+                        )
+                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $4::jsonb, NOW())
+                        RETURNING id, email, full_name, status
+                        """,
+                        email_orig,
+                        email_norm,
+                        full_name,
+                        json.dumps({"signup_provider": "google", "picture": picture}),
+                    )
+                    created_pending = True
+                else:
+                    await conn.execute(
+                        """
+                        UPDATE auth_users
+                           SET email_verified_at = COALESCE(email_verified_at, NOW()),
+                               full_name = COALESCE(full_name, $2),
+                               metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
+                               updated_at = NOW()
+                         WHERE id = $1
+                        """,
+                        user["id"],
+                        full_name,
+                        json.dumps({"google_picture": picture}),
+                    )
+
+                await conn.execute(
+                    """
+                    INSERT INTO auth_identities (
+                        user_id, provider, provider_user_id, email, last_seen_at, raw_profile
+                    )
+                    VALUES ($1, 'google', $2, $3, NOW(), $4::jsonb)
+                    ON CONFLICT (provider, provider_user_id)
+                    DO UPDATE SET last_seen_at = NOW(), email = EXCLUDED.email, raw_profile = EXCLUDED.raw_profile
+                    """,
+                    user["id"],
+                    provider_user_id,
+                    email_orig,
+                    json.dumps(profile),
+                )
+            else:
+                await conn.execute(
+                    """
+                    UPDATE auth_identities
+                       SET last_seen_at = NOW(), email = $3, raw_profile = $4::jsonb
+                     WHERE provider = 'google' AND provider_user_id = $2 AND user_id = $1
+                    """,
+                    user["id"],
+                    provider_user_id,
+                    email_orig,
+                    json.dumps(profile),
+                )
+
+    if user["status"] != "active":
+        event_type = "google_register_pending" if created_pending else "google_login_blocked"
+        await _write_auth_event(
+            event_type,
+            request,
+            target_user_id=str(user["id"]),
+            email=email_norm,
+            status=user["status"],
+            metadata={"provider_user_id": provider_user_id},
+        )
+        if created_pending and settings.auth_admin_notify_email:
+            await send_email(
+                settings.auth_admin_notify_email,
+                "FinTrack Google user pending approval",
+                (
+                    f"A Google SSO user is pending approval.\n\n"
+                    f"Email: {email_norm}\n"
+                    f"Name: {full_name or '-'}\n\n"
+                    f"Open Admin Panel -> Users & Sessions to approve or reject."
+                ),
+            )
+        raise HTTPException(status_code=403, detail=f"User is {user['status']}")
+
+    session = await _create_session_for_user(user, request, login_method="google", metadata={"provider_user_id": provider_user_id})
+    await _write_auth_event(
+        "google_login_success",
+        request,
+        target_user_id=str(user["id"]),
+        role=session["auth_role"],
+        email=email_norm,
+        status="active",
+        metadata={"legacy_role": session["role"], "session_id": session["session_id"], "provider_user_id": provider_user_id},
+    )
+    return session
 
 
 async def create_password_reset(email: str, request: Request) -> dict[str, Any]:

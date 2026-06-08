@@ -22,7 +22,10 @@ import base64
 import hashlib
 import hmac
 import time
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import RedirectResponse
+import httpx
 from pydantic import BaseModel
 from ..config import settings
 
@@ -165,7 +168,41 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
+def _frontend_origin() -> str:
+    origin = (settings.frontend_url or "").strip().rstrip("/")
+    if not origin or origin == "*":
+        return ""
+    return origin
+
+
+def _oauth_redirect_url(path: str = "/login", *, fragment: dict | None = None, query: dict | None = None) -> str:
+    origin = _frontend_origin()
+    base = f"{origin}{path}" if origin else path
+    if query:
+        base = f"{base}?{urlencode({k: v for k, v in query.items() if v is not None})}"
+    if fragment:
+        base = f"{base}#{urlencode({k: v for k, v in fragment.items() if v is not None})}"
+    return base
+
+
+def _google_redirect_uri(request: Request) -> str:
+    configured = (settings.google_redirect_uri or "").strip()
+    if configured:
+        return configured
+    return str(request.url_for("google_callback"))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.get("/providers")
+async def auth_providers():
+    """Public login capability flags for safe progressive auth rollout."""
+    return {
+        "email_password": True,
+        "legacy_password": True,
+        "google": bool(settings.google_client_id and settings.google_client_secret),
+    }
+
 
 @router.post("/login")
 async def login(body: LoginRequest, request: Request):
@@ -262,6 +299,92 @@ async def email_bootstrap(body: EmailBootstrapRequest, request: Request):
         body.bootstrap_password,
         request,
     )
+
+
+@router.get("/google/start")
+async def google_start(request: Request, next: str = "/"):
+    """Start Google OAuth. Existing password and legacy login paths remain available."""
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(status_code=503, detail="Google SSO is not configured")
+    from ..services.auth_master import create_oauth_state
+    state = await create_oauth_state("google", next, request)
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": _google_redirect_uri(request),
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "prompt": "select_account",
+    }
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}", status_code=302)
+
+
+@router.get("/google/callback", name="google_callback")
+async def google_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+    """Handle Google OAuth callback, then send the frontend a verified FinTrack token."""
+    redirect_to = "/"
+    try:
+        from ..services.auth_master import consume_oauth_state, login_with_google_profile
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+        redirect_to = await consume_oauth_state(state or "", "google", request)
+        if not code:
+            raise HTTPException(status_code=400, detail="Google authorization code is missing")
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_res = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "redirect_uri": _google_redirect_uri(request),
+                    "grant_type": "authorization_code",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_res.raise_for_status()
+            token_payload = token_res.json()
+            id_token = token_payload.get("id_token")
+            if not id_token:
+                raise HTTPException(status_code=400, detail="Google did not return an ID token")
+            profile_res = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": id_token},
+            )
+            profile_res.raise_for_status()
+            profile = profile_res.json()
+        if profile.get("aud") != settings.google_client_id:
+            raise HTTPException(status_code=403, detail="Google token audience mismatch")
+        if profile.get("iss") not in {"accounts.google.com", "https://accounts.google.com"}:
+            raise HTTPException(status_code=403, detail="Google token issuer mismatch")
+        login_payload = await login_with_google_profile(profile, request)
+        return RedirectResponse(
+            _oauth_redirect_url(
+                "/login",
+                fragment={
+                    "oauth_token": login_payload["token"],
+                    "oauth_next": redirect_to,
+                    "oauth": "google",
+                },
+            ),
+            status_code=302,
+        )
+    except HTTPException as exc:
+        detail = str(exc.detail or "Google sign-in failed")
+        code_value = "pending_approval" if "pending_approval" in detail else "google_error"
+        if "disabled" in detail:
+            code_value = "disabled"
+        elif "rejected" in detail:
+            code_value = "rejected"
+        return RedirectResponse(
+            _oauth_redirect_url("/login", query={"oauth_error": code_value, "message": detail}),
+            status_code=302,
+        )
+    except Exception:
+        return RedirectResponse(
+            _oauth_redirect_url("/login", query={"oauth_error": "google_error", "message": "Google sign-in failed"}),
+            status_code=302,
+        )
 
 
 @router.post("/email/forgot-password")
