@@ -31,6 +31,7 @@ import { useToast } from '../context/ToastContext'
 import { useTheme } from '../context/ThemeContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { formatInr } from '../utils/format'
+import EmptyState from '../components/EmptyState'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 // Fallback only — real options are fetched dynamically from the picklist API
@@ -3057,32 +3058,31 @@ export default function StatusBoard() {
 
         {/* ── Empty state ── */}
         {!loading && !error && records.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-              <ClipboardList size={26} style={{ color: 'var(--text-3)' }} />
-            </div>
-            <p className="text-base font-bold mb-1" style={{ color: 'var(--text-1)' }}>No status updates yet</p>
-            <p className="text-sm mb-5 max-w-xs" style={{ color: 'var(--text-3)' }}>
-              Add live project status entries to track what's happening across the portfolio.
-            </p>
-            {isEditor && (
-              <button className="btn-primary flex items-center gap-2 text-sm" onClick={() => setModal('new')}>
-                <Plus size={14} /> Add First Status
+          <EmptyState
+            icon={<ClipboardList size={24} />}
+            title="No status updates yet"
+            subtitle="Add live project status entries to track what's happening across the portfolio."
+            action={isEditor && (
+              <button className="btn-primary" onClick={() => setModal('new')}>
+                <Plus size={13} />Add first status
               </button>
             )}
-          </div>
+          />
         )}
 
         {/* ── No results ── */}
         {!loading && !error && records.length > 0 && filtered.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No entries match your filter.</p>
-            <button onClick={() => { setSearch(''); setFilterClient(''); setFilterStatus('') }}
-              className="text-xs font-semibold mt-2" style={{ color: 'var(--accent)' }}>
-              Clear filters
-            </button>
-          </div>
+          <EmptyState
+            icon={<ClipboardList size={22} />}
+            title="No entries match your filter"
+            subtitle="Try adjusting your search, client, or status filters."
+            action={
+              <button onClick={() => { setSearch(''); setFilterClient(''); setFilterStatus('') }} className="btn-ghost">
+                Clear filters
+              </button>
+            }
+            compact
+          />
         )}
 
         {/* ══ CARD VIEW ══ */}

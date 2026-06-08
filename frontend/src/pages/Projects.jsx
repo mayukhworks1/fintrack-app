@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
+import EmptyState from '../components/EmptyState'
 import { formatInr, formatPct } from '../utils/format'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
@@ -413,34 +414,25 @@ export default function Projects() {
         </ExecutivePanel>
       ) : displayed.length === 0 ? (
         <ExecutivePanel title="Project stream" subtitle="No projects are visible in the current scope.">
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'var(--bg-input)' }}>
-            <FolderKanbanIcon />
-          </div>
-          <p className="text-base font-semibold" style={{ color: 'var(--text-2)' }}>
-            {search ? 'No results found' : 'No projects match these filters'}
-          </p>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-            {search ? 'Try a different search term' : 'Clear your filters or create a new project'}
-          </p>
-          <div className="flex gap-2 mt-5">
-            {(search || status || client) && (
-              <button onClick={() => { clearSearch(); setSearchParams({}) }}
-                className="px-4 py-2 rounded-xl text-sm transition-all"
-                style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
-                Clear filters
-              </button>
-            )}
-            {isEditor && (
-              <button onClick={() => navigate('/projects/new')}
-                className="px-4 py-2 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-                + New project
-              </button>
-            )}
-          </div>
-        </div>
+          <EmptyState
+            icon={<FolderKanban size={22} />}
+            title={search ? 'No results found' : 'No projects match these filters'}
+            subtitle={search ? 'Try a different search term or clear the search.' : 'Clear your filters or add a new project to get started.'}
+            action={
+              <>
+                {(search || status || client) && (
+                  <button onClick={() => { clearSearch(); setSearchParams({}) }} className="btn-ghost">
+                    Clear filters
+                  </button>
+                )}
+                {isEditor && (
+                  <button onClick={() => navigate('/projects/new')} className="btn-primary">
+                    <Plus size={13} />New project
+                  </button>
+                )}
+              </>
+            }
+          />
         </ExecutivePanel>
       ) : (
         <ExecutivePanel title="Project stream" subtitle="Live project cards with direct finance and delivery context.">

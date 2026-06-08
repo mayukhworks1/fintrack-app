@@ -20,6 +20,7 @@ import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import clsx from 'clsx'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
+import EmptyState from '../components/EmptyState'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Dropdown options are derived live from invoice records — no hardcoded fallbacks
@@ -2871,10 +2872,13 @@ export default function Invoices() {
               </div>
             ))
           : records.length === 0
-            ? <div className="card text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
-                No invoices found.{' '}
-                <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline font-medium">Create one</button>
-              </div>
+            ? <EmptyState
+                icon={<Receipt size={22} />}
+                title="No invoices found"
+                subtitle="Adjust your filters or create your first invoice to get started."
+                action={isEditor && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                compact
+              />
             : records.map(r => {
                 const f = r.fields || {}
                 const outstanding = Number(f['Outstanding Amount'] || 0)
@@ -3061,14 +3065,14 @@ export default function Invoices() {
               {loading && !listData
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : records.length === 0
-                  ? <tr><td colSpan={17} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
-                      <div className="flex flex-col items-center gap-2">
-                        <Receipt size={28} style={{ opacity: 0.3 }} />
-                        <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
-                        <p className="text-xs">Adjust your filters or{' '}
-                          <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
-                        </p>
-                      </div>
+                  ? <tr><td colSpan={17}>
+                      <EmptyState
+                        icon={<Receipt size={22} />}
+                        title="No invoices found"
+                        subtitle="Adjust your filters or create your first invoice."
+                        action={isEditor && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                        compact
+                      />
                     </td></tr>
                   : records.map((r, rowIndex) => {
                       const f = r.fields || {}

@@ -22,6 +22,7 @@ import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import clsx from 'clsx'
+import EmptyState from '../components/EmptyState'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
@@ -3213,14 +3214,13 @@ export default function WebInvoices() {
                   </div>
                 ))
               : records.length === 0
-                ? <div className="card flex flex-col items-center py-12 gap-3" style={{ color: 'var(--text-3)' }}>
-                    <Receipt size={32} style={{ opacity: 0.3 }} />
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
-                    <p className="text-xs text-center max-w-[240px]">Try adjusting your filters, or create a new invoice to get started.</p>
-                    <button onClick={openNew} className="btn-primary mt-2" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
-                      <Plus size={13} />Create invoice
-                    </button>
-                  </div>
+                ? <EmptyState
+                    icon={<Receipt size={22} />}
+                    title="No invoices found"
+                    subtitle="Try adjusting your filters, or create a new invoice to get started."
+                    action={<button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                    compact
+                  />
                 : records.map(r => {
                     const f = r.fields || {}
                     const cur = f['Currency'] || 'RS'
