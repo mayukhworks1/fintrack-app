@@ -1,21 +1,33 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Mail, Shield, Calendar, Clock, Key, Check, AlertCircle, Pencil, X } from 'lucide-react'
+import {
+  User, Mail, Shield, Calendar, Clock, Key, Check, AlertCircle,
+  Pencil, X, Phone, Briefcase, Building2, MapPin, Globe2,
+  Link2, Unlink, LogOut, RefreshCw, ChevronRight, Info,
+} from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
-function Avatar({ name, email, size = 48 }) {
+/* ── Helpers ─────────────────────────────────────────────────────────── */
+function ts(v) {
+  if (!v) return '—'
+  try { return new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
+  catch { return v }
+}
+
+function Avatar({ name, email, size = 56 }) {
   const initials = name
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : (email || '?')[0].toUpperCase()
   return (
     <div
-      className="rounded-full flex items-center justify-center font-bold flex-shrink-0"
+      className="rounded-full flex items-center justify-center font-bold flex-shrink-0 select-none"
       style={{
         width: size, height: size,
         background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
         color: '#fff',
         fontSize: size * 0.35,
         letterSpacing: '0.02em',
+        boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
       }}
     >
       {initials}
@@ -23,53 +35,91 @@ function Avatar({ name, email, size = 48 }) {
   )
 }
 
-function InfoRow({ icon: Icon, label, value }) {
-  return (
-    <div className="flex items-center gap-3 py-2.5 border-b" style={{ borderColor: 'var(--border)' }}>
-      <Icon size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-      <span className="text-xs w-24 flex-shrink-0" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span className="text-sm font-medium truncate" style={{ color: 'var(--text-1)' }}>{value || '—'}</span>
-    </div>
-  )
+const ROLE_STYLE = {
+  superadmin: { label: 'Super Admin', bg: 'rgba(220,38,38,0.10)',   fg: '#dc2626' },
+  admin:      { label: 'Admin',       bg: 'rgba(220,38,38,0.10)',   fg: '#dc2626' },
+  editor:     { label: 'Editor',      bg: 'rgba(99,102,241,0.12)',  fg: '#6366f1' },
+  viewer:     { label: 'Viewer',      bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
+  user:       { label: 'User',        bg: 'rgba(22,163,74,0.10)',   fg: '#16a34a' },
 }
-
-function ts(v) {
-  if (!v) return '—'
-  try { return new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
-  catch { return v }
-}
-
-function roleBadge(role) {
-  const map = {
-    superadmin: { label: 'Super Admin', bg: 'rgba(220,38,38,0.10)', fg: '#dc2626' },
-    admin:      { label: 'Admin',       bg: 'rgba(220,38,38,0.10)', fg: '#dc2626' },
-    editor:     { label: 'Editor',      bg: 'rgba(99,102,241,0.12)', fg: '#6366f1' },
-    viewer:     { label: 'Viewer',      bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
-    user:       { label: 'User',        bg: 'rgba(22,163,74,0.10)', fg: '#16a34a' },
-  }
-  const s = map[role] || { label: role || 'Unknown', bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' }
+function RoleBadge({ role }) {
+  const s = ROLE_STYLE[role] || { label: role || 'Unknown', bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
       style={{ background: s.bg, color: s.fg }}>
       {s.label}
     </span>
   )
 }
 
+function Card({ children, className = '', style = {} }) {
+  return (
+    <div className={`rounded-2xl border p-5 ${className}`}
+      style={{ background: 'var(--card-bg)', borderColor: 'var(--border)', ...style }}>
+      {children}
+    </div>
+  )
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p className="text-[11px] font-semibold uppercase tracking-widest mb-3"
+      style={{ color: 'var(--text-3)' }}>{children}</p>
+  )
+}
+
+function InfoRow({ icon: Icon, label, value, mono = false, accent = false }) {
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b last:border-0"
+      style={{ borderColor: 'var(--border)' }}>
+      <Icon size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--text-3)' }} />
+      <span className="text-xs w-28 flex-shrink-0 pt-px" style={{ color: 'var(--text-3)' }}>{label}</span>
+      <span className={`text-sm flex-1 break-all ${mono ? 'font-mono' : 'font-medium'}`}
+        style={{ color: accent ? 'var(--accent)' : value ? 'var(--text-1)' : 'var(--text-3)' }}>
+        {value || '—'}
+      </span>
+    </div>
+  )
+}
+
+function Msg({ msg }) {
+  if (!msg) return null
+  return (
+    <p className="text-xs mt-3 flex items-center gap-1.5"
+      style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>
+      {msg.ok ? <Check size={11} /> : <AlertCircle size={11} />}
+      {msg.text}
+    </p>
+  )
+}
+
+const PROVIDER_META = {
+  google: {
+    label: 'Google',
+    icon: (
+      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
+        style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.4)' }}>
+        G
+      </span>
+    ),
+  },
+}
+
+/* ── Main component ──────────────────────────────────────────────────── */
 export default function Profile() {
-  const { user: ctxUser, logout } = useAuth()
+  const { logout } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Name editing
-  const [editingName, setEditingName] = useState(false)
-  const [nameVal, setNameVal] = useState('')
-  const [nameSaving, setNameSaving] = useState(false)
-  const [nameMsg, setNameMsg] = useState(null)
+  // Profile editing
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({ full_name: '', phone: '', job_title: '', department: '', company: '', location: '', timezone: '' })
+  const [saving, setSaving] = useState(false)
+  const [profileMsg, setProfileMsg] = useState(null)
 
-  // Password change
-  const [showPwForm, setShowPwForm] = useState(false)
+  // Password
+  const [showPw, setShowPw] = useState(false)
   const [pw, setPw] = useState({ current: '', newPw: '', confirm: '' })
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState(null)
@@ -79,7 +129,15 @@ export default function Profile() {
     try {
       const data = await api.auth.getProfile()
       setProfile(data)
-      setNameVal(data.full_name || '')
+      setForm({
+        full_name: data.full_name || '',
+        phone: data.phone || '',
+        job_title: data.job_title || '',
+        department: data.department || '',
+        company: data.company || '',
+        location: data.location || '',
+        timezone: data.timezone || '',
+      })
     } catch (e) {
       setError(e.message || 'Failed to load profile')
     } finally {
@@ -89,30 +147,42 @@ export default function Profile() {
 
   useEffect(() => { load() }, [load])
 
-  const saveName = async () => {
-    setNameSaving(true); setNameMsg(null)
+  const resetForm = () => setForm({
+    full_name: profile?.full_name || '', phone: profile?.phone || '',
+    job_title: profile?.job_title || '', department: profile?.department || '',
+    company: profile?.company || '', location: profile?.location || '',
+    timezone: profile?.timezone || '',
+  })
+
+  const saveProfile = async () => {
+    setSaving(true); setProfileMsg(null)
     try {
-      const res = await api.auth.updateProfile({ full_name: nameVal.trim() || null })
-      setProfile(p => ({ ...p, full_name: res.full_name }))
-      setEditingName(false)
-      setNameMsg({ ok: true, text: 'Name updated' })
+      const payload = Object.fromEntries(
+        Object.entries(form).map(([k, v]) => [k, String(v || '').trim() || null])
+      )
+      const res = await api.auth.updateProfile(payload)
+      setProfile(p => ({ ...p, ...res }))
+      setEditing(false)
+      setProfileMsg({ ok: true, text: 'Profile updated successfully' })
+      setTimeout(() => setProfileMsg(null), 3000)
     } catch (e) {
-      setNameMsg({ ok: false, text: e.message || 'Failed to update name' })
+      setProfileMsg({ ok: false, text: e.message || 'Failed to update' })
     } finally {
-      setNameSaving(false)
+      setSaving(false)
     }
   }
 
-  const changePassword = async (e) => {
+  const changePw = async (e) => {
     e.preventDefault()
     if (pw.newPw !== pw.confirm) { setPwMsg({ ok: false, text: 'Passwords do not match' }); return }
-    if (pw.newPw.length < 8) { setPwMsg({ ok: false, text: 'New password must be at least 8 characters' }); return }
+    if (pw.newPw.length < 8) { setPwMsg({ ok: false, text: 'Minimum 8 characters' }); return }
     setPwSaving(true); setPwMsg(null)
     try {
       const res = await api.auth.changePassword({ current_password: pw.current, new_password: pw.newPw })
-      setPwMsg({ ok: true, text: res.message || 'Password changed successfully' })
+      setPwMsg({ ok: true, text: res.message || 'Password changed' })
       setPw({ current: '', newPw: '', confirm: '' })
-      setShowPwForm(false)
+      setShowPw(false)
+      setTimeout(() => setPwMsg(null), 4000)
     } catch (e) {
       setPwMsg({ ok: false, text: e.message || 'Failed to change password' })
     } finally {
@@ -120,10 +190,13 @@ export default function Profile() {
     }
   }
 
+  /* ── Loading / error states ── */
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[300px]">
-        <div className="text-sm" style={{ color: 'var(--text-3)' }}>Loading profile…</div>
+      <div className="p-6 flex items-center justify-center min-h-[300px] gap-2"
+        style={{ color: 'var(--text-3)' }}>
+        <RefreshCw size={14} className="animate-spin" />
+        <span className="text-sm">Loading profile…</span>
       </div>
     )
   }
@@ -136,7 +209,11 @@ export default function Profile() {
           <AlertCircle size={16} style={{ color: '#dc2626', flexShrink: 0, marginTop: 1 }} />
           <div>
             <p className="text-sm font-medium" style={{ color: '#dc2626' }}>Could not load profile</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{error}</p>
+            <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--text-3)' }}>{error}</p>
+            <button onClick={load} className="text-xs px-2.5 py-1 rounded-lg border inline-flex items-center gap-1.5"
+              style={{ borderColor: 'rgba(220,38,38,0.3)', color: '#dc2626' }}>
+              <RefreshCw size={11} /> Retry
+            </button>
           </div>
         </div>
       </div>
@@ -144,146 +221,262 @@ export default function Profile() {
   }
 
   const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'User'
+  const googleIdentity = (profile?.identities || []).find(i => i.provider === 'google')
+  const hasPassword = Boolean(profile?.password_changed_at || profile?.email)
 
   return (
-    <div className="p-4 sm:p-6 max-w-2xl mx-auto w-full space-y-5">
+    <div className="p-4 sm:p-6 max-w-2xl mx-auto w-full space-y-4">
 
-      {/* Header card */}
-      <div className="rounded-2xl border p-5 flex items-center gap-4"
-        style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
-        <Avatar name={profile?.full_name} email={profile?.email} size={56} />
+      {/* ── Hero header ── */}
+      <Card className="flex items-center gap-4">
+        <Avatar name={profile?.full_name} email={profile?.email} size={60} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg font-bold truncate" style={{ color: 'var(--text-1)' }}>{displayName}</h1>
-            {roleBadge(profile?.role)}
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+              {displayName}
+            </h1>
+            <RoleBadge role={profile?.role} />
           </div>
-          <p className="text-sm truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{profile?.email}</p>
+          <p className="text-sm" style={{ color: 'var(--text-3)' }}>{profile?.email}</p>
+          {profile?.job_title && (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+              {profile.job_title}{profile?.company ? ` · ${profile.company}` : ''}
+            </p>
+          )}
         </div>
-      </div>
+      </Card>
 
-      {/* Account details */}
-      <div className="rounded-2xl border p-4" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
-        <p className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Account Details</p>
-        <InfoRow icon={Mail}     label="Email"       value={profile?.email} />
-        <InfoRow icon={Shield}   label="Role"        value={profile?.role} />
-        <InfoRow icon={Calendar} label="Joined"      value={ts(profile?.created_at)} />
-        <InfoRow icon={Clock}    label="Last active" value={ts(profile?.last_seen_at)} />
-        <div className="flex items-center gap-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
-          <User size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-          <span className="text-xs w-24 flex-shrink-0" style={{ color: 'var(--text-3)' }}>Sessions</span>
+      {/* ── Account details ── */}
+      <Card>
+        <SectionLabel>Account Details</SectionLabel>
+        <InfoRow icon={Mail}     label="Email"            value={profile?.email} />
+        <InfoRow icon={Shield}   label="Role"             value={profile?.role} />
+        <InfoRow icon={Calendar} label="Joined"           value={ts(profile?.created_at)} />
+        <InfoRow icon={Clock}    label="Last active"      value={ts(profile?.last_seen_at)} />
+        {profile?.approved_at && (
+          <InfoRow icon={Check}  label="Approved"         value={ts(profile.approved_at)} accent />
+        )}
+        <div className="flex items-start gap-3 py-2.5 border-b last:border-0"
+          style={{ borderColor: 'var(--border)' }}>
+          <User size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--text-3)' }} />
+          <span className="text-xs w-28 flex-shrink-0 pt-px" style={{ color: 'var(--text-3)' }}>Sessions</span>
           <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
-            {profile?.active_sessions ?? '—'} active
+            {profile?.active_sessions ?? 0} active
+            <span className="ml-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
+              ({profile?.total_sessions ?? 0} total)
+            </span>
           </span>
         </div>
-      </div>
+      </Card>
 
-      {/* Display name */}
-      <div className="rounded-2xl border p-4" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
+      {/* ── Connected accounts ── */}
+      <Card>
+        <SectionLabel>Connected Accounts</SectionLabel>
+
+        {/* Google */}
+        <div className="flex items-center gap-3 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+          <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
+            style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.4)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            G
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Google</p>
+            {googleIdentity
+              ? <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  {googleIdentity.email} · last used {ts(googleIdentity.last_seen_at)}
+                </p>
+              : <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Not connected</p>
+            }
+          </div>
+          {googleIdentity
+            ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{ background: 'rgba(22,163,74,0.10)', color: '#16a34a' }}>
+                <Check size={10} /> Connected
+              </span>
+            : <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{ background: 'rgba(100,116,139,0.10)', color: 'var(--text-3)' }}>
+                <Unlink size={10} /> Not linked
+              </span>
+          }
+        </div>
+
+        {/* Email / password auth */}
+        <div className="flex items-center gap-3 py-3">
+          <Mail size={16} className="flex-shrink-0" style={{ color: 'var(--text-3)' }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Email & Password</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+              {hasPassword
+                ? `Password ${profile?.password_changed_at ? `last changed ${ts(profile.password_changed_at)}` : 'set'}`
+                : 'No password set'
+              }
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+            style={{ background: hasPassword ? 'rgba(22,163,74,0.10)' : 'rgba(100,116,139,0.10)', color: hasPassword ? '#16a34a' : 'var(--text-3)' }}>
+            {hasPassword ? <><Check size={10} /> Active</> : <><Unlink size={10} /> None</>}
+          </span>
+        </div>
+
+        {/* Teable email note */}
+        {profile?.teable_email && profile.teable_email !== profile.email && (
+          <div className="mt-1 flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs"
+            style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)' }}>
+            <Info size={12} className="flex-shrink-0 mt-px" style={{ color: '#6366f1' }} />
+            <span style={{ color: 'var(--text-2)' }}>
+              Your Teable "Raised By" identity is <strong>{profile.teable_email}</strong> — invoices matching this email are linked to your account.
+            </span>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Profile details ── */}
+      <Card>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Display Name</p>
-          {!editingName && (
-            <button onClick={() => { setEditingName(true); setNameMsg(null) }}
-              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border"
-              style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
+          <div>
+            <SectionLabel>Profile Details</SectionLabel>
+          </div>
+          {!editing && (
+            <button
+              onClick={() => { resetForm(); setEditing(true); setProfileMsg(null) }}
+              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
+              style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+            >
               <Pencil size={11} /> Edit
             </button>
           )}
         </div>
-        {editingName ? (
-          <div className="space-y-2">
-            <input
-              autoFocus
-              value={nameVal}
-              onChange={e => setNameVal(e.target.value)}
-              className="input w-full px-3 py-2 rounded-lg text-sm"
-              placeholder="Your full name"
-              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
-            />
-            <div className="flex items-center gap-2">
-              <button onClick={saveName} disabled={nameSaving}
+
+        {editing ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                ['full_name',   'Full name',    'Mayukh Jain',       User],
+                ['phone',       'Phone',        '+91 98765 43210',   Phone],
+                ['job_title',   'Role / title', 'Finance Executive', Briefcase],
+                ['department',  'Department',   'Accounts',          Building2],
+                ['company',     'Company',      'TheWorks',          Building2],
+                ['location',    'Location',     'Mumbai, India',     MapPin],
+                ['timezone',    'Timezone',     'Asia/Kolkata',      Globe2],
+              ].map(([key, label, placeholder, Icon]) => (
+                <label key={key} className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium flex items-center gap-1"
+                    style={{ color: 'var(--text-3)' }}>
+                    <Icon size={10} /> {label}
+                  </span>
+                  <input
+                    value={form[key] || ''}
+                    onChange={e => setForm(v => ({ ...v, [key]: e.target.value }))}
+                    className="input px-3 py-2 rounded-xl text-sm"
+                    placeholder={placeholder}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button onClick={saveProfile} disabled={saving}
                 className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
-                <Check size={12} /> {nameSaving ? 'Saving…' : 'Save'}
+                <Check size={12} /> {saving ? 'Saving…' : 'Save changes'}
               </button>
-              <button onClick={() => { setEditingName(false); setNameVal(profile?.full_name || '') }}
+              <button onClick={() => { setEditing(false); resetForm() }}
                 className="text-xs px-3 py-1.5 rounded-lg border inline-flex items-center gap-1.5"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
                 <X size={12} /> Cancel
               </button>
             </div>
+            <Msg msg={profileMsg} />
           </div>
         ) : (
-          <p className="text-sm" style={{ color: 'var(--text-1)' }}>
-            {profile?.full_name || <span style={{ color: 'var(--text-3)' }}>No display name set</span>}
-          </p>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+              <InfoRow icon={User}      label="Full name"   value={profile?.full_name} />
+              <InfoRow icon={Phone}     label="Phone"       value={profile?.phone} />
+              <InfoRow icon={Briefcase} label="Title"       value={profile?.job_title} />
+              <InfoRow icon={Building2} label="Department"  value={profile?.department} />
+              <InfoRow icon={Building2} label="Company"     value={profile?.company} />
+              <InfoRow icon={MapPin}    label="Location"    value={profile?.location} />
+              <InfoRow icon={Globe2}    label="Timezone"    value={profile?.timezone} />
+            </div>
+            <Msg msg={profileMsg} />
+          </>
         )}
-        {nameMsg && (
-          <p className="text-xs mt-2 flex items-center gap-1.5"
-            style={{ color: nameMsg.ok ? '#16a34a' : '#dc2626' }}>
-            {nameMsg.ok ? <Check size={11} /> : <AlertCircle size={11} />}
-            {nameMsg.text}
-          </p>
-        )}
-      </div>
+      </Card>
 
-      {/* Change password */}
-      <div className="rounded-2xl border p-4" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Password</p>
-          <button onClick={() => { setShowPwForm(v => !v); setPwMsg(null); setPw({ current: '', newPw: '', confirm: '' }) }}
-            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border"
-            style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
-            <Key size={11} /> {showPwForm ? 'Cancel' : 'Change password'}
+      {/* ── Security: password ── */}
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <SectionLabel>Security</SectionLabel>
+          <button
+            onClick={() => { setShowPw(v => !v); setPwMsg(null); setPw({ current: '', newPw: '', confirm: '' }) }}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
+            style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <Key size={11} /> {showPw ? 'Cancel' : 'Change password'}
           </button>
         </div>
 
-        {showPwForm ? (
-          <form onSubmit={changePassword} className="space-y-2.5">
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Current password</label>
-              <input type="password" value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
-                className="input w-full px-3 py-2 rounded-lg text-sm" placeholder="Current password" required />
-            </div>
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>New password</label>
-              <input type="password" value={pw.newPw} onChange={e => setPw(p => ({ ...p, newPw: e.target.value }))}
-                className="input w-full px-3 py-2 rounded-lg text-sm" placeholder="At least 8 characters" required />
-            </div>
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Confirm new password</label>
-              <input type="password" value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
-                className="input w-full px-3 py-2 rounded-lg text-sm" placeholder="Repeat new password" required />
-            </div>
+        {!showPw && (
+          <div className="flex items-center gap-3 py-2">
+            <Key size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            <span className="text-xs w-28 flex-shrink-0" style={{ color: 'var(--text-3)' }}>Password</span>
+            <span className="text-sm tracking-[0.3em]" style={{ color: 'var(--text-3)' }}>••••••••</span>
+          </div>
+        )}
+
+        {showPw && (
+          <form onSubmit={changePw} className="space-y-3 mt-1">
+            {[
+              ['current',  'Current password',     'current-password'],
+              ['newPw',    'New password',          'new-password'],
+              ['confirm',  'Confirm new password',  'new-password'],
+            ].map(([field, label, autocomplete]) => (
+              <div key={field}>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>{label}</label>
+                <input
+                  type="password"
+                  value={pw[field]}
+                  onChange={e => setPw(p => ({ ...p, [field]: e.target.value }))}
+                  className="input w-full px-3 py-2 rounded-xl text-sm"
+                  placeholder={field === 'newPw' ? 'At least 8 characters' : ''}
+                  autoComplete={autocomplete}
+                  required
+                />
+              </div>
+            ))}
             <button type="submit" disabled={pwSaving}
               className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
               <Key size={12} /> {pwSaving ? 'Changing…' : 'Change password'}
             </button>
+            <Msg msg={pwMsg} />
           </form>
-        ) : (
-          <p className="text-sm" style={{ color: 'var(--text-3)' }}>••••••••</p>
         )}
+        {!showPw && <Msg msg={pwMsg} />}
+      </Card>
 
-        {pwMsg && (
-          <p className="text-xs mt-2 flex items-center gap-1.5"
-            style={{ color: pwMsg.ok ? '#16a34a' : '#dc2626' }}>
-            {pwMsg.ok ? <Check size={11} /> : <AlertCircle size={11} />}
-            {pwMsg.text}
-          </p>
-        )}
-      </div>
-
-      {/* Danger zone */}
-      <div className="rounded-2xl border p-4"
-        style={{ background: 'var(--card-bg)', borderColor: 'rgba(220,38,38,0.2)' }}>
-        <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#dc2626' }}>Sign Out</p>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>
-          This will end your current session and return you to the login screen.
-        </p>
-        <button onClick={logout}
-          className="text-xs px-3 py-1.5 rounded-lg border inline-flex items-center gap-1.5"
-          style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.3)', background: 'rgba(220,38,38,0.06)' }}>
-          Sign out
-        </button>
-      </div>
+      {/* ── Sign out ── */}
+      <Card style={{ borderColor: 'rgba(220,38,38,0.18)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold mb-0.5" style={{ color: '#dc2626' }}>Sign out</p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+              Ends your current session and returns you to the login screen.
+            </p>
+          </div>
+          <button
+            onClick={logout}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border transition-all flex-shrink-0"
+            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.3)', background: 'rgba(220,38,38,0.06)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.12)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
+          >
+            <LogOut size={12} /> Sign out
+          </button>
+        </div>
+      </Card>
 
     </div>
   )

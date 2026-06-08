@@ -92,6 +92,12 @@ class ResetPasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = None
+    phone: str | None = None
+    job_title: str | None = None
+    department: str | None = None
+    company: str | None = None
+    location: str | None = None
+    timezone: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -548,6 +554,13 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
                 u.id::text,
                 u.email,
                 u.full_name,
+                u.phone,
+                u.job_title,
+                u.department,
+                u.company,
+                u.location,
+                u.timezone,
+                u.teable_email,
                 u.status,
                 u.created_at,
                 u.approved_at,
@@ -561,20 +574,45 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
             LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
             LEFT JOIN auth_roles r ON r.id = ur.role_id
             WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-            GROUP BY u.id, u.email, u.full_name, u.status, u.created_at, u.approved_at, u.password_changed_at
+            GROUP BY u.id, u.email, u.full_name, u.phone, u.job_title, u.department,
+                     u.company, u.location, u.timezone, u.teable_email, u.status,
+                     u.created_at, u.approved_at, u.password_changed_at
             """,
             token_hint,
         )
         if not row:
             raise HTTPException(status_code=401, detail="Session not found or expired")
+        user_id_str = row["id"]
         roles = list(row["roles"] or [])
+        # Fetch linked identity providers
+        identity_rows = await pool.fetch(
+            "SELECT provider, provider_user_id, email, last_seen_at FROM auth_identities WHERE user_id = $1::uuid ORDER BY provider",
+            user_id_str,
+        )
+        identities = [
+            {
+                "provider":         r["provider"],
+                "provider_user_id": r["provider_user_id"],
+                "email":            r["email"],
+                "last_seen_at":     r["last_seen_at"].isoformat() if r["last_seen_at"] else None,
+            }
+            for r in identity_rows
+        ]
         return {
-            "id":                   row["id"],
+            "id":                   user_id_str,
             "email":                row["email"],
             "full_name":            row["full_name"],
+            "phone":                row["phone"],
+            "job_title":            row["job_title"],
+            "department":           row["department"],
+            "company":              row["company"],
+            "location":             row["location"],
+            "timezone":             row["timezone"],
+            "teable_email":         row["teable_email"],
             "status":               row["status"],
             "role":                 roles[0] if roles else None,
             "roles":                roles,
+            "identities":           identities,
             "created_at":           row["created_at"].isoformat() if row["created_at"] else None,
             "approved_at":          row["approved_at"].isoformat() if row["approved_at"] else None,
             "last_seen_at":         row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
@@ -590,7 +628,7 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
 
 @router.patch("/profile")
 async def update_profile(body: UpdateProfileRequest, request: Request, _role: str = Depends(_require_email_auth)):
-    """Update the current user's display name."""
+    """Update the current user's profile details."""
     user_id = getattr(request.state, "auth_user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -599,14 +637,46 @@ async def update_profile(body: UpdateProfileRequest, request: Request, _role: st
         pool = get_pool()
         if not pool:
             raise HTTPException(status_code=503, detail="Database unavailable")
-        full_name = (body.full_name or "").strip() or None
+        def clean(value: str | None, limit: int) -> str | None:
+            value = (value or "").strip()
+            return value[:limit] if value else None
+
         row = await pool.fetchrow(
-            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2::uuid RETURNING full_name, email",
-            full_name, user_id,
+            """
+            UPDATE auth_users
+               SET full_name = $1,
+                   phone = $2,
+                   job_title = $3,
+                   department = $4,
+                   company = $5,
+                   location = $6,
+                   timezone = $7,
+                   updated_at = NOW()
+             WHERE id = $8::uuid
+             RETURNING full_name, email, phone, job_title, department, company, location, timezone
+            """,
+            clean(body.full_name, 255),
+            clean(body.phone, 40),
+            clean(body.job_title, 120),
+            clean(body.department, 120),
+            clean(body.company, 160),
+            clean(body.location, 160),
+            clean(body.timezone, 80),
+            user_id,
         )
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
-        return {"ok": True, "full_name": row["full_name"], "email": row["email"]}
+        return {
+            "ok": True,
+            "full_name": row["full_name"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "job_title": row["job_title"],
+            "department": row["department"],
+            "company": row["company"],
+            "location": row["location"],
+            "timezone": row["timezone"],
+        }
     except HTTPException:
         raise
     except Exception as exc:
