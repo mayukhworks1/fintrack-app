@@ -160,15 +160,17 @@ def _safe_redirect_path(value: str | None) -> str:
     return path[:300] or "/"
 
 
-def _admin_user_review_links(request: Request, user_id: str) -> dict[str, str]:
-    origin = app_origin_from_request(request)
-    if not origin:
-        origin = settings.frontend_url.rstrip("/") if settings.frontend_url and settings.frontend_url != "*" else ""
+def _admin_user_review_links(user_id: str) -> dict[str, str]:
+    # Always prefer the configured frontend URL — never derive from request
+    # headers because during OAuth callbacks the referer is accounts.google.com.
+    origin = ""
+    if settings.frontend_url and settings.frontend_url not in ("*", ""):
+        origin = settings.frontend_url.rstrip("/")
     base = f"{origin}/admin" if origin else "/admin"
     return {
-        "review": f"{base}?tab=users&subtab=auth-users&user={user_id}",
+        "review":  f"{base}?tab=users&subtab=auth-users&user={user_id}",
         "approve": f"{base}?tab=users&subtab=auth-users&user={user_id}&decision=approve",
-        "reject": f"{base}?tab=users&subtab=auth-users&user={user_id}&decision=reject",
+        "reject":  f"{base}?tab=users&subtab=auth-users&user={user_id}&decision=reject",
     }
 
 
@@ -343,7 +345,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
         )
     await _write_auth_event("password_register_pending", request, target_user_id=str(row["id"]), email=email_norm, status=row["status"])
     if settings.auth_admin_notify_email:
-        links = _admin_user_review_links(request, str(row["id"]))
+        links = _admin_user_review_links(str(row["id"]))
         await send_email(
             settings.auth_admin_notify_email,
             "FinTrack user pending approval",
@@ -699,7 +701,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
             metadata={"provider_user_id": provider_user_id},
         )
         if created_pending and settings.auth_admin_notify_email:
-            links = _admin_user_review_links(request, str(user["id"]))
+            links = _admin_user_review_links(str(user["id"]))
             await send_email(
                 settings.auth_admin_notify_email,
                 "FinTrack Google user pending approval",
