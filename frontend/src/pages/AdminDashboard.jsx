@@ -884,6 +884,13 @@ function AuditLogTab() {
 
   // ── Client-side advanced filter builder ───────────────────────────────────
   const [filterConditions, setFilterConditions] = useState([])
+  const auditConditionFields = useCallback((row) => {
+    const userParts = [row?.user_email, row?.user_name, row?.user_id].filter(Boolean)
+    return {
+      ...row,
+      user: userParts.join(' · '),
+    }
+  }, [])
 
   // ── Purge ──────────────────────────────────────────────────────────────────
   const [showPurge,  setShowPurge]  = useState(false)
@@ -968,8 +975,8 @@ function AuditLogTab() {
 
   const sourceRows = filterConditions.length > 0 ? (fullRows || data?.rows || []) : (data?.rows || [])
   const filteredRows = useMemo(
-    () => applyConditions(sourceRows, filterConditions, r => r),
-    [sourceRows, filterConditions]
+    () => applyConditions(sourceRows, filterConditions, auditConditionFields),
+    [sourceRows, filterConditions, auditConditionFields]
   )
   const displayRows = useMemo(
     () => (filterConditions.length > 0 ? filteredRows.slice(offset, offset + limit) : filteredRows),
@@ -977,9 +984,14 @@ function AuditLogTab() {
   )
 
   async function handleExport(format) {
-    const exportRows = applyConditions(await ensureFullRows(), filterConditions, r => r)
+    const exportRows = applyConditions(await ensureFullRows(), filterConditions, auditConditionFields)
+      .map(auditConditionFields)
     const columns = [
       { key: 'ts', label: 'Time' },
+      { key: 'user', label: 'User' },
+      { key: 'user_email', label: 'User Email' },
+      { key: 'user_name', label: 'User Name' },
+      { key: 'user_id', label: 'User ID' },
       { key: 'role', label: 'Role' },
       { key: 'method', label: 'Method' },
       { key: 'path', label: 'Path' },
@@ -1001,6 +1013,7 @@ function AuditLogTab() {
       columns,
       rows: exportRows,
       filters: {
+        user_email: filterUserEmail,
         role: filterRole,
         method: filterMethod,
         status: filterStatus,
@@ -1151,6 +1164,10 @@ function AuditLogTab() {
         <div className="pt-1">
           <FilterBuilder
             fields={[
+              { key: 'user', label: 'User', type: 'text' },
+              { key: 'user_email', label: 'User Email', type: 'text' },
+              { key: 'user_name', label: 'User Name', type: 'text' },
+              { key: 'user_id', label: 'User ID', type: 'text' },
               { key: 'role',    label: 'Role',    type: 'text' },
               { key: 'method',  label: 'Method',  type: 'text' },
               { key: 'path',    label: 'Path',    type: 'text' },
@@ -1172,7 +1189,7 @@ function AuditLogTab() {
               { key: 'ts', label: 'Time', type: 'date' },
             ]}
             records={fullRows || data?.rows || []}
-            getFieldValue={r => r}
+            getFieldValue={auditConditionFields}
             conditions={filterConditions}
             onChange={setFilterConditions}
             label="Add condition filter"
