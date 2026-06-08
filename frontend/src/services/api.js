@@ -20,9 +20,13 @@ export function getAuthToken() {
   try { return localStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
 }
 export function setAuthToken(t) {
+  _clientCache.clear()
   try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY) } catch {}
 }
-export function clearAuthToken() { setAuthToken('') }
+export function clearAuthToken() {
+  _clientCache.clear()
+  setAuthToken('')
+}
 
 // ── In-flight request dedupe ──────────────────────────────────────────────
 // Polling hooks across multiple mounted components frequently fire the
@@ -89,15 +93,16 @@ function bustWebProjectReads() {
 async function request(path, options = {}, retries = 2) {
   const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
+  const skipClientCache = path.startsWith('/api/admin') || path === '/api/auth/verify'
 
-  if (method === 'GET' && !externalSignal && !fresh) {
+  if (method === 'GET' && !externalSignal && !fresh && !skipClientCache) {
     const cached = _ccGet(path, cacheTtl)
     if (cached !== null) return cached
   }
 
   // Coalesce identical concurrent GETs across the app
   const data = await _dedupedFetch(method, path, () =>
-    _doRequest(path, { signal: externalSignal, timeout, fresh, cacheTtl, ...rest }, retries), externalSignal, fresh)
+    _doRequest(path, { signal: externalSignal, timeout, fresh: fresh || skipClientCache, cacheTtl, ...rest }, retries), externalSignal, fresh || skipClientCache)
   return data
 }
 

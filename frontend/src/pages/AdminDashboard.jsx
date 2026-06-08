@@ -2080,60 +2080,77 @@ function AuthUsersTab() {
                   </div>
                 ))}
               </div>
-              <div className="hidden md:block overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
-                      {['User','Teable Email','Status','Roles','Sessions','Activity','Created','Last seen','Actions'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap"
-                          style={{ color: 'var(--text-2)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.rows || []).map(row => (
-                      <tr key={row.id} className="border-b transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td className="px-3 py-2 min-w-[220px]">
-                          <div className="font-semibold" style={{ color: 'var(--text-1)' }}>{row.email}</div>
-                          <EditableName
-                            value={row.full_name || ''}
-                            saving={actingId === `${row.id}:name`}
-                            onSave={name => updateName(row, name)}
-                          />
-                        </td>
-                        <td className="px-3 py-2 min-w-[200px]">
-                          <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-3)' }}>Raised By match:</div>
-                          <EditableName
-                            value={row.teable_email || ''}
-                            saving={actingId === `${row.id}:teable`}
-                            onSave={v => updateTeableEmail(row, v)}
-                            placeholder={row.email}
-                            emptyLabel="= login email (click to override)"
-                          />
-                        </td>
-                        <td className="px-3 py-2"><AuthStatusBadge status={row.status} /></td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {(row.roles || []).length ? row.roles.map(r => <Badge key={r} color="indigo">{r}</Badge>) : <Badge>No role</Badge>}
+              <div className="hidden md:grid gap-3">
+                {(data?.rows || []).map(row => (
+                  <div
+                    key={row.id}
+                    className="rounded-2xl border p-4 transition-all"
+                    style={{
+                      borderColor: 'var(--border)',
+                      background: 'linear-gradient(135deg, var(--card-bg), var(--bg-soft))',
+                      boxShadow: 'var(--shadow-soft)',
+                    }}
+                  >
+                    <div className="grid grid-cols-[minmax(260px,1.2fr)_minmax(220px,0.9fr)_minmax(360px,1.1fr)] gap-4 items-start">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black shrink-0"
+                            style={{ background: 'rgba(99,102,241,0.14)', color: '#6366f1' }}
+                          >
+                            {(row.full_name || row.email || '?').slice(0, 2).toUpperCase()}
                           </div>
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          <b>{row.active_session_count || 0}</b> active · {row.session_count || 0} total
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                          <b>{row.audit_request_count || 0}</b> requests · {row.auth_event_count || 0} auth events
-                          <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>Last request {relTime(row.last_request_at)}</div>
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{ts(row.created_at)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{relTime(row.last_seen_at)}</td>
-                        <td className="px-3 py-2 min-w-[320px]">{renderActions(row)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
+                            <EditableName
+                              value={row.full_name || ''}
+                              saving={actingId === `${row.id}:name`}
+                              onSave={name => updateName(row, name)}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <AuthStatusBadge status={row.status} />
+                          {(row.roles || []).length ? row.roles.map(r => <Badge key={r} color="indigo">{r}</Badge>) : <Badge>No role</Badge>}
+                        </div>
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                          Created {ts(row.created_at)} · Last seen {relTime(row.last_seen_at)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border p-3 min-w-0" style={{ borderColor: 'var(--border)', background: 'var(--glass-bg)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] mb-1" style={{ color: 'var(--text-3)' }}>
+                          Teable raised-by match
+                        </p>
+                        <EditableName
+                          value={row.teable_email || ''}
+                          saving={actingId === `${row.id}:teable`}
+                          onSave={v => updateTeableEmail(row, v)}
+                          placeholder={row.email}
+                          emptyLabel="Uses login email unless overridden"
+                        />
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Sessions</p>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{row.active_session_count || 0} active · {row.session_count || 0} total</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Audit</p>
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{row.audit_request_count || 0} req · {row.auth_event_count || 0} events</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2" style={{ borderColor: 'var(--border)', background: 'var(--glass-bg)' }}>
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Controls</span>
+                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Last request {relTime(row.last_request_at)}</span>
+                        </div>
+                        {renderActions(row)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </>
           )}
