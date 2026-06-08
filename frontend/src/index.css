@@ -91,6 +91,9 @@
   --kpi-4-bg: rgba(71,85,105,0.08);   --kpi-4-fg: #334155;
   --kpi-5-bg: rgba(124,58,237,0.07);  --kpi-5-fg: #5b21b6;
 
+  /* Secondary surface */
+  --bg-2:             #f0f3f8;
+
   /* Legacy glass compat */
   --glass-bg:         rgba(255,255,255,0.90);
   --glass-bg-hover:   #f6f8fb;
@@ -165,6 +168,7 @@
   --kpi-3-bg: rgba(24,163,107,0.08);  --kpi-3-fg: #158f5d;
   --kpi-4-bg: rgba(209,138,26,0.09);  --kpi-4-fg: #b36f08;
   --kpi-5-bg: rgba(220,106,95,0.08);  --kpi-5-fg: #c2574b;
+  --bg-2:             #eeece7;
   --glass-bg:         rgba(255,254,250,0.94);
   --glass-bg-hover:   #fbfaf7;
   --glass-bg-active:  #ffffff;
@@ -222,6 +226,7 @@ html.dark .main-app-theme {
   --kpi-3-bg: rgba(76,199,144,0.12);   --kpi-3-fg: #69d8a6;
   --kpi-4-bg: rgba(240,178,72,0.12);   --kpi-4-fg: #f6c970;
   --kpi-5-bg: rgba(240,130,118,0.12);  --kpi-5-fg: #f5a198;
+  --bg-2:             #1c1d1a;
   --glass-bg:         rgba(23,24,23,0.94);
   --glass-bg-hover:   #1f211f;
   --glass-bg-active:  #252722;
@@ -280,6 +285,7 @@ html.dark .main-app-theme {
   --kpi-3-bg: rgba(56,189,248,0.10);   --kpi-3-fg: #38bdf8;
   --kpi-4-bg: rgba(148,163,184,0.10);  --kpi-4-fg: #94a3b8;
   --kpi-5-bg: rgba(167,139,250,0.10);  --kpi-5-fg: #a78bfa;
+  --bg-2:             #111927;
   --glass-bg:         #0d1525;
   --glass-bg-hover:   #111927;
   --glass-bg-active:  #1a2540;
@@ -303,7 +309,10 @@ html.dark .main-app-theme {
     background-color: var(--bg-base);
     color: var(--text-1);
     @apply antialiased font-sans;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "cv11", "ss01", "cv02", "cv03", "cv04";
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     letter-spacing: 0;
     transition: background-color 0.3s, color 0.3s;
   }
@@ -700,6 +709,28 @@ html.dark .main-app-theme {
   .btn-icon:hover    { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
   .btn-icon:active   { transform: scale(0.94); }
   .btn-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Secondary — for Refresh / Export / Retry actions ── */
+  .btn-secondary {
+    background: var(--bg-input);
+    color: var(--text-2);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    box-shadow: none;
+    transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    white-space: nowrap;
+    letter-spacing: 0.005em;
+  }
+  .btn-secondary:hover    { background: var(--card-bg); border-color: var(--text-3); color: var(--text-1); box-shadow: var(--shadow-sm); }
+  .btn-secondary:active   { opacity: 0.82; }
+  .btn-secondary:disabled { opacity: 0.38; cursor: not-allowed; }
 
   /* ── Input ── */
   .input {
