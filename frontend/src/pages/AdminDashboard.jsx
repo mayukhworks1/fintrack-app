@@ -277,6 +277,53 @@ function StatBox({ label, value, sub, color, accent }) {
   )
 }
 
+function HealthEvidenceCard({ label, item }) {
+  const ok = Boolean(item?.ok)
+  return (
+    <div className="card min-w-0 space-y-2" style={{ borderLeft: `3px solid ${ok ? '#16a34a' : '#dc2626'}` }}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{label}</p>
+        <Badge color={ok ? 'green' : 'red'}>{ok ? 'OK' : 'Check'}</Badge>
+      </div>
+      <p className="text-[11px] leading-relaxed min-h-[32px]" style={{ color: 'var(--text-3)' }} title={item?.detail || ''}>
+        {item?.detail || 'No live detail returned'}
+      </p>
+
+      {label === 'Sync Freshness' && item?.stale_sources?.length > 0 && (
+        <p className="text-[11px]" style={{ color: '#d97706' }}>Stale mirrors: {item.stale_sources.join(', ')}</p>
+      )}
+
+      {label === 'Teable' && item?.tables && (
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(item.tables).map(([name, table]) => (
+            <Badge key={name} color={table?.ok ? 'green' : 'red'}>{name}</Badge>
+          ))}
+        </div>
+      )}
+
+      {label === 'Environment' && item?.checks && (
+        <div className="space-y-1">
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(item.checks).map(([name, value]) => (
+              <Badge key={name} color={value ? 'green' : 'red'}>{name}</Badge>
+            ))}
+          </div>
+          {item.missing?.length > 0 && (
+            <div className="rounded-lg p-2" style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.18)' }}>
+              <p className="text-[11px] font-semibold mb-1" style={{ color: '#dc2626' }}>Action needed in production secrets</p>
+              {item.missing.map(name => (
+                <p key={name} className="text-[11px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                  <code style={{ color: '#dc2626' }}>{name}</code>: {item.guidance?.[name] || 'Set this value in the deployment environment.'}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DeploymentChecklist() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -339,37 +386,7 @@ function DeploymentChecklist() {
 
       {loading && !data ? <StatSkeleton /> : error ? <Err msg={error} onRetry={load} /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-          {checks.map(([label, item]) => {
-            const ok = Boolean(item?.ok)
-            return (
-              <div key={label} className="card min-w-0 space-y-2" style={{ borderLeft: `3px solid ${ok ? '#16a34a' : '#dc2626'}` }}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{label}</p>
-                  <Badge color={ok ? 'green' : 'red'}>{ok ? 'OK' : 'Check'}</Badge>
-                </div>
-                <p className="text-[11px] leading-relaxed min-h-[32px]" style={{ color: 'var(--text-3)' }} title={item?.detail || ''}>
-                  {item?.detail || 'No detail'}
-                </p>
-                {label === 'Sync Freshness' && item?.stale_sources?.length > 0 && (
-                  <p className="text-[11px]" style={{ color: '#d97706' }}>Stale: {item.stale_sources.join(', ')}</p>
-                )}
-                {label === 'Teable' && item?.tables && (
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(item.tables).map(([name, table]) => (
-                      <Badge key={name} color={table?.ok ? 'green' : 'red'}>{name}</Badge>
-                    ))}
-                  </div>
-                )}
-                {label === 'Environment' && item?.checks && (
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(item.checks).map(([name, value]) => (
-                      <Badge key={name} color={value ? 'green' : 'red'}>{name}</Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {checks.map(([label, item]) => <HealthEvidenceCard key={label} label={label} item={item} />)}
         </div>
       )}
     </section>
@@ -1327,7 +1344,7 @@ function AuditLogTab() {
 
                         {/* Duration */}
                         <td className="px-3 py-2 tabular-nums whitespace-nowrap"
-                          style={{ color: row.duration_ms > 2000 ? '#f59e0b' : row.duration_ms > 5000 ? '#dc2626' : 'var(--text-2)' }}>
+                          style={{ color: row.duration_ms > 5000 ? '#dc2626' : row.duration_ms > 2000 ? '#f59e0b' : 'var(--text-2)' }}>
                           {row.duration_ms != null ? `${row.duration_ms}ms` : '—'}
                         </td>
 
@@ -3950,17 +3967,20 @@ function DeploymentHealthTab() {
   useEffect(() => { load() }, [load])
 
   const checks = data ? [
-    { key: 'postgres', label: 'PostgreSQL',    icon: Database,      detail: data.postgres?.detail },
-    { key: 'valkey',   label: 'Valkey / Redis', icon: Activity,      detail: data.valkey?.detail },
-    { key: 'teable',   label: 'Teable API',    icon: Link2,         detail: data.teable?.detail },
-    { key: 'email',    label: 'Email (Brevo)',  icon: Mail,          detail: data.email?.detail },
-    { key: 'env',      label: 'Env Variables', icon: ServerCrash,   detail: data.env?.ok
-        ? 'All required vars set'
-        : 'Missing: ' + Object.entries(data.env?.checks || {}).filter(([,v]) => !v).map(([k]) => k).join(', ') },
+    ['PostgreSQL', data.postgres],
+    ['Teable', data.teable],
+    ['Valkey / Redis', data.valkey],
+    ['Email (Brevo)', data.email],
+    ['OpenRouter', data.openrouter],
+    ['Auth Sessions', data.auth_sessions],
+    ['Cron Jobs', data.cron_jobs],
+    ['Sync Freshness', data.sync_freshness],
+    ['Failed Webhooks', data.failed_webhooks],
+    ['Environment', data.env],
   ] : []
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>System Health</h2>
@@ -3989,28 +4009,8 @@ function DeploymentHealthTab() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            {checks.map(({ key, label, icon: Icon, detail }) => {
-              const ok = data[key]?.ok
-              return (
-                <div key={key} className="rounded-xl border p-3 flex items-center gap-3"
-                  style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: ok ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)' }}>
-                    <Icon size={14} style={{ color: ok ? '#16a34a' : '#dc2626' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{label}</p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{detail || '—'}</p>
-                  </div>
-                  <div className="flex-shrink-0">
-                    {ok
-                      ? <Badge color="green">OK</Badge>
-                      : <Badge color="red">Fail</Badge>}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+            {checks.map(([label, item]) => <HealthEvidenceCard key={label} label={label} item={item} />)}
           </div>
 
           {data.env && !data.env.ok && (

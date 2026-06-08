@@ -38,6 +38,10 @@ if [[ -n "${HEALTH_URL:-}" ]]; then
 else
   echo "== Live health endpoint skipped =="
   echo "Set HEALTH_URL=https://your-api/health to include live health verification."
+  if [[ "${REQUIRE_HEALTH_URL:-0}" == "1" ]]; then
+    echo "REQUIRE_HEALTH_URL=1 was set, so production check cannot pass without HEALTH_URL." >&2
+    exit 1
+  fi
 fi
 
 echo "Production check complete."

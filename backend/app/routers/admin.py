@@ -1401,14 +1401,26 @@ async def deployment_health(_: str = Depends(require_admin)):
     env_checks = {
         "POSTGRES_URL":  bool(s.postgres_url),
         "TEABLE_API_TOKEN": bool(s.teable_api_token),
-        "APP_SECRET":    s.app_secret != "fintrack-dev-secret-change-me",
+        "APP_SECRET":    bool(s.app_secret and s.app_secret != "fintrack-dev-secret-change-me"),
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
         "OPENROUTER_API_KEY": bool(s.openrouter_api_key),
     }
+    env_guidance = {
+        "POSTGRES_URL": "Required for PG mirror, audit logs, auth users, sessions, reports, and admin dashboards.",
+        "TEABLE_API_TOKEN": "Required for Teable source-of-truth reads/writes.",
+        "APP_SECRET": "Required for secure login/session token signing. Set a long random value in production.",
+        "BREVOAPIKEY": "Required for invite, reset-password, and email test delivery.",
+        "FRONTEND_URL": "Required for correct reset/invite links and OAuth redirects.",
+        "OPENROUTER_API_KEY": "Required for AI assistant and report generation.",
+    }
+    missing_env = [name for name, ok in env_checks.items() if not ok]
     results["env"] = {
         "ok": all(env_checks.values()),
         "checks": env_checks,
+        "missing": missing_env,
+        "guidance": env_guidance,
+        "detail": "All required production env vars are present" if not missing_env else f"Missing or unsafe: {', '.join(missing_env)}",
     }
 
     results["deployment"] = {

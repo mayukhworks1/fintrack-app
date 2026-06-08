@@ -6,6 +6,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 
 // ── Module-level mocks ────────────────────────────────────────────────────────
 
@@ -76,6 +79,8 @@ vi.mock('../context/ThemeContext', () => ({
 function wrap(ui) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)
 }
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
@@ -192,6 +197,18 @@ describe('api service structure', () => {
     const url = api.admin.userTimelineExportUrl('abc-123', 'csv')
     expect(url).toContain('abc-123')
     expect(url).toContain('fmt=csv')
+  })
+})
+
+// ── Admin request investigation filters ──────────────────────────────────────
+
+describe('admin request filters', () => {
+  it('exposes user identity in the advanced condition builder', () => {
+    const source = readFileSync(resolve(__dirname, '../pages/AdminDashboard.jsx'), 'utf8')
+    expect(source).toContain("{ key: 'user', label: 'User', type: 'text' }")
+    expect(source).toContain("{ key: 'user_email', label: 'User Email', type: 'text' }")
+    expect(source).toContain("{ key: 'user_name', label: 'User Name', type: 'text' }")
+    expect(source).toContain("{ key: 'user_id', label: 'User ID', type: 'text' }")
   })
 })
 

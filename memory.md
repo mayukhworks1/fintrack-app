@@ -965,3 +965,86 @@ Next likely follow-ups:
 - Run live health verification with `HEALTH_URL` before the next production-sensitive push.
 - If user reports Admin access still failing in browser, first clear frontend token/cache or sign out/in because backend precedence is fixed but old browser state can still hold stale tokens until replaced.
 - Consider adding a frontend smoke test that asserts Admin Requests condition field list includes `User` / `User Email`.
+
+## 2026-06-08 Admin Health Evidence / Production Check Guard
+
+User asked to address the remaining production-hardening list:
+
+- Add live production health check with `HEALTH_URL` before production-sensitive pushes.
+- Add frontend smoke test for Admin Requests user filters.
+- Improve large chunks, optimistic CRUD reconciliation, audit investigation links, and Runey-style UI.
+- Make Admin Overview/System Health honest, understandable, evident, and backed by live proof.
+
+Implemented in this tranche:
+
+- `scripts/production_check.sh`
+  - Still runs backend import, backend smoke tests, frontend tests, frontend build.
+  - If `HEALTH_URL` is set, it curls and prints the live health JSON.
+  - If `REQUIRE_HEALTH_URL=1` is set without `HEALTH_URL`, the script now fails intentionally.
+  - Production-sensitive command to use:
+    - `REQUIRE_HEALTH_URL=1 HEALTH_URL=https://mayukhj24-fintrack-api.hf.space/health ./scripts/production_check.sh`
+
+- `backend/app/routers/admin.py`
+  - Deployment health `env` payload now includes:
+    - `missing`
+    - `guidance`
+    - clearer `detail`
+  - `APP_SECRET` check is explicit and treats the dev default as unsafe.
+  - Health guidance explains why each env var matters:
+    - `POSTGRES_URL`
+    - `TEABLE_API_TOKEN`
+    - `APP_SECRET`
+    - `BREVOAPIKEY`
+    - `FRONTEND_URL`
+    - `OPENROUTER_API_KEY`
+
+- `frontend/src/pages/AdminDashboard.jsx`
+  - Added reusable `HealthEvidenceCard`.
+  - Admin Overview Production Health and dedicated System Health tab now use the same evidence-rich cards.
+  - Environment card now shows exactly what is missing and what action to take.
+  - Fixed request duration severity coloring: `>5000ms` now correctly shows red before `>2000ms` amber.
+
+- `frontend/src/test/smoke.test.jsx`
+  - Added smoke coverage that Admin Requests advanced condition builder exposes:
+    - `User`
+    - `User Email`
+    - `User Name`
+    - `User ID`
+
+- `backend/.env.example`
+  - Updated to current production reality:
+    - added `APP_SECRET`
+    - replaced outdated Zoho SMTP guidance with Brevo API guidance
+
+Verification:
+
+- `npm test -- --run`
+  - `16 passed`
+- `backend/.venv/bin/python -m pytest backend/tests/smoke_test.py -q`
+  - `19 passed`
+  - existing Pydantic v2 deprecation warning remains.
+- `./scripts/production_check.sh`
+  - passed.
+- `REQUIRE_HEALTH_URL=1 ./scripts/production_check.sh`
+  - intentionally failed without `HEALTH_URL`, proving the guard works.
+- `REQUIRE_HEALTH_URL=1 HEALTH_URL=https://mayukhj24-fintrack-api.hf.space/health ./scripts/production_check.sh`
+  - passed.
+  - Live HF `/health` returned `status: healthy`, PostgreSQL connected, Valkey connected, sync running, Teable configured, AI configured.
+
+What the user still needs to do:
+
+- In Hugging Face Space secrets, add `APP_SECRET`.
+- Generate a long random value, for example:
+  - `openssl rand -base64 48`
+- After adding it, restart/rebuild the HF Space and recheck Admin Panel -> System Health.
+
+Important scope note:
+
+- Route-level lazy loading and chart vendor splitting already exist in `frontend/src/App.jsx` and `frontend/vite.config.js`.
+- Further chunk reduction requires page-internal component splitting, especially for:
+  - `WebInvoices`
+  - `AdminDashboard`
+  - `StatusBoard`
+  - `Invoices`
+  - `charts-recharts`
+- Optimistic CRUD reconciliation across invoices/projects/web invoices remains a separate high-risk UI/data-flow tranche and should be implemented per module with tests, not bundled into admin health changes.
