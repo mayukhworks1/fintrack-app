@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 
 const OAUTH_ERROR_MESSAGES = {
-  pending_approval: 'Your account is awaiting superadmin approval. You'll be notified once it's activated.',
+  pending_approval: "Your account is awaiting superadmin approval. You'll be notified once it's activated.",
   disabled:         'Your account has been disabled. Contact your administrator for help.',
   rejected:         'Your account request was not approved. Contact your administrator if you think this is a mistake.',
   google_error:     'Google sign-in failed. Please try again or use email login.',
