@@ -1,14 +1,181 @@
-import { NavLink, Link, useLocation } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark
+  Plus, Landmark, FileSpreadsheet, Layers
 } from 'lucide-react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
+
+/* ── New quick-action button with animated popover ── */
+const NEW_OPTIONS = [
+  {
+    id: 'invoice',
+    label: 'New Invoice',
+    sub: 'Raise an invoice for a client',
+    icon: Receipt,
+    to: '/invoices?new=1',
+    accent: '#7d95ff',
+    accentBg: 'rgba(125,149,255,0.12)',
+    accentBorder: 'rgba(125,149,255,0.22)',
+  },
+  {
+    id: 'project',
+    label: 'New Project',
+    sub: 'Start tracking a new engagement',
+    icon: Layers,
+    to: '/projects/new',
+    accent: '#84e254',
+    accentBg: 'rgba(132,226,84,0.10)',
+    accentBorder: 'rgba(132,226,84,0.20)',
+  },
+]
+
+function NewQuickAction({ collapsed }) {
+  const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState('invoice') // invoice selected by default
+  const [mounted, setMounted] = useState(false)
+  const [visible, setVisible] = useState(false)
+  const ref = useRef(null)
+  const navigate = useNavigate()
+
+  const openPopover = useCallback(() => {
+    setHovered('invoice')
+    setOpen(true)
+    setMounted(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+  }, [])
+
+  const closePopover = useCallback(() => {
+    setVisible(false)
+    setTimeout(() => { setOpen(false); setMounted(false) }, 220)
+  }, [])
+
+  const pick = useCallback((opt) => {
+    closePopover()
+    // If navigating to invoices with ?new=1, we navigate then trigger the drawer
+    // The Invoices page should listen for this query param
+    navigate(opt.to)
+  }, [closePopover, navigate])
+
+  // Close on outside click / Escape
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') closePopover() }
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) closePopover() }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onClick)
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick) }
+  }, [open, closePopover])
+
+  return (
+    <div className="runey-quick-action" ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={open ? closePopover : openPopover}
+        className={`runey-new-button ${collapsed ? 'is-collapsed' : ''}`}
+        title={collapsed ? 'Create new…' : undefined}
+        aria-label={collapsed ? 'Create new' : undefined}
+        aria-expanded={open}
+        style={{ position: 'relative' }}
+      >
+        <Plus size={collapsed ? 18 : 15}
+          style={{ transition: 'transform 0.25s cubic-bezier(.34,1.56,.64,1)', transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }} />
+        {!collapsed && <span>New</span>}
+      </button>
+
+      {mounted && (
+        <div
+          role="dialog"
+          aria-label="Create new"
+          style={{
+            position: 'absolute',
+            left: collapsed ? 56 : 0,
+            bottom: collapsed ? 'auto' : 'calc(100% + 8px)',
+            top: collapsed ? 0 : 'auto',
+            zIndex: 9999,
+            width: 260,
+            background: 'var(--card-bg, #1a1e2a)',
+            border: '1px solid var(--card-border, rgba(255,255,255,0.10))',
+            borderRadius: 20,
+            boxShadow: '0 24px 60px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.2)',
+            padding: '8px',
+            opacity: visible ? 1 : 0,
+            transform: visible
+              ? 'scale(1) translateY(0)'
+              : (collapsed ? 'scale(0.92) translateX(-8px)' : 'scale(0.92) translateY(8px)'),
+            transformOrigin: collapsed ? 'left top' : 'bottom left',
+            transition: 'opacity 0.22s ease, transform 0.22s cubic-bezier(.34,1.56,.64,1)',
+            pointerEvents: visible ? 'auto' : 'none',
+          }}
+        >
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3, #7f8a9c)', padding: '6px 8px 8px', userSelect: 'none' }}>
+            What would you like to create?
+          </p>
+
+          {NEW_OPTIONS.map((opt) => {
+            const Icon = opt.icon
+            const isHov = hovered === opt.id
+            return (
+              <button
+                key={opt.id}
+                onClick={() => pick(opt)}
+                onMouseEnter={() => setHovered(opt.id)}
+                onFocus={() => setHovered(opt.id)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 12px',
+                  borderRadius: 14,
+                  border: `1px solid ${isHov ? opt.accentBorder : 'transparent'}`,
+                  background: isHov ? opt.accentBg : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s, border-color 0.15s, transform 0.12s',
+                  transform: isHov ? 'translateX(2px)' : 'translateX(0)',
+                  marginBottom: 2,
+                }}
+              >
+                <div style={{
+                  width: 38, height: 38, borderRadius: 12,
+                  background: isHov ? opt.accentBg : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${isHov ? opt.accentBorder : 'rgba(255,255,255,0.08)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}>
+                  <Icon size={17} style={{ color: isHov ? opt.accent : 'var(--text-3, #7f8a9c)', transition: 'color 0.15s' }} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: isHov ? opt.accent : 'var(--text-1, #f4f7fb)', margin: 0, transition: 'color 0.15s' }}>
+                    {opt.label}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--text-3, #7f8a9c)', margin: '2px 0 0', lineHeight: 1.3 }}>
+                    {opt.sub}
+                  </p>
+                </div>
+                {opt.id === 'invoice' && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    padding: '2px 6px', borderRadius: 6,
+                    color: opt.accent, background: opt.accentBg,
+                    flexShrink: 0, marginLeft: 'auto',
+                  }}>
+                    Default
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ── Brand icon — minimal fin/track monogram ── */
 function BrandIcon({ size = 28 }) {
@@ -140,17 +307,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         ) : null}
       </div>
 
-      <div className="runey-quick-action">
-        <Link
-          to="/projects/new"
-          className={`runey-new-button ${collapsed ? 'is-collapsed' : ''}`}
-          title={collapsed ? 'New project' : undefined}
-          aria-label={collapsed ? 'New project' : undefined}
-        >
-          <Plus size={collapsed ? 18 : 15} />
-          {!collapsed && <span>New</span>}
-        </Link>
-      </div>
+      <NewQuickAction collapsed={collapsed} />
 
       {/* Nav links */}
       <nav className={`runey-nav ${collapsed ? 'is-collapsed' : ''}`} aria-label="Main navigation">

@@ -1879,6 +1879,17 @@ export default function Invoices() {
   /* ── Helpers ── */
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
+
+  // Open new drawer automatically when navigated here with ?new=1
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      openNew()
+      const next = new URLSearchParams(searchParams)
+      next.delete('new')
+      setSearchParams(next, { replace: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const openRecordPayment = r => setDrawer({
     mode: 'payment',
     invoice: r,
