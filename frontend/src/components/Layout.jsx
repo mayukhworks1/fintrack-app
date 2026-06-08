@@ -43,6 +43,7 @@ function NewQuickAction({ collapsed }) {
   const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
   const btnRef = useRef(null)
   const navigate = useNavigate()
+  const { dark } = useTheme()
 
   const openPopover = useCallback(() => {
     if (!btnRef.current) return
@@ -96,6 +97,17 @@ function NewQuickAction({ collapsed }) {
     }
   }, [open, closePopover])
 
+  const bg       = dark ? '#1c2030'                      : '#ffffff'
+  const border   = dark ? 'rgba(255,255,255,0.10)'       : 'rgba(15,23,42,0.09)'
+  const shadow   = dark ? '0 32px 80px rgba(0,0,0,0.5)' : '0 16px 48px rgba(15,23,42,0.14)'
+  const labelClr = dark ? 'rgba(255,255,255,0.32)'       : 'rgba(15,23,42,0.38)'
+  const titleClr = dark ? 'rgba(255,255,255,0.92)'       : '#152033'
+  const subClr   = dark ? 'rgba(255,255,255,0.35)'       : '#6b7280'
+  const iconDim  = dark ? 'rgba(255,255,255,0.38)'       : '#9ca3af'
+  const rowHovBg = (opt) => opt.accentBg
+  const iconBg   = dark ? 'rgba(255,255,255,0.05)'       : 'rgba(15,23,42,0.04)'
+  const iconBdr  = dark ? 'rgba(255,255,255,0.08)'       : 'rgba(15,23,42,0.08)'
+
   const popover = mounted && createPortal(
     <div
       role="dialog"
@@ -106,10 +118,10 @@ function NewQuickAction({ collapsed }) {
         left: popoverPos.left,
         zIndex: 99999,
         width: 272,
-        background: 'linear-gradient(160deg, #1c2030 0%, #161a26 100%)',
-        border: '1px solid rgba(255,255,255,0.10)',
+        background: bg,
+        border: `1px solid ${border}`,
         borderRadius: 20,
-        boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.3)',
+        boxShadow: shadow,
         padding: '8px',
         opacity: visible ? 1 : 0,
         transform: visible ? 'scale(1) translateY(0)' : 'scale(0.94) translateY(-6px)',
@@ -118,7 +130,7 @@ function NewQuickAction({ collapsed }) {
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >
-      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', padding: '6px 10px 8px', userSelect: 'none' }}>
+      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: labelClr, padding: '6px 10px 8px', userSelect: 'none' }}>
         Create new
       </p>
 
@@ -139,7 +151,7 @@ function NewQuickAction({ collapsed }) {
               padding: '10px 12px',
               borderRadius: 14,
               border: `1px solid ${isHov ? opt.accentBorder : 'transparent'}`,
-              background: isHov ? opt.accentBg : 'transparent',
+              background: isHov ? rowHovBg(opt) : 'transparent',
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'background 0.15s, border-color 0.15s, transform 0.15s',
@@ -149,19 +161,19 @@ function NewQuickAction({ collapsed }) {
           >
             <div style={{
               width: 40, height: 40, borderRadius: 12,
-              background: isHov ? opt.accentBg : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${isHov ? opt.accentBorder : 'rgba(255,255,255,0.08)'}`,
+              background: isHov ? opt.accentBg : iconBg,
+              border: `1px solid ${isHov ? opt.accentBorder : iconBdr}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
               transition: 'background 0.15s, border-color 0.15s',
             }}>
-              <Icon size={18} style={{ color: isHov ? opt.accent : 'rgba(255,255,255,0.4)', transition: 'color 0.15s' }} />
+              <Icon size={18} style={{ color: isHov ? opt.accent : iconDim, transition: 'color 0.15s' }} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: isHov ? opt.accent : 'rgba(255,255,255,0.9)', margin: 0, transition: 'color 0.15s' }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: isHov ? opt.accent : titleClr, margin: 0, transition: 'color 0.15s' }}>
                 {opt.label}
               </p>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '2px 0 0', lineHeight: 1.35 }}>
+              <p style={{ fontSize: 11, color: subClr, margin: '2px 0 0', lineHeight: 1.35 }}>
                 {opt.sub}
               </p>
             </div>
