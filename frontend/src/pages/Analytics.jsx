@@ -1330,54 +1330,120 @@ export default function Analytics() {
       </div>
       )}
 
-      {/* ── Invoice status pie ── */}
+      {/* ── Invoice status breakdown — rich split layout ── */}
       {visibleWidgets.has('status_breakdown') && (
-      <ChartCard title="Invoice Status Mix" sub="Amount raised by status — this period">
+      <ChartCard title="Invoice Status Mix" sub="Detailed breakdown of amount, count, and share by status this period">
         {statusBreakdown.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoices in selected period</div>
-        ) : (
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={62} outerRadius={90}
-                  dataKey="amount" nameKey="name" paddingAngle={3} animationBegin={0} animationDuration={800}>
-                  {statusBreakdown.map((entry) => {
-                    const c = entry.name === 'Paid'
-                      ? (dark ? '#84e254' : '#16a34a')
-                      : entry.name === 'Pending' ? '#f3b45d'
-                      : entry.name === 'Cancelled' ? (dark ? '#ff7d80' : '#dc2626') : '#9ca3af'
-                    return <Cell key={entry.name} fill={c} opacity={0.9} />
-                  })}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null
-                    const d = payload[0].payload
-                    const total = statusBreakdown.reduce((s, x) => s + x.amount, 0)
-                    return (
-                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
-                        <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{d.name}</p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-                          <span style={{ color: 'var(--text-3)' }}>Amount</span>
-                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(d.amount)}</span>
+        ) : (() => {
+          const totalAmt = statusBreakdown.reduce((s, x) => s + x.amount, 0)
+          const totalCnt = statusBreakdown.reduce((s, x) => s + x.count, 0)
+          const STATUS_COLOR = (name) =>
+            name === 'Paid'      ? (dark ? '#84e254' : '#16a34a') :
+            name === 'Pending'   ? '#f3b45d' :
+            name === 'Cancelled' ? (dark ? '#ff7d80' : '#dc2626') : '#9ca3af'
+          const STATUS_BG = (name) =>
+            name === 'Paid'      ? (dark ? 'rgba(132,226,84,0.1)' : 'rgba(22,145,95,0.08)') :
+            name === 'Pending'   ? 'rgba(243,180,93,0.1)' :
+            name === 'Cancelled' ? (dark ? 'rgba(255,125,128,0.1)' : 'rgba(220,38,38,0.08)') :
+            'rgba(156,163,175,0.1)'
+          return (
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+              {/* Left: donut + center label */}
+              <div className="flex-shrink-0 flex flex-col items-center justify-center" style={{ minWidth: 200 }}>
+                <div style={{ position: 'relative', width: 180, height: 180 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={58} outerRadius={82}
+                        dataKey="amount" nameKey="name" paddingAngle={3} animationBegin={0} animationDuration={800}>
+                        {statusBreakdown.map((entry) => (
+                          <Cell key={entry.name} fill={STATUS_COLOR(entry.name)} opacity={0.9} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
+                              <p style={{ color: STATUS_COLOR(d.name), fontWeight: 700, marginBottom: 6 }}>{d.name}</p>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                                <span style={{ color: 'var(--text-3)' }}>Amount</span>
+                                <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(d.amount)}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                                <span style={{ color: 'var(--text-3)' }}>Share</span>
+                                <span style={{ color: STATUS_COLOR(d.name), fontWeight: 700 }}>{totalAmt > 0 ? ((d.amount / totalAmt) * 100).toFixed(1) : '0'}%</span>
+                              </div>
+                            </div>
+                          )
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Center label */}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalCnt}</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>invoices</p>
+                  </div>
+                </div>
+                <p className="text-xs mt-2 font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{inr(totalAmt)}</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>total raised this period</p>
+              </div>
+
+              {/* Right: per-status detail rows */}
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+                {statusBreakdown.map((s) => {
+                  const pct = totalAmt > 0 ? (s.amount / totalAmt) * 100 : 0
+                  const cntPct = totalCnt > 0 ? (s.count / totalCnt) * 100 : 0
+                  const color = STATUS_COLOR(s.name)
+                  const bg = STATUS_BG(s.name)
+                  return (
+                    <div key={s.name} className="rounded-2xl p-3.5 transition-transform duration-200 hover:scale-[1.01]"
+                      style={{ background: bg, border: `1px solid ${color}22` }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>{s.name}</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
-                          <span style={{ color: 'var(--text-3)' }}>Invoices</span>
-                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{d.count}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
-                          <span style={{ color: 'var(--text-3)' }}>Share</span>
-                          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{total > 0 ? ((d.amount / total) * 100).toFixed(1) : '0'}%</span>
-                        </div>
+                        <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded"
+                          style={{ color, background: `${color}18` }}>
+                          {pct.toFixed(1)}%
+                        </span>
                       </div>
-                    )
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-3)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+                      <p className="text-lg font-bold tabular-nums" style={{ color }}>{inr(s.amount)}</p>
+                      <div className="flex items-center justify-between mt-1 mb-2">
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{s.count} invoice{s.count === 1 ? '' : 's'}</p>
+                        <p className="text-[10px] tabular-nums" style={{ color: 'var(--text-3)' }}>{cntPct.toFixed(0)}% by count</p>
+                      </div>
+                      {/* Amount share bar */}
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Summary stat row */}
+                <div className="rounded-2xl p-3.5 sm:col-span-2"
+                  style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: '1px solid var(--card-border)' }}>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    {[
+                      { label: 'Collection rate', value: totalAmt > 0 ? `${((statusBreakdown.find(s => s.name === 'Paid')?.amount || 0) / totalAmt * 100).toFixed(1)}%` : '—', color: 'var(--fin-positive)' },
+                      { label: 'Avg per invoice', value: totalCnt > 0 ? inr(totalAmt / totalCnt) : '—', color: 'var(--text-1)' },
+                      { label: 'Pending exposure', value: inr(statusBreakdown.find(s => s.name === 'Pending')?.amount || 0), color: 'var(--fin-warning)' },
+                    ].map(stat => (
+                      <div key={stat.label}>
+                        <p className="text-base font-bold tabular-nums" style={{ color: stat.color }}>{stat.value}</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </ChartCard>
       )}
 
