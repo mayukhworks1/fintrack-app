@@ -74,11 +74,14 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
 
 
 def app_origin_from_request(request) -> str:
+    # Always prefer the configured frontend URL — request Origin/Referer headers
+    # can point to third-party domains (e.g. accounts.google.com during OAuth).
+    if settings.frontend_url and settings.frontend_url not in ("*", ""):
+        return settings.frontend_url.rstrip("/")
+    # Only fall back to request headers when frontend_url is not configured.
     origin = request.headers.get("origin") or request.headers.get("referer") or ""
     if origin:
         parts = origin.split("/", 3)
         if len(parts) >= 3:
             return "/".join(parts[:3])
-    if settings.frontend_url and settings.frontend_url != "*":
-        return settings.frontend_url.rstrip("/")
     return ""
