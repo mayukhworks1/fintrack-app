@@ -1065,3 +1065,81 @@ Important scope note:
   - `Invoices`
   - `charts-recharts`
 - Optimistic CRUD reconciliation across invoices/projects/web invoices remains a separate high-risk UI/data-flow tranche and should be implemented per module with tests, not bundled into admin health changes.
+
+## 2026-06-08 Auth/profile/email improvement tranche
+
+User confirmed Google SSO works after secrets and hard refresh. Next request was to improve auth/profile and email flows:
+
+- Better emails for account creation and approval.
+- Superadmin approval notification should include clear approve/reject buttons.
+- Profile page must collect practical user details, not only display name.
+- Superadmin must be able to map a user login email to the exact Teable `Raised By` value, including aliases like `faizan` when Teable does not store a full email.
+
+Implemented locally:
+
+- `backend/app/db/postgres.py`
+  - Additive auth user columns:
+    - `phone`
+    - `job_title`
+    - `department`
+    - `company`
+    - `location`
+    - `timezone`
+  - Existing `teable_email` column remains, but product meaning should now be treated as a Teable Raised By alias/override, not necessarily an email.
+
+- `backend/app/routers/auth.py`
+  - `GET /api/auth/profile` now returns phone/title/department/company/location/timezone.
+  - `PATCH /api/auth/profile` updates all profile details in one request.
+  - Changes remain additive and require the same verified email-auth session dependency.
+
+- `backend/app/services/auth_master.py`
+  - Added admin review link helper for pending account emails.
+  - Password registration pending email now sends:
+    - superadmin notification with Review, Approve, Reject buttons linking to Admin Users for the exact user.
+    - user acknowledgement that the account is pending approval.
+  - Google SSO pending-user email now sends the same superadmin action buttons plus user acknowledgement.
+  - Buttons deep-link to Admin and still require authenticated admin/superadmin session; they are not unauthenticated approval bypasses.
+
+- `backend/app/routers/admin.py`
+  - `GET /api/admin/auth/users` now supports exact `user_id` filtering.
+  - Search now also checks `teable_email`/Raised By alias.
+  - Admin auth users response includes the new profile fields.
+
+- `frontend/src/pages/Profile.jsx`
+  - Profile screen now has a full editable Profile Details card:
+    - full name
+    - phone
+    - role/title
+    - department
+    - company
+    - location
+    - timezone
+  - Existing password change and sign-out remain.
+
+- `frontend/src/pages/AdminDashboard.jsx`
+  - Auth Users tab reads `?user=<id>&decision=approve|reject` deep links from approval emails.
+  - If a decision parameter is present, it prompts the authenticated admin to approve/reject the focused user.
+  - User focus banner lets admin return to all users.
+  - Teable mapping UI relabeled from vague email wording to `Teable Raised By alias` with guidance for values like `faizan`.
+
+Validation run:
+
+- `frontend`: `npm test -- --run` -> 16 passed.
+- `backend`: `/Users/Mayuk/fintrack-app/backend/.venv/bin/python -m pytest -q` -> 19 passed.
+- `frontend`: `npm run build` -> passed.
+
+Recommended email trigger contract now:
+
+- User creates email/password account -> user gets pending acknowledgement; superadmin gets approval email with buttons.
+- User first signs in via Google SSO and does not already exist -> user gets pending acknowledgement; superadmin gets approval email with buttons.
+- Superadmin approves/reactivates user -> user gets access-approved email.
+- Superadmin creates active user with invite -> user gets set-password invite.
+- Superadmin resends invite -> fresh set-password invite.
+- User forgot password -> reset email if account is active.
+- Superadmin force password reset -> reset email and all active sessions revoked.
+
+Pending before production push:
+
+- Run full production check with live `HEALTH_URL`.
+- Commit and push if user approves.
+- Optional future cleanup: rename DB column `teable_email` to `teable_raised_by_alias` via a careful compatibility migration. Not done now to avoid breaking existing code/data.

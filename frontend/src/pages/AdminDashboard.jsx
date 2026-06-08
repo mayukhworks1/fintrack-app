@@ -1793,6 +1793,7 @@ function AuthStatusBadge({ status }) {
 }
 
 function AuthUsersTab() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState(null)
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1807,6 +1808,7 @@ function AuthUsersTab() {
   const [actingId, setActingId] = useState('')
   const [message, setMessage] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [decisionHandled, setDecisionHandled] = useState(false)
   const [smtpTo, setSmtpTo] = useState('')
   const [newUser, setNewUser] = useState({
     email: '',
@@ -1815,6 +1817,8 @@ function AuthUsersTab() {
     status: 'active',
     send_invite: true,
   })
+  const targetUserId = searchParams.get('user') || ''
+  const requestedDecision = ['approve', 'reject'].includes(searchParams.get('decision')) ? searchParams.get('decision') : ''
 
   const roleOpts = useMemo(
     () => roles.map(r => [r.role_key, `${r.label || r.role_key}`]),
@@ -1830,6 +1834,7 @@ function AuthUsersTab() {
     setLoading(true); setError(null)
     try {
       const res = await api.admin.authUsers({
+        user_id: targetUserId || undefined,
         limit,
         offset,
         status: statusFilter[0] || undefined,
@@ -1849,10 +1854,10 @@ function AuthUsersTab() {
     } finally {
       setLoading(false)
     }
-  }, [limit, offset, statusFilter, roleFilter, search])
+  }, [limit, offset, statusFilter, roleFilter, search, targetUserId])
 
   useEffect(() => { loadRoles().catch(e => setError(e.message)) }, [loadRoles])
-  useEffect(() => { setOffset(0) }, [limit, statusFilter, roleFilter, search])
+  useEffect(() => { setOffset(0) }, [limit, statusFilter, roleFilter, search, targetUserId])
   useEffect(() => { load() }, [load])
 
   const act = useCallback(async (row, action) => {
@@ -1878,6 +1883,19 @@ function AuthUsersTab() {
       setActingId('')
     }
   }, [load, roleByUser])
+
+  useEffect(() => {
+    if (!requestedDecision || !targetUserId || decisionHandled || !data?.rows?.length) return
+    const row = data.rows.find(r => r.id === targetUserId)
+    if (!row) return
+    setDecisionHandled(true)
+    // Remove ?decision from URL first so a page refresh doesn't re-trigger,
+    // then execute — act() sets its own error state if the API call fails.
+    const next = new URLSearchParams(searchParams)
+    next.delete('decision')
+    setSearchParams(next, { replace: true })
+    act(row, requestedDecision)
+  }, [act, data, decisionHandled, requestedDecision, searchParams, setSearchParams, targetUserId])
 
   const createUser = useCallback(async (e) => {
     e?.preventDefault()
@@ -2069,7 +2087,7 @@ function AuthUsersTab() {
           <div>
             <p className="font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Auth control plane</p>
             <p style={{ color: 'var(--text-3)' }}>
-              Create, invite, approve, change roles, revoke sessions, and trace each user through auth_events plus request audit logs.
+              Create, invite, approve, change roles, map Teable Raised By aliases, revoke sessions, and trace each user through auth_events plus request audit logs.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2079,7 +2097,7 @@ function AuthUsersTab() {
             <input
               value={smtpTo}
               onChange={e => setSmtpTo(e.target.value)}
-              placeholder="test email optional"
+              placeholder="email test recipient"
               className="input text-xs px-3 py-1.5 rounded-lg w-44"
             />
             <button onClick={testSmtp} disabled={actingId === 'smtp-test'} className="btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
@@ -2144,8 +2162,27 @@ function AuthUsersTab() {
           ]} />
         <FMulti label="Role" selected={roleFilter} onChange={setRoleFilter} width={170}
           opts={roleOpts} />
-        <FPill label="Search" value={search} onChange={setSearch} placeholder="email or name…" width={220} />
+          <FPill label="Search" value={search} onChange={setSearch} placeholder="email or name…" width={220} />
       </FilterBar>
+
+      {targetUserId && (
+        <div className="rounded-xl border p-3 text-xs flex flex-wrap items-center justify-between gap-2"
+          style={{ borderColor: 'rgba(37,99,235,0.24)', background: 'rgba(37,99,235,0.07)' }}>
+          <span style={{ color: 'var(--text-2)' }}>
+            Reviewing user from email action link. Clear this focus to return to all users.
+          </span>
+          <button
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('user'); next.delete('decision')
+              setSearchParams(next, { replace: true })
+            }}
+            className="btn-secondary text-xs px-3 py-1.5"
+          >
+            Show all users
+          </button>
+        </div>
+      )}
 
       {data && (
         <div className="text-xs flex flex-wrap gap-2" style={{ color: 'var(--text-3)' }}>
@@ -2187,9 +2224,9 @@ function AuthUsersTab() {
                     key={row.id}
                     className="rounded-2xl border p-4 transition-all"
                     style={{
-                      borderColor: 'var(--border)',
+                      borderColor: row.id === targetUserId ? 'rgba(37,99,235,0.55)' : 'var(--border)',
                       background: 'linear-gradient(135deg, var(--card-bg), var(--bg-soft))',
-                      boxShadow: 'var(--shadow-soft)',
+                      boxShadow: row.id === targetUserId ? '0 18px 50px rgba(37,99,235,0.18)' : 'var(--shadow-soft)',
                     }}
                   >
                     <div className="grid grid-cols-[minmax(260px,1.2fr)_minmax(220px,0.9fr)_minmax(360px,1.1fr)] gap-4 items-start">
@@ -2221,15 +2258,18 @@ function AuthUsersTab() {
 
                       <div className="rounded-xl border p-3 min-w-0" style={{ borderColor: 'var(--border)', background: 'var(--glass-bg)' }}>
                         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] mb-1" style={{ color: 'var(--text-3)' }}>
-                          Teable raised-by match
+                          Teable Raised By alias
                         </p>
                         <EditableName
                           value={row.teable_email || ''}
                           saving={actingId === `${row.id}:teable`}
                           onSave={v => updateTeableEmail(row, v)}
-                          placeholder={row.email}
-                          emptyLabel="Uses login email unless overridden"
+                          placeholder={`e.g. ${row.email?.split('@')[0] || 'faizan'}`}
+                          emptyLabel="Uses login email unless alias is set"
                         />
+                        <p className="text-[10px] mt-2" style={{ color: 'var(--text-3)' }}>
+                          Use this when Teable stores Raised By as a name/alias like “faizan” instead of the login email.
+                        </p>
                         <div className="grid grid-cols-2 gap-2 mt-3">
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Sessions</p>
