@@ -1,13 +1,15 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
+  ComposedChart, ReferenceLine,
 } from 'recharts'
 import {
   RefreshCw, AlertCircle, TrendingUp, TrendingDown, IndianRupee,
   Wallet, Receipt, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
   Target, Sparkles, Activity, CalendarClock, CheckCircle2, Hourglass,
-  Users, Layers, Zap, ArrowRight,
+  Users, Layers, Zap, ArrowRight, Filter, BarChart2, PieChart as PieIcon,
+  ChevronRight, DollarSign, Percent, Timer,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
@@ -115,6 +117,8 @@ const ANALYTICS_WIDGET_CATALOG = [
   { id: 'status_breakdown', label: 'Invoice status mix', description: 'Status distribution by amount raised.' },
   { id: 'client_concentration', label: 'Client concentration', description: 'Revenue distribution across clients.' },
   { id: 'project_profitability', label: 'Project profitability', description: 'Project-level revenue, cost, profit, and outstanding exposure.' },
+  { id: 'pipeline', label: 'Revenue pipeline', description: 'Funnel from raised → collected → outstanding → overdue.' },
+  { id: 'dso_trend', label: 'Payment speed trend', description: 'Month-by-month average days to collect.' },
 ]
 
 const ANALYTICS_DEFAULT_WIDGET_IDS = ANALYTICS_WIDGET_CATALOG.map((widget) => widget.id)
@@ -232,6 +236,73 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
         <p className="text-[13px] font-bold leading-tight" style={{ color: m.fg }}>{title}</p>
         <p className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
       </div>
+    </div>
+  )
+}
+
+/* Custom tooltip wrapper for recharts with consistent design */
+function CustomTooltip({ active, payload, label, formatter, dark: _dark }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: 'var(--card-bg)',
+      border: '1px solid var(--card-border)',
+      borderRadius: 14,
+      padding: '10px 14px',
+      fontSize: 12,
+      boxShadow: 'var(--card-shadow)',
+      minWidth: 140,
+    }}>
+      {label && <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{label}</p>}
+      {payload.map((item, i) => (
+        <div key={i} className="flex items-center justify-between gap-4">
+          <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0, display: 'inline-block' }} />
+            {item.name}
+          </span>
+          <span style={{ color: 'var(--text-1)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+            {formatter ? formatter(item.value, item.name, item) : item.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* Pipeline funnel stages */
+function PipelineFunnel({ data, dark }) {
+  if (!data) return null
+  const stages = [
+    { label: 'Total Raised', value: data.raised, color: '#7d95ff', pct: 100 },
+    { label: 'Collected', value: data.received, color: '#84e254', pct: data.raised > 0 ? (data.received / data.raised) * 100 : 0 },
+    { label: 'Outstanding', value: data.outstanding, color: '#f3b45d', pct: data.raised > 0 ? (data.outstanding / data.raised) * 100 : 0 },
+    { label: 'Overdue (>30d)', value: data.overdue, color: '#ff7d80', pct: data.raised > 0 ? (data.overdue / data.raised) * 100 : 0 },
+  ]
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {stages.map((s, i) => (
+        <div key={s.label} className="relative overflow-hidden rounded-2xl p-4 transition-transform duration-200 hover:scale-[1.02]"
+          style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: `1px solid ${s.color}22` }}>
+          {/* Background fill bar */}
+          <div className="absolute inset-x-0 bottom-0 rounded-b-2xl transition-all duration-700"
+            style={{ height: `${s.pct}%`, background: `${s.color}11` }} />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              {i > 0 && (
+                <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded"
+                  style={{ color: s.color, background: `${s.color}18` }}>
+                  {s.pct.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            <p className="text-lg font-bold tabular-nums" style={{ color: s.color }}>{inr(s.value)}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{s.label}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -381,6 +452,52 @@ export default function Analytics() {
       counts[bucket]  += 1
     })
     return Object.entries(buckets).map(([range, amount]) => ({ range, amount, count: counts[range] }))
+  }, [allInvoices])
+
+  /* ── DSO trend per month (last 8 months) ── */
+  const dsoTrend = useMemo(() => {
+    const byMonth = {}
+    allInvoices.forEach(r => {
+      const f = r.fields || {}
+      if (f['Payment Status'] !== 'Paid') return
+      const key = monthKey(f['Cleared Date'])
+      if (!key) return
+      const days = daysBetween(f['Raised Date'], f['Cleared Date'])
+      if (days == null) return
+      if (!byMonth[key]) byMonth[key] = { sum: 0, count: 0, collected: 0 }
+      byMonth[key].sum += days
+      byMonth[key].count += 1
+      byMonth[key].collected += Number(f['Amount Raised'] || 0)
+    })
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([key, { sum, count, collected }]) => ({
+        label: monthLabel(key),
+        dso: Math.round(sum / count),
+        count,
+        collected,
+      }))
+  }, [allInvoices])
+
+  /* ── Revenue pipeline funnel ── */
+  const pipeline = useMemo(() => {
+    if (!allInvoices.length) return null
+    let raised = 0, received = 0, outstanding = 0, overdue = 0
+    allInvoices.forEach(r => {
+      const f = r.fields || {}
+      if (f['Payment Status'] === 'Cancelled') return
+      const amt = Number(f['Amount Raised'] || 0)
+      raised += amt
+      if (f['Payment Status'] === 'Paid') {
+        received += amt
+      } else {
+        outstanding += amt
+        const aging = Number(f['Agening (Days)'] || 0)
+        if (aging > 30) overdue += amt
+      }
+    })
+    return { raised, received, outstanding, overdue }
   }, [allInvoices])
 
   /* ── Top pending invoices (oldest first, top 5) ── */
@@ -973,11 +1090,18 @@ export default function Analytics() {
         </section>
       )}
 
+      {/* ── Revenue pipeline funnel ── */}
+      {visibleWidgets.has('pipeline') && pipeline && (
+        <ChartCard title="Revenue Pipeline" sub="Lifecycle from raised → collected → outstanding → overdue">
+          <PipelineFunnel data={pipeline} dark={dark} />
+        </ChartCard>
+      )}
+
       {/* ── Cash flow timeline ── */}
       {visibleWidgets.has('cashflow') && (
       <ChartCard
         title="Cash Flow"
-        sub="Monthly raised vs collected (last 12 months)"
+        sub="Monthly raised (bars) vs collected (line) — last 12 months"
         action={monthDelta != null && (
           <span className="text-[11px] font-semibold tabular-nums px-2 py-1 rounded-md flex items-center gap-1"
             style={{
@@ -992,29 +1116,123 @@ export default function Analytics() {
         {cashflow.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoice data yet</div>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={cashflow} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={cashflow} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              style={{ cursor: 'crosshair' }}>
               <defs>
-                <linearGradient id="raisedG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+                <linearGradient id="raisedBarG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={dark ? '#7d95ff' : '#2563eb'} stopOpacity={0.85} />
+                  <stop offset="100%" stopColor={dark ? '#7d95ff' : '#2563eb'} stopOpacity={0.45} />
                 </linearGradient>
-                <linearGradient id="collectedG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#16a34a" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
+                <linearGradient id="collectedLineG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={dark ? '#84e254' : '#16a34a'} stopOpacity={0.4} />
+                  <stop offset="100%" stopColor={dark ? '#84e254' : '#16a34a'} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 10 }} />
-              <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} />
-              <Tooltip {...executiveTooltip} formatter={(v, name) => [inr(v), name]} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area type="monotone" dataKey="raised"    stroke="#2563eb" strokeWidth={2} fill="url(#raisedG)"    name="Raised" />
-              <Area type="monotone" dataKey="collected" stroke="#16a34a" strokeWidth={2} fill="url(#collectedG)" name="Collected" />
-            </AreaChart>
+              <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} axisLine={false} tickLine={false} width={52} />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const raised = payload.find(p => p.dataKey === 'raised')?.value || 0
+                  const collected = payload.find(p => p.dataKey === 'collected')?.value || 0
+                  const gap = raised - collected
+                  const rate = raised > 0 ? (collected / raised * 100).toFixed(1) : '—'
+                  return (
+                    <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)', minWidth: 170 }}>
+                      <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 8 }}>{label}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                          <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: dark ? '#7d95ff' : '#2563eb', display: 'inline-block' }} />Raised
+                          </span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(raised)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                          <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: dark ? '#84e254' : '#16a34a', display: 'inline-block' }} />Collected
+                          </span>
+                          <span style={{ color: dark ? '#84e254' : '#16a34a', fontWeight: 600 }}>{inr(collected)}</span>
+                        </div>
+                        {gap > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                            <span style={{ color: 'var(--text-3)' }}>Gap</span>
+                            <span style={{ color: 'var(--fin-warning)', fontWeight: 600 }}>{inr(gap)}</span>
+                          </div>
+                        )}
+                        <div style={{ borderTop: '1px solid var(--card-border)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Collection rate</span>
+                          <span style={{ color: 'var(--fin-positive)', fontWeight: 700 }}>{rate}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-3)' }} />
+              <Bar dataKey="raised" name="Raised" fill="url(#raisedBarG)" radius={[4, 4, 0, 0]}
+                animationBegin={0} animationDuration={800} />
+              <Area type="monotone" dataKey="collected" name="Collected"
+                stroke={dark ? '#84e254' : '#16a34a'} strokeWidth={2.5}
+                fill="url(#collectedLineG)" dot={{ r: 3.5, fill: dark ? '#84e254' : '#16a34a', strokeWidth: 0 }}
+                activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                animationBegin={200} animationDuration={900} />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </ChartCard>
+      )}
+
+      {/* ── DSO trend chart ── */}
+      {visibleWidgets.has('dso_trend') && dsoTrend.length > 1 && (
+        <ChartCard title="Payment Speed" sub="Average days to collect per month — lower is better">
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={dsoTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="dsoLineG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f3b45d" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#f3b45d" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `${v}d`} axisLine={false} tickLine={false} width={36} />
+              <ReferenceLine y={14} stroke="var(--fin-positive)" strokeDasharray="4 3" label={{ value: '14d target', position: 'insideTopRight', fontSize: 9, fill: 'var(--fin-positive)' }} />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const dso = payload[0]?.value
+                  return (
+                    <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
+                      <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{label}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Avg days to collect</span>
+                        <span style={{ color: dso <= 14 ? 'var(--fin-positive)' : dso <= 30 ? 'var(--fin-warning)' : 'var(--fin-negative)', fontWeight: 700 }}>{dso}d</span>
+                      </div>
+                      {payload[0]?.payload?.count && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Invoices cleared</span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{payload[0].payload.count}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }}
+              />
+              <Area type="monotone" dataKey="dso" name="DSO (days)"
+                stroke="#f3b45d" strokeWidth={2.5}
+                fill="url(#dsoLineG)"
+                dot={(props) => {
+                  const { cx, cy, payload } = props
+                  const color = payload.dso <= 14 ? (dark ? '#84e254' : '#16a34a') : payload.dso <= 30 ? '#f3b45d' : (dark ? '#ff7d80' : '#d85f58')
+                  return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={4} fill={color} stroke="var(--card-bg)" strokeWidth={2} />
+                }}
+                activeDot={{ r: 6, strokeWidth: 2, stroke: 'var(--card-bg)' }}
+                animationBegin={0} animationDuration={900} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ChartCard>
       )}
 
       {/* ── Row: Aging + Top pending ── */}
@@ -1022,36 +1240,49 @@ export default function Analytics() {
       <div className={clsx('grid gap-4', visibleWidgets.has('aging') && visibleWidgets.has('top_pending') ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1')}>
 
         {visibleWidgets.has('aging') && (
-        <ChartCard title="Receivables Aging" sub="Pending invoice value by age (overall)">
+        <ChartCard title="Receivables Aging" sub="Pending invoice value by age bucket (overall)">
           {aging.every(a => a.amount === 0) ? (
             <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
-              No pending invoices — all caught up
+              No pending invoices — all caught up 🎉
             </div>
           ) : (
-            <div className="space-y-3">
-              {aging.map(({ range, amount, count }) => {
-                const total = aging.reduce((s, a) => s + a.amount, 0)
-                const pct = total > 0 ? (amount / total) * 100 : 0
-                const color =
-                  range === '0-30'  ? 'var(--fin-positive)' :
-                  range === '31-60' ? 'var(--fin-warning)' : 'var(--fin-negative)'
-                return (
-                  <div key={range}>
-                    <div className="flex items-baseline justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                        <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{range} days</span>
-                        <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>· {count} invoice{count === 1 ? '' : 's'}</span>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={aging} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
+                barCategoryGap="28%">
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" horizontal={false} />
+                <XAxis type="number" tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="range" tick={{ fill: 'var(--text-2)', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} width={54} tickFormatter={v => `${v}d`} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0].payload
+                    return (
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
+                        <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{d.range} days</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Outstanding</span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(d.amount)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Invoices</span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{d.count}</span>
+                        </div>
                       </div>
-                      <span className="font-bold tabular-nums text-sm" style={{ color }}>{inr(amount)}</span>
-                    </div>
-                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                    )
+                  }}
+                />
+                <Bar dataKey="amount" name="Outstanding" radius={[0, 6, 6, 0]} animationBegin={0} animationDuration={800}>
+                  {aging.map((entry) => {
+                    const fill = entry.range === '0-30'
+                      ? (dark ? '#84e254' : '#16a34a')
+                      : entry.range === '31-60'
+                        ? '#f3b45d'
+                        : (dark ? '#ff7d80' : '#d85f58')
+                    return <Cell key={entry.range} fill={fill} />
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </ChartCard>
         )}
@@ -1101,58 +1332,102 @@ export default function Analytics() {
 
       {/* ── Invoice status pie ── */}
       {visibleWidgets.has('status_breakdown') && (
-      <ChartCard title="Invoice Status" sub="By total amount raised (this period)">
+      <ChartCard title="Invoice Status Mix" sub="Amount raised by status — this period">
         {statusBreakdown.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No invoices in selected period</div>
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={56} outerRadius={88}
-                dataKey="amount" nameKey="name" paddingAngle={2}>
-                {statusBreakdown.map((entry) => {
-                  const c = entry.name === 'Paid' ? '#16a34a' : entry.name === 'Pending' ? '#d97706' : entry.name === 'Cancelled' ? '#dc2626' : '#9ca3af'
-                  return <Cell key={entry.name} fill={c} />
-                })}
-              </Pie>
-              <Tooltip {...executiveTooltip}
-                formatter={(v, n, p) => [inr(v) + ` (${p.payload.count} invoice${p.payload.count === 1 ? '' : 's'})`, n]} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={62} outerRadius={90}
+                  dataKey="amount" nameKey="name" paddingAngle={3} animationBegin={0} animationDuration={800}>
+                  {statusBreakdown.map((entry) => {
+                    const c = entry.name === 'Paid'
+                      ? (dark ? '#84e254' : '#16a34a')
+                      : entry.name === 'Pending' ? '#f3b45d'
+                      : entry.name === 'Cancelled' ? (dark ? '#ff7d80' : '#dc2626') : '#9ca3af'
+                    return <Cell key={entry.name} fill={c} opacity={0.9} />
+                  })}
+                </Pie>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0].payload
+                    const total = statusBreakdown.reduce((s, x) => s + x.amount, 0)
+                    return (
+                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
+                        <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{d.name}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Amount</span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(d.amount)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Invoices</span>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{d.count}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                          <span style={{ color: 'var(--text-3)' }}>Share</span>
+                          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{total > 0 ? ((d.amount / total) * 100).toFixed(1) : '0'}%</span>
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-3)' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </ChartCard>
       )}
 
       {/* ── Client concentration row ── */}
-      {visibleWidgets.has('client_concentration') && clientConc.length > 1 && (
-        <ChartCard title="Client Concentration" sub="Revenue distribution — diversification check">
-          <div className="space-y-2.5">
-            {clientConc.map((c, i) => {
-              const color = i === 0 && c.pct >= 70 ? 'var(--fin-warning)' : 'var(--accent)'
-              return (
-                <div key={c.name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{c.name}</span>
-                      {i === 0 && c.pct >= 70 && (
-                        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                          style={{ background: 'var(--fin-warn-bg)', color: 'var(--fin-warning)' }}>
-                          High concentration
-                        </span>
-                      )}
+      {visibleWidgets.has('client_concentration') && clientConc.length > 0 && (
+        <ChartCard
+          title="Client Concentration"
+          sub="Revenue distribution — diversification risk check"
+          action={clientConc[0]?.pct >= 70 && (
+            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded"
+              style={{ background: 'var(--fin-warn-bg)', color: 'var(--fin-warning)' }}>
+              High concentration
+            </span>
+          )}
+        >
+          <ResponsiveContainer width="100%" height={Math.max(160, clientConc.length * 44)}>
+            <BarChart data={clientConc} layout="vertical" margin={{ top: 4, right: 60, left: 0, bottom: 4 }} barCategoryGap="28%">
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" horizontal={false} />
+              <XAxis type="number" tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `${v.toFixed(0)}%`} domain={[0, 100]} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null
+                  const d = payload[0].payload
+                  return (
+                    <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '10px 14px', fontSize: 12, boxShadow: 'var(--card-shadow)' }}>
+                      <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{d.name}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Revenue</span>
+                        <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(d.amount)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Share</span>
+                        <span style={{ color: d.pct >= 70 ? 'var(--fin-warning)' : 'var(--accent)', fontWeight: 700 }}>{d.pct.toFixed(1)}%</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs tabular-nums" style={{ color: 'var(--text-3)' }}>{inr(c.amount)}</span>
-                      <span className="text-xs font-bold tabular-nums" style={{ color }}>{formatPct(c.pct, 1)}</span>
-                    </div>
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-                    <div className="h-full rounded-full transition-all duration-700" style={{ width: `${c.pct}%`, background: color }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                  )
+                }}
+              />
+              <Bar dataKey="pct" name="% of revenue" radius={[0, 6, 6, 0]} animationBegin={0} animationDuration={800}
+                label={{ position: 'right', formatter: (v) => `${v.toFixed(1)}%`, fontSize: 10, fill: 'var(--text-3)', dy: 1 }}>
+                {clientConc.map((entry, i) => (
+                  <Cell key={entry.name}
+                    fill={i === 0 && entry.pct >= 70 ? '#f3b45d' : (dark ? '#7d95ff' : '#2563eb')}
+                    opacity={0.85 - i * 0.06}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </ChartCard>
       )}
 
@@ -1163,7 +1438,7 @@ export default function Analytics() {
           <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No project data</div>
         ) : (
           <div className="overflow-x-auto -mx-2 sm:-mx-4">
-            <table className="w-full text-xs" style={{ minWidth: 720 }}>
+            <table className="w-full text-xs" style={{ minWidth: 740 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--card-border)' }}>
                   {['Project', 'Revenue', 'Cost', 'Profit', 'Margin', 'Invoiced', 'Outstanding'].map(h => (
@@ -1173,34 +1448,47 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody>
-                {projMatrix.map(p => (
-                  <tr key={p.id} className="tbl-row">
-                    <td className="px-2 sm:px-4 py-2.5">
-                      <p className="font-semibold" style={{ color: 'var(--text-1)' }}>{p.name}</p>
-                      <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{p.status}</p>
-                    </td>
-                    <td className="px-2 sm:px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-1)' }}>{inr(p.billed)}</td>
-                    <td className="px-2 sm:px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(p.cost)}</td>
-                    <td className="px-2 sm:px-4 py-2.5 tabular-nums font-semibold"
-                      style={{ color: p.profit >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
-                      {inr(p.profit)}
-                    </td>
-                    <td className="px-2 sm:px-4 py-2.5">
-                      <span className="font-bold tabular-nums px-1.5 py-0.5 rounded text-[11px]"
-                        style={{
-                          color: p.margin >= 20 ? 'var(--fin-positive)' : p.margin >= 0 ? 'var(--fin-warning)' : 'var(--fin-negative)',
-                          background: p.margin >= 20 ? 'var(--fin-pos-bg)' : p.margin >= 0 ? 'var(--fin-warn-bg)' : 'var(--fin-neg-bg)',
-                        }}>
-                        {p.margin >= 0 ? '+' : ''}{formatPct(p.margin, 2)}
-                      </span>
-                    </td>
-                    <td className="px-2 sm:px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(p.invoiced)}</td>
-                    <td className="px-2 sm:px-4 py-2.5 tabular-nums"
-                      style={{ color: p.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>
-                      {p.outstanding > 0 ? inr(p.outstanding) : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {projMatrix.map(p => {
+                  const marginColor = p.margin >= 20 ? 'var(--fin-positive)' : p.margin >= 0 ? 'var(--fin-warning)' : 'var(--fin-negative)'
+                  const marginBg = p.margin >= 20 ? 'var(--fin-pos-bg)' : p.margin >= 0 ? 'var(--fin-warn-bg)' : 'var(--fin-neg-bg)'
+                  const cappedPct = Math.min(Math.abs(p.margin), 100)
+                  return (
+                    <tr key={p.id} className="tbl-row" style={{ transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-dim)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}>
+                      <td className="px-2 sm:px-4 py-2.5">
+                        <p className="font-semibold" style={{ color: 'var(--text-1)' }}>{p.name}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{p.status}</p>
+                      </td>
+                      <td className="px-2 sm:px-4 py-2.5 tabular-nums font-medium" style={{ color: 'var(--text-1)' }}>{inr(p.billed)}</td>
+                      <td className="px-2 sm:px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(p.cost)}</td>
+                      <td className="px-2 sm:px-4 py-2.5 tabular-nums font-semibold"
+                        style={{ color: p.profit >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
+                        {inr(p.profit)}
+                      </td>
+                      <td className="px-2 sm:px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold tabular-nums px-1.5 py-0.5 rounded text-[11px]"
+                            style={{ color: marginColor, background: marginBg, flexShrink: 0 }}>
+                            {p.margin >= 0 ? '+' : ''}{formatPct(p.margin, 1)}
+                          </span>
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)', minWidth: 36 }}>
+                            <div className="h-full rounded-full" style={{ width: `${cappedPct}%`, background: marginColor, transition: 'width 0.7s ease' }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-2 sm:px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(p.invoiced)}</td>
+                      <td className="px-2 sm:px-4 py-2.5 tabular-nums">
+                        <span style={{ color: p.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>
+                          {p.outstanding > 0 ? inr(p.outstanding) : '—'}
+                        </span>
+                        {p.outstanding > 0 && (
+                          <div className="w-1.5 h-1.5 rounded-full inline-block ml-1.5 animate-pulse" style={{ background: 'var(--fin-warning)' }} />
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
