@@ -899,3 +899,69 @@ Still pending from the user's larger request:
 - More granular before/after change display in audit-log itself.
 - Full Runey-style sidebar/theme unification across every module.
 - Live health check should be run with `HEALTH_URL` before production push when production API is reachable.
+
+## 2026-06-08 Admin Auth / Request Filters Hotfixes
+
+Context:
+
+- User reported Admin Panel access returning `403 Admin access required` when logging in with legacy password `Master@2026`.
+- User also reported the Admin Panel -> Requests condition filter did not include a user filter, despite request rows showing user identity.
+- User expected fixes to be pushed to `mayukhworks1/fintrack-app` on `main`.
+
+Implemented and pushed commits:
+
+- `ab8857f fix: make admin overview load resiliently`
+  - Admin Overview/Production Health now uses shorter resilient health fetch behavior so a slow health dependency does not block the whole admin overview.
+
+- `f22357c fix: prevent stale auth on admin access`
+  - `frontend/src/services/api.js` now clears client cache on token set/clear.
+  - Admin and auth verification routes bypass client cache so stale role/session data does not keep blocking access after login changes.
+
+- `6736f64 fix: prefer admin password on legacy login`
+  - Root cause: `/api/auth/login` checked `APP_PASSWORD` before `APP_ADMIN_PASSWORD`. If both shared the same value, legacy login returned `editor`, causing `/api/admin/*` to fail with `403 Admin access required`.
+  - Backend auth now gives admin password precedence when legacy passwords overlap.
+  - Added smoke coverage: `test_admin_password_wins_when_legacy_passwords_overlap`.
+
+- `ef0e43f fix: add user filters to admin requests`
+  - `frontend/src/pages/AdminDashboard.jsx` Admin Requests condition builder now exposes:
+    - `User`
+    - `User Email`
+    - `User Name`
+    - `User ID`
+  - `User` is a derived field combining email/name/id for easier investigation filtering.
+  - Condition filtering uses the derived field mapper against hydrated full rows, not only visible page rows.
+  - Request exports now include user identity columns:
+    - `User`
+    - `User Email`
+    - `User Name`
+    - `User ID`
+  - No backend/db change needed because `GET /api/admin/audit-log` already returns `user_id`, `user_email`, and `user_name`, and already supports top-level `user_email` query filtering.
+
+Validation after latest fix:
+
+- `backend/.venv/bin/python -m pytest backend/tests/smoke_test.py -q`
+  - `19 passed`
+  - one existing Pydantic v2 deprecation warning remains.
+- `cd frontend && npm test -- --run`
+  - `15 passed`
+- `cd frontend && npm run build`
+  - production build passed.
+- `./scripts/production_check.sh`
+  - backend import OK
+  - backend smoke tests OK
+  - frontend tests OK
+  - frontend build OK
+  - live health endpoint skipped because `HEALTH_URL` was not set.
+
+Current state:
+
+- Branch: `main`.
+- Remote: `https://github.com/mayukhworks1/fintrack-app.git`.
+- Latest pushed commit: `ef0e43f`.
+- Admin Requests user filtering is fixed in frontend and uses existing backend audit identity fields.
+
+Next likely follow-ups:
+
+- Run live health verification with `HEALTH_URL` before the next production-sensitive push.
+- If user reports Admin access still failing in browser, first clear frontend token/cache or sign out/in because backend precedence is fixed but old browser state can still hold stale tokens until replaced.
+- Consider adding a frontend smoke test that asserts Admin Requests condition field list includes `User` / `User Email`.
