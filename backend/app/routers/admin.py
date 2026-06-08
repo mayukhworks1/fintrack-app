@@ -1270,7 +1270,7 @@ async def deployment_health(_: str = Depends(require_admin)):
             table_checks[name] = _health_item(False, "No Teable token configured")
             return
         best_error = "No successful token"
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=5) as client:
             for token in tokens:
                 try:
                     r = await client.get(
@@ -1698,7 +1698,42 @@ async def admin_stats(_: str = Depends(require_admin)):
             (SELECT error     FROM sync_log WHERE error IS NOT NULL ORDER BY id DESC LIMIT 1)   AS last_sync_error
     """)
 
-    return _row_to_dict(row)
+    # Top error paths (24h) — helps diagnose what's causing the error rate
+    top_error_rows = await pool.fetch("""
+        SELECT
+            path,
+            COUNT(*)                                                         AS total,
+            COUNT(*) FILTER (WHERE status >= 400 AND status < 500)          AS client_errors,
+            COUNT(*) FILTER (WHERE status >= 500)                            AS server_errors,
+            ROUND(AVG(duration_ms))::int                                     AS avg_ms
+        FROM audit_log
+        WHERE ts > NOW() - INTERVAL '24h' AND status >= 400
+        GROUP BY path
+        ORDER BY total DESC
+        LIMIT 6
+    """)
+
+    # Top slow paths (24h) — p95-ish by avg; only include paths with >2 requests
+    top_slow_rows = await pool.fetch("""
+        SELECT
+            path,
+            ROUND(AVG(duration_ms))::int    AS avg_ms,
+            MAX(duration_ms)::int           AS max_ms,
+            COUNT(*)                        AS count
+        FROM audit_log
+        WHERE ts > NOW() - INTERVAL '24h'
+          AND duration_ms IS NOT NULL
+          AND duration_ms > 800
+        GROUP BY path
+        HAVING COUNT(*) > 1
+        ORDER BY avg_ms DESC
+        LIMIT 6
+    """)
+
+    result = _row_to_dict(row)
+    result["top_error_paths"] = [dict(r) for r in top_error_rows]
+    result["top_slow_paths"]  = [dict(r) for r in top_slow_rows]
+    return result
 
 
 # ── Audit log ─────────────────────────────────────────────────────────────────

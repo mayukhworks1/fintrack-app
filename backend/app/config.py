@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -77,8 +78,7 @@ class Settings(BaseSettings):
     hf_token:    Optional[str] = None
     hf_space_id: str = "Mayukhj24/fintrack-api"
 
-    class Config:
-        env_file = ".env"
+    model_config = ConfigDict(env_file=".env")
 
 
 settings = Settings()

@@ -331,7 +331,7 @@ function DeploymentChecklist() {
 
   const load = useCallback(async (opts = {}) => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.deploymentHealth({ fresh: true, timeout: 6000, ...opts })) }
+    try { setData(await api.admin.deploymentHealth({ fresh: true, timeout: 18000, ...opts })) }
     catch (e) {
       if (e?.name === 'AbortError') return
       setError(e.message || 'Deployment health failed')
@@ -400,7 +400,7 @@ function OverviewTab({ onOpenHistoryDrilldown }) {
 
   const load = useCallback(async (opts = {}) => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.stats({ timeout: 6000, ...opts })) }
+    try { setData(await api.admin.stats({ timeout: 12000, ...opts })) }
     catch (e) {
       if (e?.name === 'AbortError') return
       setError(e.message)
@@ -448,6 +448,73 @@ function OverviewTab({ onOpenHistoryDrilldown }) {
             sub={`${err4xx} client · ${err5xx} server errors`} />
         </div>
       </section>
+
+      {/* Top error paths */}
+      {data.top_error_paths?.length > 0 && (
+        <section>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+            Top Error Paths (24h)
+          </h3>
+          <div className="card overflow-hidden p-0">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-2)' }}>
+                  <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Path</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>4xx</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>5xx</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Total</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Avg ms</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_error_paths.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: i < data.top_error_paths.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <td className="px-3 py-2 font-mono truncate max-w-[220px]" style={{ color: 'var(--text-1)' }} title={r.path}>{r.path}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: r.client_errors > 0 ? '#d97706' : 'var(--text-3)' }}>{r.client_errors}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: r.server_errors > 0 ? '#dc2626' : 'var(--text-3)' }}>{r.server_errors}</td>
+                    <td className="px-3 py-2 text-right font-semibold" style={{ color: 'var(--text-1)' }}>{r.total}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: 'var(--text-3)' }}>{r.avg_ms ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Top slow paths */}
+      {data.top_slow_paths?.length > 0 && (
+        <section>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+            Slow Paths (24h · avg &gt;800ms · ≥2 requests)
+          </h3>
+          <div className="card overflow-hidden p-0">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-2)' }}>
+                  <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Path</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Avg ms</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Max ms</th>
+                  <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--text-3)' }}>Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_slow_paths.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: i < data.top_slow_paths.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <td className="px-3 py-2 font-mono truncate max-w-[260px]" style={{ color: 'var(--text-1)' }} title={r.path}>{r.path}</td>
+                    <td className="px-3 py-2 text-right font-semibold"
+                      style={{ color: r.avg_ms > 3000 ? '#dc2626' : r.avg_ms > 1500 ? '#d97706' : '#16a34a' }}>
+                      {r.avg_ms?.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right" style={{ color: 'var(--text-3)' }}>{r.max_ms?.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: 'var(--text-3)' }}>{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* Requests by role */}
       <section>
@@ -3959,7 +4026,7 @@ function DeploymentHealthTab() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setData(await api.admin.deploymentHealth()) }
+    try { setData(await api.admin.deploymentHealth({ fresh: true, timeout: 18000 })) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [])
