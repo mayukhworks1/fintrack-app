@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
+import Drawer from '../components/Drawer'
 import {
   Globe, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
@@ -698,9 +699,8 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ens
 }
 
 /* ── Detail panel ── */
-function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
-  if (!invoice) return null
-  const f = invoice.fields || {}
+function InvoiceDetail({ open, invoice, onClose, onEdit, onPreview }) {
+  const f = (open && invoice) ? (invoice.fields || {}) : {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
@@ -708,30 +708,28 @@ function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
   const cur = f['Currency'] || 'RS'
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }} onClick={onClose} aria-hidden="true" />
-      <aside className="relative ml-auto flex flex-col h-full animate-slide-in"
-        style={{ width: 'min(100vw,500px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
-
-        <div className="flex items-start justify-between px-5 py-4 gap-3" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="font-bold text-sm" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{f['Invoice Number'] || '—'}</p>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
-                {currencySymbol(cur)}{cur}
-              </span>
-            </div>
-            <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>
-              {[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>
-            <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
-          </div>
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={
+        <div className="flex items-center gap-2">
+          <span>{f['Invoice Number'] || '—'}</span>
+          {open && invoice && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+              {currencySymbol(cur)}{cur}
+            </span>
+          )}
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+      }
+      subtitle={[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
+      width={500}
+      accent={false}
+      actions={<button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>}
+      footer={
+        <button onClick={onClose} className="btn-ghost w-full text-xs" style={{ justifyContent: 'center' }}>Close</button>
+      }
+    >
+      <div className="p-5 space-y-5">
           <div className="flex items-center gap-2 flex-wrap">
             <StatusPill status={f['Payment Status']} />
             {f['Speed'] && (
@@ -806,13 +804,8 @@ function InvoiceDetail({ invoice, onClose, onEdit, onPreview }) {
               )}
             </div>
           )}
-        </div>
-
-        <div className="px-5 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-          <button onClick={onClose} className="btn-ghost w-full text-xs" style={{ justifyContent: 'center' }}>Close</button>
-        </div>
-      </aside>
-    </div>
+      </div>
+    </Drawer>
   )
 }
 
@@ -822,6 +815,7 @@ function FieldRow({ label, children }) {
 }
 
 function InvoiceDrawer({
+  open,
   invoice,
   draft,
   onClose,
@@ -958,21 +952,29 @@ function InvoiceDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }} onClick={onClose} aria-hidden="true" />
-      <aside className="relative ml-auto flex flex-col h-full overflow-hidden animate-slide-in"
-        style={{ width: 'min(100vw,520px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
-
-        <div className="h-1 w-full flex-shrink-0 rounded-t-[inherit]"
-          style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-soft))' }} />
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-          <h2 className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>
-            {isEdit ? `Edit · ${invoice.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
-          </h2>
-          <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={isEdit ? `Edit · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
+      width={520}
+      accent
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          {isEdit ? (
+            <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+              <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
+            </button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+              <Save size={12} />{saving ? 'Saving…' : currentRecordId ? 'Save changes' : 'Create invoice'}
+            </button>
+          </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+      }
+    >
+      <div className="p-5 space-y-3.5">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
               style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
@@ -1111,23 +1113,8 @@ function InvoiceDrawer({
               ensureRecord={persistDraftRecord}
             />
           </div>
-        </div>
-
-        <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-          {isEdit ? (
-            <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
-            </button>
-          ) : <div />}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Save size={12} />{saving ? 'Saving…' : currentRecordId ? 'Save changes' : 'Create invoice'}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </div>
+      </div>
+    </Drawer>
   )
 }
 
@@ -3433,25 +3420,26 @@ export default function WebInvoices() {
       {/* Mobile bottom nav — hidden sm+ */}
       <MobileBottomNav workspace={workspace} setWorkspace={setWorkspace} isAll={isAll} />
 
-      {/* Drawers */}
-      {drawer?.mode === 'view' && createPortal(
-        <InvoiceDetail invoice={drawer.invoice} onClose={closeDrawer} onEdit={() => setDrawer({ mode: 'edit', invoice: drawer.invoice })} onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })} />,
-        document.body
-      )}
-      {(drawer?.mode === 'new' || drawer?.mode === 'edit') && createPortal(
-        <InvoiceDrawer
-          invoice={drawer.mode === 'edit' ? drawer.invoice : null}
-          draft={drawer.mode === 'new' ? drawer.draft : null}
-          onClose={closeDrawer}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
-          picklists={picklists}
-          onOptionsUpdate={handleOptionsUpdate}
-          canEditPicklists={canEditPicklists}
-          onPicklistPermissionError={handlePicklistPermissionError}
-        />,
-        document.body
-      )}
+      {/* Drawers — always rendered so exit animations play */}
+      <InvoiceDetail
+        open={drawer?.mode === 'view'}
+        invoice={drawer?.mode === 'view' ? drawer.invoice : null}
+        onClose={closeDrawer}
+        onEdit={() => setDrawer({ mode: 'edit', invoice: drawer?.invoice })}
+        onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+      />
+      <InvoiceDrawer
+        open={drawer?.mode === 'new' || drawer?.mode === 'edit'}
+        invoice={drawer?.mode === 'edit' ? drawer.invoice : null}
+        draft={drawer?.mode === 'new' ? drawer?.draft : null}
+        onClose={closeDrawer}
+        onSaved={handleSaved}
+        onDeleted={handleDeleted}
+        picklists={picklists}
+        onOptionsUpdate={handleOptionsUpdate}
+        canEditPicklists={canEditPicklists}
+        onPicklistPermissionError={handlePicklistPermissionError}
+      />
       {helpOpen && createPortal(
         <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />,
         document.body

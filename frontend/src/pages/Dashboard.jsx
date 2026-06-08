@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext'
 import {
   TrendingUp, TrendingDown, IndianRupee, FolderKanban,
   Target, AlertTriangle, Award, RefreshCw, Plus,
-  ArrowRight, Flame, Activity
+  ArrowRight, Flame, Activity, ShieldCheck
 } from 'lucide-react'
+import EmptyState from '../components/EmptyState'
 import ProjectCard from '../components/ProjectCard'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
@@ -111,23 +112,52 @@ function RiskRow({ project }) {
 }
 
 /* ── Client revenue bar ── */
-function ClientBar({ client, billed, profit, maxBilled }) {
-  const pct    = maxBilled > 0 ? (billed / maxBilled) * 100 : 0
+function ClientBar({ client, billed, profit, maxBilled, rank }) {
+  const pct    = maxBilled > 0 ? Math.max(4, (billed / maxBilled) * 100) : 4
   const margin = billed > 0 ? (profit / billed) * 100 : 0
+  const isPos  = margin >= 0
+  const marginColor = margin >= 20 ? 'var(--fin-positive)' : margin >= 0 ? 'var(--fin-warning)' : 'var(--fin-negative)'
+  const marginBg    = margin >= 20 ? 'var(--fin-pos-bg)' : margin >= 0 ? 'var(--fin-warn-bg)' : 'var(--fin-neg-bg)'
+  // bar gradient: anchor at accent, lighter at edges
+  const barGrad = `linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 75%, transparent) 100%)`
+  const initials = client.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between items-baseline text-sm">
-        <span className="font-medium" style={{ color: 'var(--text-1)' }}>{client}</span>
-        <div className="flex items-center gap-3 text-xs flex-shrink-0 ml-2">
-          <span className="tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(billed)}</span>
-          <span className="font-bold tabular-nums" style={{ color: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
-            {formatPct(margin, 2)} margin
+    <div
+      className="group flex flex-col gap-2 p-3 rounded-2xl transition-all"
+      style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.borderColor = 'var(--accent-soft)' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.borderColor = 'var(--glass-border)' }}
+    >
+      <div className="flex items-center gap-2.5">
+        {/* Avatar */}
+        <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold select-none"
+          style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+          {initials || '#'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug truncate" style={{ color: 'var(--text-1)' }}>{client}</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(billed)}</span>
+          <span
+            className="text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-full"
+            style={{ background: marginBg, color: marginColor }}
+          >
+            {isPos ? '+' : ''}{formatPct(margin, 1)}
           </span>
         </div>
       </div>
-      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-        <div className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: 'var(--accent)' }} />
+      {/* Bar */}
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${pct}%`,
+            background: barGrad,
+            transition: 'width 0.8s cubic-bezier(0.34,1.26,0.64,1)',
+          }}
+        />
       </div>
     </div>
   )
@@ -559,14 +589,16 @@ export default function Dashboard() {
         <div className="card">
           <h2 className="section-title mb-4">Revenue by Client</h2>
           {loading && !data
-            ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
-            : <div className="space-y-4">
+            ? <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+            : <div className="space-y-2">
                 {Object.entries(s?.client_billed || {}).length === 0
                   ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>No data yet</p>
-                  : Object.entries(s.client_billed).map(([cl, billed]) => (
-                      <ClientBar key={cl} client={cl} billed={billed}
-                        profit={s.client_profit?.[cl] || 0} maxBilled={maxBilled} />
-                    ))
+                  : Object.entries(s.client_billed)
+                      .sort(([,a],[,b]) => b - a)
+                      .map(([cl, billed], i) => (
+                        <ClientBar key={cl} client={cl} billed={billed}
+                          profit={s.client_profit?.[cl] || 0} maxBilled={maxBilled} rank={i} />
+                      ))
                 }
               </div>
           }
@@ -580,14 +612,12 @@ export default function Dashboard() {
           <p className="text-xs mb-4" style={{ color: 'var(--text-3)' }}>Negative profit or critical health</p>
           {loading && !data ? <SkeletonCard /> :
             atRisk.length === 0
-              ? <div className="flex flex-col items-center py-6 text-center">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-                    style={{ background: 'var(--accent-dim)' }}>
-                    <Award size={18} style={{ color: 'var(--fin-positive)' }} aria-hidden="true" />
-                  </div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>All projects healthy</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>No critical issues found</p>
-                </div>
+              ? <EmptyState
+                  compact
+                  icon={<ShieldCheck size={20} />}
+                  title="All projects healthy"
+                  subtitle="No negative margin or critical health flags found."
+                />
               : <div>{atRisk.map((p, i) => <RiskRow key={i} project={p} />)}</div>
           }
         </div>

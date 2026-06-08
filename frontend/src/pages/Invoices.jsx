@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import Drawer from '../components/Drawer'
 import {
   Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
   Clock, CheckCircle2, XCircle, Search, ExternalLink, FileText,
@@ -564,10 +565,9 @@ function SuggestInput({ value, onChange, options = [], placeholder = 'Type or se
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
-  if (!invoice) return null
+function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
   const navigate = useNavigate()
-  const f = invoice.fields || {}
+  const f = (open && invoice) ? (invoice.fields || {}) : {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
@@ -598,39 +598,35 @@ function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, isEditor, on
     navigate(`/status?v=${encodeURIComponent(btoa(JSON.stringify(cfg)))}`)
   }
 
+  const actions = open && invoice ? (
+    <>
+      {isEditor && f['Payment Status'] === 'Pending' && (
+        <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+          <CheckCircle2 size={12} />Record Payment
+        </button>
+      )}
+      {isEditor && (
+        <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+          Edit
+        </button>
+      )}
+    </>
+  ) : null
+
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
-        onClick={onClose} aria-hidden="true" />
-      <aside className="relative ml-auto flex flex-col h-full animate-slide-in"
-        style={{ width: 'min(calc(100vw - 1rem), 500px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
-
-        {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 gap-3" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-          <div className="min-w-0">
-            <p className="font-bold text-sm" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
-              {f['Invoice Number'] || '—'}
-            </p>
-            <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>
-              {[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {isEditor && f['Payment Status'] === 'Pending' && (
-              <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                <CheckCircle2 size={12} />Record Payment
-              </button>
-            )}
-            {isEditor && (
-              <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                Edit
-              </button>
-            )}
-            <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={f['Invoice Number'] || '—'}
+      subtitle={[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
+      width={500}
+      accent={false}
+      actions={actions}
+      footer={
+        <button onClick={onClose} className="btn-ghost w-full text-xs" style={{ justifyContent: 'center' }}>Close</button>
+      }
+    >
+      <div className="p-5 space-y-5">
           {/* Status row */}
           <div className="flex items-center gap-2 flex-wrap">
             <StatusPill status={f['Payment Status']} />
@@ -730,13 +726,8 @@ function InvoiceDetail({ invoice, onClose, onEdit, onRecordPayment, isEditor, on
               )}
             </div>
           )}
-        </div>
-
-        <div className="px-5 py-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-          <button onClick={onClose} className="btn-ghost w-full text-xs" style={{ justifyContent: 'center' }}>Close</button>
-        </div>
-      </aside>
-    </div>
+      </div>
+    </Drawer>
   )
 }
 
@@ -745,7 +736,7 @@ function Field({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
+function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
   const { userEmail, authRole, isEmailAuth } = useAuth()
   const isEdit = Boolean(invoice?.id)
   const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance'].includes(authRole))
@@ -940,23 +931,40 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
     }
   }
 
+  const drawerTitle = paymentOnly
+    ? `Record Payment · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}`
+    : isEdit ? `Edit · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'
+
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
-        onClick={onClose} aria-hidden="true" />
-      <aside className="relative ml-auto flex flex-col h-full overflow-hidden animate-slide-in"
-        style={{ width: 'min(calc(100vw - 1rem), 520px)', background: 'var(--sidebar-bg)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderLeft: '1px solid var(--glass-border)' }}>
-
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-          <h2 className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>
-            {paymentOnly
-              ? `Record Payment · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}`
-              : isEdit ? `Edit · ${invoice.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
-          </h2>
-          <button onClick={onClose} className="btn-icon" aria-label="Close"><X size={14} /></button>
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={drawerTitle}
+      width={520}
+      accent
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          {isEdit ? (
+            <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+              <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
+            </button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={!canSubmit}
+              className={canSubmit ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: canSubmit ? 1 : 0.62 }}
+              title={!canSubmit ? 'No form changes to save' : undefined}
+            >
+              <Save size={12} />{saving ? 'Saving…' : !canSubmit ? 'No changes' : paymentOnly ? 'Record payment' : isEdit ? 'Save changes' : 'Create invoice'}
+            </button>
+          </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+      }
+    >
+      <div className="p-5 space-y-3.5">
 
           {/* ── AI Invoice Scanner ── */}
           <div>
@@ -1181,28 +1189,7 @@ function InvoiceDrawer({ invoice, prefill, paymentOnly = false, onClose, onSaved
             </div>
           )}
         </div>
-
-        <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
-          {isEdit ? (
-            <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
-            </button>
-          ) : <div />}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
-            <button
-              onClick={handleSave}
-              disabled={!canSubmit}
-              className={canSubmit ? 'btn-primary' : 'btn-ghost'}
-              style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: canSubmit ? 1 : 0.62 }}
-              title={!canSubmit ? 'No form changes to save' : undefined}
-            >
-              <Save size={12} />{saving ? 'Saving…' : !canSubmit ? 'No changes' : paymentOnly ? 'Record payment' : isEdit ? 'Save changes' : 'Create invoice'}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </div>
+    </Drawer>
   )
 }
 
@@ -3230,29 +3217,27 @@ export default function Invoices() {
       </>
       )}
 
-      {/* ── Drawers — rendered via portal to escape overflow/transform stacking contexts ── */}
-      {drawer?.mode === 'view' && createPortal(
-        <InvoiceDetail
-          invoice={drawer.invoice}
-          onClose={closeDrawer}
-          onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer.invoice })}
-          onRecordPayment={() => isEditor && openRecordPayment(drawer.invoice)}
-          isEditor={isEditor}
-          onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
-        />,
-        document.body
-      )}
-      {isEditor && (drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment') && createPortal(
+      {/* ── Drawers — always rendered so exit animations play ── */}
+      <InvoiceDetail
+        open={drawer?.mode === 'view'}
+        invoice={drawer?.mode === 'view' ? drawer.invoice : null}
+        onClose={closeDrawer}
+        onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer?.invoice })}
+        onRecordPayment={() => isEditor && openRecordPayment(drawer?.invoice)}
+        isEditor={isEditor}
+        onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+      />
+      {isEditor && (
         <InvoiceDrawer
-          invoice={drawer.mode === 'edit' || drawer.mode === 'payment' ? drawer.invoice : null}
-          prefill={drawer.mode === 'new' || drawer.mode === 'payment' ? drawer.prefill : null}
-          paymentOnly={drawer.mode === 'payment'}
+          open={drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment'}
+          invoice={drawer?.mode === 'edit' || drawer?.mode === 'payment' ? drawer.invoice : null}
+          prefill={drawer?.mode === 'new' || drawer?.mode === 'payment' ? drawer?.prefill : null}
+          paymentOnly={drawer?.mode === 'payment'}
           onClose={closeDrawer}
           onSaved={handleSaved}
           onDeleted={handleDeleted}
           options={formOptions}
-        />,
-        document.body
+        />
       )}
       {isEditor && shareModal && (
         <ShareLinkModal
