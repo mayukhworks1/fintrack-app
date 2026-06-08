@@ -650,6 +650,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         UPDATE auth_users
                            SET email_verified_at = COALESCE(email_verified_at, NOW()),
                                full_name = COALESCE(full_name, $2),
+                               teable_email = COALESCE(teable_email, $4),
                                metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
                                updated_at = NOW()
                          WHERE id = $1
@@ -657,6 +658,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         user["id"],
                         full_name,
                         json.dumps({"google_picture": picture}),
+                        email_orig,
                     )
 
                 await conn.execute(

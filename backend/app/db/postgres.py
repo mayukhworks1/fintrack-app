@@ -540,6 +540,12 @@ CREATE TABLE IF NOT EXISTS auth_users (
     password_changed_at TIMESTAMPTZ,
     email_verified_at   TIMESTAMPTZ,
     approved_by         UUID,
+    phone               VARCHAR(40),
+    job_title           VARCHAR(120),
+    department          VARCHAR(120),
+    company             VARCHAR(160),
+    location            VARCHAR(160),
+    timezone            VARCHAR(80),
     -- Optional override: the email stored in Teable's "Raised By" field.
     -- When set, ownership scoping uses this email instead of the login email.
     -- Allows login as mayukh@gmail.com while matching Teable records for mayukh@worksmayukh.space.
@@ -548,6 +554,12 @@ CREATE TABLE IF NOT EXISTS auth_users (
     CONSTRAINT auth_users_status_chk CHECK (status IN ('pending_approval', 'active', 'rejected', 'disabled'))
 );
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS teable_email VARCHAR(320);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS phone VARCHAR(40);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS job_title VARCHAR(120);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS department VARCHAR(120);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS company VARCHAR(160);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS location VARCHAR(160);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(80);
 CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
 CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);
@@ -826,6 +838,16 @@ JOIN auth_permissions p ON p.permission_key IN (
 )
 WHERE r.role_key = 'viewer'
 ON CONFLICT DO NOTHING;
+
+-- Backfill teable_email for existing Google-SSO users who signed up before
+-- auto-population was added. COALESCE guard makes this a no-op on re-runs.
+UPDATE auth_users u
+SET    teable_email = u.email,
+       updated_at   = NOW()
+FROM   auth_identities i
+WHERE  i.user_id   = u.id
+  AND  i.provider  = 'google'
+  AND  u.teable_email IS NULL;
 
 """
 # ---------------------------------------------------------------------------
