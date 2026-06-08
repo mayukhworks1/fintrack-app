@@ -82,6 +82,27 @@ class TestAuthUtils:
         assert auth.verify_token("") is None
         assert auth.verify_token("garbage") is None
 
+    @pytest.mark.asyncio
+    async def test_admin_password_wins_when_legacy_passwords_overlap(self, monkeypatch):
+        auth = self._get_auth_module()
+        if auth is None:
+            pytest.skip("Could not import auth module")
+
+        class FakeHeaders(dict):
+            def get(self, key, default=None):
+                return super().get(key, default)
+
+        class FakeRequest:
+            headers = FakeHeaders()
+            client = None
+
+        monkeypatch.setattr(auth.settings, "app_password", "Master@2026", raising=False)
+        monkeypatch.setattr(auth.settings, "app_admin_password", "Master@2026", raising=False)
+
+        res = await auth.login(auth.LoginRequest(password="Master@2026"), FakeRequest())
+        assert res["role"] == "admin"
+        assert auth.verify_token(res["token"]) == "admin"
+
 
 class TestPasswordUtils:
     """Unit-level: password hashing in auth_master.py."""

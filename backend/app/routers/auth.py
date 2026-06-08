@@ -188,7 +188,12 @@ async def login(body: LoginRequest, request: Request):
     is_all    = bool(all_pw)    and hmac.compare_digest(p, all_pw.lower())
     is_admin  = bool(admin_pw)  and hmac.compare_digest(p, admin_pw.lower())
 
-    if is_editor:
+    # Dedicated admin password must win if secrets accidentally overlap.
+    # Production previously had legacy passwords collide, causing Master@2026
+    # to log in as "editor" and then fail every /api/admin/* request.
+    if is_admin:
+        role = "admin"
+    elif is_editor:
         role = "editor"
     elif is_viewer:
         role = "viewer"
@@ -196,8 +201,6 @@ async def login(body: LoginRequest, request: Request):
         role = "web"
     elif is_all:
         role = "all"
-    elif is_admin:
-        role = "admin"
     else:
         raise HTTPException(status_code=401, detail="Incorrect password")
 
