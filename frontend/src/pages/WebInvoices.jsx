@@ -132,6 +132,9 @@ const buildWebInvoiceScalarPayload = (form, { isEdit = false } = {}) => ({
   raised_date:      form.raised_date ? `${form.raised_date}T00:00:00.000Z` : (isEdit ? null : undefined),
   cleared_date:     form.cleared_date ? `${form.cleared_date}T00:00:00.000Z` : (isEdit ? null : undefined),
   next_followup:    form.next_followup ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
+  // Always include attachment arrays so removals (empty list) are persisted to Teable.
+  reference:        Array.isArray(form.reference)   ? form.reference   : [],
+  invoice_pdf:      Array.isArray(form.invoice_pdf) ? form.invoice_pdf : [],
 })
 
 function parseIsoDate(value) {
@@ -1524,6 +1527,7 @@ export default function WebInvoices() {
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [drawer,         setDrawer]         = useState(null)
+  const [drawerKey,      setDrawerKey]      = useState(0)
   const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
   const [canEditPicklists, setCanEditPicklists] = useState(true)
   const [picklistPermissionMsg, setPicklistPermissionMsg] = useState('')
@@ -1939,8 +1943,8 @@ export default function WebInvoices() {
     })
   }
 
-  const openNew     = () => setDrawer({ mode: 'new',  invoice: null, draft: null })
-  const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
+  const openNew     = ()  => { setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
+  const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
   const closeDrawer = () => setDrawer(null)
   const handleSaved = (savedRecord) => {
     if (savedRecord?.id) {
@@ -3422,13 +3426,15 @@ export default function WebInvoices() {
 
       {/* Drawers — always rendered so exit animations play */}
       <InvoiceDetail
+        key={`detail-${drawerKey}`}
         open={drawer?.mode === 'view'}
         invoice={drawer?.mode === 'view' ? drawer.invoice : null}
         onClose={closeDrawer}
-        onEdit={() => setDrawer({ mode: 'edit', invoice: drawer?.invoice })}
+        onEdit={() => { setDrawerKey(k => k + 1); setDrawer({ mode: 'edit', invoice: drawer?.invoice }) }}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
       />
       <InvoiceDrawer
+        key={`form-${drawerKey}`}
         open={drawer?.mode === 'new' || drawer?.mode === 'edit'}
         invoice={drawer?.mode === 'edit' ? drawer.invoice : null}
         draft={drawer?.mode === 'new' ? drawer?.draft : null}
