@@ -167,11 +167,28 @@ def verify_token(token: str) -> str | None:
 
 
 def _get_client_ip(request: Request) -> str:
-    for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
+    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
         val = request.headers.get(header, "")
         if val:
             return val.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+async def _auth_rate_limit(request: Request) -> None:
+    """
+    Throttle credential/email endpoints per client IP to blunt brute force,
+    PBKDF2 CPU-DoS, and email-bombing. ~10 attempts/minute/IP. Fails open if
+    Valkey is unavailable so a cache outage never locks people out.
+    """
+    from ..db.valkey import rate_check
+    ip = _get_client_ip(request) or "unknown"
+    allowed, _ = await rate_check(ip, limit=10, window_sec=60, bucket="authrl")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts. Please wait a minute and try again.",
+            headers={"Retry-After": "60"},
+        )
 
 
 def _frontend_origin() -> str:
@@ -211,7 +228,7 @@ async def auth_providers():
 
 
 @router.post("/login")
-async def login(body: LoginRequest, request: Request):
+async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_rate_limit)):
     """
     Accept any role password. Returns signed token + role.
     Fires audit log_login as a background task.
@@ -223,13 +240,15 @@ async def login(body: LoginRequest, request: Request):
     all_pw    = (settings.app_all_password  or "").strip()
     admin_pw  = (settings.app_admin_password or "").strip()
 
-    # Lowercase constant-time comparisons
-    p = provided.lower()
-    is_editor = bool(editor_pw) and hmac.compare_digest(p, editor_pw.lower())
-    is_viewer = bool(viewer_pw) and hmac.compare_digest(p, viewer_pw.lower())
-    is_web    = bool(web_pw)    and hmac.compare_digest(p, web_pw.lower())
-    is_all    = bool(all_pw)    and hmac.compare_digest(p, all_pw.lower())
-    is_admin  = bool(admin_pw)  and hmac.compare_digest(p, admin_pw.lower())
+    # Case-SENSITIVE constant-time comparisons. Lowercasing both sides (the old
+    # behaviour) silently threw away password entropy — `MASTER@2026` would match
+    # `Master@2026`. Passwords must match exactly.
+    p = provided
+    is_editor = bool(editor_pw) and hmac.compare_digest(p, editor_pw)
+    is_viewer = bool(viewer_pw) and hmac.compare_digest(p, viewer_pw)
+    is_web    = bool(web_pw)    and hmac.compare_digest(p, web_pw)
+    is_all    = bool(all_pw)    and hmac.compare_digest(p, all_pw)
+    is_admin  = bool(admin_pw)  and hmac.compare_digest(p, admin_pw)
 
     # Dedicated admin password must win if secrets accidentally overlap.
     # Production previously had legacy passwords collide, causing Master@2026
@@ -268,7 +287,7 @@ async def login(body: LoginRequest, request: Request):
 
 
 @router.post("/email/login")
-async def email_login(body: EmailLoginRequest, request: Request):
+async def email_login(body: EmailLoginRequest, request: Request, _rl: None = Depends(_auth_rate_limit)):
     """
     Normal email/password login backed by auth_users/auth_sessions.
     Additive path: existing password-only login remains available during rollout.
@@ -278,7 +297,7 @@ async def email_login(body: EmailLoginRequest, request: Request):
 
 
 @router.post("/email/register")
-async def email_register(body: EmailRegisterRequest, request: Request):
+async def email_register(body: EmailRegisterRequest, request: Request, _rl: None = Depends(_auth_rate_limit)):
     """
     Create a pending user. Superadmin approval is required before login works.
     """
@@ -394,7 +413,7 @@ async def google_callback(request: Request, code: str | None = None, state: str 
 
 
 @router.post("/email/forgot-password")
-async def email_forgot_password(body: ForgotPasswordRequest, request: Request):
+async def email_forgot_password(body: ForgotPasswordRequest, request: Request, _rl: None = Depends(_auth_rate_limit)):
     """
     Send a password reset link if the account exists and is active.
     Response is intentionally generic to prevent account enumeration.
@@ -404,7 +423,7 @@ async def email_forgot_password(body: ForgotPasswordRequest, request: Request):
 
 
 @router.post("/email/reset-password")
-async def email_reset_password(body: ResetPasswordRequest, request: Request):
+async def email_reset_password(body: ResetPasswordRequest, request: Request, _rl: None = Depends(_auth_rate_limit)):
     """
     Consume a password reset token, update password, and revoke active sessions.
     """

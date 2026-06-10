@@ -321,7 +321,14 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
     async with pool.acquire() as conn:
         existing = await conn.fetchrow("SELECT id, status FROM auth_users WHERE email_normalized = $1", email_norm)
         if existing:
-            return {"created": False, "status": existing["status"]}
+            # Do NOT reveal that the account exists or its status — that is an
+            # account-enumeration leak. Return the same generic shape as a fresh
+            # registration so the response is indistinguishable to a caller.
+            await _write_auth_event(
+                "password_register_duplicate", request,
+                target_user_id=str(existing["id"]), email=email_norm, status=existing["status"],
+            )
+            return {"created": False, "status": "pending_approval"}
         row = await conn.fetchrow(
             """
             INSERT INTO auth_users (email, email_normalized, full_name, status, password_hash, password_changed_at)

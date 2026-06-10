@@ -56,21 +56,30 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 def _verify_signature(raw_body: bytes, signature: Optional[str]) -> bool:
     """
-    Verify HMAC-SHA256 signature if TEABLE_WEBHOOK_SECRET is configured.
-    Header format:  X-Webhook-Secret: sha256=<hex>
-    Returns True if verification passes or is not required.
+    Authenticate a webhook when TEABLE_WEBHOOK_SECRET is configured.
+
+    Two header forms are accepted so the simple Teable Automation setup works:
+      • X-Webhook-Secret: <the plain secret>        (what the setup docs describe)
+      • X-Webhook-Secret: sha256=<HMAC-SHA256 hex>  (signed body, stronger)
+
+    Both comparisons are constant-time. Returns True if verification passes, or
+    if no secret is configured (accept-all — see the startup warning).
     """
     secret = settings.teable_webhook_secret
     if not secret:
-        return True   # secret not configured — accept all
+        return True   # secret not configured — accept all (logged at startup)
     if not signature:
         logger.warning("Webhook received without X-Webhook-Secret header")
         return False
 
-    expected = "sha256=" + hmac.new(
+    # Signed-body form
+    expected_hmac = "sha256=" + hmac.new(
         secret.encode(), raw_body, digestmod=hashlib.sha256
     ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    if hmac.compare_digest(expected_hmac, signature):
+        return True
+    # Plain-secret form (matches the documented Teable Automation header)
+    return hmac.compare_digest(secret, signature)
 
 
 # ── Payload parser ───────────────────────────────────────────────────────────

@@ -244,17 +244,17 @@ async def attribution_pop(teable_id: str) -> dict | None:
 # Sliding-window rate limiter  (Sorted Set approach)
 # ---------------------------------------------------------------------------
 
-async def rate_check(ip: str, limit: int = 60, window_sec: int = 60) -> tuple[bool, int]:
+async def rate_check(ip: str, limit: int = 60, window_sec: int = 60, bucket: str = "ratelimit") -> tuple[bool, int]:
     """
     Sliding-window rate limiter.
-    - key   : ratelimit:{ip}
+    - key   : {bucket}:{ip}   (bucket lets auth/AI/etc. have independent budgets)
     - score : current epoch-ms (float)
     - Returns (allowed, remaining) — safe to call even if Valkey is down.
     """
     if not _client:
         return True, limit   # fail open
 
-    key  = f"ratelimit:{ip}"
+    key  = f"{bucket}:{ip}"
     now  = time.time()
     pipe = _client.pipeline()
 

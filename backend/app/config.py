@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     teable_web_resources_table_id: str = "tblMjssDx55GOfLtgqo"
     # Current Status table — project-level status updates (Master@2026)
     teable_status_table_id: str = "tblgdbV6T4Ly9n6YNCU"
-    # Signing key for session tokens — set APP_SECRET in prod.
+    # Signing key for session tokens. This dev default is PUBLIC (repo is public),
+    # so it MUST be overridden by APP_SECRET in any real deployment — otherwise
+    # anyone can forge a valid token for any role. main.py warns loudly at startup
+    # if this default is still in effect.
     app_secret: str = "fintrack-dev-secret-change-me"
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
@@ -60,9 +63,11 @@ class Settings(BaseSettings):
     google_redirect_uri: Optional[str] = None
 
     # ── Admin dashboard password ────────────────────────────────────────────
-    # Full PostgreSQL dashboard access.  Set APP_ADMIN_PASSWORD in HF secrets
-    # to override the default.
-    app_admin_password: str = "Master@2026"
+    # Full PostgreSQL dashboard access. MUST be set via APP_ADMIN_PASSWORD in HF
+    # secrets. No default — if unset, admin-password login is disabled (the login
+    # route guards on `bool(admin_pw)`), which fails closed. Never hard-code a value
+    # here: this repo is public and anything committed must be treated as leaked.
+    app_admin_password: str = ""
 
     # ── Real-time webhook secret ────────────────────────────────────────────
     # Set TEABLE_WEBHOOK_SECRET in HF Space secrets (any random string).
@@ -87,5 +92,7 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env")
 
+
+DEV_APP_SECRET = "fintrack-dev-secret-change-me"
 
 settings = Settings()

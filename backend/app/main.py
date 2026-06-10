@@ -23,7 +23,7 @@ from .db.postgres import get_init_error
 from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
 from .services.invoice_aging import invoice_aging_refresh_loop
-from .routers.deps import require_auth
+from .routers.deps import require_auth, require_admin
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -37,6 +37,23 @@ _aging_refresh_task: Optional[asyncio.Task] = None
 async def lifespan(app: FastAPI):
     global _sync_task, _audit_task, _aging_refresh_task
     logger.info("FinTrack API starting (version=%s)", app.version)
+
+    # ── Security self-checks ─────────────────────────────────────────────────
+    from .config import DEV_APP_SECRET
+    if settings.app_secret == DEV_APP_SECRET:
+        logger.error(
+            "SECURITY: APP_SECRET is still the public dev default. Anyone can forge "
+            "tokens for any role. Set a strong APP_SECRET in the deployment secrets "
+            "(e.g. `openssl rand -base64 48`) and restart."
+        )
+    if not settings.app_admin_password:
+        logger.warning("APP_ADMIN_PASSWORD is not set — legacy admin-password login is disabled (fail-closed).")
+    if not settings.teable_webhook_secret:
+        logger.warning(
+            "SECURITY: TEABLE_WEBHOOK_SECRET is not set — /api/webhooks/teable accepts "
+            "unauthenticated writes into the PG mirrors. Set it and add the same value as "
+            "the X-Webhook-Secret header in every Teable Automation."
+        )
 
     await postgres.init_pool()
     # Retry once after 5 s — Aiven / cold-start connections occasionally
@@ -89,9 +106,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _cors_origins() -> list[str]:
+    """
+    Restrict CORS to the configured frontend origin(s). FRONTEND_URL may be a
+    comma-separated list. Falls back to "*" only when nothing is configured, so
+    local dev keeps working but production locks down once FRONTEND_URL is set.
+    """
+    raw = (settings.frontend_url or "").strip()
+    if not raw or raw == "*":
+        return ["*"]
+    return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -114,6 +143,28 @@ app.include_router(shared_views_router.router)
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────
 _SKIP_AUDIT_PATHS = {"/", "/health", "/health/live"}
+
+# Query-string keys whose values must never be persisted to the audit log.
+# Tokens (SSE EventSource passes ?token=), passwords, and reset tokens are all
+# secrets that would otherwise sit in plaintext in audit_log / DB backups.
+_SENSITIVE_QUERY_KEYS = {"token", "pw", "password", "secret", "reset_token", "api_key", "apikey"}
+
+
+def _redact_query(raw_query: str) -> str | None:
+    """Return the query string with sensitive values masked, capped at 500 chars."""
+    if not raw_query:
+        return None
+    try:
+        from urllib.parse import parse_qsl, urlencode
+        pairs = parse_qsl(raw_query, keep_blank_values=True)
+        redacted = [
+            (k, "[REDACTED]" if k.lower() in _SENSITIVE_QUERY_KEYS else v)
+            for k, v in pairs
+        ]
+        out = urlencode(redacted)
+    except Exception:
+        out = raw_query
+    return out[:500] or None
 
 
 def _get_client_ip(request: Request) -> str:
@@ -182,7 +233,7 @@ async def request_middleware(request: Request, call_next):
             user_agent=request.headers.get("user-agent", ""),
             referer=(request.headers.get("referer") or request.headers.get("origin") or "")[:500] or None,
             body_size=int(request.headers.get("content-length") or 0) or None,
-            query_params=str(request.url.query)[:500] or None,
+            query_params=_redact_query(str(request.url.query)),
             resp_size=int(response.headers.get("content-length") or 0) or None,
             client_hint=request.headers.get("x-client-hint", ""),
             extra={k: v for k, v in auth_extra.items() if v not in (None, "")},
@@ -246,8 +297,10 @@ async def health():
 @app.get("/api/smtp-test", tags=["health"])
 async def smtp_test(pw: str = "", to: str = ""):
     """Email diagnostic — pass ?pw=<admin_password>&to=<your_email> to send a real test."""
+    import hmac as _hmac
     from .services.emailer import is_email_configured, send_email
-    if pw != settings.app_admin_password:
+    # Fail closed if no admin password is configured, and use a constant-time compare.
+    if not settings.app_admin_password or not _hmac.compare_digest(pw, settings.app_admin_password):
         raise HTTPException(status_code=403, detail="Wrong password")
     cfg = {
         "configured": is_email_configured(),
@@ -262,7 +315,7 @@ async def smtp_test(pw: str = "", to: str = ""):
 
 
 @app.post("/api/admin/pg-reconnect", tags=["health"])
-async def pg_reconnect(_: str = Depends(require_auth)):
+async def pg_reconnect(_: str = Depends(require_admin)):
     """Force a PostgreSQL reconnection attempt (useful after transient failures)."""
     if postgres.get_pool() is not None:
         return {"status": "already_connected"}
