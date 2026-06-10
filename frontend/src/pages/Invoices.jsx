@@ -178,18 +178,18 @@ const INVOICE_SHARE_COLUMNS = [
 const DEFAULT_INVOICE_COLUMN_WIDTHS = {
   row: 56,
   invoice_number: 150,
-  client_name: 190,
-  project: 300,
-  category: 150,
-  milestone: 150,
-  raised_by: 220,
-  raised_date: 120,
+  payment_status: 110,
   amount_raised: 130,
-  amount_with_tax: 130,
-  amount_received: 130,
-  outstanding_amount: 140,
-  payment_status: 120,
-  aging: 95,
+  aging: 90,
+  client_name: 170,
+  project: 240,
+  raised_date: 110,
+  outstanding_amount: 130,
+  amount_received: 120,
+  amount_with_tax: 120,
+  category: 130,
+  milestone: 130,
+  raised_by: 180,
   next_followup: 125,
   docs: 110,
   actions: 130,
@@ -3055,11 +3055,32 @@ export default function Invoices() {
                 <th className="tbl-head" style={{ width: columnWidths.invoice_number }}>
                   <ResizableHead width={columnWidths.invoice_number} onResizeStart={(e) => startColumnResize('invoice_number', e)}><SortLabel col="Invoice Number">Invoice #</SortLabel></ResizableHead>
                 </th>
+                <th className="tbl-head" style={{ width: columnWidths.payment_status }}>
+                  <ResizableHead width={columnWidths.payment_status} onResizeStart={(e) => startColumnResize('payment_status', e)}><SortLabel col="Payment Status">Status</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_raised }}>
+                  <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)}><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.aging }}>
+                  <ResizableHead width={columnWidths.aging} onResizeStart={(e) => startColumnResize('aging', e)}><SortLabel col="Agening (Days)">Aging</SortLabel></ResizableHead>
+                </th>
                 <th className="tbl-head" style={{ width: columnWidths.client_name }}>
                   <ResizableHead width={columnWidths.client_name} onResizeStart={(e) => startColumnResize('client_name', e)}><SortLabel col="Client Name">Client</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.project }}>
                   <ResizableHead width={columnWidths.project} onResizeStart={(e) => startColumnResize('project', e)}><SortLabel col="Project">Project</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.raised_date }}>
+                  <ResizableHead width={columnWidths.raised_date} onResizeStart={(e) => startColumnResize('raised_date', e)}><SortLabel col="Raised Date">Raised</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.outstanding_amount }}>
+                  <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)}><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_received }}>
+                  <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)}><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
+                </th>
+                <th className="tbl-head" style={{ width: columnWidths.amount_with_tax }}>
+                  <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)}><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.category }}>
                   <ResizableHead width={columnWidths.category} onResizeStart={(e) => startColumnResize('category', e)}><SortLabel col="Category">Category</SortLabel></ResizableHead>
@@ -3069,27 +3090,6 @@ export default function Invoices() {
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.raised_by }}>
                   <ResizableHead width={columnWidths.raised_by} onResizeStart={(e) => startColumnResize('raised_by', e)}><SortLabel col="Raised By">Raised By</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.raised_date }}>
-                  <ResizableHead width={columnWidths.raised_date} onResizeStart={(e) => startColumnResize('raised_date', e)}><SortLabel col="Raised Date">Raised</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_raised }}>
-                  <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)}><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_with_tax }}>
-                  <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)}><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_received }}>
-                  <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)}><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.outstanding_amount }}>
-                  <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)}><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.payment_status }}>
-                  <ResizableHead width={columnWidths.payment_status} onResizeStart={(e) => startColumnResize('payment_status', e)}><SortLabel col="Payment Status">Status</SortLabel></ResizableHead>
-                </th>
-                <th className="tbl-head" style={{ width: columnWidths.aging }}>
-                  <ResizableHead width={columnWidths.aging} onResizeStart={(e) => startColumnResize('aging', e)}><SortLabel col="Agening (Days)">Aging</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.next_followup }}>
                   <ResizableHead width={columnWidths.next_followup} onResizeStart={(e) => startColumnResize('next_followup', e)}><SortLabel col="Next followup">Next Followup</SortLabel></ResizableHead>
@@ -3156,6 +3156,17 @@ export default function Invoices() {
                               {f['Invoice Number'] || '—'}
                             </span>
                           </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.payment_status }}>
+                            <StatusPill status={f['Payment Status']} />
+                          </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_raised }}>
+                            <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>
+                              {fmt(f['Amount Raised'])}
+                            </span>
+                          </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.aging }}>
+                            <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
+                          </td>
                           <td className="tbl-cell align-top" style={{ width: columnWidths.client_name }}>
                             <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Client Name'] || f['Client'] || '—'}</span>
                           </td>
@@ -3169,6 +3180,24 @@ export default function Invoices() {
                               )}
                             </div>
                           </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
+                            <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
+                          </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount }}>
+                            {outstanding > 0
+                              ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
+                              : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
+                          </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_received }}>
+                            <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>
+                              {fmt(f['Amount Received'])}
+                            </span>
+                          </td>
+                          <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax }}>
+                            <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>
+                              {fmt(f['Amount with Tax'])}
+                            </span>
+                          </td>
                           <td className="tbl-cell" style={{ width: columnWidths.category }}>
                             <span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Category'] || '—'}</span>
                           </td>
@@ -3180,35 +3209,6 @@ export default function Invoices() {
                                   <span className="min-w-0 truncate">{f['Raised By']}</span>
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
-                            <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_raised }}>
-                            <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>
-                              {fmt(f['Amount Raised'])}
-                            </span>
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax }}>
-                            <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>
-                              {fmt(f['Amount with Tax'])}
-                            </span>
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_received }}>
-                            <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>
-                              {fmt(f['Amount Received'])}
-                            </span>
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount }}>
-                            {outstanding > 0
-                              ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
-                              : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.payment_status }}>
-                            <StatusPill status={f['Payment Status']} />
-                          </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.aging }}>
-                            <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                           </td>
                           <td className="tbl-cell" style={{ width: columnWidths.next_followup }}>
                             {f['Next followup']
