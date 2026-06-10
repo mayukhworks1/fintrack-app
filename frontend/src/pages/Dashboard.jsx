@@ -734,7 +734,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="section-title">Top Projects by Revenue</h2>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Existing project cards remain available, now presented inside the executive canvas.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Sorted by total billed — click any card to open the project detail.</p>
           </div>
           <button onClick={() => navigate('/projects')}
             className="text-xs font-medium flex items-center gap-1 transition-opacity hover:opacity-70"

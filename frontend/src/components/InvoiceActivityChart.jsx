@@ -74,9 +74,9 @@ export default function InvoiceActivityChart({ records = [], days = 60, classNam
   }, [])
 
   /* ── layout constants ── */
-  const H         = 200     // total SVG height
+  const H         = 210     // total SVG height
   const PAD_TOP   = 36      // room for initials circles
-  const PAD_BOT   = 32      // x-axis labels
+  const PAD_BOT   = 36      // x-axis labels
   const PAD_L     = 8
   const PAD_R     = 16
   const chartH    = H - PAD_TOP - PAD_BOT   // ≈132
@@ -247,7 +247,9 @@ export default function InvoiceActivityChart({ records = [], days = 60, classNam
           {/* ── x-axis ── */}
           {data.map((day, i) => {
             const x      = xOf(i)
-            const isLabel = i % 2 === 0
+            // Show ~8 labels max: pick interval so we get roughly one per week
+            const labelEvery = Math.max(1, Math.round(data.length / 8))
+            const isLabel = i % labelEvery === 0 || i === data.length - 1
             const hasInv  = day.invoices.length > 0
 
             return (

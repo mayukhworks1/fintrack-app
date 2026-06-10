@@ -1560,11 +1560,18 @@ export default function Invoices() {
 
   const s = summary
   const agingBuckets = useMemo(() => {
-    const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
+    const buckets = {
+      '0-14d':  { count: 0, amount: 0 },
+      '15-30d': { count: 0, amount: 0 },
+      '31-60d': { count: 0, amount: 0 },
+      '60d+':   { count: 0, amount: 0 },
+    }
     for (const r of scopedRecords) {
       const f = r.fields || {}
       if (f['Payment Status'] !== 'Pending') continue
-      buckets[classifyAgingBand(effectiveAging(f))] += 1
+      const band = classifyAgingBand(effectiveAging(f))
+      buckets[band].count += 1
+      buckets[band].amount += Number(f['Amount Raised'] || 0)
     }
     return buckets
   }, [scopedRecords])
@@ -2113,30 +2120,46 @@ export default function Invoices() {
           </div>
         </ExecutivePanel>
 
-        <ExecutivePanel title="Aging buckets" subtitle="Quick receivables heat map for the current invoice scope.">
+        <ExecutivePanel title="Aging buckets" subtitle="Pending invoice exposure by age — click to filter.">
           <div className="space-y-2">
-            {Object.entries(agingBuckets).map(([label, value]) => {
+            {Object.entries(agingBuckets).map(([label, { count, amount }]) => {
               const active = agingBandFilter === label
-              const accent = label === '60d+' ? 'negative' : label === '31-60d' ? 'warning' : undefined
+              const isWarning = label === '31-60d'
+              const isDanger  = label === '60d+'
+              const accentColor = active
+                ? 'var(--accent)'
+                : isDanger  ? 'var(--fin-negative)'
+                : isWarning ? 'var(--fin-warning)'
+                : 'var(--text-2)'
+              const bg = active
+                ? 'var(--accent-dim)'
+                : isDanger  ? 'rgba(216,95,88,0.06)'
+                : isWarning ? 'rgba(202,127,20,0.06)'
+                : 'var(--bg-input)'
+              const border = active
+                ? 'var(--accent)'
+                : isDanger  ? 'rgba(216,95,88,0.20)'
+                : isWarning ? 'rgba(202,127,20,0.20)'
+                : 'var(--card-border)'
               return (
                 <button
                   key={label}
                   type="button"
                   onClick={() => setAgingBandFilter(active ? '' : label)}
-                  className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition-all"
-                  style={{
-                    background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
-                    border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
-                    boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.08)' : 'none',
-                  }}
+                  className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all"
+                  style={{ background: bg, border: `1px solid ${border}` }}
                 >
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{label}</p>
-                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Pending invoices</p>
+                    <p className="text-xs font-semibold" style={{ color: accentColor }}>{label}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                      {count === 0 ? 'No pending invoices' : `${count} invoice${count !== 1 ? 's' : ''}`}
+                    </p>
                   </div>
-                  <span className={clsx('text-sm font-bold tabular-nums', accent === 'warning' && 'executive-stat-warning', accent === 'negative' && 'executive-stat-negative')} style={{ color: accent ? undefined : 'var(--text-1)' }}>
-                    {value}
-                  </span>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold tabular-nums" style={{ color: count === 0 ? 'var(--text-3)' : accentColor }}>
+                      {count === 0 ? '—' : fmt(amount)}
+                    </p>
+                  </div>
                 </button>
               )
             })}

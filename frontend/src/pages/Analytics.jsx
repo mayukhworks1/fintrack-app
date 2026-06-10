@@ -663,6 +663,8 @@ export default function Analytics() {
   }, [cashflow])
   const monthDelta = collectedLastMonth > 0
     ? ((collectedThisMonth - collectedLastMonth) / collectedLastMonth) * 100 : null
+  // Flag incomplete months (before the 20th) so we don't show -100% as alarming
+  const isEarlyMonth = new Date().getDate() < 20
   const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
 
   const executiveTooltip = {
@@ -1005,11 +1007,12 @@ export default function Analytics() {
                 { label: 'Outstanding', value: inr(filtered.outstanding), tone: filtered.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-1)' },
                 { label: 'Margin', value: formatPct(margin, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
                 { label: 'Period invoices', value: `${invoices.length}`, tone: 'var(--text-1)' },
-                { label: 'Month delta', value: monthDelta != null ? formatPct(monthDelta, 1) : '—', tone: monthDelta == null ? 'var(--text-1)' : monthDelta >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
+                { label: isEarlyMonth ? 'MTD vs last' : 'Month delta', value: monthDelta != null ? formatPct(monthDelta, 1) : '—', tone: monthDelta == null ? 'var(--text-1)' : (isEarlyMonth && monthDelta < 0) ? 'var(--text-3)' : monthDelta >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)', sub: isEarlyMonth && monthDelta != null && monthDelta < 0 ? 'month in progress' : undefined },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                   <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
+                  {item.sub && <p className="text-[10px] mt-1 italic" style={{ color: 'var(--text-3)' }}>{item.sub}</p>}
                 </div>
               ))}
             </div>
