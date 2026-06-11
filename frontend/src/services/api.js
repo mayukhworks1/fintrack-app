@@ -107,7 +107,7 @@ async function request(path, options = {}, retries = 2) {
 }
 
 async function requestBlob(path, options = {}) {
-  const { signal: externalSignal, timeout, ...rest } = options
+  const { signal: externalSignal, timeout, headers: extraHeaders, ...rest } = options
   const controller = new AbortController()
   const timeoutMs = timeout || TIMEOUT_MS
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
@@ -124,8 +124,9 @@ async function requestBlob(path, options = {}) {
       try { _deviceHint = await getDeviceHintHeader() } catch {}
     }
     const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+    const contentType = extraHeaders === null ? {} : { 'Content-Type': 'application/json' }
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...authHeader, ...hintHeader, ...rest.headers },
+      headers: { ...contentType, ...authHeader, ...hintHeader, ...(extraHeaders || {}) },
       signal: controller.signal,
       ...rest,
     })
@@ -156,7 +157,7 @@ async function requestBlob(path, options = {}) {
 }
 
 async function _doRequest(path, options = {}, retries = 2) {
-  const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, ...rest } = options
+  const { signal: externalSignal, timeout, fresh = false, cacheTtl = _CLIENT_TTL, headers: extraHeaders, ...rest } = options
   const method = (rest.method || 'GET').toUpperCase()
   if (method !== 'GET') retries = 0
   const controller = new AbortController()
@@ -180,8 +181,11 @@ async function _doRequest(path, options = {}, retries = 2) {
       try { _deviceHint = await getDeviceHintHeader() } catch {}
     }
     const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+    // extraHeaders===null means "no Content-Type" (multipart — let browser set boundary).
+    // extraHeaders===undefined/object means merge into defaults.
+    const contentType = extraHeaders === null ? {} : { 'Content-Type': 'application/json' }
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...authHeader, ...hintHeader, ...rest.headers },
+      headers: { ...contentType, ...authHeader, ...hintHeader, ...(extraHeaders || {}) },
       signal: controller.signal,
       ...rest,
     })
@@ -621,7 +625,7 @@ export const api = {
     uploadAvatar: (file) => {
       const form = new FormData()
       form.append('file', file)
-      return request('/api/auth/profile/avatar', { method: 'POST', body: form, headers: {} })
+      return request('/api/auth/profile/avatar', { method: 'POST', body: form, headers: null })
     },
     deleteAvatar: () => request('/api/auth/profile/avatar', { method: 'DELETE' }),
   },
