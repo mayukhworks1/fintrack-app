@@ -20,7 +20,7 @@ from fastapi import HTTPException, Request
 from ..config import settings
 from ..db.audit import log_login, parse_client_hint, parse_ua, build_device_label
 from ..db.postgres import get_pool
-from .emailer import app_origin_from_request, send_email
+from .emailer import app_origin_from_request, email_wrap_html, send_email
 
 _HASH_ALG = "pbkdf2_sha256"
 
@@ -353,38 +353,55 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
     await _write_auth_event("password_register_pending", request, target_user_id=str(row["id"]), email=email_norm, status=row["status"])
     if settings.auth_admin_notify_email:
         links = _admin_user_review_links(str(row["id"]))
+        user_name = (full_name or "").strip() or "-"
         await send_email(
             settings.auth_admin_notify_email,
-            "FinTrack user pending approval",
+            f"Action needed: new FinTrack user waiting for approval",
             (
                 f"A new FinTrack user is pending approval.\n\n"
                 f"Email: {email_norm}\n"
-                f"Name: {(full_name or '').strip() or '-'}\n\n"
+                f"Name: {user_name}\n\n"
                 f"Review: {links['review']}\n"
                 f"Approve: {links['approve']}\n"
                 f"Reject: {links['reject']}\n\n"
                 f"You must be signed in as superadmin/admin to approve or reject."
             ),
-            html=(
-                "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
-                "<h2 style=\"margin:0 0 8px\">FinTrack user pending approval</h2>"
-                f"<p><b>Email:</b> {email_norm}<br><b>Name:</b> {(full_name or '').strip() or '-'}</p>"
-                f"{_button_html(links['approve'], 'Approve user', '#16a34a')}"
-                f"{_button_html(links['reject'], 'Reject user', '#dc2626')}"
-                f"{_button_html(links['review'], 'Review in Admin', '#2563eb')}"
-                "<p style=\"font-size:12px;color:#6b7280\">These buttons open the Admin Panel. Final action still requires an authenticated admin session.</p>"
-                "</div>"
+            html=email_wrap_html(
+                title="New user pending approval",
+                preheader=f"{user_name} ({email_norm}) signed up and needs your review.",
+                to_email=settings.auth_admin_notify_email,
+                body_html=(
+                    "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">New user pending approval</h2>"
+                    f"<p style=\"margin:0 0 12px\">A new account has been created and is waiting for your review.</p>"
+                    f"<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px\">"
+                    f"<tr><td style=\"font-size:13px;color:#6b7280;padding-bottom:4px\">Email</td></tr>"
+                    f"<tr><td style=\"font-size:15px;font-weight:600;color:#111827;padding-bottom:10px\">{email_norm}</td></tr>"
+                    f"<tr><td style=\"font-size:13px;color:#6b7280;padding-bottom:4px\">Name</td></tr>"
+                    f"<tr><td style=\"font-size:15px;font-weight:600;color:#111827\">{user_name}</td></tr>"
+                    f"</table>"
+                    f"<p style=\"margin:0 0 12px\">"
+                    f"{_button_html(links['approve'], 'Approve', '#16a34a')}"
+                    f"{_button_html(links['reject'], 'Reject', '#dc2626')}"
+                    f"{_button_html(links['review'], 'Review details', '#2563eb')}"
+                    f"</p>"
+                    f"<p style=\"margin:16px 0 0;font-size:13px;color:#6b7280\">These links open the Admin Panel. An authenticated admin session is required to take action.</p>"
+                ),
             ),
         )
     await send_email(
         email_orig,
-        "Your FinTrack account is pending approval",
-        "Your FinTrack account has been created and is waiting for superadmin approval. You will receive another email after approval.",
-        html=(
-            "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
-            "<h2 style=\"margin:0 0 8px\">FinTrack account received</h2>"
-            "<p>Your account is waiting for superadmin approval. You will receive another email after approval.</p>"
-            "</div>"
+        "Your FinTrack account is awaiting approval",
+        "Your FinTrack account has been created and is waiting for superadmin approval. You will receive another email once approved.",
+        html=email_wrap_html(
+            title="Account received — awaiting approval",
+            preheader="Your FinTrack account has been created and is in the approval queue.",
+            to_email=email_orig,
+            body_html=(
+                "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Account received</h2>"
+                "<p style=\"margin:0 0 12px\">Your FinTrack account has been created successfully.</p>"
+                "<p style=\"margin:0 0 12px\">It is currently awaiting superadmin approval. You will receive another email at this address as soon as your account is approved and ready to use.</p>"
+                "<p style=\"margin:0;color:#6b7280;font-size:13px\">If you did not create this account, you can safely ignore this email.</p>"
+            ),
         ),
     )
     return {"created": True, "status": row["status"]}
@@ -475,29 +492,45 @@ async def create_admin_invited_user(
             invite_path = "/login"
             invite_params = urlencode({'reset_token': token, 'invite': '1', 'email': email_orig})
             invite_url = f"{origin}{invite_path}?{invite_params}" if origin else f"{invite_path}?{invite_params}"
+            hi_name = f"Hi {(full_name or '').strip()}" if full_name else "Hi"
             delivery = await send_email(
                 email_orig,
-                "You are invited to FinTrack",
+                "You have been invited to FinTrack",
                 (
-                    f"Hi{' ' + (full_name or '').strip() if full_name else ''},\n\n"
+                    f"{hi_name},\n\n"
                     f"You have been invited to FinTrack with role: {role_key}.\n\n"
-                    f"Click below to set your password and sign in. This link expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
+                    f"Click the link below to set your password and sign in. This link expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
                     f"{invite_url}\n\n"
-                    f"If you were not expecting this, you can safely ignore this email."
+                    f"If you were not expecting this invitation, you can safely ignore this email."
                 ),
-                html=(
-                    f"<p>Hi{' <b>' + (full_name or '').strip() + '</b>' if full_name else ''},</p>"
-                    f"<p>You have been invited to <b>FinTrack</b> with role: <b>{role_key}</b>.</p>"
-                    f"<p><a href=\"{invite_url}\" style=\"display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600\">Set password &amp; sign in</a></p>"
-                    f"<p style=\"color:#888;font-size:12px\">This link expires in {settings.password_reset_ttl_minutes} minutes. If you were not expecting this, you can safely ignore this email.</p>"
+                html=email_wrap_html(
+                    title="You have been invited to FinTrack",
+                    preheader=f"Set your password to activate your FinTrack account ({role_key}).",
+                    to_email=email_orig,
+                    body_html=(
+                        f"<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">{hi_name},</h2>"
+                        f"<p style=\"margin:0 0 12px\">You have been invited to FinTrack with role: <strong>{role_key}</strong>.</p>"
+                        f"<p style=\"margin:0 0 20px\">Click the button below to set your password and sign in. This link expires in <strong>{settings.password_reset_ttl_minutes} minutes</strong>.</p>"
+                        f"{_button_html(invite_url, 'Set password &amp; sign in', '#2563eb')}"
+                        f"<p style=\"margin:20px 0 0;font-size:13px;color:#6b7280\">If you were not expecting this invitation, you can safely ignore this email — no account will be activated.</p>"
+                    ),
                 ),
             )
         else:
             delivery = await send_email(
                 email_norm,
-                "FinTrack account created",
-                "Your FinTrack account has been created and is pending superadmin approval.",
-                html="<p>Your FinTrack account has been created and is pending superadmin approval.</p>",
+                "Your FinTrack account is awaiting approval",
+                "Your FinTrack account has been created and is pending superadmin approval. You will receive an email once approved.",
+                html=email_wrap_html(
+                    title="Account awaiting approval",
+                    preheader="Your FinTrack account has been created and is in the approval queue.",
+                    to_email=email_norm,
+                    body_html=(
+                        "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Account awaiting approval</h2>"
+                        "<p style=\"margin:0 0 12px\">Your FinTrack account has been created and is currently pending superadmin approval.</p>"
+                        "<p style=\"margin:0;color:#6b7280;font-size:13px\">You will receive another email once your account is approved and ready to use.</p>"
+                    ),
+                ),
             )
 
     await _write_auth_event(
@@ -723,39 +756,58 @@ async def _login_with_oidc_profile(
         )
         if created_pending and settings.auth_admin_notify_email:
             links = _admin_user_review_links(str(user["id"]))
+            sso_name = full_name or "-"
             await send_email(
                 settings.auth_admin_notify_email,
-                f"FinTrack {provider_label} user pending approval",
+                f"Action needed: {provider_label} SSO user waiting for approval",
                 (
                     f"A {provider_label} SSO user is pending approval.\n\n"
                     f"Email: {email_norm}\n"
-                    f"Name: {full_name or '-'}\n\n"
+                    f"Name: {sso_name}\n\n"
                     f"Review: {links['review']}\n"
                     f"Approve: {links['approve']}\n"
                     f"Reject: {links['reject']}\n\n"
                     f"You must be signed in as superadmin/admin to approve or reject."
                 ),
-                html=(
-                    "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
-                    f"<h2 style=\"margin:0 0 8px\">{provider_label} SSO user pending approval</h2>"
-                    f"<p><b>Email:</b> {email_norm}<br><b>Name:</b> {full_name or '-'}</p>"
-                    f"{_button_html(links['approve'], 'Approve user', '#16a34a')}"
-                    f"{_button_html(links['reject'], 'Reject user', '#dc2626')}"
-                    f"{_button_html(links['review'], 'Review in Admin', '#2563eb')}"
-                    "<p style=\"font-size:12px;color:#6b7280\">These buttons open the Admin Panel. Final action still requires an authenticated admin session.</p>"
-                    "</div>"
+                html=email_wrap_html(
+                    title=f"{provider_label} SSO user pending approval",
+                    preheader=f"{sso_name} ({email_norm}) signed in via {provider_label} and needs your review.",
+                    to_email=settings.auth_admin_notify_email,
+                    body_html=(
+                        f"<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">{provider_label} SSO user pending approval</h2>"
+                        f"<p style=\"margin:0 0 12px\">A user signed in via {provider_label} and their account is awaiting your review.</p>"
+                        f"<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px\">"
+                        f"<tr><td style=\"font-size:13px;color:#6b7280;padding-bottom:4px\">Email</td></tr>"
+                        f"<tr><td style=\"font-size:15px;font-weight:600;color:#111827;padding-bottom:10px\">{email_norm}</td></tr>"
+                        f"<tr><td style=\"font-size:13px;color:#6b7280;padding-bottom:4px\">Name</td></tr>"
+                        f"<tr><td style=\"font-size:15px;font-weight:600;color:#111827;padding-bottom:10px\">{sso_name}</td></tr>"
+                        f"<tr><td style=\"font-size:13px;color:#6b7280;padding-bottom:4px\">Sign-in provider</td></tr>"
+                        f"<tr><td style=\"font-size:15px;font-weight:600;color:#111827\">{provider_label}</td></tr>"
+                        f"</table>"
+                        f"<p style=\"margin:0 0 12px\">"
+                        f"{_button_html(links['approve'], 'Approve', '#16a34a')}"
+                        f"{_button_html(links['reject'], 'Reject', '#dc2626')}"
+                        f"{_button_html(links['review'], 'Review details', '#2563eb')}"
+                        f"</p>"
+                        f"<p style=\"margin:16px 0 0;font-size:13px;color:#6b7280\">These links open the Admin Panel. An authenticated admin session is required to take action.</p>"
+                    ),
                 ),
             )
         if created_pending:
             await send_email(
                 email_orig,
-                f"Your FinTrack {provider_label} sign-in is pending approval",
-                f"Your {provider_label} sign-in was received and is waiting for superadmin approval. You will receive another email after approval.",
-                html=(
-                    "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
-                    "<h2 style=\"margin:0 0 8px\">FinTrack approval pending</h2>"
-                    f"<p>Your {provider_label} sign-in was received and is waiting for superadmin approval.</p>"
-                    "</div>"
+                f"Your FinTrack account is awaiting approval",
+                f"Your {provider_label} sign-in was received and is waiting for superadmin approval. You will receive another email once approved.",
+                html=email_wrap_html(
+                    title="Account awaiting approval",
+                    preheader=f"Your {provider_label} sign-in was received — approval pending.",
+                    to_email=email_orig,
+                    body_html=(
+                        "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Account awaiting approval</h2>"
+                        f"<p style=\"margin:0 0 12px\">Your {provider_label} sign-in was received. Your account is currently pending superadmin approval.</p>"
+                        "<p style=\"margin:0 0 12px\">You will receive another email at this address once your account is approved.</p>"
+                        "<p style=\"margin:0;color:#6b7280;font-size:13px\">If you did not attempt to sign in, you can safely ignore this email.</p>"
+                    ),
                 ),
             )
         raise HTTPException(status_code=403, detail=f"User is {user['status']}")
@@ -867,15 +919,22 @@ async def create_password_reset(email: str, request: Request) -> dict[str, Any]:
             reset_user["email"],
             "Reset your FinTrack password",
             (
-                f"Use this link to reset your FinTrack password. It expires in "
-                f"{settings.password_reset_ttl_minutes} minutes.\n\n{reset_url}\n\n"
-                f"If you did not request this, ignore this email."
+                f"Someone requested a password reset for this FinTrack account.\n\n"
+                f"Use this link to set a new password — it expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
+                f"{reset_url}\n\n"
+                f"If you did not request this, ignore this email. Your password has not been changed."
             ),
-            html=(
-                f"<p>Use this link to reset your FinTrack password. It expires in "
-                f"{settings.password_reset_ttl_minutes} minutes.</p>"
-                f"<p><a href=\"{reset_url}\">Reset password</a></p>"
-                f"<p>If you did not request this, ignore this email.</p>"
+            html=email_wrap_html(
+                title="Reset your FinTrack password",
+                preheader="Use the button below to set a new password. Link expires soon.",
+                to_email=reset_user["email"],
+                body_html=(
+                    "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Reset your password</h2>"
+                    "<p style=\"margin:0 0 12px\">Someone requested a password reset for your FinTrack account.</p>"
+                    f"<p style=\"margin:0 0 20px\">This link expires in <strong>{settings.password_reset_ttl_minutes} minutes</strong>.</p>"
+                    f"{_button_html(reset_url, 'Set new password', '#2563eb')}"
+                    "<p style=\"margin:20px 0 0;font-size:13px;color:#6b7280\">If you did not request this, ignore this email — your password has not been changed and this link will expire automatically.</p>"
+                ),
             ),
         )
         await _write_auth_event(
@@ -957,7 +1016,17 @@ async def reset_password_with_token(token: str, password: str, request: Request)
     await send_email(
         reset["email"],
         "Your FinTrack password was changed",
-        "Your FinTrack password was changed. If this was not you, contact the workspace owner immediately.",
+        "Your FinTrack password was successfully changed. If you did not make this change, contact the workspace owner immediately.",
+        html=email_wrap_html(
+            title="Password changed",
+            preheader="Your FinTrack password was just changed.",
+            to_email=reset["email"],
+            body_html=(
+                "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Password changed</h2>"
+                "<p style=\"margin:0 0 12px\">Your FinTrack account password was successfully changed.</p>"
+                "<p style=\"margin:0;font-size:13px;color:#6b7280\">If you did not make this change, contact the workspace owner immediately — your account may have been compromised.</p>"
+            ),
+        ),
     )
     return {"ok": True, "message": "Password updated. Please sign in again."}
 
@@ -967,7 +1036,16 @@ async def send_user_approved_email(email: str, request: Request) -> dict[str, An
     login_url = f"{origin}/login" if origin else "/login"
     return await send_email(
         email,
-        "Your FinTrack access is approved",
+        "Your FinTrack account is approved — you can sign in now",
         f"Your FinTrack account has been approved. Sign in here:\n\n{login_url}",
-        html=f"<p>Your FinTrack account has been approved.</p><p><a href=\"{login_url}\">Sign in to FinTrack</a></p>",
+        html=email_wrap_html(
+            title="Account approved — welcome to FinTrack",
+            preheader="Your FinTrack account is approved. Click to sign in.",
+            to_email=email,
+            body_html=(
+                "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Account approved</h2>"
+                "<p style=\"margin:0 0 20px\">Your FinTrack account has been approved. You can now sign in and access the platform.</p>"
+                f"{_button_html(login_url, 'Sign in to FinTrack', '#2563eb')}"
+            ),
+        ),
     )

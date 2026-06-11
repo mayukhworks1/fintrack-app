@@ -1087,7 +1087,7 @@ async def admin_resend_invite(
         return _no_db()
     import secrets as _secrets
     from ..services.auth_master import _hash_reset_token
-    from ..services.emailer import send_email, app_origin_from_request
+    from ..services.emailer import email_wrap_html, send_email, app_origin_from_request
     from urllib.parse import urlencode
     from datetime import datetime, timezone, timedelta
 
@@ -1129,20 +1129,26 @@ async def admin_resend_invite(
     invite_params = urlencode({"reset_token": token, "invite": "1", "email": user["email"]})
     invite_url = f"{origin}/login?{invite_params}" if origin else f"/login?{invite_params}"
 
+    hi_name = f"Hi {(user['full_name'] or '').strip()}" if user["full_name"] else "Hi"
     delivery = await send_email(
         user["email"],
-        "Your FinTrack invite link (refreshed)",
+        "Your updated FinTrack invite link",
         (
-            f"Hi{' ' + (user['full_name'] or '').strip() if user['full_name'] else ''},\n\n"
+            f"{hi_name},\n\n"
             f"Here is your refreshed FinTrack invite link. It expires in {settings.password_reset_ttl_minutes} minutes:\n\n"
             f"{invite_url}\n\nIf you were not expecting this, ignore this email."
         ),
-        html=(
-            f"<p>Hi{' <b>' + (user['full_name'] or '') + '</b>' if user['full_name'] else ''},</p>"
-            f"<p>Here is your refreshed <b>FinTrack</b> invite link.</p>"
-            f"<p><a href=\"{invite_url}\" style=\"display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;"
-            f"border-radius:8px;text-decoration:none;font-weight:600\">Set password &amp; sign in</a></p>"
-            f"<p style=\"color:#888;font-size:12px\">Expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+        html=email_wrap_html(
+            title="Your updated FinTrack invite link",
+            preheader=f"A fresh invite link — expires in {settings.password_reset_ttl_minutes} minutes.",
+            to_email=user["email"],
+            body_html=(
+                f"<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">{hi_name},</h2>"
+                f"<p style=\"margin:0 0 12px\">Here is your updated FinTrack invite link.</p>"
+                f"<p style=\"margin:0 0 20px\">This link expires in <strong>{settings.password_reset_ttl_minutes} minutes</strong>.</p>"
+                f"<a href=\"{invite_url}\" style=\"display:inline-block;padding:12px 22px;background:#2563eb;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px\">Set password &amp; sign in</a>"
+                f"<p style=\"margin:20px 0 0;font-size:13px;color:#6b7280\">If you were not expecting this, you can safely ignore this email.</p>"
+            ),
         ),
     )
     return {"ok": True, "delivery": delivery, "invite_url": invite_url if not delivery.get("sent") else None}
@@ -1162,7 +1168,7 @@ async def admin_force_password_reset(
         return _no_db()
     import secrets as _secrets
     from ..services.auth_master import _hash_reset_token
-    from ..services.emailer import send_email, app_origin_from_request
+    from ..services.emailer import email_wrap_html, send_email, app_origin_from_request
     from urllib.parse import urlencode
     from datetime import datetime, timezone, timedelta
 
@@ -1207,18 +1213,23 @@ async def admin_force_password_reset(
 
     delivery = await send_email(
         user["email"],
-        "Reset your FinTrack password (admin-initiated)",
+        "Your FinTrack password needs to be reset",
         (
-            f"An admin has requested a password reset for your FinTrack account.\n\n"
+            f"An admin has initiated a password reset for your FinTrack account.\n\n"
             f"All your active sessions have been revoked. Use this link to set a new password:\n\n"
             f"{reset_url}\n\nThis link expires in {settings.password_reset_ttl_minutes} minutes."
         ),
-        html=(
-            f"<p>An admin has requested a password reset for your FinTrack account.</p>"
-            f"<p>All your active sessions have been revoked.</p>"
-            f"<p><a href=\"{reset_url}\" style=\"display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;"
-            f"border-radius:8px;text-decoration:none;font-weight:600\">Reset password</a></p>"
-            f"<p style=\"color:#888;font-size:12px\">Expires in {settings.password_reset_ttl_minutes} minutes.</p>"
+        html=email_wrap_html(
+            title="Password reset required",
+            preheader="An admin has reset your FinTrack account — use the link to set a new password.",
+            to_email=user["email"],
+            body_html=(
+                f"<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Password reset required</h2>"
+                f"<p style=\"margin:0 0 12px\">An admin has initiated a password reset for your FinTrack account. All active sessions have been revoked.</p>"
+                f"<p style=\"margin:0 0 20px\">Use the button below to set a new password. This link expires in <strong>{settings.password_reset_ttl_minutes} minutes</strong>.</p>"
+                f"<a href=\"{reset_url}\" style=\"display:inline-block;padding:12px 22px;background:#dc2626;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px\">Set new password</a>"
+                f"<p style=\"margin:20px 0 0;font-size:13px;color:#6b7280\">If you did not expect this, contact the workspace admin immediately.</p>"
+            ),
         ),
     )
     return {"ok": True, "sessions_revoked": int(revoked or 0), "delivery": delivery}
@@ -1462,7 +1473,7 @@ async def admin_test_email(
     actor_role: str = Depends(require_admin),
 ):
     """Send a test email via the configured provider (Brevo) to verify delivery works."""
-    from ..services.emailer import is_email_configured, send_email
+    from ..services.emailer import email_wrap_html, is_email_configured, send_email
 
     to_email = (body.to or getattr(request.state, "auth_user_email", None) or settings.auth_admin_notify_email or settings.smtp_from_email or "").strip()
     configured = is_email_configured()
@@ -1471,8 +1482,17 @@ async def admin_test_email(
         delivery = await send_email(
             to_email,
             "FinTrack email delivery test",
-            "This is a FinTrack email test. If you received it, invite and password reset emails will deliver correctly.",
-            html="<p>This is a <b>FinTrack</b> email delivery test.</p><p>If you received it, invite and password reset emails will deliver correctly.</p>",
+            "This is a FinTrack email delivery test. If you received it in your inbox, transactional emails (invites, password resets, approvals) are configured correctly.",
+            html=email_wrap_html(
+                title="FinTrack email delivery test",
+                preheader="Delivery test — if you received this, email is working correctly.",
+                to_email=to_email,
+                body_html=(
+                    "<h2 style=\"margin:0 0 16px;font-size:18px;font-weight:700\">Email delivery test</h2>"
+                    "<p style=\"margin:0 0 12px\">This is a transactional email delivery test from FinTrack.</p>"
+                    "<p style=\"margin:0;color:#6b7280;font-size:13px\">If this arrived in your inbox (not spam), invite, approval, and password reset emails are configured correctly.</p>"
+                ),
+            ),
         )
     pool = get_pool()
     if pool:
