@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     # ── HF Dataset storage (profile pictures, attachments) ──────────────────
     # Private dataset used as a file store — files are served via backend proxy.
     # Set HF_DATASET_REPO to override (or leave as default).
-    hf_dataset_repo: str = "Mayukhjh24/fintrackstorage"
+    hf_dataset_repo: str = "Mayukhj24/fintrackstorage"
 
     # ── AI/ML: embedding model + LangChain tracing ──────────────────────────
     # OpenRouter embedding model for pgvector RAG.

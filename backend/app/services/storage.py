@@ -1,5 +1,5 @@
 """
-Hugging Face Dataset-backed file storage (Mayukhjh24/fintrackstorage).
+Hugging Face Dataset-backed file storage (Mayukhj24/fintrackstorage).
 
 Files are stored in a private HF dataset and proxied through the backend
 API so authentication is always required to read them.
@@ -16,6 +16,27 @@ from ..config import settings
 logger = logging.getLogger("fintrack.storage")
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+_repo_ensured: bool = False
+
+
+def _ensure_repo_sync() -> None:
+    """Create the HF dataset repo if it doesn't exist yet (idempotent)."""
+    global _repo_ensured
+    if _repo_ensured:
+        return
+    api = _hf_api()
+    repo = _repo_id()
+    try:
+        api.repo_info(repo_id=repo, repo_type="dataset")
+        logger.info("storage: HF dataset repo %s exists", repo)
+    except Exception:
+        try:
+            api.create_repo(repo_id=repo, repo_type="dataset", private=True)
+            logger.info("storage: created private HF dataset repo %s", repo)
+        except Exception as create_exc:
+            logger.warning("storage: could not create repo %s: %s", repo, create_exc)
+    _repo_ensured = True
 MAX_AVATAR_BYTES = 4 * 1024 * 1024  # 4 MB
 
 EXT_FOR_MIME = {
@@ -34,7 +55,7 @@ def _hf_api():
 
 
 def _repo_id() -> str:
-    return settings.hf_dataset_repo or "Mayukhjh24/fintrackstorage"
+    return settings.hf_dataset_repo or "Mayukhj24/fintrackstorage"
 
 
 def _proxy_url(path_in_repo: str) -> str:
@@ -51,6 +72,7 @@ async def upload_bytes(
     repo = _repo_id()
 
     def _sync():
+        _ensure_repo_sync()
         api.upload_file(
             path_or_fileobj=io.BytesIO(data),
             path_in_repo=path_in_repo,

@@ -642,15 +642,16 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         """
                         INSERT INTO auth_users (
                             email, email_normalized, full_name, status,
-                            email_verified_at, teable_email, metadata, updated_at
+                            email_verified_at, teable_email, metadata, avatar_url, updated_at
                         )
-                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $1, $4::jsonb, NOW())
+                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $1, $4::jsonb, $5, NOW())
                         RETURNING id, email, full_name, status
                         """,
                         email_orig,
                         email_norm,
                         full_name,
                         json.dumps({"signup_provider": "google", "picture": picture}),
+                        picture,
                     )
                     created_pending = True
                 else:
@@ -660,6 +661,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                            SET email_verified_at = COALESCE(email_verified_at, NOW()),
                                full_name = COALESCE(full_name, $2),
                                teable_email = COALESCE(teable_email, $4),
+                               avatar_url = COALESCE(avatar_url, $5),
                                metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
                                updated_at = NOW()
                          WHERE id = $1
@@ -668,6 +670,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         full_name,
                         json.dumps({"google_picture": picture}),
                         email_orig,
+                        picture,
                     )
 
                 await conn.execute(
@@ -696,6 +699,13 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                     email_orig,
                     json.dumps(profile),
                 )
+                # Backfill avatar_url from Google picture if not set
+                if picture:
+                    await conn.execute(
+                        "UPDATE auth_users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL",
+                        picture,
+                        user["id"],
+                    )
 
     if user["status"] != "active":
         event_type = "google_register_pending" if created_pending else "google_login_blocked"
