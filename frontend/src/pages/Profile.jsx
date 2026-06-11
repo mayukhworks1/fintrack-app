@@ -284,18 +284,29 @@ export default function Profile() {
       {/* ── Hero header ── */}
       <Card className="flex items-center gap-4">
         {/* Avatar with upload overlay */}
-        <div className="relative flex-shrink-0 group">
+        <div className="relative flex-shrink-0 group" style={{ width: 64, height: 64 }}>
+          {/* Spinning progress ring while uploading */}
+          {avatarUploading && (
+            <svg className="absolute inset-0 animate-spin" width="64" height="64" viewBox="0 0 64 64"
+              style={{ zIndex: 10 }}>
+              <circle cx="32" cy="32" r="30" fill="none" strokeWidth="3"
+                stroke="rgba(99,102,241,0.2)" />
+              <circle cx="32" cy="32" r="30" fill="none" strokeWidth="3"
+                stroke="#6366f1" strokeLinecap="round"
+                strokeDasharray="48 140" />
+            </svg>
+          )}
           <Avatar name={profile?.full_name} email={profile?.email} avatarUrl={profile?.avatar_url} size={64} />
-          {/* Upload overlay */}
+          {/* Hover/upload overlay */}
           <button
-            onClick={() => avatarInputRef.current?.click()}
+            onClick={() => !avatarUploading && avatarInputRef.current?.click()}
             disabled={avatarUploading}
-            className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
-            title="Change photo"
+            className={`absolute inset-0 rounded-full flex items-center justify-center transition-opacity ${avatarUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            style={{ background: avatarUploading ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.5)', cursor: avatarUploading ? 'wait' : 'pointer' }}
+            title={avatarUploading ? 'Uploading…' : 'Change photo'}
           >
             {avatarUploading
-              ? <RefreshCw size={16} className="animate-spin" style={{ color: '#fff' }} />
+              ? <span className="text-[10px] font-semibold" style={{ color: '#fff' }}>…</span>
               : <Camera size={16} style={{ color: '#fff' }} />
             }
           </button>
@@ -324,12 +335,15 @@ export default function Profile() {
           {/* Avatar action row */}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <button
-              onClick={() => avatarInputRef.current?.click()}
+              onClick={() => !avatarUploading && avatarInputRef.current?.click()}
               disabled={avatarUploading}
               className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border transition-colors"
-              style={{ color: 'var(--accent)', borderColor: 'var(--accent)', background: 'var(--accent-dim, rgba(99,102,241,0.08))' }}
+              style={{ color: 'var(--accent)', borderColor: 'var(--accent)', background: 'var(--accent-dim, rgba(99,102,241,0.08))', opacity: avatarUploading ? 0.7 : 1 }}
             >
-              <Camera size={10} /> {profile?.avatar_url ? 'Change photo' : 'Add photo'}
+              {avatarUploading
+                ? <><RefreshCw size={10} className="animate-spin" /> Uploading…</>
+                : <><Camera size={10} /> {profile?.avatar_url ? 'Change photo' : 'Add photo'}</>
+              }
             </button>
             {profile?.avatar_url && (
               <button
