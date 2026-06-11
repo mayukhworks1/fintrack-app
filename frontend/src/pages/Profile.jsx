@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 function ts(v) {
@@ -16,17 +17,17 @@ function ts(v) {
 }
 
 function Avatar({ name, email, avatarUrl, size = 56 }) {
+  const src = useAvatarSrc(avatarUrl)
   const initials = name
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : (email || '?')[0].toUpperCase()
-  if (avatarUrl) {
+  if (src) {
     return (
       <img
-        src={avatarUrl}
+        src={src}
         alt={name || email || 'Avatar'}
         className="rounded-full flex-shrink-0 object-cover"
         style={{ width: size, height: size, boxShadow: '0 4px 14px rgba(99,102,241,0.25)' }}
-        onError={e => { e.currentTarget.style.display = 'none' }}
       />
     )
   }

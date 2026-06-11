@@ -10,6 +10,7 @@ import {
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
 
 /* ── New quick-action button with animated popover ── */
 const NEW_OPTIONS = [
@@ -302,6 +303,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const initials = user?.full_name
     ? user.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : (user?.email || 'U')[0].toUpperCase()
+  const avatarSrc = useAvatarSrc(user?.avatar_url)
   const location = useLocation()
 
   // Close mobile drawer on navigation
@@ -452,12 +454,11 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           style={{ textDecoration: 'none' }}
           title={collapsed ? displayName : undefined}
         >
-          {user?.avatar_url
+          {avatarSrc
             ? <img
-                src={user.avatar_url}
+                src={avatarSrc}
                 alt={displayName}
                 className="runey-profile-avatar object-cover"
-                onError={e => { e.currentTarget.style.display = 'none' }}
               />
             : <span className="runey-profile-avatar" style={{
                 background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
