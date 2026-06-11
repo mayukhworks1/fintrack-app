@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   User, Mail, Shield, Calendar, Clock, Key, Check, AlertCircle,
   Pencil, X, Phone, Briefcase, Building2, MapPin, Globe2,
   Link2, Unlink, LogOut, RefreshCw, ChevronRight, Info,
+  Camera, Trash2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -14,10 +15,21 @@ function ts(v) {
   catch { return v }
 }
 
-function Avatar({ name, email, size = 56 }) {
+function Avatar({ name, email, avatarUrl, size = 56 }) {
   const initials = name
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : (email || '?')[0].toUpperCase()
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || email || 'Avatar'}
+        className="rounded-full flex-shrink-0 object-cover"
+        style={{ width: size, height: size, boxShadow: '0 4px 14px rgba(99,102,241,0.25)' }}
+        onError={e => { e.currentTarget.style.display = 'none' }}
+      />
+    )
+  }
   return (
     <div
       className="rounded-full flex items-center justify-center font-bold flex-shrink-0 select-none"
@@ -124,6 +136,48 @@ export default function Profile() {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState(null)
 
+  // Avatar upload
+  const avatarInputRef = useRef(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarMsg, setAvatarMsg] = useState(null)
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setAvatarMsg({ ok: false, text: 'Only image files allowed' }); return
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setAvatarMsg({ ok: false, text: 'Image must be under 4 MB' }); return
+    }
+    setAvatarUploading(true); setAvatarMsg(null)
+    try {
+      const res = await api.auth.uploadAvatar(file)
+      setProfile(p => ({ ...p, avatar_url: res.avatar_url }))
+      setAvatarMsg({ ok: true, text: 'Profile picture updated' })
+      setTimeout(() => setAvatarMsg(null), 3000)
+    } catch (err) {
+      setAvatarMsg({ ok: false, text: err.message || 'Upload failed' })
+    } finally {
+      setAvatarUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleAvatarDelete = async () => {
+    setAvatarUploading(true); setAvatarMsg(null)
+    try {
+      await api.auth.deleteAvatar()
+      setProfile(p => ({ ...p, avatar_url: null }))
+      setAvatarMsg({ ok: true, text: 'Profile picture removed' })
+      setTimeout(() => setAvatarMsg(null), 3000)
+    } catch (err) {
+      setAvatarMsg({ ok: false, text: err.message || 'Failed to remove' })
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
@@ -229,7 +283,31 @@ export default function Profile() {
 
       {/* ── Hero header ── */}
       <Card className="flex items-center gap-4">
-        <Avatar name={profile?.full_name} email={profile?.email} size={60} />
+        {/* Avatar with upload overlay */}
+        <div className="relative flex-shrink-0 group">
+          <Avatar name={profile?.full_name} email={profile?.email} avatarUrl={profile?.avatar_url} size={64} />
+          {/* Upload overlay */}
+          <button
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={avatarUploading}
+            className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            title="Change photo"
+          >
+            {avatarUploading
+              ? <RefreshCw size={16} className="animate-spin" style={{ color: '#fff' }} />
+              : <Camera size={16} style={{ color: '#fff' }} />
+            }
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
+        </div>
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
             <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
@@ -243,6 +321,34 @@ export default function Profile() {
               {profile.job_title}{profile?.company ? ` · ${profile.company}` : ''}
             </p>
           )}
+          {/* Avatar action row */}
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border transition-colors"
+              style={{ color: 'var(--accent)', borderColor: 'var(--accent)', background: 'var(--accent-dim, rgba(99,102,241,0.08))' }}
+            >
+              <Camera size={10} /> {profile?.avatar_url ? 'Change photo' : 'Add photo'}
+            </button>
+            {profile?.avatar_url && (
+              <button
+                onClick={handleAvatarDelete}
+                disabled={avatarUploading}
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border transition-colors"
+                style={{ color: 'var(--text-3)', borderColor: 'var(--border)' }}
+              >
+                <Trash2 size={10} /> Remove
+              </button>
+            )}
+            {avatarMsg && (
+              <span className="text-[11px] flex items-center gap-1"
+                style={{ color: avatarMsg.ok ? '#16a34a' : '#dc2626' }}>
+                {avatarMsg.ok ? <Check size={10} /> : <AlertCircle size={10} />}
+                {avatarMsg.text}
+              </span>
+            )}
+          </div>
         </div>
       </Card>
 

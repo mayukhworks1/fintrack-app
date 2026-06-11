@@ -90,6 +90,19 @@ class Settings(BaseSettings):
     hf_token:    Optional[str] = None
     hf_space_id: str = "Mayukhj24/fintrack-api"
 
+    # ── HF Dataset storage (profile pictures, attachments) ──────────────────
+    # Private dataset used as a file store — files are served via backend proxy.
+    # Set HF_DATASET_REPO to override (or leave as default).
+    hf_dataset_repo: str = "Mayukhjh24/fintrackstorage"
+
+    # ── AI/ML: embedding model + LangChain tracing ──────────────────────────
+    # OpenRouter embedding model for pgvector RAG.
+    openrouter_embed_model: str = "openai/text-embedding-3-small"
+    # Optional LangSmith tracing (set LANGCHAIN_API_KEY + LANGCHAIN_TRACING_V2=true)
+    langchain_api_key:    Optional[str] = None
+    langchain_tracing_v2: bool = False
+    langchain_project:    str = "fintrack"
+
     model_config = ConfigDict(env_file=".env")
 
 

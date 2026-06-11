@@ -23,7 +23,7 @@ import hashlib
 import hmac
 import time
 from urllib.parse import urlencode
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 import httpx
 from pydantic import BaseModel
@@ -580,6 +580,7 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
                 u.location,
                 u.timezone,
                 u.teable_email,
+                u.avatar_url,
                 u.status,
                 u.created_at,
                 u.approved_at,
@@ -594,8 +595,8 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
             LEFT JOIN auth_roles r ON r.id = ur.role_id
             WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
             GROUP BY u.id, u.email, u.full_name, u.phone, u.job_title, u.department,
-                     u.company, u.location, u.timezone, u.teable_email, u.status,
-                     u.created_at, u.approved_at, u.password_changed_at
+                     u.company, u.location, u.timezone, u.teable_email, u.avatar_url,
+                     u.status, u.created_at, u.approved_at, u.password_changed_at
             """,
             token_hint,
         )
@@ -628,6 +629,7 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
             "location":             row["location"],
             "timezone":             row["timezone"],
             "teable_email":         row["teable_email"],
+            "avatar_url":           row["avatar_url"],
             "status":               row["status"],
             "role":                 roles[0] if roles else None,
             "roles":                roles,
@@ -739,3 +741,83 @@ async def change_password(body: ChangePasswordRequest, request: Request, _role: 
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Profile picture (avatar) ─────────────────────────────────────────────────
+
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_MAX_AVATAR_BYTES    = 4 * 1024 * 1024  # 4 MB
+_EXT_FOR_MIME = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
+
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    _role: str = Depends(_require_email_auth),
+):
+    """Upload a profile picture. Returns {avatar_url} proxy path."""
+    user_id = getattr(request.state, "auth_user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower() or "image/jpeg"
+    if content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, GIF, and WebP images are allowed")
+
+    data = await file.read(_MAX_AVATAR_BYTES + 1)
+    if len(data) > _MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="Image too large (max 4 MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    if not settings.hf_token:
+        raise HTTPException(status_code=503, detail="File storage not configured (HF_TOKEN missing)")
+
+    ext = _EXT_FOR_MIME.get(content_type, "jpg")
+    path_in_repo = f"profiles/{user_id}/avatar.{ext}"
+
+    from ..services.storage import upload_bytes
+    proxy_url = await upload_bytes(data, path_in_repo, content_type)
+
+    from ..db.postgres import get_pool
+    pool = get_pool()
+    if pool:
+        await pool.execute(
+            "UPDATE auth_users SET avatar_url = $1, updated_at = NOW() WHERE id = $2::uuid",
+            proxy_url, user_id,
+        )
+
+    return {"ok": True, "avatar_url": proxy_url}
+
+
+@router.delete("/profile/avatar")
+async def delete_avatar(
+    request: Request,
+    _role: str = Depends(_require_email_auth),
+):
+    """Remove the user's profile picture."""
+    user_id = getattr(request.state, "auth_user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    from ..db.postgres import get_pool
+    pool = get_pool()
+    old_url: str | None = None
+    if pool:
+        row = await pool.fetchrow("SELECT avatar_url FROM auth_users WHERE id = $1::uuid", user_id)
+        old_url = row["avatar_url"] if row else None
+
+    if old_url:
+        prefix = "/api/storage/file/"
+        if old_url.startswith(prefix):
+            from ..services.storage import delete_path
+            await delete_path(old_url[len(prefix):])
+
+    if pool:
+        await pool.execute(
+            "UPDATE auth_users SET avatar_url = NULL, updated_at = NOW() WHERE id = $1::uuid",
+            user_id,
+        )
+
+    return {"ok": True}

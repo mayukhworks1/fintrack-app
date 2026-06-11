@@ -618,5 +618,11 @@ export const api = {
     getProfile:      ()       => request('/api/auth/profile'),
     updateProfile:   (data)   => request('/api/auth/profile', { method: 'PATCH', body: JSON.stringify(data) }),
     changePassword:  (data)   => request('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
+    uploadAvatar: (file) => {
+      const form = new FormData()
+      form.append('file', file)
+      return request('/api/auth/profile/avatar', { method: 'POST', body: form, headers: {} })
+    },
+    deleteAvatar: () => request('/api/auth/profile/avatar', { method: 'DELETE' }),
   },
 }

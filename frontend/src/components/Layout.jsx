@@ -452,10 +452,18 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           style={{ textDecoration: 'none' }}
           title={collapsed ? displayName : undefined}
         >
-          <span className="runey-profile-avatar" style={{
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            color: '#fff', fontSize: 11, fontWeight: 700,
-          }}>{initials}</span>
+          {user?.avatar_url
+            ? <img
+                src={user.avatar_url}
+                alt={displayName}
+                className="runey-profile-avatar object-cover"
+                onError={e => { e.currentTarget.style.display = 'none' }}
+              />
+            : <span className="runey-profile-avatar" style={{
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff', fontSize: 11, fontWeight: 700,
+              }}>{initials}</span>
+          }
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate">{displayName}</p>

@@ -16,6 +16,7 @@ from .routers import admin
 from .routers import insights as insights_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
+from .routers import storage as storage_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -28,15 +29,24 @@ from .routers.deps import require_auth, require_admin
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-_sync_task:  Optional[asyncio.Task] = None
-_audit_task: Optional[asyncio.Task] = None
+_sync_task:       Optional[asyncio.Task] = None
+_audit_task:      Optional[asyncio.Task] = None
 _aging_refresh_task: Optional[asyncio.Task] = None
+_embed_task:      Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _sync_task, _audit_task, _aging_refresh_task
+    global _sync_task, _audit_task, _aging_refresh_task, _embed_task
     logger.info("FinTrack API starting (version=%s)", app.version)
+
+    # ── LangChain / LangSmith observability ─────────────────────────────────
+    if settings.langchain_tracing_v2 and settings.langchain_api_key:
+        import os
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"]     = settings.langchain_api_key
+        os.environ["LANGCHAIN_PROJECT"]     = settings.langchain_project
+        logger.info("LangSmith tracing enabled (project=%s)", settings.langchain_project)
 
     # ── Security self-checks ─────────────────────────────────────────────────
     from .config import DEV_APP_SECRET
@@ -83,10 +93,27 @@ async def lifespan(app: FastAPI):
         _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
         logger.info("Background invoice aging refresh task started")
 
+    # ── Background embedding task (pgvector RAG) ─────────────────────────────
+    if postgres.get_pool() and settings.openrouter_api_key:
+        async def _embed_loop():
+            from .services.embeddings import embed_all_records_bg, is_pgvector_available
+            if not await is_pgvector_available():
+                logger.info("pgvector not available — embedding loop skipped")
+                return
+            logger.info("Starting background embedding task")
+            while True:
+                try:
+                    await embed_all_records_bg()
+                except Exception as exc:
+                    logger.warning("embed_all_records_bg error: %s", exc)
+                await asyncio.sleep(600)   # re-embed new/changed records every 10 min
+        _embed_task = asyncio.create_task(_embed_loop(), name="embedding-bg")
+        logger.info("Background embedding task started")
+
     yield
 
     # ── Graceful shutdown ─────────────────────────────────────────────────
-    for task in (_sync_task, _audit_task, _aging_refresh_task):
+    for task in (_sync_task, _audit_task, _aging_refresh_task, _embed_task):
         if task and not task.done():
             task.cancel()
             try:
@@ -139,6 +166,7 @@ app.include_router(admin.router)
 app.include_router(insights_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
+app.include_router(storage_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────
@@ -279,18 +307,23 @@ async def health():
                     sync_meta["synced_at"] = sync_meta["synced_at"].isoformat()
         except Exception:
             sync_meta = None
+    from .services.embeddings import _pgvector_ok as _pgv
     return {
-        "status":        "healthy",
-        "version":       app.version,
+        "status":            "healthy",
+        "version":           app.version,
         "teable_configured": bool(settings.teable_api_token),
         "ai_configured":     bool(settings.openrouter_api_key),
-        "postgres":      "connected" if pg_ok else "unavailable",
-        "postgres_error": pg_err,
-        "valkey":        "connected" if vk_ok else "unavailable",
-        "sync_running":  _sync_task is not None and not _sync_task.done(),
-        "last_sync":     sync_meta,
-        "cache":         cache.stats(),
-        "timestamp":     time.time(),
+        "storage_configured": bool(settings.hf_token and settings.hf_dataset_repo),
+        "postgres":          "connected" if pg_ok else "unavailable",
+        "postgres_error":    pg_err,
+        "valkey":            "connected" if vk_ok else "unavailable",
+        "pgvector":          "available" if _pgv else ("unavailable" if _pgv is False else "unchecked"),
+        "sync_running":      _sync_task is not None and not _sync_task.done(),
+        "embed_running":     _embed_task is not None and not _embed_task.done(),
+        "langsmith_tracing": settings.langchain_tracing_v2 and bool(settings.langchain_api_key),
+        "last_sync":         sync_meta,
+        "cache":             cache.stats(),
+        "timestamp":         time.time(),
     }
 
 

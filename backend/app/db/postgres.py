@@ -560,6 +560,7 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS department VARCHAR(120);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS company VARCHAR(160);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS location VARCHAR(160);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(80);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
 CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);
@@ -848,6 +849,59 @@ FROM   auth_identities i
 WHERE  i.user_id   = u.id
   AND  i.provider  = 'google'
   AND  u.teable_email IS NULL;
+
+-- ── pgvector: semantic RAG for AI assistant ──────────────────────────────
+-- Enable the vector extension (requires pgvector installed in PostgreSQL).
+-- Wrapped in a DO block so startup continues even if the extension is absent.
+DO $$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'pgvector extension not available (install it in Aiven console): %', SQLERRM;
+END
+$$;
+
+-- Record embeddings table — populated by the background embedding job.
+-- Only created when pgvector is available; silently skipped otherwise.
+DO $$
+BEGIN
+  CREATE TABLE IF NOT EXISTS record_embeddings (
+    id           BIGSERIAL    PRIMARY KEY,
+    record_id    VARCHAR(60)  NOT NULL,
+    table_name   VARCHAR(60)  NOT NULL,
+    content      TEXT         NOT NULL DEFAULT '',
+    embedding    vector(1536),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE(record_id, table_name)
+  );
+  CREATE INDEX IF NOT EXISTS re_record_idx ON record_embeddings (record_id, table_name);
+  CREATE INDEX IF NOT EXISTS re_table_idx  ON record_embeddings (table_name, updated_at DESC);
+  -- IVFFlat index for fast cosine similarity (requires >100 rows to be useful)
+  CREATE INDEX IF NOT EXISTS re_ivfflat_idx ON record_embeddings
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 20);
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'record_embeddings table/index creation skipped (pgvector absent): %', SQLERRM;
+END
+$$;
+
+-- AI trace log — captures timing, model, retrieval metadata per AI request
+CREATE TABLE IF NOT EXISTS ai_traces (
+  id            BIGSERIAL    PRIMARY KEY,
+  ts            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  session_id    VARCHAR(60),
+  request_id    VARCHAR(60),
+  endpoint      VARCHAR(60),
+  model         VARCHAR(120),
+  retrieval     VARCHAR(30),   -- 'lexical' | 'hybrid' | 'vector' | 'none'
+  latency_ms    INTEGER,
+  prompt_tokens INTEGER,
+  answer_tokens INTEGER,
+  user_id       UUID,
+  query_snippet TEXT,
+  extra         JSONB         NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS at_ts_idx ON ai_traces (ts DESC);
+CREATE INDEX IF NOT EXISTS at_session_idx ON ai_traces (session_id, ts DESC);
 
 """
 # ---------------------------------------------------------------------------

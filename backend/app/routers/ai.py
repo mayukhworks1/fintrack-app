@@ -135,6 +135,44 @@ AI_TASK_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
+async def _write_ai_trace(
+    pool,
+    *,
+    endpoint: str,
+    model: str,
+    retrieval: str,
+    latency_ms: int | None,
+    tokens: Any = None,
+    session_id: str | None = None,
+    request_id: str | None = None,
+    query: str | None = None,
+    user_id: Any = None,
+) -> None:
+    """Write a single row to ai_traces (fire-and-forget). Never raises."""
+    try:
+        prompt_tok = answer_tok = None
+        if isinstance(tokens, dict):
+            prompt_tok = tokens.get("prompt_tokens")
+            answer_tok = tokens.get("completion_tokens")
+        elif isinstance(tokens, (int, float)):
+            answer_tok = int(tokens)
+        await pool.execute(
+            """
+            INSERT INTO ai_traces
+              (endpoint, model, retrieval, latency_ms, prompt_tokens, answer_tokens,
+               session_id, request_id, query_snippet, user_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            """,
+            endpoint, model[:120] if model else None,
+            retrieval, latency_ms,
+            prompt_tok, answer_tok,
+            session_id, request_id,
+            query, str(user_id) if user_id else None,
+        )
+    except Exception as exc:
+        logger.debug("_write_ai_trace failed: %s", exc)
+
+
 def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
     """Build concise invoice context string for the AI."""
     lines = [
@@ -1279,9 +1317,32 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
                 duration_ms=duration_ms,
             ))
 
-        resp = {"reply": result["content"], "model": result["model_short"], "verification": verification, "planner": planner}
+        retrieval_method = retrieval.get("retrieval_method", "lexical")
+        resp = {
+            "reply": result["content"],
+            "model": result["model_short"],
+            "verification": verification,
+            "planner": planner,
+            "retrieval_method": retrieval_method,
+            "latency_ms": duration_ms,
+        }
         if session_id:
             resp["session_id"] = session_id
+
+        # Fire-and-forget AI trace
+        if pool:
+            asyncio.create_task(_write_ai_trace(
+                pool,
+                endpoint="chat",
+                model=result.get("model", ""),
+                retrieval=retrieval_method,
+                latency_ms=duration_ms,
+                tokens=result.get("tokens_used"),
+                session_id=session_id,
+                request_id=getattr(request.state, "request_id", None),
+                query=user_message[:200],
+                user_id=getattr(request.state, "auth_user_id", None),
+            ))
         return resp
 
     except Exception as e:
