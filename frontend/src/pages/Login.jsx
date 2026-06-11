@@ -15,6 +15,11 @@ const OAUTH_ERROR_MESSAGES = {
 export default function Login() {
   const { login, acceptToken } = useAuth()
   const navigate = useNavigate()
+  const [oauthToken] = useState(() => {
+    const hash = window.location.hash?.replace(/^#/, '')
+    if (!hash) return ''
+    return new URLSearchParams(hash).get('oauth_token') || ''
+  })
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
@@ -34,7 +39,9 @@ export default function Login() {
   const [pendingApproval, setPendingApproval] = useState(false)
   const inputRef = useRef(null)
 
-  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => {
+    if (!oauthToken) inputRef.current?.focus()
+  }, [oauthToken])
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +94,47 @@ export default function Login() {
     })()
     return () => { cancelled = true }
   }, [acceptToken, navigate])
+
+  if (oauthToken && loading) {
+    return (
+      <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm animate-fade-in">
+          <div className="flex items-center justify-center gap-2.5 mb-8">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
+            >
+              <TrendingUp size={16} className="text-white" aria-hidden="true" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
+              FinTrack
+            </span>
+          </div>
+          <div
+            className="rounded-2xl p-7 text-center"
+            style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--card-border)',
+              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.25)' }}
+            >
+              <Loader2 size={26} className="animate-spin" style={{ color: '#2563eb' }} />
+            </div>
+            <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+              Signing you in
+            </h1>
+            <p className="text-sm" style={{ color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Your {zohoEnabled ? 'SSO' : 'account'} session is being verified. You will be redirected automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const startGoogleLogin = () => {
     if (loading) return

@@ -1832,6 +1832,7 @@ function AuthUsersTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [decisionHandled, setDecisionHandled] = useState(false)
   const [smtpTo, setSmtpTo] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
   const [newUser, setNewUser] = useState({
     email: '',
     full_name: '',
@@ -1852,8 +1853,10 @@ function AuthUsersTab() {
     setRoles(res.roles || [])
   }, [])
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null)
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    setError(null)
     try {
       const res = await api.admin.authUsers({
         user_id: targetUserId || undefined,
@@ -1874,7 +1877,8 @@ function AuthUsersTab() {
     } catch (e) {
       setError(e.message)
     } finally {
-      setLoading(false)
+      if (silent) setRefreshing(false)
+      else setLoading(false)
     }
   }, [limit, offset, statusFilter, roleFilter, search, targetUserId])
 
@@ -1898,7 +1902,7 @@ function AuthUsersTab() {
       else if (action === 'role') await api.admin.updateAuthUserRole(row.id, { role_key, reason: 'Role changed from admin auth users tab', revoke_sessions: true })
       else if (action === 'revoke') await api.admin.revokeAuthUserSessions(row.id)
       setMessage('Auth user updated. Event written to auth_events.')
-      await load()
+      await load({ silent: true })
     } catch (e) {
       setMessage(e.message || 'Auth action failed')
     } finally {
@@ -1933,7 +1937,7 @@ function AuthUsersTab() {
       setMessage(res.message || 'User created')
       setNewUser({ email: '', full_name: '', role_key: 'user', status: 'active', send_invite: true })
       setShowCreate(false)
-      await load()
+      await load({ silent: true })
     } catch (e) {
       setMessage(e.message || 'User creation failed')
     } finally {
@@ -1965,7 +1969,7 @@ function AuthUsersTab() {
     try {
       await api.admin.deleteAuthUser(row.id, isActive)
       setMessage(`User ${row.email} deleted.`)
-      await load()
+      await load({ silent: true })
     } catch (e) {
       setMessage(e.message || 'Delete failed')
     } finally {
@@ -1977,7 +1981,7 @@ function AuthUsersTab() {
     setActingId(`${row.id}:teable`)
     try {
       await api.admin.setTeableEmail(row.id, { teable_email: teableEmail || null })
-      await load()
+      await load({ silent: true })
     } catch (e) {
       setMessage(e.message || 'Teable email update failed')
     } finally {
@@ -2013,7 +2017,7 @@ function AuthUsersTab() {
     setActingId(`${row.id}:name`)
     try {
       await api.admin.updateAuthUserName(row.id, { full_name: name })
-      await load()
+      await load({ silent: true })
     } catch (e) {
       setMessage(e.message || 'Name update failed')
     } finally {
@@ -2023,11 +2027,13 @@ function AuthUsersTab() {
 
   const renderActions = (row) => {
     const busy = (name) => actingId === `${row.id}:${name}`
+    const rowBusy = Boolean(actingId) && actingId.startsWith(`${row.id}:`)
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <select
           value={roleByUser[row.id] || row.roles?.[0] || 'user'}
           onChange={e => setRoleByUser(prev => ({ ...prev, [row.id]: e.target.value }))}
+          disabled={rowBusy}
           className="text-[11px] px-2 py-1 rounded-lg border outline-none"
           style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)' }}>
           {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => (
@@ -2035,28 +2041,28 @@ function AuthUsersTab() {
           ))}
         </select>
         {row.status === 'active' && (roleByUser[row.id] || row.roles?.[0] || 'user') !== (row.roles?.[0] || 'user') && (
-          <button onClick={() => act(row, 'role')} disabled={!!actingId}
+          <button onClick={() => act(row, 'role')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
             style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
             <Save size={11} /> {busy('role') ? 'Saving…' : 'Save role'}
           </button>
         )}
         {row.status !== 'active' && (
-          <button onClick={() => act(row, row.status === 'pending_approval' ? 'approve' : 'reactivate')} disabled={!!actingId}
+          <button onClick={() => act(row, row.status === 'pending_approval' ? 'approve' : 'reactivate')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
             style={{ color: '#16a34a', borderColor: 'rgba(22,163,74,0.28)', background: 'rgba(22,163,74,0.08)' }}>
             {busy('approve') || busy('reactivate') ? 'Working…' : row.status === 'pending_approval' ? 'Approve' : 'Reactivate'}
           </button>
         )}
         {row.status === 'pending_approval' && (
-          <button onClick={() => act(row, 'reject')} disabled={!!actingId}
+          <button onClick={() => act(row, 'reject')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
             style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
             {busy('reject') ? 'Working…' : 'Reject'}
           </button>
         )}
         {row.status === 'active' && (
-          <button onClick={() => act(row, 'disable')} disabled={!!actingId}
+          <button onClick={() => act(row, 'disable')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
             style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
             {busy('disable') ? 'Working…' : 'Disable'}
@@ -2064,31 +2070,31 @@ function AuthUsersTab() {
         )}
         {/* Invite actions — available for active/pending users */}
         {(row.status === 'active' || row.status === 'pending_approval') && (
-          <button onClick={() => resendInvite(row)} disabled={!!actingId}
+          <button onClick={() => resendInvite(row)} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
             style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
             <SendHorizontal size={11} /> {busy('invite') ? 'Sending…' : 'Resend invite'}
           </button>
         )}
         {row.status === 'active' && (
-          <button onClick={() => forcePasswordReset(row)} disabled={!!actingId}
+          <button onClick={() => forcePasswordReset(row)} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
             style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
             <KeyRound size={11} /> {busy('forcereset') ? 'Working…' : 'Force reset'}
           </button>
         )}
-        <button onClick={() => setTimelineUserId(row.id)} disabled={!!actingId}
+        <button onClick={() => setTimelineUserId(row.id)} disabled={rowBusy}
           className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
           style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}>
           <Clock size={11} /> Timeline
         </button>
-        <button onClick={() => deleteUser(row)} disabled={!!actingId}
+        <button onClick={() => deleteUser(row)} disabled={rowBusy}
           className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
           style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
           <Trash2 size={11} /> {busy('delete') ? 'Deleting…' : 'Delete'}
         </button>
         {row.active_session_count > 0 && (
-          <button onClick={() => act(row, 'revoke')} disabled={!!actingId}
+          <button onClick={() => act(row, 'revoke')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
             style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
             {busy('revoke') ? 'Revoking…' : 'Revoke sessions'}
@@ -2209,6 +2215,7 @@ function AuthUsersTab() {
       {data && (
         <div className="text-xs flex flex-wrap gap-2" style={{ color: 'var(--text-3)' }}>
           <span>{data.total.toLocaleString()} user{data.total !== 1 ? 's' : ''}</span>
+          {refreshing && <span>Refreshing…</span>}
           {message && <span style={{ color: message.includes('failed') || message.includes('Unknown') ? '#dc2626' : '#16a34a' }}>{message}</span>}
         </div>
       )}
