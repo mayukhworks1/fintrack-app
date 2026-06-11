@@ -683,6 +683,18 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
                 u.created_at,
                 u.approved_at,
                 u.password_changed_at,
+                (
+                    SELECT COALESCE(
+                        NULLIF(ai.raw_profile->>'picture', ''),
+                        NULLIF(ai.raw_profile->>'avatar_url', '')
+                    )
+                    FROM auth_identities ai
+                    WHERE ai.user_id = u.id
+                    ORDER BY
+                        CASE WHEN ai.provider = 'google' THEN 0 ELSE 1 END,
+                        ai.last_seen_at DESC NULLS LAST
+                    LIMIT 1
+                ) AS avatar_url,
                 ARRAY_AGG(DISTINCT r.role_key ORDER BY r.role_key) FILTER (WHERE r.role_key IS NOT NULL) AS roles,
                 COUNT(DISTINCT s.id) FILTER (WHERE s.revoked_at IS NULL AND s.expires_at > NOW()) AS active_sessions,
                 COUNT(DISTINCT s.id) AS total_sessions,

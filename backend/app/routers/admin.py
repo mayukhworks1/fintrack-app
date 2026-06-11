@@ -442,6 +442,18 @@ async def admin_auth_users(
         SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
                u.approved_at, u.disabled_at, u.email_verified_at, u.teable_email,
                u.phone, u.job_title, u.department, u.company, u.location, u.timezone,
+               (
+                 SELECT COALESCE(
+                   NULLIF(ai.raw_profile->>'picture', ''),
+                   NULLIF(ai.raw_profile->>'avatar_url', '')
+                 )
+                 FROM auth_identities ai
+                 WHERE ai.user_id = u.id
+                 ORDER BY
+                   CASE WHEN ai.provider = 'google' THEN 0 ELSE 1 END,
+                   ai.last_seen_at DESC NULLS LAST
+                 LIMIT 1
+               ) AS avatar_url,
                COALESCE(role_agg.roles, ARRAY[]::text[]) AS roles,
                COALESCE(session_agg.session_count, 0) AS session_count,
                COALESCE(session_agg.active_session_count, 0) AS active_session_count,

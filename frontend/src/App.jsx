@@ -132,11 +132,12 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
-          <>
-            <WebInvoices />
-            <VercelAnalytics />
-          </>
+          <Routes>
+            <Route path="/profile" element={<Profile />} />
+            <Route path="*" element={<WebInvoices />} />
+          </Routes>
         </Suspense>
+        <VercelAnalytics />
       </ErrorBoundary>
     )
   }

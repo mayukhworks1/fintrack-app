@@ -303,6 +303,20 @@ class WebInvoiceService:
         cache_key = f"webinv:list:{status}:{project}:{raised_by}:{limit}:{skip}:{order_by}:{order}"
 
         async def _load():
+            if raised_by:
+                records = await self._fetch_records(
+                    status=status,
+                    project=project,
+                    order_by=order_by,
+                    order=order,
+                )
+                email_lc = raised_by.lower()
+                scoped = [
+                    r for r in records
+                    if str((r.get("fields") or {}).get("Raised By") or "").lower() == email_lc
+                ]
+                return {"records": scoped[skip:skip + limit], "total": len(scoped)}
+
             params: dict[str, Any] = {
                 "fieldKeyType": "name",
                 "take": limit,
@@ -320,12 +334,6 @@ class WebInvoiceService:
                     "fieldId": WEB_INVOICE_FIELD_IDS["Project"],
                     "operator": "is",
                     "value": project,
-                })
-            if raised_by:
-                filter_set.append({
-                    "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
-                    "operator": "is",
-                    "value": raised_by,
                 })
             if filter_set:
                 params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
@@ -353,35 +361,7 @@ class WebInvoiceService:
         cache_key = "webinv:all" if not raised_by else f"webinv:all:raised_by:{raised_by}"
 
         async def _load():
-            records, skip = [], 0
-            async with httpx.AsyncClient(timeout=30) as client:
-                while True:
-                    params = {
-                        "fieldKeyType": "name",
-                        "take": 1000,
-                        "skip": skip,
-                        "orderBy": json.dumps([{
-                            "fieldId": WEB_INVOICE_FIELD_IDS["Raised Date"],
-                            "order": "desc",
-                        }]),
-                    }
-                    if raised_by:
-                        params["filter"] = json.dumps({
-                            "conjunction": "and",
-                            "filterSet": [{
-                                "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
-                                "operator": "is",
-                                "value": raised_by,
-                            }],
-                        })
-                    res = await client.get(self._record_url, params=params, headers=self._headers)
-                    res.raise_for_status()
-                    batch = res.json().get("records", [])
-                    records.extend(batch)
-                    if len(batch) < 1000:
-                        break
-                    skip += 1000
-            result = [_apply_runtime_invoice_derivatives(r) for r in records]
+            result = await self._fetch_records()
             # Python-side case-insensitive safety filter for ownership scoping
             if raised_by:
                 email_lc = raised_by.lower()
@@ -390,6 +370,49 @@ class WebInvoiceService:
         if raised_by:
             return await _load()
         return await cache.get_or_set(cache_key, ttl=_TTL_ALL, loader=_load)
+
+    async def _fetch_records(
+        self,
+        *,
+        status: Optional[str] = None,
+        project: Optional[str] = None,
+        order_by: str = "Raised Date",
+        order: str = "desc",
+    ) -> list[dict]:
+        records: list[dict[str, Any]] = []
+        skip = 0
+        field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
+        async with httpx.AsyncClient(timeout=30) as client:
+            while True:
+                params: dict[str, Any] = {
+                    "fieldKeyType": "name",
+                    "take": 1000,
+                    "skip": skip,
+                    "orderBy": json.dumps([{"fieldId": field_id, "order": order}]),
+                }
+                filter_set = []
+                if status:
+                    filter_set.append({
+                        "fieldId": WEB_INVOICE_FIELD_IDS["Payment Status"],
+                        "operator": "is",
+                        "value": status,
+                    })
+                if project:
+                    filter_set.append({
+                        "fieldId": WEB_INVOICE_FIELD_IDS["Project"],
+                        "operator": "is",
+                        "value": project,
+                    })
+                if filter_set:
+                    params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
+                res = await client.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                batch = res.json().get("records", [])
+                records.extend(batch)
+                if len(batch) < 1000:
+                    break
+                skip += 1000
+        return [_apply_runtime_invoice_derivatives(r) for r in records]
 
     async def get_invoice(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"

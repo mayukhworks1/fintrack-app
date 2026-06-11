@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import Drawer from '../components/Drawer'
 import {
   Globe, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
@@ -1396,8 +1397,17 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
 
 /* ── Collapsible app sidebar ── */
 function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, onNew }) {
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { dark, toggle } = useTheme()
+  const displayName = user?.full_name || user?.email?.split('@')[0] || 'User'
+  const displaySub = user?.email || 'Web billing'
+  const initials = (displayName || '?')
+    .split(' ')
+    .map(part => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
 
   const navItems = [
     { value: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
@@ -1484,15 +1494,20 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
           <LogOut size={13} style={{ flexShrink: 0 }} />
           {open && <span className="text-xs">Sign out</span>}
         </button>
-        <div className={`runey-profile ${open ? '' : 'is-collapsed'}`}>
-          <span className="runey-profile-avatar">TW</span>
+        <Link
+          to="/profile"
+          className={`runey-profile ${open ? '' : 'is-collapsed'}`}
+          style={{ textDecoration: 'none' }}
+          title={!open ? displayName : undefined}
+        >
+          <span className="runey-profile-avatar">{initials}</span>
           {open && (
             <div className="min-w-0">
-              <p>TheWorks</p>
-              <span>Web billing</span>
+              <p>{displayName}</p>
+              <span>{displaySub}</span>
             </div>
           )}
-        </div>
+        </Link>
       </div>
     </aside>
   )

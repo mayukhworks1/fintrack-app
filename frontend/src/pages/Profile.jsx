@@ -54,6 +54,8 @@ const ROLE_STYLE = {
   editor:     { label: 'Editor',      bg: 'rgba(99,102,241,0.12)',  fg: '#6366f1' },
   viewer:     { label: 'Viewer',      bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
   user:       { label: 'User',        bg: 'rgba(22,163,74,0.10)',   fg: '#16a34a' },
+  web:        { label: 'Web Invoice User', bg: 'rgba(124,58,237,0.12)', fg: '#7c3aed' },
+  all:        { label: 'Workspace User',   bg: 'rgba(236,72,153,0.12)', fg: '#db2777' },
 }
 function RoleBadge({ role }) {
   const s = ROLE_STYLE[role] || { label: role || 'Unknown', bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' }
@@ -322,7 +324,6 @@ export default function Profile() {
             onChange={handleAvatarChange}
           />
         </div>
-
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
             <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>

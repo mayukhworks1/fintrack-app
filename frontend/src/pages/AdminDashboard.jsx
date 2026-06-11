@@ -136,6 +136,28 @@ function roleBadge(role) {
   return <Badge color={map[role] || 'default'}>{role || 'anon'}</Badge>
 }
 
+function UserAvatar({ row, size = 40 }) {
+  const initials = (row.full_name || row.email || '?').slice(0, 2).toUpperCase()
+  if (row.avatar_url) {
+    return (
+      <img
+        src={row.avatar_url}
+        alt={row.full_name || row.email || 'User avatar'}
+        className="rounded-2xl object-cover shrink-0"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+  return (
+    <div
+      className="rounded-2xl flex items-center justify-center text-xs font-black shrink-0"
+      style={{ width: size, height: size, background: 'rgba(99,102,241,0.14)', color: '#6366f1' }}
+    >
+      {initials}
+    </div>
+  )
+}
+
 function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name — click to set' }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(value)
@@ -2232,12 +2254,7 @@ function AuthUsersTab() {
                     <div className="grid grid-cols-[minmax(260px,1.2fr)_minmax(220px,0.9fr)_minmax(360px,1.1fr)] gap-4 items-start">
                       <div className="min-w-0 space-y-2">
                         <div className="flex items-start gap-3">
-                          <div
-                            className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black shrink-0"
-                            style={{ background: 'rgba(99,102,241,0.14)', color: '#6366f1' }}
-                          >
-                            {(row.full_name || row.email || '?').slice(0, 2).toUpperCase()}
-                          </div>
+                          <UserAvatar row={row} />
                           <div className="min-w-0">
                             <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
                             <EditableName
