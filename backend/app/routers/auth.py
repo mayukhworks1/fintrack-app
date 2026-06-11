@@ -554,7 +554,21 @@ async def verify(authorization: str | None = Header(default=None)):
                     u.email,
                     u.full_name,
                     u.status,
-                    u.avatar_url,
+                    COALESCE(
+                        u.avatar_url,
+                        (
+                            SELECT COALESCE(
+                                NULLIF(ai.raw_profile->>'picture', ''),
+                                NULLIF(ai.raw_profile->>'avatar_url', '')
+                            )
+                            FROM auth_identities ai
+                            WHERE ai.user_id = u.id
+                            ORDER BY
+                                CASE WHEN ai.provider = 'google' THEN 0 ELSE 1 END,
+                                ai.last_seen_at DESC NULLS LAST
+                            LIMIT 1
+                        )
+                    ) AS avatar_url,
                     r.role_key AS auth_role
                 FROM auth_sessions s
                 JOIN auth_users u ON u.id = s.user_id

@@ -33,6 +33,7 @@ import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { FilterSelect, FilterMulti } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -138,10 +139,11 @@ function roleBadge(role) {
 
 function UserAvatar({ row, size = 40 }) {
   const initials = (row.full_name || row.email || '?').slice(0, 2).toUpperCase()
-  if (row.avatar_url) {
+  const avatarSrc = useAvatarSrc(row.avatar_url)
+  if (avatarSrc) {
     return (
       <img
-        src={row.avatar_url}
+        src={avatarSrc}
         alt={row.full_name || row.email || 'User avatar'}
         className="rounded-2xl object-cover shrink-0"
         style={{ width: size, height: size }}
@@ -4203,13 +4205,16 @@ function UserTimelineDrawer({ userId, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
           style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
-          <div>
-            <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>
-              {data?.user?.email || 'User Timeline'}
-            </p>
-            {data?.user?.full_name && (
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>{data.user.full_name}</p>
-            )}
+          <div className="flex items-center gap-3 min-w-0">
+            {data?.user && <UserAvatar row={data.user} size={44} />}
+            <div className="min-w-0">
+              <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>
+                {data?.user?.email || 'User Timeline'}
+              </p>
+              {data?.user?.full_name && (
+                <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{data.user.full_name}</p>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-red-50" style={{ color: 'var(--text-3)' }}>
             <X size={15} />

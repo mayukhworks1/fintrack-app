@@ -959,7 +959,31 @@ async def admin_user_timeline(
         return _no_db()
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id::text, email, full_name, status, teable_email FROM auth_users WHERE id = $1::uuid",
+            """
+            SELECT
+                u.id::text,
+                u.email,
+                u.full_name,
+                u.status,
+                u.teable_email,
+                COALESCE(
+                    u.avatar_url,
+                    (
+                        SELECT COALESCE(
+                            NULLIF(ai.raw_profile->>'picture', ''),
+                            NULLIF(ai.raw_profile->>'avatar_url', '')
+                        )
+                        FROM auth_identities ai
+                        WHERE ai.user_id = u.id
+                        ORDER BY
+                            CASE WHEN ai.provider = 'google' THEN 0 ELSE 1 END,
+                            ai.last_seen_at DESC NULLS LAST
+                        LIMIT 1
+                    )
+                ) AS avatar_url
+            FROM auth_users u
+            WHERE u.id = $1::uuid
+            """,
             user_id,
         )
         if not user:

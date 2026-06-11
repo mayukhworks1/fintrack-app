@@ -23,6 +23,7 @@ import { ProjectsWorkspace } from './WebProjects'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import clsx from 'clsx'
 import EmptyState from '../components/EmptyState'
 
@@ -1399,6 +1400,7 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
 function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, onNew }) {
   const { logout, user } = useAuth()
   const { dark, toggle } = useTheme()
+  const avatarSrc = useAvatarSrc(user?.avatar_url)
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'User'
   const displaySub = user?.email || 'Web billing'
   const initials = (displayName || '?')
@@ -1500,7 +1502,15 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
           style={{ textDecoration: 'none' }}
           title={!open ? displayName : undefined}
         >
-          <span className="runey-profile-avatar">{initials}</span>
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt={displayName}
+              className="runey-profile-avatar object-cover"
+            />
+          ) : (
+            <span className="runey-profile-avatar">{initials}</span>
+          )}
           {open && (
             <div className="min-w-0">
               <p>{displayName}</p>
