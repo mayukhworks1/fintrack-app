@@ -134,6 +134,14 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  const updateUser = useCallback((patch) => {
+    setUser(u => {
+      const next = u ? { ...u, ...patch } : patch
+      setStoredJson(USER_KEY, next)
+      return next
+    })
+  }, [])
+
   const logout = useCallback(() => {
     // Fire server-side session invalidation first (fire-and-forget).
     // The backend marks is_active=false so the admin panel shows "Logged out"
@@ -165,6 +173,7 @@ export function AuthProvider({ children }) {
       login,
       acceptToken,
       logout,
+      updateUser,
     }}>
       {children}
     </AuthContext.Provider>

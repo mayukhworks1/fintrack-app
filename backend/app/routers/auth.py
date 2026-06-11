@@ -458,6 +458,7 @@ async def verify(authorization: str | None = Header(default=None)):
                     u.email,
                     u.full_name,
                     u.status,
+                    u.avatar_url,
                     r.role_key AS auth_role
                 FROM auth_sessions s
                 JOIN auth_users u ON u.id = s.user_id
@@ -495,6 +496,7 @@ async def verify(authorization: str | None = Header(default=None)):
                         "email": row["email"],
                         "full_name": row["full_name"],
                         "status": row["status"],
+                        "avatar_url": row["avatar_url"],
                     },
                 })
     except HTTPException:

@@ -120,7 +120,7 @@ const PROVIDER_META = {
 
 /* ── Main component ──────────────────────────────────────────────────── */
 export default function Profile() {
-  const { logout } = useAuth()
+  const { logout, updateUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -155,6 +155,7 @@ export default function Profile() {
     try {
       const res = await api.auth.uploadAvatar(file)
       setProfile(p => ({ ...p, avatar_url: res.avatar_url }))
+      updateUser({ avatar_url: res.avatar_url })
       setAvatarMsg({ ok: true, text: 'Profile picture updated' })
       setTimeout(() => setAvatarMsg(null), 3000)
     } catch (err) {
@@ -170,6 +171,7 @@ export default function Profile() {
     try {
       await api.auth.deleteAvatar()
       setProfile(p => ({ ...p, avatar_url: null }))
+      updateUser({ avatar_url: null })
       setAvatarMsg({ ok: true, text: 'Profile picture removed' })
       setTimeout(() => setAvatarMsg(null), 3000)
     } catch (err) {
