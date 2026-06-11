@@ -324,8 +324,8 @@ class WebInvoiceService:
             if raised_by:
                 filter_set.append({
                     "fieldId": WEB_INVOICE_FIELD_IDS["Raised By"],
-                    "operator": "contains",
-                    "value": raised_by.lower(),
+                    "operator": "is",
+                    "value": raised_by,
                 })
             if filter_set:
                 params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
