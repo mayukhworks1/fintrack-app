@@ -279,6 +279,7 @@ export default function Profile() {
 
   const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'User'
   const googleIdentity = (profile?.identities || []).find(i => i.provider === 'google')
+  const zohoIdentity   = (profile?.identities || []).find(i => i.provider === 'zoho')
   const hasPassword = Boolean(profile?.password_changed_at || profile?.email)
 
   return (
@@ -412,6 +413,33 @@ export default function Profile() {
             }
           </div>
           {googleIdentity
+            ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{ background: 'rgba(22,163,74,0.10)', color: '#16a34a' }}>
+                <Check size={10} /> Connected
+              </span>
+            : <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{ background: 'rgba(100,116,139,0.10)', color: 'var(--text-3)' }}>
+                <Unlink size={10} /> Not linked
+              </span>
+          }
+        </div>
+
+        {/* Zoho */}
+        <div className="flex items-center gap-3 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+          <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
+            style={{ background: '#E42527', color: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}>
+            Z
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Zoho</p>
+            {zohoIdentity
+              ? <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  {zohoIdentity.email} · last used {ts(zohoIdentity.last_seen_at)}
+                </p>
+              : <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Not connected</p>
+            }
+          </div>
+          {zohoIdentity
             ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
                 style={{ background: 'rgba(22,163,74,0.10)', color: '#16a34a' }}>
                 <Check size={10} /> Connected

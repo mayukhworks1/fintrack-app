@@ -9,6 +9,7 @@ const OAUTH_ERROR_MESSAGES = {
   disabled:         'Your account has been disabled. Contact your administrator for help.',
   rejected:         'Your account request was not approved. Contact your administrator if you think this is a mistake.',
   google_error:     'Google sign-in failed. Please try again or use email login.',
+  zoho_error:       'Zoho sign-in failed. Please try again or use email login.',
 }
 
 export default function Login() {
@@ -27,6 +28,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [mailing, setMailing] = useState(false)
   const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [zohoEnabled,   setZohoEnabled]   = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingApproval, setPendingApproval] = useState(false)
@@ -37,8 +39,13 @@ export default function Login() {
   useEffect(() => {
     let cancelled = false
     api.auth.providers()
-      .then((res) => { if (!cancelled) setGoogleEnabled(Boolean(res?.google)) })
-      .catch(() => { if (!cancelled) setGoogleEnabled(false) })
+      .then((res) => {
+        if (!cancelled) {
+          setGoogleEnabled(Boolean(res?.google))
+          setZohoEnabled(Boolean(res?.zoho))
+        }
+      })
+      .catch(() => { if (!cancelled) { setGoogleEnabled(false); setZohoEnabled(false) } })
     return () => { cancelled = true }
   }, [])
 
@@ -51,7 +58,7 @@ export default function Login() {
         setPendingApproval(true)
         return
       }
-      setError(OAUTH_ERROR_MESSAGES[oauthError] || params.get('message') || 'Google sign-in failed')
+      setError(OAUTH_ERROR_MESSAGES[oauthError] || params.get('message') || 'Sign-in failed')
       return
     }
     const hash = window.location.hash?.replace(/^#/, '')
@@ -71,7 +78,7 @@ export default function Login() {
         if (!cancelled) navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true })
       } catch (err) {
         if (!cancelled) {
-          setError(err?.message || 'Google sign-in failed')
+          setError(err?.message || 'Sign-in failed')
           window.history.replaceState({}, '', '/login')
         }
       } finally {
@@ -85,8 +92,14 @@ export default function Login() {
     if (loading) return
     setError('')
     setNotice('')
-    const next = '/'
-    window.location.assign(api.auth.googleStartUrl(next))
+    window.location.assign(api.auth.googleStartUrl('/'))
+  }
+
+  const startZohoLogin = () => {
+    if (loading) return
+    setError('')
+    setNotice('')
+    window.location.assign(api.auth.zohoStartUrl('/'))
   }
 
   const submit = async (e) => {
@@ -267,30 +280,54 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4">
-            {googleEnabled && !resetToken && !registerMode && !legacyMode && (
+            {(googleEnabled || zohoEnabled) && !resetToken && !registerMode && !legacyMode && (
               <>
-                <button
-                  type="button"
-                  onClick={startGoogleLogin}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                  style={{
-                    background: 'var(--card-bg)',
-                    border: '1px solid var(--card-border)',
-                    color: 'var(--text-1)',
-                    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                    opacity: loading ? 0.6 : 1,
-                  }}
-                >
-                  <span
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
-                    style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
-                    aria-hidden="true"
-                  >
-                    G
-                  </span>
-                  Continue with Google
-                </button>
+                <div className="flex flex-col gap-2">
+                  {googleEnabled && (
+                    <button
+                      type="button"
+                      onClick={startGoogleLogin}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      style={{
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text-1)',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                        opacity: loading ? 0.6 : 1,
+                      }}
+                    >
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
+                        aria-hidden="true"
+                      >G</span>
+                      Continue with Google
+                    </button>
+                  )}
+                  {zohoEnabled && (
+                    <button
+                      type="button"
+                      onClick={startZohoLogin}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      style={{
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text-1)',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                        opacity: loading ? 0.6 : 1,
+                      }}
+                    >
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        style={{ background: '#E42527', color: '#fff', border: '1px solid rgba(228,37,39,0.3)' }}
+                        aria-hidden="true"
+                      >Z</span>
+                      Continue with Zoho
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>
                   <span className="h-px flex-1" style={{ background: 'var(--card-border)' }} />
                   or

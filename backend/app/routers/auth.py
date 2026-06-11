@@ -215,6 +215,13 @@ def _google_redirect_uri(request: Request) -> str:
     return str(request.url_for("google_callback"))
 
 
+def _zoho_redirect_uri(request: Request) -> str:
+    configured = (settings.zoho_redirect_uri or "").strip()
+    if configured:
+        return configured
+    return str(request.url_for("zoho_callback"))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/providers")
@@ -224,6 +231,7 @@ async def auth_providers():
         "email_password": True,
         "legacy_password": True,
         "google": bool(settings.google_client_id and settings.google_client_secret),
+        "zoho":   bool(settings.zoho_client_id   and settings.zoho_client_secret),
     }
 
 
@@ -408,6 +416,94 @@ async def google_callback(request: Request, code: str | None = None, state: str 
     except Exception:
         return RedirectResponse(
             _oauth_redirect_url("/login", query={"oauth_error": "google_error", "message": "Google sign-in failed"}),
+            status_code=302,
+        )
+
+
+@router.get("/zoho/start")
+async def zoho_start(request: Request, next: str = "/"):
+    """Start Zoho OAuth 2.0 flow."""
+    if not settings.zoho_client_id or not settings.zoho_client_secret:
+        raise HTTPException(status_code=503, detail="Zoho SSO is not configured")
+    from ..services.auth_master import create_oauth_state
+    state = await create_oauth_state("zoho", next, request)
+    params = {
+        "client_id": settings.zoho_client_id,
+        "redirect_uri": _zoho_redirect_uri(request),
+        "response_type": "code",
+        "scope": "openid profile email",
+        "state": state,
+        "prompt": "consent",
+        "access_type": "online",
+    }
+    return RedirectResponse(f"https://accounts.zoho.com/oauth/v2/auth?{urlencode(params)}", status_code=302)
+
+
+@router.get("/zoho/callback", name="zoho_callback")
+async def zoho_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    """Handle Zoho OAuth callback, verify the token, and redirect to the frontend."""
+    redirect_to = "/"
+    try:
+        from ..services.auth_master import consume_oauth_state, login_with_zoho_profile
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+        redirect_to = await consume_oauth_state(state or "", "zoho", request)
+        if not code:
+            raise HTTPException(status_code=400, detail="Zoho authorization code is missing")
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_res = await client.post(
+                "https://accounts.zoho.com/oauth/v2/token",
+                data={
+                    "code": code,
+                    "client_id": settings.zoho_client_id,
+                    "client_secret": settings.zoho_client_secret,
+                    "redirect_uri": _zoho_redirect_uri(request),
+                    "grant_type": "authorization_code",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_res.raise_for_status()
+            token_payload = token_res.json()
+            access_token = token_payload.get("access_token")
+            if not access_token:
+                raise HTTPException(status_code=400, detail="Zoho did not return an access token")
+            profile_res = await client.get(
+                "https://accounts.zoho.com/oauth/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            profile_res.raise_for_status()
+            profile = profile_res.json()
+        login_payload = await login_with_zoho_profile(profile, request)
+        return RedirectResponse(
+            _oauth_redirect_url(
+                "/login",
+                fragment={
+                    "oauth_token": login_payload["token"],
+                    "oauth_next": redirect_to,
+                    "oauth": "zoho",
+                },
+            ),
+            status_code=302,
+        )
+    except HTTPException as exc:
+        detail = str(exc.detail or "Zoho sign-in failed")
+        code_value = "pending_approval" if "pending_approval" in detail else "zoho_error"
+        if "disabled" in detail:
+            code_value = "disabled"
+        elif "rejected" in detail:
+            code_value = "rejected"
+        return RedirectResponse(
+            _oauth_redirect_url("/login", query={"oauth_error": code_value, "message": detail}),
+            status_code=302,
+        )
+    except Exception:
+        return RedirectResponse(
+            _oauth_redirect_url("/login", query={"oauth_error": "zoho_error", "message": "Zoho sign-in failed"}),
             status_code=302,
         )
 

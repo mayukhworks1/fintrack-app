@@ -594,27 +594,33 @@ async def login_with_email(email: str, password: str, request: Request) -> dict[
     return session
 
 
-async def login_with_google_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
+async def _login_with_oidc_profile(
+    *,
+    provider: str,
+    provider_label: str,
+    provider_user_id: str,
+    email_orig: str,
+    email_norm: str,
+    email_verified: bool,
+    full_name: str | None,
+    picture: str | None,
+    raw_profile: dict,
+    request: Request,
+) -> dict[str, Any]:
     """
-    Link or create a Google identity, then create a normal auth session.
-    New Google users are always pending until a superadmin approves them.
+    Shared OIDC login handler for any provider (Google, Zoho, …).
+    Finds or creates the user, links the identity, then creates a session.
+    New SSO users are always pending until a superadmin approves them.
     """
     pool = get_pool()
     if not pool:
-        raise HTTPException(status_code=503, detail="PostgreSQL is required for Google login")
-    provider_user_id = str(profile.get("sub") or "").strip()
-    email_orig = str(profile.get("email") or "").strip()
-    email_norm = normalize_email(email_orig)
-    verified_raw = profile.get("email_verified")
-    email_verified = verified_raw is True or str(verified_raw).lower() == "true"
-    full_name = str(profile.get("name") or "").strip() or None
-    picture = str(profile.get("picture") or "").strip() or None
+        raise HTTPException(status_code=503, detail=f"PostgreSQL is required for {provider_label} login")
     if not provider_user_id:
-        await _write_auth_event("google_login_failed", request, email=email_norm, status="missing_subject")
-        raise HTTPException(status_code=400, detail="Google profile is missing subject")
+        await _write_auth_event(f"{provider}_login_failed", request, email=email_norm, status="missing_subject")
+        raise HTTPException(status_code=400, detail=f"{provider_label} profile is missing subject")
     if not email_verified:
-        await _write_auth_event("google_login_failed", request, email=email_norm, status="email_not_verified")
-        raise HTTPException(status_code=403, detail="Google email is not verified")
+        await _write_auth_event(f"{provider}_login_failed", request, email=email_norm, status="email_not_verified")
+        raise HTTPException(status_code=403, detail=f"{provider_label} email is not verified")
 
     created_pending = False
     async with pool.acquire() as conn:
@@ -624,17 +630,14 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                 SELECT u.id, u.email, u.full_name, u.status
                 FROM auth_identities i
                 JOIN auth_users u ON u.id = i.user_id
-                WHERE i.provider = 'google' AND i.provider_user_id = $1
+                WHERE i.provider = $1 AND i.provider_user_id = $2
                 """,
+                provider,
                 provider_user_id,
             )
             if not user:
                 user = await conn.fetchrow(
-                    """
-                    SELECT id, email, full_name, status
-                    FROM auth_users
-                    WHERE email_normalized = $1
-                    """,
+                    "SELECT id, email, full_name, status FROM auth_users WHERE email_normalized = $1",
                     email_norm,
                 )
                 if not user:
@@ -650,7 +653,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         email_orig,
                         email_norm,
                         full_name,
-                        json.dumps({"signup_provider": "google", "picture": picture}),
+                        json.dumps({"signup_provider": provider, "picture": picture}),
                         picture,
                     )
                     created_pending = True
@@ -668,7 +671,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                         """,
                         user["id"],
                         full_name,
-                        json.dumps({"google_picture": picture}),
+                        json.dumps({f"{provider}_picture": picture}),
                         email_orig,
                         picture,
                     )
@@ -678,28 +681,29 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                     INSERT INTO auth_identities (
                         user_id, provider, provider_user_id, email, last_seen_at, raw_profile
                     )
-                    VALUES ($1, 'google', $2, $3, NOW(), $4::jsonb)
+                    VALUES ($1, $2, $3, $4, NOW(), $5::jsonb)
                     ON CONFLICT (provider, provider_user_id)
                     DO UPDATE SET last_seen_at = NOW(), email = EXCLUDED.email, raw_profile = EXCLUDED.raw_profile
                     """,
                     user["id"],
+                    provider,
                     provider_user_id,
                     email_orig,
-                    json.dumps(profile),
+                    json.dumps(raw_profile),
                 )
             else:
                 await conn.execute(
                     """
                     UPDATE auth_identities
                        SET last_seen_at = NOW(), email = $3, raw_profile = $4::jsonb
-                     WHERE provider = 'google' AND provider_user_id = $2 AND user_id = $1
+                     WHERE provider = $5 AND provider_user_id = $2 AND user_id = $1
                     """,
                     user["id"],
                     provider_user_id,
                     email_orig,
-                    json.dumps(profile),
+                    json.dumps(raw_profile),
+                    provider,
                 )
-                # Backfill avatar_url from Google picture if not set
                 if picture:
                     await conn.execute(
                         "UPDATE auth_users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL",
@@ -708,7 +712,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                     )
 
     if user["status"] != "active":
-        event_type = "google_register_pending" if created_pending else "google_login_blocked"
+        event_type = f"{provider}_register_pending" if created_pending else f"{provider}_login_blocked"
         await _write_auth_event(
             event_type,
             request,
@@ -721,9 +725,9 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
             links = _admin_user_review_links(str(user["id"]))
             await send_email(
                 settings.auth_admin_notify_email,
-                "FinTrack Google user pending approval",
+                f"FinTrack {provider_label} user pending approval",
                 (
-                    f"A Google SSO user is pending approval.\n\n"
+                    f"A {provider_label} SSO user is pending approval.\n\n"
                     f"Email: {email_norm}\n"
                     f"Name: {full_name or '-'}\n\n"
                     f"Review: {links['review']}\n"
@@ -733,7 +737,7 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
                 ),
                 html=(
                     "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
-                    "<h2 style=\"margin:0 0 8px\">Google SSO user pending approval</h2>"
+                    f"<h2 style=\"margin:0 0 8px\">{provider_label} SSO user pending approval</h2>"
                     f"<p><b>Email:</b> {email_norm}<br><b>Name:</b> {full_name or '-'}</p>"
                     f"{_button_html(links['approve'], 'Approve user', '#16a34a')}"
                     f"{_button_html(links['reject'], 'Reject user', '#dc2626')}"
@@ -745,20 +749,22 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
         if created_pending:
             await send_email(
                 email_orig,
-                "Your FinTrack Google sign-in is pending approval",
-                "Your Google sign-in was received and is waiting for superadmin approval. You will receive another email after approval.",
+                f"Your FinTrack {provider_label} sign-in is pending approval",
+                f"Your {provider_label} sign-in was received and is waiting for superadmin approval. You will receive another email after approval.",
                 html=(
                     "<div style=\"font-family:Inter,Arial,sans-serif;line-height:1.55;color:#111827\">"
                     "<h2 style=\"margin:0 0 8px\">FinTrack approval pending</h2>"
-                    "<p>Your Google sign-in was received and is waiting for superadmin approval.</p>"
+                    f"<p>Your {provider_label} sign-in was received and is waiting for superadmin approval.</p>"
                     "</div>"
                 ),
             )
         raise HTTPException(status_code=403, detail=f"User is {user['status']}")
 
-    session = await _create_session_for_user(user, request, login_method="google", metadata={"provider_user_id": provider_user_id})
+    session = await _create_session_for_user(
+        user, request, login_method=provider, metadata={"provider_user_id": provider_user_id}
+    )
     await _write_auth_event(
-        "google_login_success",
+        f"{provider}_login_success",
         request,
         target_user_id=str(user["id"]),
         role=session["auth_role"],
@@ -767,6 +773,54 @@ async def login_with_google_profile(profile: dict[str, Any], request: Request) -
         metadata={"legacy_role": session["role"], "session_id": session["session_id"], "provider_user_id": provider_user_id},
     )
     return session
+
+
+async def login_with_google_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Link or create a Google identity, then create a normal auth session."""
+    provider_user_id = str(profile.get("sub") or "").strip()
+    email_orig = str(profile.get("email") or "").strip()
+    verified_raw = profile.get("email_verified")
+    return await _login_with_oidc_profile(
+        provider="google",
+        provider_label="Google",
+        provider_user_id=provider_user_id,
+        email_orig=email_orig,
+        email_norm=normalize_email(email_orig),
+        email_verified=verified_raw is True or str(verified_raw).lower() == "true",
+        full_name=str(profile.get("name") or "").strip() or None,
+        picture=str(profile.get("picture") or "").strip() or None,
+        raw_profile=profile,
+        request=request,
+    )
+
+
+async def login_with_zoho_profile(profile: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Link or create a Zoho identity, then create a normal auth session."""
+    provider_user_id = str(profile.get("sub") or "").strip()
+    email_orig = str(profile.get("email") or "").strip()
+    # Zoho always verifies emails; field may be absent — default True
+    verified_raw = profile.get("email_verified")
+    email_verified = verified_raw is True or str(verified_raw).lower() in {"true", "1"} if verified_raw is not None else True
+    full_name = (
+        str(profile.get("name") or "").strip()
+        or " ".join(filter(None, [
+            str(profile.get("given_name") or "").strip(),
+            str(profile.get("family_name") or "").strip(),
+        ]))
+        or None
+    )
+    return await _login_with_oidc_profile(
+        provider="zoho",
+        provider_label="Zoho",
+        provider_user_id=provider_user_id,
+        email_orig=email_orig,
+        email_norm=normalize_email(email_orig),
+        email_verified=email_verified,
+        full_name=full_name,
+        picture=str(profile.get("picture") or "").strip() or None,
+        raw_profile=profile,
+        request=request,
+    )
 
 
 async def create_password_reset(email: str, request: Request) -> dict[str, Any]:

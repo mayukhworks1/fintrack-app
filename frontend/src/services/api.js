@@ -615,6 +615,7 @@ export const api = {
     emailBootstrap: (data) => request('/api/auth/email/bootstrap', { method: 'POST', body: JSON.stringify(data) }),
     providers: () => request('/api/auth/providers', {}, 0),
     googleStartUrl: (next = '/') => `${API_BASE_URL}/api/auth/google/start?next=${encodeURIComponent(next || '/')}`,
+    zohoStartUrl:   (next = '/') => `${API_BASE_URL}/api/auth/zoho/start?next=${encodeURIComponent(next || '/')}`,
     forgotPassword: (email) => request('/api/auth/email/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
     resetPassword: (token, password) => request('/api/auth/email/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
     verify: ()         => request('/api/auth/verify', {}, 0),

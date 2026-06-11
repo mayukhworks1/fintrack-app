@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     google_client_secret: Optional[str] = None
     google_redirect_uri: Optional[str] = None
 
+    # ── Zoho OAuth / SSO ───────────────────────────────────────────────────
+    # Create a Server-based Application at https://api-console.zoho.com
+    # Set redirect URI: https://<api-host>/api/auth/zoho/callback
+    zoho_client_id: Optional[str] = None
+    zoho_client_secret: Optional[str] = None
+    zoho_redirect_uri: Optional[str] = None
+
     # ── Admin dashboard password ────────────────────────────────────────────
     # Full PostgreSQL dashboard access. MUST be set via APP_ADMIN_PASSWORD in HF
     # secrets. No default — if unset, admin-password login is disabled (the login
