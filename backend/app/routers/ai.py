@@ -951,9 +951,10 @@ async def _build_context_pg(pool) -> str:
         return cached
 
     # ── 2. Build from PG mirrors ─────────────────────────────────────────
-    proj_rows, inv_rows = await asyncio.gather(
+    proj_rows, inv_rows, last_sync_row = await asyncio.gather(
         pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 120"),
         pool.fetch("SELECT fields FROM invoices_mirror  ORDER BY raised_date DESC NULLS LAST LIMIT 60"),
+        pool.fetchrow("SELECT MAX(synced_at) AS last_sync FROM projects_mirror"),
     )
 
     # asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
@@ -978,8 +979,9 @@ async def _build_context_pg(pool) -> str:
 
     total_billed  = sum(_safe_float(f.get("Amount Billed So far")) for f in proj_fields)
     total_profit  = sum(_safe_float(f.get("Actual Profit"))         for f in proj_fields)
-    avg_profit    = (sum(_safe_float(f.get("Profit percentage")) for f in proj_fields)
-                     / len(proj_fields)) if proj_fields else 0.0
+    # Derive avg margin from totals — Teable stores Profit % as a decimal fraction
+    # (e.g. 0.4479 = 44.79%), so averaging the raw field gives a wrong near-zero value.
+    avg_profit    = (total_profit / total_billed * 100) if total_billed > 0 else 0.0
     by_status: dict = {}
     by_client: dict = {}
     by_health: dict = {}
@@ -988,8 +990,15 @@ async def _build_context_pg(pool) -> str:
         c = f.get("Client", "Unknown");         by_client[c] = by_client.get(c, 0) + 1
         h = f.get("Health", "Unknown");         by_health[h] = by_health.get(h, 0) + 1
 
+    import datetime as _dt
+    last_sync = last_sync_row["last_sync"] if last_sync_row else None
+    freshness = (
+        last_sync.strftime("Data last synced: %d %b %Y %H:%M UTC")
+        if last_sync else "Data freshness: unknown"
+    )
     project_text = (
         "=== PORTFOLIO SUMMARY ===\n"
+        f"{freshness}\n"
         f"Total Projects: {len(proj_fields)}\n"
         f"Total Billed: ₹{total_billed:,.0f}\n"
         f"Total Profit: ₹{total_profit:,.0f}\n"
@@ -1875,6 +1884,9 @@ async def _build_report_payload_pg(pool) -> dict:
         if pct_raw is not None and pct_raw != "":
             try:
                 pct_f = float(pct_raw)
+                # Teable stores Profit % as decimal fraction (0.4479 = 44.79%)
+                if 0 < pct_f < 2.0:
+                    pct_f = pct_f * 100
                 profit_pcts.append(pct_f)
                 label = f"{f.get('Client', '?')} / {f.get('Project Name', '?')}"
                 if best_rec["pct"] is None or pct_f > best_rec["pct"]:
@@ -1896,11 +1908,13 @@ async def _build_report_payload_pg(pool) -> dict:
         if f.get("Target Achieved "):
             target_achieved += 1
 
-    avg_profit_pct = sum(profit_pcts) / len(profit_pcts) if profit_pcts else 0.0
+    avg_profit_pct = (total_profit / total_billed * 100) if total_billed > 0 else 0.0
 
     at_risk = []
     for f in proj_fields:
         pct_v  = _safe_float(f.get("Profit percentage"))
+        if 0 < pct_v < 2.0:
+            pct_v = pct_v * 100
         health = f.get("Health") or ""
         if pct_v < 0 or "🔴" in health:
             at_risk.append({

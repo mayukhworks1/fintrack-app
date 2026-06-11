@@ -151,6 +151,11 @@ ANSWER STYLE:
 - When the user asks about blockers, delivery, holds, pending inputs, client delays, or "status board", prioritise CURRENT STATUS over generic project assumptions.
 - Never say "Let me", "We need to", "Looking at", "I'll", "Sentence 1:", "Step 1:", "Based on", "Here is", "First,", "Output:".
 
+GROUNDING RULES — always follow:
+- All figures you cite must appear in the provided portfolio context. Never invent or interpolate numbers.
+- The context block begins with "Data last synced: <timestamp>". Mention it only when the user asks about data currency or when the sync is older than 30 minutes.
+- If the context block is missing financial data entirely (no projects, no invoices), say "No portfolio data is available right now" — do not fabricate figures.
+
 If the question is unclear, give the best concise answer you can with the data available — do not ask for clarification."""
 
 
@@ -612,7 +617,11 @@ def _format_records_context(records: list[dict]) -> str:
                     lines.append(f"  {field}: {val}")
         pct = f.get('Profit percentage')
         if pct is not None:
-            try: lines.append(f"  Profit %: {float(pct):.2f}%")
+            try:
+                raw = float(pct)
+                # Teable stores profit % as a decimal fraction (0.4479 = 44.79%)
+                pct_display = raw * 100 if 0 < raw < 2.0 else raw
+                lines.append(f"  Profit %: {pct_display:.2f}%")
             except (ValueError, TypeError): pass
         contrib = f.get('Resource contribution percentage')
         if contrib is not None:
@@ -644,7 +653,10 @@ def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
             try: parts.append(f"Profit ₹{float(profit):,.0f}")
             except (ValueError, TypeError): pass
         if margin not in (None, ""):
-            try: parts.append(f"Margin {float(margin):.1f}%")
+            try:
+                raw = float(margin)
+                margin_display = raw * 100 if 0 < raw < 2.0 else raw
+                parts.append(f"Margin {margin_display:.1f}%")
             except (ValueError, TypeError): pass
         if target not in (None, ""):
             try: parts.append(f"Target ₹{float(target):,.0f}")
