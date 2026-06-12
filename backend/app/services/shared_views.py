@@ -653,19 +653,18 @@ def _parse_attachments(value: Any) -> list[dict[str, Any]]:
 
 def _effective_aging(fields: dict[str, Any]) -> int:
     try:
-        aging = int(fields.get("Aging") or 0)
+        aging = int(fields.get("Agening (Days)") or fields.get("Aging") or 0)
         if aging > 0:
             return aging
     except Exception:
         pass
-    for key in ("Next followup", "Raised Date"):
-        date_only = _date_only_value(fields.get(key))
-        if date_only:
-            try:
-                target = datetime.fromisoformat(date_only)
-                return max(0, (datetime.now() - target).days)
-            except Exception:
-                continue
+    date_only = _date_only_value(fields.get("Raised Date"))
+    if date_only:
+        try:
+            target = datetime.fromisoformat(date_only)
+            return max(0, (datetime.now() - target).days)
+        except Exception:
+            pass
     return 0
 
 

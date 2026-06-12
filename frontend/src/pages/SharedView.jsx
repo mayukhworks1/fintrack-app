@@ -161,9 +161,9 @@ function parseAttachments(value) {
   return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : []
 }
 function effectiveAging(fields = {}) {
-  const raw = Number(fields['Aging'] || 0)
+  const raw = Number(fields['Agening (Days)'] ?? fields['Aging'] ?? 0)
   if (Number.isFinite(raw) && raw > 0) return raw
-  const candidate = dateOnlyValue(fields['Next followup']) || dateOnlyValue(fields['Raised Date'])
+  const candidate = dateOnlyValue(fields['Raised Date'])
   if (!candidate) return 0
   const target = new Date(candidate)
   if (Number.isNaN(target.getTime())) return 0

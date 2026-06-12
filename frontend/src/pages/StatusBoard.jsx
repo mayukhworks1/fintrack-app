@@ -915,7 +915,7 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
             </label>
             <input type="text" className="input-field w-full text-sm"
               placeholder="e.g. UAT in progress — awaiting client sign-off"
-              value={form.short_status} onChange={e => set('short_status', e.target.value)} maxLength={300} />
+              value={form.short_status} onChange={e => set('short_status', e.target.value)} maxLength={500} />
           </div>
 
           {/* Detailed status */}

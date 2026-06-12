@@ -156,7 +156,7 @@ class StatusCreate(BaseModel):
     client: str
     project: str
     current_status_detailed: Optional[str] = Field(None, max_length=5000)
-    short_status: Optional[str] = Field(None, max_length=300)
+    short_status: Optional[str] = Field(None, max_length=500)
     status: Optional[str] = None          # single-select: Completed | On Hold | Input Pending | In progress | Not started
 
     def to_teable_fields(self) -> dict:
@@ -174,7 +174,7 @@ class StatusUpdate(BaseModel):
     client: Optional[str] = None
     project: Optional[str] = None
     current_status_detailed: Optional[str] = Field(None, max_length=5000)
-    short_status: Optional[str] = Field(None, max_length=300)
+    short_status: Optional[str] = Field(None, max_length=500)
     status: Optional[str] = None          # single-select: Completed | On Hold | Input Pending | In progress | Not started
 
     def to_teable_fields(self) -> dict:
