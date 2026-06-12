@@ -193,8 +193,10 @@ function SectionHead({ title, sub, children }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function TaxLedger() {
+export default function TaxLedger({ source = 'main' } = {}) {
   const { isEditor } = useAuth()
+  const isWebSource = source === 'web'
+  const canShare = isEditor && !isWebSource
   const [selectedPeriodKey, setSelectedPeriodKey] = useState(PERIODS.find(p => p.type === 'fy')?.key || PERIODS[0].key)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo,   setCustomTo]   = useState('')
@@ -208,9 +210,10 @@ export default function TaxLedger() {
   const [manageModal, setManageModal] = useState(false)
   const printRef = useRef(null)
 
-  const fetchInvoices = useCallback((opts = {}) =>
-    api.invoices.list({ limit: 1000, order_by: 'Raised Date', order: 'desc', ...opts }),
-  [])
+  const fetchInvoices = useCallback((opts = {}) => {
+    const params = { limit: 1000, order_by: 'Raised Date', order: 'desc', ...opts }
+    return isWebSource ? api.webInvoices.list(params) : api.invoices.list(params)
+  }, [isWebSource])
   const { data: listData, loading, refresh } = useAutoRefresh(fetchInvoices, 15_000)
   const allInvoices = listData?.records || []
 
@@ -382,10 +385,10 @@ export default function TaxLedger() {
       'Raised Date',
       'Cleared Date',
     ],
-    theme: 'amber',
+    theme: isWebSource ? 'emerald' : 'amber',
     density: 'compact',
     showDashboard: true,
-  }), [invoiceScope, period.from, period.label, period.to, search])
+  }), [invoiceScope, isWebSource, period.from, period.label, period.to, search])
 
   const shareTitle = useMemo(
     () => `Tax Ledger · ${period.label} · ${invoiceScope === 'tax' ? 'Paid tax register' : invoiceScope === 'open' ? 'Open invoices' : 'All invoices'}`,
@@ -425,12 +428,18 @@ export default function TaxLedger() {
               <ReceiptText size={18} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>Tax Ledger</h1>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>GST collection · TDS deducted · Tax filing register</p>
+              <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+                {isWebSource ? 'Web Tax Ledger' : 'Tax Ledger'}
+              </h1>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+                {isWebSource
+                  ? 'Web invoice GST collection · TDS deducted · tax filing register'
+                  : 'GST collection · TDS deducted · Tax filing register'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {isEditor && (
+            {canShare && (
               <>
                 <button onClick={() => setShareModal(true)} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
                   <Share2 size={12} /> Share View
@@ -987,7 +996,7 @@ export default function TaxLedger() {
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
-      {isEditor && shareModal && createPortal(
+      {canShare && shareModal && createPortal(
         <ShareLinkModal
           resourceType="tax-ledger"
           selectedRecords={filteredInvoices}
@@ -1000,7 +1009,7 @@ export default function TaxLedger() {
         />,
         document.body
       )}
-      {isEditor && manageModal && createPortal(
+      {canShare && manageModal && createPortal(
         <ManageSharedLinksModal
           resourceType="tax-ledger"
           recordLabel="invoice"

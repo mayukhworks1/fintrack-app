@@ -168,11 +168,15 @@ const INVOICE_SHARE_COLUMNS = [
   'Amount with Tax',
   'Amount Received',
   'Outstanding Amount',
+  'Agening (Days)',
   'Raised Date',
   'Cleared Date',
   'Next followup',
   'Description',
   'Remark',
+  'Reference',
+  'Invoice PDF',
+  'Last Modified',
 ]
 
 const DEFAULT_INVOICE_COLUMN_WIDTHS = {

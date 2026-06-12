@@ -71,8 +71,8 @@ const RESOURCE_META = {
     primaryLabel: 'All clients',
     defaultView: 'list',
     showDashboardByDefault: false,
-    columns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup', 'Description', 'Remark', 'Last Modified'],
-    defaultColumns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Outstanding Amount', 'Raised Date', 'Cleared Date', 'Next followup'],
+    columns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Milestone', 'Raised By', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount', 'Agening (Days)', 'Raised Date', 'Cleared Date', 'Next followup', 'Description', 'Remark', 'Reference', 'Invoice PDF', 'Last Modified'],
+    defaultColumns: ['Invoice Number', 'Client Name', 'Project', 'Category', 'Payment Status', 'Amount Raised', 'Amount Received', 'Outstanding Amount', 'Agening (Days)', 'Raised Date', 'Cleared Date', 'Next followup'],
   },
   'tax-ledger': {
     noun: 'tax invoice',
@@ -548,9 +548,12 @@ const COL_WIDTHS = {
   'TDS Amount':                 '115px',
   'TDS %':                      '75px',
   'Outstanding Amount':         '125px',
+  'Agening (Days)':             '90px',
   'Raised Date':                '110px',
   'Cleared Date':               '110px',
   'Next followup':              '110px',
+  'Reference':                  '120px',
+  'Invoice PDF':                '120px',
   'Last Modified':              '130px',
 }
 
@@ -598,12 +601,25 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (['Amount Billed So far', 'Actual Profit', 'Amount Raised', 'Amount with Tax', 'Amount Received', 'Outstanding Amount'].includes(col)) return (
     <span className="text-[12px] font-semibold tabular-nums text-gray-800">{fmtInr(f[col])}</span>
   )
+  if (col === 'Agening (Days)') return (
+    <span className="text-[12px] font-semibold tabular-nums text-gray-800">
+      {effectiveAging(f) > 0 ? `${effectiveAging(f)}d` : '—'}
+    </span>
+  )
   if (col === 'Profit percentage') return (
     <span className="text-[12px] font-semibold tabular-nums text-gray-800">{f[col] ? `${Number(f[col]).toFixed(1)}%` : '—'}</span>
   )
   if (['Raised Date', 'Cleared Date', 'Next followup'].includes(col)) return (
     <span className="text-[11px] text-gray-600 whitespace-nowrap">{fmtDate(f[col])}</span>
   )
+  if (col === 'Reference' || col === 'Invoice PDF') {
+    const files = parseAttachments(f[col])
+    return (
+      <span className="text-[12px] font-medium text-gray-700">
+        {files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : '—'}
+      </span>
+    )
+  }
   if (col === 'Last Modified') return (
     <span className="text-[11px] text-gray-400 whitespace-nowrap">{fmtDate(f.lastModifiedTime || '')}</span>
   )

@@ -31,7 +31,7 @@ def _get_token(authorization: str | None = Header(default=None)) -> str:
     return authorization.split(" ", 1)[1].strip()
 
 
-PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance"}
+PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance", "web_admin"}
 
 
 async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, Any] | None:

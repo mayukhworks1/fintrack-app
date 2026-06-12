@@ -727,6 +727,7 @@ INSERT INTO auth_roles (role_key, label, description, rank, is_system) VALUES
   ('admin', 'Admin', 'Business administration and operational control.', 10, true),
   ('manager', 'Manager', 'Scoped team/client/project operations.', 30, true),
   ('finance', 'Finance', 'Invoice, tax ledger, reports, and payment operations.', 40, true),
+  ('web_admin', 'Web Invoice Admin', 'Full access across web invoices, web projects, and web finance controls.', 45, true),
   ('web', 'Web Invoice User', 'Scoped web invoice access owned by user email.', 50, true),
   ('user', 'User', 'Scoped operational user.', 60, true),
   ('viewer', 'Viewer', 'Read-only scoped access.', 90, true)
@@ -808,6 +809,19 @@ JOIN auth_permissions p ON p.permission_key IN (
   'module.tax.export', 'module.reports.create', 'module.reports.export'
 )
 WHERE r.role_key = 'finance'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM auth_roles r
+JOIN auth_permissions p ON p.permission_key IN (
+  'module.dashboard.view', 'module.projects.view', 'module.projects.create', 'module.projects.edit',
+  'module.projects.delete', 'module.invoices.view', 'module.invoices.create', 'module.invoices.edit',
+  'module.invoices.delete', 'module.invoices.payment', 'module.tax.view', 'module.tax.export',
+  'module.tax.share', 'module.analytics.view', 'module.reports.create', 'module.reports.export',
+  'module.ai.use', 'module.shared.manage'
+)
+WHERE r.role_key = 'web_admin'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO auth_role_permissions (role_id, permission_id)

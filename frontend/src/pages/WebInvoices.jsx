@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext'
 import { ProjectsWorkspace } from './WebProjects'
+import TaxLedger from './TaxLedger'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
@@ -45,6 +46,30 @@ const EMPTY_FORM = {
   reference: [], invoice_pdf: [],
   currency: 'RS',
 }
+
+const WEB_INVOICE_SCALAR_FORM_KEYS = [
+  'invoice_number',
+  'project',
+  'category',
+  'description',
+  'milestone',
+  'raised_by',
+  'raised_date',
+  'cleared_date',
+  'amount_raised',
+  'amount_with_tax',
+  'amount_received',
+  'payment_status',
+  'remark',
+  'next_followup',
+  'currency',
+]
+
+const normalizeWebInvoiceScalarForm = (form) => WEB_INVOICE_SCALAR_FORM_KEYS.reduce((acc, key) => {
+  const value = form?.[key]
+  acc[key] = value == null ? '' : String(value).trim()
+  return acc
+}, {})
 
 // Currency helpers
 const CURRENCY_SYMBOLS = { RS: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ' }
@@ -118,7 +143,7 @@ function getProjectCategoryOption(options = [], current = '') {
   return options.find(o => !isRetainerCategory(o)) || ''
 }
 
-const buildWebInvoiceScalarPayload = (form, { isEdit = false } = {}) => ({
+const buildWebInvoiceScalarPayload = (form, { isEdit = false, paymentOnly = false } = {}) => ({
   invoice_number:   form.invoice_number,
   project:          form.project,
   category:         form.category,
@@ -133,7 +158,9 @@ const buildWebInvoiceScalarPayload = (form, { isEdit = false } = {}) => ({
   amount_received:  form.amount_received !== '' ? Number(form.amount_received) : undefined,
   raised_date:      form.raised_date ? `${form.raised_date}T00:00:00.000Z` : (isEdit ? null : undefined),
   cleared_date:     form.cleared_date ? `${form.cleared_date}T00:00:00.000Z` : (isEdit ? null : undefined),
-  next_followup:    form.next_followup ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
+  next_followup:    paymentOnly
+    ? null
+    : form.next_followup ? `${form.next_followup}T00:00:00.000Z` : (isEdit ? null : undefined),
   // Always include attachment arrays so removals (empty list) are persisted to Teable.
   reference:        Array.isArray(form.reference)   ? form.reference   : [],
   invoice_pdf:      Array.isArray(form.invoice_pdf) ? form.invoice_pdf : [],
@@ -704,13 +731,24 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ens
 }
 
 /* ── Detail panel ── */
-function InvoiceDetail({ open, invoice, onClose, onEdit, onPreview }) {
+function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
   const f = (open && invoice) ? (invoice.fields || {}) : {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
   const outstanding = Number(f['Outstanding Amount'] || 0)
   const cur = f['Currency'] || 'RS'
+
+  const actions = open && invoice ? (
+    <>
+      {isEditor && f['Payment Status'] === 'Pending' && (
+        <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+          <CheckCircle2 size={12} />Record Payment
+        </button>
+      )}
+      <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>
+    </>
+  ) : null
 
   return (
     <Drawer
@@ -729,7 +767,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onPreview }) {
       subtitle={[f['Project'], f['Category'], f['Milestone']].filter(Boolean).join(' · ')}
       width={500}
       accent={false}
-      actions={<button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>}
+      actions={actions}
       footer={
         <button onClick={onClose} className="btn-ghost w-full text-xs" style={{ justifyContent: 'center' }}>Close</button>
       }
@@ -823,6 +861,7 @@ function InvoiceDrawer({
   open,
   invoice,
   draft,
+  paymentOnly = false,
   onClose,
   onSaved,
   onDeleted,
@@ -833,8 +872,9 @@ function InvoiceDrawer({
 }) {
   const { userEmail, authRole, isEmailAuth } = useAuth()
   const isEdit = Boolean(invoice?.id)
-  const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance'].includes(authRole))
+  const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance', 'web_admin'].includes(authRole))
   const [form,       setForm]       = useState(EMPTY_FORM)
+  const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [saving,     setSaving]     = useState(false)
   const [deleting,   setDeleting]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -842,6 +882,11 @@ function InvoiceDrawer({
   const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
   const [categoryLocked, setCategoryLocked] = useState(false)
   const paidSelected = form.payment_status === 'Paid'
+  const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizeWebInvoiceScalarForm(form)) !== JSON.stringify(normalizeWebInvoiceScalarForm(initialForm)),
+    [form, initialForm]
+  )
   const retainerSelected = isRetainerCategory(form.category)
   const retainerCategoryOption = getRetainerCategoryOption(picklists?.Category || [])
   const projectCategoryOption = getProjectCategoryOption(picklists?.Category || [], form.category)
@@ -849,17 +894,24 @@ function InvoiceDrawer({
 
   useEffect(() => {
     const ownerPatch = ownerLocked ? { raised_by: userEmail } : {}
-    if (!invoice && !draft) { setForm({ ...EMPTY_FORM, ...ownerPatch }); return }
+    if (!invoice && !draft) {
+      const next = { ...EMPTY_FORM, ...ownerPatch }
+      setForm(next)
+      setInitialForm(next)
+      return
+    }
     if (!invoice && draft) {
-      setForm({
+      const next = {
         ...EMPTY_FORM,
         ...draft,
         ...ownerPatch,
-      })
+      }
+      setForm(next)
+      setInitialForm(next)
       return
     }
     const f = invoice.fields || {}
-    setForm({
+    const next = {
       invoice_number:  f['Invoice Number']  || '',
       project:         f['Project']         || '',
       category:        f['Category']        || '',
@@ -877,7 +929,10 @@ function InvoiceDrawer({
       next_followup:   f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
       reference:       Array.isArray(f['Reference'])   ? f['Reference']   : [],
       invoice_pdf:     Array.isArray(f['Invoice PDF']) ? f['Invoice PDF'] : [],
-    })
+      ...(draft || {}),
+    }
+    setForm(next)
+    setInitialForm(next)
   }, [invoice, draft, ownerLocked, userEmail])
 
   useEffect(() => {
@@ -926,20 +981,29 @@ function InvoiceDrawer({
   }
 
   async function handleSave() {
-    if (paidSelected && !String(form.amount_received).trim()) {
+    if (isEdit && !paymentOnly && !hasFormChanges) {
+      setError('')
+      return
+    }
+    if (hasPaymentAttempt && form.payment_status !== 'Paid') {
+      setError('Payment Status must be Paid when recording received amount or cleared date')
+      return
+    }
+    if (hasPaymentAttempt && !String(form.amount_received).trim()) {
       setError('Amount received is required when status is Paid')
       return
     }
-    if (paidSelected && !form.cleared_date) {
+    if (hasPaymentAttempt && !form.cleared_date) {
       setError('Cleared date is required when status is Paid')
       return
     }
     setSaving(true); setError('')
     try {
-      const payload = buildWebInvoiceScalarPayload(form, { isEdit })
+      const payload = buildWebInvoiceScalarPayload(form, { isEdit, paymentOnly })
       const saved = currentRecordId
         ? await api.webInvoices.update(currentRecordId, payload)
         : await api.webInvoices.create(payload)
+      setInitialForm(form)
       onSaved(saved)
     } catch (e) {
       setError(e.message || 'Save failed')
@@ -960,7 +1024,9 @@ function InvoiceDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      title={isEdit ? `Edit · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
+      title={paymentOnly
+        ? `Record Payment · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}`
+        : isEdit ? `Edit · ${invoice?.fields?.['Invoice Number'] || 'Invoice'}` : 'New Invoice'}
       width={520}
       accent
       footer={
@@ -972,8 +1038,14 @@ function InvoiceDrawer({
           ) : <div />}
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-              <Save size={12} />{saving ? 'Saving…' : currentRecordId ? 'Save changes' : 'Create invoice'}
+            <button
+              onClick={handleSave}
+              disabled={!saving && isEdit && !paymentOnly ? !hasFormChanges : saving}
+              className={!saving && isEdit && !paymentOnly && !hasFormChanges ? 'btn-ghost' : 'btn-primary'}
+              style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: !saving && isEdit && !paymentOnly && !hasFormChanges ? 0.62 : 1 }}
+              title={!saving && isEdit && !paymentOnly && !hasFormChanges ? 'No form changes to save' : undefined}
+            >
+              <Save size={12} />{saving ? 'Saving…' : (!paymentOnly && isEdit && !hasFormChanges) ? 'No changes' : paymentOnly ? 'Record payment' : currentRecordId ? 'Save changes' : 'Create invoice'}
             </button>
           </div>
         </div>
@@ -1367,7 +1439,10 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
     { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { value: 'invoices',  label: 'Invoices',  icon: FileText },
     { value: 'retainers', label: 'Retainers', icon: Repeat2 },
-    ...(isAll ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
+    ...(isAll ? [
+      { value: 'projects', label: 'Projects', icon: Briefcase },
+      { value: 'tax', label: 'Tax', icon: Receipt },
+    ] : []),
   ]
   return (
     <nav className="sm:hidden flex-shrink-0 flex items-stretch border-t"
@@ -1417,6 +1492,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
     { value: 'retainers',  label: 'Retainers',  icon: Repeat2 },
     ...(isAll ? [
       { value: 'projects',  label: 'Projects',  icon: Briefcase },
+      { value: 'tax',       label: 'Tax Ledger', icon: Receipt },
     ] : []),
   ]
 
@@ -1970,6 +2046,20 @@ export default function WebInvoices() {
 
   const openNew     = ()  => { setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
   const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
+  const openRecordPayment = r => {
+    setDrawerKey(k => k + 1)
+    setDrawer({
+      mode: 'payment',
+      invoice: r,
+      draft: {
+        payment_status: 'Paid',
+        amount_received: r?.fields?.['Amount Raised'] ?? '',
+        cleared_date: new Date().toISOString().slice(0, 10),
+        reference: Array.isArray(r?.fields?.['Reference']) ? r.fields['Reference'] : [],
+        remark: r?.fields?.['Remark'] || '',
+      },
+    })
+  }
   const closeDrawer = () => setDrawer(null)
   const handleSaved = (savedRecord) => {
     if (savedRecord?.id) {
@@ -2667,6 +2757,12 @@ export default function WebInvoices() {
           {workspace === 'projects' && isAll && (
             <section>
               <ProjectsWorkspace />
+            </section>
+          )}
+
+          {workspace === 'tax' && isAll && (
+            <section>
+              <TaxLedger source="web" />
             </section>
           )}
 
@@ -3428,11 +3524,23 @@ export default function WebInvoices() {
                                 ) : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>
                               <td className="tbl-cell" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => openView(r)}
-                                  className="btn-ghost flex items-center gap-1.5"
-                                  style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
-                                  <Eye size={12} /><span className="text-[11px] font-semibold">View</span>
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {isAll && f['Payment Status'] === 'Pending' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openRecordPayment(r)}
+                                      className="btn-primary"
+                                      style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem' }}
+                                    >
+                                      <CheckCircle2 size={12} /><span className="text-[11px] font-semibold">Pay</span>
+                                    </button>
+                                  )}
+                                  <button onClick={() => openView(r)}
+                                    className="btn-ghost flex items-center gap-1.5"
+                                    style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
+                                    <Eye size={12} /><span className="text-[11px] font-semibold">View</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           )
@@ -3456,13 +3564,18 @@ export default function WebInvoices() {
         invoice={drawer?.mode === 'view' ? drawer.invoice : null}
         onClose={closeDrawer}
         onEdit={() => { setDrawerKey(k => k + 1); setDrawer({ mode: 'edit', invoice: drawer?.invoice }) }}
+        onRecordPayment={() => {
+          if (isAll && drawer?.invoice) openRecordPayment(drawer.invoice)
+        }}
+        isEditor={isAll}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
       />
       <InvoiceDrawer
         key={`form-${drawerKey}`}
-        open={drawer?.mode === 'new' || drawer?.mode === 'edit'}
-        invoice={drawer?.mode === 'edit' ? drawer.invoice : null}
-        draft={drawer?.mode === 'new' ? drawer?.draft : null}
+        open={drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment'}
+        invoice={drawer?.mode === 'edit' || drawer?.mode === 'payment' ? drawer.invoice : null}
+        draft={drawer?.mode === 'new' || drawer?.mode === 'payment' ? drawer?.draft : null}
+        paymentOnly={drawer?.mode === 'payment'}
         onClose={closeDrawer}
         onSaved={handleSaved}
         onDeleted={handleDeleted}
@@ -3480,3 +3593,16 @@ export default function WebInvoices() {
     </div>
   )
 }
+                        {isAll && f['Payment Status'] === 'Pending' && (
+                          <div className="flex justify-end mt-3">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); openRecordPayment(r) }}
+                              className="btn-primary"
+                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem' }}
+                            >
+                              <CheckCircle2 size={12} />
+                              <span className="text-[11px] font-semibold">Pay</span>
+                            </button>
+                          </div>
+                        )}
