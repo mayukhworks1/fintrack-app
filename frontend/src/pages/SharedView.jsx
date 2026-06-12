@@ -645,9 +645,15 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
             {cols.map(col => (
               <div
                 key={col}
-                className="text-[10px] font-bold uppercase tracking-widest truncate px-2 py-1 rounded-lg"
+                className="text-[10px] font-bold uppercase tracking-widest truncate px-3 py-2"
                 style={highlighted.has(col)
-                  ? { color: '#1d4ed8', background: 'rgba(59,130,246,0.10)', boxShadow: 'inset 0 0 0 1px rgba(59,130,246,0.14)' }
+                  ? {
+                      color: '#1d4ed8',
+                      background: 'rgba(59,130,246,0.10)',
+                      borderTop: '1px solid rgba(59,130,246,0.18)',
+                      borderBottom: '1px solid rgba(59,130,246,0.18)',
+                      boxShadow: 'inset 1px 0 0 rgba(59,130,246,0.18), inset -1px 0 0 rgba(59,130,246,0.18)',
+                    }
                   : { color: '#94a3b8' }}
               >
                 {col}
@@ -679,8 +685,13 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                 {cols.map(col => (
                   <div
                     key={col}
-                    className="min-w-0 px-2 py-1 rounded-lg transition-colors"
-                    style={highlighted.has(col) ? { background: 'rgba(59,130,246,0.06)' } : undefined}
+                    className="min-w-0 px-3 py-2 transition-colors"
+                    style={highlighted.has(col)
+                      ? {
+                          background: 'rgba(59,130,246,0.06)',
+                          boxShadow: 'inset 1px 0 0 rgba(59,130,246,0.14), inset -1px 0 0 rgba(59,130,246,0.14)',
+                        }
+                      : undefined}
                   >
                     {cellContent(col, f, clr, resourceType, meta, showClientAccents)}
                   </div>
