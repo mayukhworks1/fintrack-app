@@ -161,6 +161,21 @@ function monthKey(value) {
 function parseAttachments(value) {
   return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : []
 }
+function recordAttachmentSummary(resourceType, fields = {}) {
+  if (resourceType === 'status') {
+    const count = parseAttachments(fields['Attachments']).length
+    return count ? { count, label: count === 1 ? '1 attachment' : `${count} attachments` } : null
+  }
+  if (resourceType === 'invoices' || resourceType === 'tax-ledger') {
+    const refs = parseAttachments(fields['Reference']).length
+    const pdfs = parseAttachments(fields['Invoice PDF']).length
+    const total = refs + pdfs
+    return total
+      ? { count: total, label: `${refs} ref · ${pdfs} pdf${pdfs === 1 ? '' : 's'}` }
+      : null
+  }
+  return null
+}
 function effectiveAging(fields = {}) {
   const raw = Number(fields['Agening (Days)'] ?? fields['Aging'] ?? 0)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -365,6 +380,7 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
   const short      = resourceType === 'status' ? (f['Short Status'] || '') : ''
   const detail     = resourceType === 'status' ? (f['Current Status (Detailed)'] || '') : ''
   const hasDetail  = detail.trim() && detail.trim() !== short.trim()
+  const attachmentInfo = recordAttachmentSummary(resourceType, f)
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
@@ -374,6 +390,13 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
           <div className="min-w-0">
             <p className="text-xs font-semibold mb-1 truncate" style={{ color: clr }}>{groupValue}</p>
             <h3 className="text-base font-bold text-gray-900 leading-snug">{titleValue}</h3>
+            {attachmentInfo && (
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.18)', color: '#1d4ed8' }}>
+                <Eye size={11} />
+                {attachmentInfo.label}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge value={statusValue} />
@@ -655,10 +678,13 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                 style={highlighted.has(col)
                   ? {
                       color: '#1d4ed8',
-                      background: 'rgba(59,130,246,0.10)',
-                      borderTop: '1px solid rgba(59,130,246,0.18)',
-                      borderBottom: '1px solid rgba(59,130,246,0.18)',
-                      boxShadow: 'inset 1px 0 0 rgba(59,130,246,0.18), inset -1px 0 0 rgba(59,130,246,0.18)',
+                      background: 'linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.10))',
+                      borderTop: '1px solid rgba(59,130,246,0.24)',
+                      borderBottom: '1px solid rgba(59,130,246,0.24)',
+                      borderLeft: '1px solid rgba(59,130,246,0.24)',
+                      borderRight: '1px solid rgba(59,130,246,0.24)',
+                      borderTopLeftRadius: 12,
+                      borderTopRightRadius: 12,
                     }
                   : { color: '#94a3b8' }}
               >
@@ -694,8 +720,9 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                     className="min-w-0 px-3 py-2 transition-colors"
                     style={highlighted.has(col)
                       ? {
-                          background: 'rgba(59,130,246,0.06)',
-                          boxShadow: 'inset 1px 0 0 rgba(59,130,246,0.14), inset -1px 0 0 rgba(59,130,246,0.14)',
+                          background: 'linear-gradient(180deg, rgba(59,130,246,0.12), rgba(59,130,246,0.07))',
+                          borderLeft: '1px solid rgba(59,130,246,0.18)',
+                          borderRight: '1px solid rgba(59,130,246,0.18)',
                         }
                       : undefined}
                   >
@@ -816,7 +843,7 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDe
   )
 }
 
-function DetailModal({ resourceType, record, onClose }) {
+function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
   const f = record?.fields || {}
   const groupValue = f[meta.clientField] || 'Unknown'
@@ -903,7 +930,10 @@ function DetailModal({ resourceType, record, onClose }) {
                             key={`${name}-${index}`}
                             className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer transition-all"
                             style={{ background: '#fff', border: '1px solid #e2e8f0' }}
-                            onClick={() => setPreviewDocs({ docs: files, index })}
+                            onClick={() => {
+                              onTrackEvent?.('attachment_open', record, { field: 'Attachments', file_name: name, file_type: info.label })
+                              setPreviewDocs({ docs: files, index })
+                            }}
                             onMouseEnter={e => e.currentTarget.style.borderColor = info.color + '55'}
                             onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
                             <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
@@ -1147,6 +1177,23 @@ export default function SharedView() {
   const [savingRecordId, setSavingRecordId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
   const [allExpanded, setAllExpanded] = useState(false)
+
+  const trackSharedEvent = useCallback((eventType, record, meta = {}) => {
+    if (!token || !eventType || !record?.id) return
+    api.sharedViews.recordEvent(token, {
+      event_type: eventType,
+      record_id: record.id,
+      meta,
+    })
+  }, [token])
+
+  const openDetailRecord = useCallback((record) => {
+    if (!record) return
+    trackSharedEvent('record_detail', record, {
+      title: record.fields?.[RESOURCE_META[data?.resource_type || 'status']?.titleField || 'Project'] || '',
+    })
+    setDetailRecord(record)
+  }, [data?.resource_type, trackSharedEvent])
 
   const resourceType = data?.resource_type || 'status'
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
@@ -1595,7 +1642,7 @@ export default function SharedView() {
                 resourceType={resourceType}
                 canEdit={canEdit}
                 onEdit={setEditRecord}
-                onDetail={setDetailRecord}
+                onDetail={openDetailRecord}
                 compact={compact}
                 showClientAccents={showClientAccents}
                 groupByField={activeCardGroupBy}
@@ -1604,8 +1651,8 @@ export default function SharedView() {
                 allExpanded={allExpanded}
               />
             )}
-            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} highlightColumns={vc.highlightColumns || []} />}
-            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} groupByField={activeBoardGroupBy} />}
+            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={openDetailRecord} showClientAccents={showClientAccents} highlightColumns={vc.highlightColumns || []} />}
+            {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={openDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} groupByField={activeBoardGroupBy} />}
           </>
         )}
       </main>
@@ -1628,7 +1675,7 @@ export default function SharedView() {
           onSave={form => saveRecordChanges(editRecord, form)}
         />
       )}
-      {detailRecord && <DetailModal resourceType={resourceType} record={detailRecord} onClose={() => setDetailRecord(null)} />}
+      {detailRecord && <DetailModal resourceType={resourceType} record={detailRecord} onClose={() => setDetailRecord(null)} onTrackEvent={trackSharedEvent} />}
     </div>
   )
 }

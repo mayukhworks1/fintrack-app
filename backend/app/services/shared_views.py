@@ -524,6 +524,90 @@ class SharedViewService:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
+    async def get_accesses_stats(self, token: str) -> dict:
+        """Aggregated analytics for a single shared link."""
+        pool = get_pool()
+        if not pool:
+            return {}
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    COUNT(*)                                                 AS total_events,
+                    COUNT(*) FILTER (WHERE event_type = 'view')             AS page_views,
+                    COUNT(*) FILTER (WHERE event_type = 'record_detail')    AS record_details,
+                    COUNT(*) FILTER (WHERE event_type = 'attachment_open')  AS attachment_opens,
+                    COUNT(*) FILTER (WHERE event_type = 'edit')             AS edits,
+                    COUNT(DISTINCT viewer_key)                               AS unique_visitors,
+                    MIN(accessed_at)                                         AS first_seen,
+                    MAX(accessed_at)                                         AS last_seen
+                FROM shared_view_accesses
+                WHERE view_token = $1
+                """,
+                token,
+            )
+            stats = dict(rows[0]) if rows else {}
+
+            # Location breakdown (top 10)
+            loc_rows = await conn.fetch(
+                """
+                SELECT country, country_code, city, region,
+                       COUNT(DISTINCT viewer_key) AS visitors,
+                       COUNT(*) AS hits
+                FROM shared_view_accesses
+                WHERE view_token = $1 AND country IS NOT NULL
+                GROUP BY country, country_code, city, region
+                ORDER BY visitors DESC, hits DESC
+                LIMIT 10
+                """,
+                token,
+            )
+            stats["locations"] = [dict(r) for r in loc_rows]
+
+            # Device breakdown
+            dev_rows = await conn.fetch(
+                """
+                SELECT device_type, browser, os,
+                       COUNT(DISTINCT viewer_key) AS visitors
+                FROM shared_view_accesses
+                WHERE view_token = $1
+                GROUP BY device_type, browser, os
+                ORDER BY visitors DESC
+                LIMIT 10
+                """,
+                token,
+            )
+            stats["devices"] = [dict(r) for r in dev_rows]
+
+            # Daily timeline (last 14 days)
+            day_rows = await conn.fetch(
+                """
+                SELECT DATE(accessed_at AT TIME ZONE 'UTC') AS day,
+                       COUNT(*) FILTER (WHERE event_type = 'view')             AS views,
+                       COUNT(*) FILTER (WHERE event_type = 'record_detail')    AS record_details,
+                       COUNT(*) FILTER (WHERE event_type = 'attachment_open')  AS attachment_opens,
+                       COUNT(*) FILTER (WHERE event_type = 'edit')             AS edits,
+                       COUNT(DISTINCT viewer_key)                               AS unique_visitors
+                FROM shared_view_accesses
+                WHERE view_token = $1
+                  AND accessed_at > NOW() - INTERVAL '14 days'
+                GROUP BY day
+                ORDER BY day
+                """,
+                token,
+            )
+            stats["timeline"] = [dict(r) for r in day_rows]
+
+        return {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in stats.items()
+                if k not in ('locations', 'devices', 'timeline')} | {
+            'locations': stats.get('locations', []),
+            'devices':   stats.get('devices', []),
+            'timeline':  [
+                {kk: (vv.isoformat() if hasattr(vv, 'isoformat') else vv) for kk, vv in row.items()}
+                for row in stats.get('timeline', [])
+            ],
+        }
+
     async def _log_access(
         self,
         token: str,
@@ -534,6 +618,7 @@ class SharedViewService:
         resource_type: str = "status",
         event_type: str = "view",
         record_id: Optional[str] = None,
+        meta: Optional[dict] = None,
     ) -> None:
         """Geo-enrich and insert access record; update counter. Fire-and-forget."""
         pool = get_pool()
@@ -597,8 +682,8 @@ class SharedViewService:
                     INSERT INTO shared_view_accesses
                         (view_token, event_type, viewer_key, record_id, ip, country, country_code, region, city, isp, lat, lon, timezone,
                          geo_source, accuracy_m, os, browser, device_type, device_label, device_model, platform_version,
-                         user_agent, referer)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+                         user_agent, referer, meta)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
                     """,
                     token, event_type, viewer_key, record_id,
                     ip or None,
@@ -614,6 +699,7 @@ class SharedViewService:
                     ((ch.get("platformVersion") or "")[:40] or None),
                     (user_agent[:1000] if user_agent else None),
                     referer or None,
+                    json.dumps(meta) if meta else None,
                 )
                 if should_increment:
                     await conn.execute(

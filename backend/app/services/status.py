@@ -35,6 +35,23 @@ _REPORT_KEY   = "report:executive"
 _sse_queues: set[asyncio.Queue] = set()
 
 
+def _sanitize_teable_attachments(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    allowed_keys = (
+        "id", "name", "filename", "path", "token", "size",
+        "mimetype", "mimeType", "type", "url", "presignedUrl",
+    )
+    cleaned: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        entry = {key: item.get(key) for key in allowed_keys if item.get(key) not in (None, "")}
+        if entry:
+            cleaned.append(entry)
+    return cleaned
+
+
 def subscribe_sse() -> asyncio.Queue:
     """Register a new SSE subscriber. Returns the queue to read from."""
     q: asyncio.Queue = asyncio.Queue(maxsize=4)
@@ -475,6 +492,8 @@ class StatusService:
         request=None,
         role: Optional[str] = None,
     ) -> dict[str, Any]:
+        if "Attachments" in fields:
+            fields = {**fields, "Attachments": _sanitize_teable_attachments(fields.get("Attachments"))}
         if request and role:
             try:
                 from ..db.attribution import record_user_attribution

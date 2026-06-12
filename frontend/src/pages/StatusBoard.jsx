@@ -148,6 +148,17 @@ function parseAttachments(value) {
   return []
 }
 
+function sanitizeAttachmentsForSave(value) {
+  return parseAttachments(value).map((item) => {
+    if (!item || typeof item !== 'object') return item
+    const next = {}
+    for (const key of ['id', 'name', 'filename', 'path', 'token', 'size', 'mimetype', 'mimeType', 'type', 'url', 'presignedUrl']) {
+      if (item[key] != null) next[key] = item[key]
+    }
+    return next
+  })
+}
+
 // ── Expiry presets ─────────────────────────────────────────────────────────────
 const EXPIRY_OPTS = [
   { label: 'Never',    value: 0   },
@@ -352,12 +363,23 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                 {client || 'Unknown client'}
               </div>
               <h2 className="text-2xl font-bold leading-tight" style={{ color: 'var(--text-1)' }}>{project || 'Untitled project'}</h2>
-              {modified && (
-                <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-                  <Clock size={12} />
-                  Last updated {fmtDate(modified)}
-                </p>
-              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {modified && (
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                    <Clock size={12} />
+                    Last updated {fmtDate(modified)}
+                  </p>
+                )}
+                {attachments.length > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                    style={{ background: 'rgba(14,165,233,0.10)', border: '1px solid rgba(14,165,233,0.22)', color: '#0ea5e9' }}
+                  >
+                    <Paperclip size={11} />
+                    {attachments.length} attachment{attachments.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1">
               {isEditor && (
@@ -429,7 +451,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
             </div>
           </div>
 
-          {/* Attachments — full-width below the grid */}
+          {/* Attachments — still previewable below, but surfaced in the header above */}
           {attachments.length > 0 && (
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
@@ -461,6 +483,7 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
   const detail   = f['Current Status (Detailed)'] || ''
   const status   = f['Status'] || ''
   const modified = f['lastModifiedTime'] || record?.createdTime || ''
+  const attachments = parseAttachments(f['Attachments'])
   const clrHex   = clientColor(client)
   const sc       = statusStyle(status)
   const p        = compact ? '0.75rem' : '1rem'
@@ -533,13 +556,24 @@ function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selected, on
 
         {/* Row 2: status badge + last modified */}
         <div className="flex items-center justify-between mb-2">
-          {status ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-              style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
-              {status}
-            </span>
-          ) : <span />}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {status ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+                {status}
+              </span>
+            ) : <span />}
+            {attachments.length > 0 && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                style={{ background: 'rgba(14,165,233,0.10)', color: '#0ea5e9', border: '1px solid rgba(14,165,233,0.22)' }}
+              >
+                <Paperclip size={10} />
+                {attachments.length}
+              </span>
+            )}
+          </div>
           {modified && (
             <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}>
               <Clock size={9} />{fmtShortDate(modified)}
@@ -2789,7 +2823,7 @@ export default function StatusBoard() {
     setSaving(true)
     try {
       const { attachments, ...rest } = form
-      const payload = { ...rest, attachments }
+      const payload = { ...rest, attachments: sanitizeAttachmentsForSave(attachments) }
       const updated = await api.status.update(modal.id, payload)
       if (updated?.id || updated?.fields) {
         setRecords((current) => current.map((record) => {

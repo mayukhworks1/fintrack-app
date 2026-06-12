@@ -574,6 +574,17 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+    // Fire-and-forget event (record_detail, attachment_open). Uses sendBeacon if available.
+    recordEvent: (token, data) => {
+      const url = `${BASE_URL}/api/public/view/${encodeURIComponent(token)}/event`
+      const body = JSON.stringify(data)
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))
+        return
+      }
+      fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/json' } }).catch(() => {})
+    },
+    stats: (token) => request(`/api/shared-views/${token}/stats`),
   },
   admin: {
     stats:              (opts = {})       => request('/api/admin/stats', opts),
@@ -612,6 +623,7 @@ export const api = {
     recordHistory: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/record-history?${q}`) },
     sharedLinks:   (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/shared-links?${q}`) },
     sharedLinkAccesses: (token, limit = 200) => request(`/api/admin/shared-links/${token}/accesses?limit=${limit}`),
+    sharedLinkStats: (token) => request(`/api/admin/shared-links/${token}/stats`),
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
     triggerAgingRefresh: ()      => request('/api/admin/sync/aging-refresh', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),

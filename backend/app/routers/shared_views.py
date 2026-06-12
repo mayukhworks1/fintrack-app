@@ -8,6 +8,7 @@ Public endpoint: read-only, no auth, geo-tracked
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -61,6 +62,12 @@ class PublicSharedViewUpdate(BaseModel):
 
 class SharedViewAccessDelete(BaseModel):
     access_ids: list[str]
+
+
+class PublicEventBody(BaseModel):
+    event_type: str   # record_detail | attachment_open
+    record_id: Optional[str] = None
+    meta: Optional[dict] = None  # e.g. {"file_name": "...", "file_type": "pdf"}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -202,6 +209,13 @@ async def delete_shared_view_accesses(
     return {"deleted": deleted}
 
 
+@router.get("/api/shared-views/{token}/stats")
+async def get_shared_view_stats(token: str, _: str = Depends(require_editor)):
+    """Aggregated analytics: unique visitors, event breakdown, locations, devices, timeline."""
+    svc = SharedViewService()
+    return await svc.get_accesses_stats(token)
+
+
 # ── Public endpoint (NO auth) ──────────────────────────────────────────────────
 
 @router.get("/api/public/view/{token}")
@@ -274,3 +288,43 @@ async def update_public_view_record(
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/public/view/{token}/event", status_code=204)
+async def record_public_event(token: str, body: PublicEventBody, request: Request):
+    """
+    Fire-and-forget event tracking for public link viewers.
+    Allowed event types: record_detail, attachment_open.
+    Called via navigator.sendBeacon or fetch from the shared view frontend.
+    """
+    allowed_types = {"record_detail", "attachment_open"}
+    if body.event_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"event_type must be one of {sorted(allowed_types)}")
+
+    # Sanitise meta — only string/number values allowed, max 10 keys
+    clean_meta: dict | None = None
+    if body.meta:
+        clean_meta = {
+            str(k)[:64]: (str(v)[:256] if v is not None else None)
+            for k, v in list(body.meta.items())[:10]
+        }
+
+    svc = SharedViewService()
+    view = await svc.get_public_view(token)
+    ip = _ip(request)
+    ua = request.headers.get("user-agent", "")
+    referer = request.headers.get("referer") or request.headers.get("origin") or ""
+    ch = request.headers.get("x-client-hint", "")
+    asyncio.create_task(
+        svc._log_access(
+            token=token,
+            ip=ip,
+            user_agent=ua,
+            referer=referer,
+            client_hint=ch,
+            resource_type=view.get("resource_type") or "status",
+            event_type=body.event_type,
+            record_id=body.record_id,
+            meta=clean_meta,
+        )
+    )

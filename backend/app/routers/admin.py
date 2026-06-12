@@ -272,6 +272,13 @@ async def admin_shared_link_accesses(
     return {"accesses": accesses, "total": len(accesses)}
 
 
+@router.get("/shared-links/{token}/stats")
+async def admin_shared_link_stats(token: str, _: str = Depends(require_admin)):
+    """Aggregated analytics for a single shared link."""
+    svc = SharedViewService()
+    return await svc.get_accesses_stats(token)
+
+
 @router.get("/insight-configs")
 async def admin_insight_configs(
     page_key: Optional[str] = Query(None),

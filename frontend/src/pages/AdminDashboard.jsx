@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Fragment } from 'react'
 import {
   LayoutDashboard, ScrollText, Users, MessageSquareText,
   RefreshCw, Database, FileText, Clock, LogOut,
@@ -3637,6 +3638,7 @@ function SharedLinksTab() {
   const [resourceType, setResourceType] = useState('')
   const [selected, setSelected] = useState(null)
   const [accesses, setAccesses] = useState([])
+  const [stats, setStats] = useState(null)
   const [loadingAccesses, setLoadingAccesses] = useState(false)
 
   const load = useCallback(async () => {
@@ -3651,16 +3653,51 @@ function SharedLinksTab() {
   useEffect(() => { load() }, [load])
 
   async function toggleAccesses(token) {
-    if (selected === token) { setSelected(null); return }
+    if (selected === token) {
+      setSelected(null)
+      setAccesses([])
+      setStats(null)
+      return
+    }
     setSelected(token)
     setLoadingAccesses(true)
     try {
-      const res = await api.admin.sharedLinkAccesses(token)
+      const [res, statRes] = await Promise.all([
+        api.admin.sharedLinkAccesses(token),
+        api.admin.sharedLinkStats(token),
+      ])
       setAccesses(res.accesses || [])
+      setStats(statRes || null)
     } finally {
       setLoadingAccesses(false)
     }
   }
+
+  function eventBadgeColor(type) {
+    if (type === 'edit') return 'amber'
+    if (type === 'attachment_open') return 'purple'
+    if (type === 'record_detail') return 'blue'
+    return 'green'
+  }
+
+  function eventLabel(type) {
+    if (type === 'attachment_open') return 'Attachment'
+    if (type === 'record_detail') return 'Record detail'
+    if (type === 'edit') return 'Edit'
+    return 'View'
+  }
+
+  function eventIcon(type) {
+    if (type === 'attachment_open') return <Link2 size={12} />
+    if (type === 'record_detail') return <Search size={12} />
+    if (type === 'edit') return <FileText size={12} />
+    return <Eye size={12} />
+  }
+
+  const selectedView = useMemo(
+    () => (data.views || []).find((view) => view.token === selected) || null,
+    [data.views, selected],
+  )
 
   return (
     <section className="space-y-4">
@@ -3691,7 +3728,7 @@ function SharedLinksTab() {
               </thead>
               <tbody>
                 {(data.views || []).map(v => (
-                  <>
+                  <Fragment key={v.token}>
                     <tr key={v.token} className="tbl-row">
                       <td className="tbl-cell font-medium" style={{ color: 'var(--text-1)' }}>{v.title || 'Untitled link'}</td>
                       <td className="tbl-cell"><Badge color="blue">{(v.resource_type || 'status').toUpperCase()}</Badge></td>
@@ -3710,31 +3747,135 @@ function SharedLinksTab() {
                           {loadingAccesses ? <Skeleton rows={3} /> : accesses.length === 0 ? (
                             <p className="text-xs" style={{ color: 'var(--text-3)' }}>No events yet.</p>
                           ) : (
-                            <div className="space-y-2 max-h-72 overflow-y-auto">
-                              {accesses.map((a, i) => (
-                                <div key={i} className="rounded-xl px-3 py-2 text-xs flex items-start justify-between gap-3"
-                                  style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <Badge color={a.event_type === 'edit' ? 'amber' : 'green'}>{String(a.event_type || 'view').toUpperCase()}</Badge>
-                                      <span className="font-mono">{a.ip || '?'}</span>
-                                      {a.country && <span style={{ color: 'var(--text-3)' }}>{[a.city, a.region, a.country].filter(Boolean).join(', ')}</span>}
-                                      {a.geo_source && <span style={{ color: 'var(--text-3)' }}>{a.geo_source === 'browser' ? 'GPS' : 'IP Geo'}</span>}
+                            <div className="space-y-4">
+                              {selectedView && stats && (
+                                <div className="space-y-4">
+                                  <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                                    {[
+                                      ['Unique viewers', stats.unique_visitors || 0, 'blue'],
+                                      ['Page views', stats.page_views || 0, 'green'],
+                                      ['Record opens', stats.record_details || 0, 'purple'],
+                                      ['Attachment opens', stats.attachment_opens || 0, 'amber'],
+                                      ['Edits', stats.edits || 0, selectedView.access_mode === 'edit' ? 'amber' : 'default'],
+                                      ['Total events', stats.total_events || 0, 'default'],
+                                    ].map(([label, value, color]) => (
+                                      <div key={label} className="rounded-2xl p-3"
+                                        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                        <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
+                                        <div className="flex items-end justify-between gap-2">
+                                          <p className="text-xl font-bold" style={{ color: 'var(--text-1)' }}>{fmt(value)}</p>
+                                          <Badge color={color}>{label === 'Edits' ? (selectedView.access_mode || 'read') : 'live'}</Badge>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
+                                    <div className="rounded-2xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                      <div className="flex items-center justify-between gap-2 mb-3">
+                                        <div>
+                                          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Link investigation</p>
+                                          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                                            First seen {ts(stats.first_seen)} · Last seen {ts(stats.last_seen)}
+                                          </p>
+                                        </div>
+                                        <Badge color={selectedView.is_dynamic ? 'green' : 'indigo'}>
+                                          {selectedView.is_dynamic ? 'Live view' : 'Snapshot'}
+                                        </Badge>
+                                      </div>
+                                      <div className="grid gap-3 md:grid-cols-2">
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>Top locations</p>
+                                          <div className="space-y-2">
+                                            {(stats.locations || []).slice(0, 5).map((row, index) => (
+                                              <div key={`${row.country || 'unknown'}-${row.city || index}`} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+                                                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                                                <div className="min-w-0">
+                                                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                                                    {[row.city, row.region, row.country].filter(Boolean).join(', ') || 'Unknown'}
+                                                  </p>
+                                                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{fmt(row.visitors)} visitors · {fmt(row.hits)} hits</p>
+                                                </div>
+                                                <MapPin size={12} style={{ color: 'var(--text-3)' }} />
+                                              </div>
+                                            ))}
+                                            {!stats.locations?.length && <p className="text-xs" style={{ color: 'var(--text-3)' }}>No geodata recorded yet.</p>}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>Top devices</p>
+                                          <div className="space-y-2">
+                                            {(stats.devices || []).slice(0, 5).map((row, index) => (
+                                              <div key={`${row.device_type || 'device'}-${row.browser || index}`} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+                                                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                                                <div className="min-w-0">
+                                                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                                                    {[row.device_type, row.browser, row.os].filter(Boolean).join(' · ') || 'Unknown device'}
+                                                  </p>
+                                                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{fmt(row.visitors)} unique visitors</p>
+                                                </div>
+                                                <Monitor size={12} style={{ color: 'var(--text-3)' }} />
+                                              </div>
+                                            ))}
+                                            {!stats.devices?.length && <p className="text-xs" style={{ color: 'var(--text-3)' }}>No device data recorded yet.</p>}
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ color: 'var(--text-3)' }}>
-                                      {a.device_label && <span>{a.device_label}</span>}
-                                      {a.record_id && <code>{a.record_id}</code>}
+
+                                    <div className="rounded-2xl p-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                      <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text-1)' }}>Event timeline</p>
+                                      <div className="space-y-2 max-h-72 overflow-y-auto">
+                                        {accesses.map((a, i) => (
+                                          <div key={`${a.id || a.accessed_at || i}`} className="rounded-xl px-3 py-2.5 text-xs flex items-start justify-between gap-3"
+                                            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                                            <div className="min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge color={eventBadgeColor(a.event_type)}>
+                                                  <span className="inline-flex items-center gap-1">{eventIcon(a.event_type)}{eventLabel(a.event_type)}</span>
+                                                </Badge>
+                                                {a.record_id && <code className="text-[11px]">{a.record_id}</code>}
+                                                <span className="font-mono">{a.ip || '?'}</span>
+                                              </div>
+                                              <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ color: 'var(--text-3)' }}>
+                                                {a.country && <span>{[a.city, a.region, a.country].filter(Boolean).join(', ')}</span>}
+                                                {a.geo_source && <span>{a.geo_source === 'browser' ? 'GPS' : 'IP Geo'}</span>}
+                                                {a.device_label && <span>{a.device_label}</span>}
+                                                {a.meta?.field && <span>Field: {a.meta.field}</span>}
+                                                {a.meta?.file_name && <span>File: {a.meta.file_name}</span>}
+                                              </div>
+                                            </div>
+                                            <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}>{ts(a.accessed_at)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
-                                  <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}>{ts(a.accessed_at)}</span>
                                 </div>
-                              ))}
+                              )}
+
+                              {!stats && (
+                                <div className="space-y-2 max-h-72 overflow-y-auto">
+                                  {accesses.map((a, i) => (
+                                    <div key={`${a.id || a.accessed_at || i}`} className="rounded-xl px-3 py-2 text-xs flex items-start justify-between gap-3"
+                                      style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <Badge color={eventBadgeColor(a.event_type)}>{String(a.event_type || 'view').toUpperCase()}</Badge>
+                                          <span className="font-mono">{a.ip || '?'}</span>
+                                        </div>
+                                      </div>
+                                      <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}>{ts(a.accessed_at)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
                 {!data.views?.length && (
                   <tr><td colSpan={8} className="tbl-cell text-center" style={{ color: 'var(--text-3)' }}>No shared links found.</td></tr>

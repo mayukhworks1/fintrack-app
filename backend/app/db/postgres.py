@@ -522,6 +522,8 @@ ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS record_id VARCHAR(60);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_label VARCHAR(255);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS device_model VARCHAR(120);
 ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS platform_version VARCHAR(40);
+ALTER TABLE shared_view_accesses ADD COLUMN IF NOT EXISTS meta JSONB;
+CREATE INDEX IF NOT EXISTS sva_event_idx ON shared_view_accesses (view_token, event_type);
 
 -- ── Auth master: users, roles, permissions, sessions ─────────────────────
 -- Additive auth control plane. Existing password-role login remains compatible
