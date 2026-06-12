@@ -76,12 +76,28 @@ function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
     if (vc.overdueOnly) parts.push('Outstanding only')
     if (vc.hasDocsOnly) parts.push('With docs only')
     if (vc.followupDueOnly) parts.push('Follow-up due')
-    if (vc.search) parts.push(`Search: "${vc.search}"`)
+    const safeSearch = normalizeSearchSummary(vc.search)
+    if (safeSearch) parts.push(`Search: "${safeSearch}"`)
   } else {
     const count = Array.isArray(view?.record_ids) ? view.record_ids.length : fallbackCount
     parts.push(`Snapshot · ${count} ${noun}${count === 1 ? '' : 's'}`)
   }
   return parts.join(' · ')
+}
+
+function normalizeSearchSummary(value) {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.includes('[native code]')) return ''
+  if (/^function\s+\w*\s*\(/i.test(trimmed)) return ''
+  return trimmed.slice(0, 120)
+}
+
+function normalizeHighlightColumns(columns, allowedColumns = []) {
+  if (!Array.isArray(columns) || !allowedColumns.length) return []
+  const allowed = new Set(allowedColumns)
+  return columns.filter((col, index) => typeof col === 'string' && allowed.has(col) && columns.indexOf(col) === index)
 }
 
 export function ShareLinkModal({
@@ -90,6 +106,7 @@ export function ShareLinkModal({
   viewConfig = null,
   title: defaultTitle = '',
   recordLabel,
+  highlightableColumns = [],
   enableLiveMode = false,
   allowEdit = true,
   onClose,
@@ -99,6 +116,7 @@ export function ShareLinkModal({
   const [expiry, setExpiry] = useState(0)
   const [accessMode, setAccessMode] = useState('read')
   const [mode, setMode] = useState(enableLiveMode ? 'live' : 'snapshot')
+  const [highlightColumns, setHighlightColumns] = useState(() => normalizeHighlightColumns(viewConfig?.highlightColumns, highlightableColumns))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [shareData, setShareData] = useState(null)
@@ -111,6 +129,10 @@ export function ShareLinkModal({
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
+
+  useEffect(() => {
+    setHighlightColumns(normalizeHighlightColumns(viewConfig?.highlightColumns, highlightableColumns))
+  }, [viewConfig, highlightableColumns])
 
   async function createShare() {
     setSaving(true)
@@ -128,7 +150,7 @@ export function ShareLinkModal({
         access_mode: accessMode,
         resource_type: resourceType,
       }
-      if (viewConfig) payload.view_config = viewConfig
+      if (viewConfig) payload.view_config = { ...viewConfig, highlightColumns }
       const data = await api.sharedViews.create(payload)
       setShareData(data)
       setStep('created')
@@ -201,9 +223,56 @@ export function ShareLinkModal({
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>Link title</label>
-                <input type="text" className="input-field w-full text-sm" value={title}
-                  onChange={e => setTitle(e.target.value)} placeholder={`e.g. Shared ${noun} view`} maxLength={200} />
+                <div
+                  className="rounded-2xl p-2"
+                  style={{ background: 'rgba(37,99,235,0.04)', border: '1px solid rgba(37,99,235,0.16)' }}
+                >
+                  <input type="text" className="input-field w-full text-sm font-medium" value={title}
+                    onChange={e => setTitle(e.target.value)} placeholder={`e.g. Shared ${noun} view`} maxLength={200}
+                    style={{ borderColor: 'rgba(37,99,235,0.18)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }} />
+                </div>
               </div>
+              {highlightableColumns.length > 0 && (
+                <div
+                  className="rounded-2xl p-3"
+                  style={{ background: 'rgba(15,23,42,0.025)', border: '1px solid var(--border)' }}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <label className="block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                        Highlight columns in shared view
+                      </label>
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                        Pick the columns you want visually emphasized on the shared invoice page.
+                      </p>
+                    </div>
+                    <span className="text-[10px] px-2 py-1 rounded-full"
+                      style={{ background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                      {highlightColumns.length} selected
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {highlightableColumns.map((column) => {
+                      const active = highlightColumns.includes(column)
+                      return (
+                        <button
+                          key={column}
+                          type="button"
+                          onClick={() => setHighlightColumns((current) => active ? current.filter((item) => item !== column) : [...current, column])}
+                          className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all"
+                          style={{
+                            background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
+                            color: active ? 'var(--accent)' : 'var(--text-2)',
+                            border: `1px solid ${active ? 'var(--accent-soft)' : 'var(--border)'}`,
+                          }}
+                        >
+                          {column}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Expires</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -303,8 +372,9 @@ export function ShareLinkModal({
   )
 }
 
-function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecords, recordLabel, onClose, onSave }) {
+function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecords, recordLabel, highlightableColumns = [], onClose, onSave }) {
   const [mode, setMode] = useState(view?.is_dynamic ? 'live' : 'snapshot')
+  const [highlightColumns, setHighlightColumns] = useState(() => normalizeHighlightColumns(view?.view_config?.highlightColumns || currentViewConfig?.highlightColumns, highlightableColumns))
   const [saving, setSaving] = useState(false)
   const { showToast } = useToast()
   if (!view) return null
@@ -315,6 +385,10 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   const newScope = mode === 'live'
     ? summarizeShareScope({ is_dynamic: true, view_config: currentViewConfig }, resourceType)
     : `Snapshot · ${visibleCount} ${noun}${visibleCount === 1 ? '' : 's'}`
+
+  useEffect(() => {
+    setHighlightColumns(normalizeHighlightColumns(view?.view_config?.highlightColumns || currentViewConfig?.highlightColumns, highlightableColumns))
+  }, [view, currentViewConfig, highlightableColumns])
 
   async function handleSave() {
     if (!currentViewConfig) {
@@ -331,9 +405,10 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
     }
     setSaving(true)
     try {
+      const nextViewConfig = { ...(currentViewConfig || {}), highlightColumns }
       const patch = mode === 'live'
-        ? { record_ids: ['__dynamic__'], view_config: currentViewConfig }
-        : { record_ids: visibleRecords.map(r => r.id), view_config: currentViewConfig }
+        ? { record_ids: ['__dynamic__'], view_config: nextViewConfig }
+        : { record_ids: visibleRecords.map(r => r.id), view_config: nextViewConfig }
       await onSave(patch)
       onClose()
     } finally {
@@ -400,6 +475,44 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
             <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>New scope summary</p>
             <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{newScope}</p>
           </div>
+          {highlightableColumns.length > 0 && (
+            <div className="rounded-2xl p-3" style={{ background: 'rgba(15,23,42,0.025)', border: '1px solid var(--border)' }}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <label className="block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                    Highlight columns in shared view
+                  </label>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    Update the same link so these columns stay emphasized in the public invoice view.
+                  </p>
+                </div>
+                <span className="text-[10px] px-2 py-1 rounded-full"
+                  style={{ background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                  {highlightColumns.length} selected
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {highlightableColumns.map((column) => {
+                  const active = highlightColumns.includes(column)
+                  return (
+                    <button
+                      key={column}
+                      type="button"
+                      onClick={() => setHighlightColumns((current) => active ? current.filter((item) => item !== column) : [...current, column])}
+                      className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all"
+                      style={{
+                        background: active ? 'var(--accent-dim)' : 'var(--bg-input)',
+                        color: active ? 'var(--accent)' : 'var(--text-2)',
+                        border: `1px solid ${active ? 'var(--accent-soft)' : 'var(--border)'}`,
+                      }}
+                    >
+                      {column}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-2">
             <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
             <button onClick={handleSave} disabled={saving || visibleCount <= 0 || (mode === 'snapshot' && snapshotTooLarge)} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
@@ -413,7 +526,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   )
 }
 
-export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, onClose }) {
+export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = [], onClose }) {
   const { showToast } = useToast()
   const [views, setViews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -803,6 +916,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
           currentViewConfig={currentViewConfig}
           visibleRecords={visibleRecords}
           recordLabel={recordLabel}
+          highlightableColumns={highlightableColumns}
           onClose={() => setScopeEditor(null)}
           onSave={(patch) => saveScopeUpdate(scopeEditor, patch)}
         />

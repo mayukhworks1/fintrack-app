@@ -626,9 +626,10 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   return <span className="text-[12px] text-gray-700 truncate block">{f[col] || '—'}</span>
 }
 
-function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true }) {
+function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true, highlightColumns = [] }) {
   const meta = RESOURCE_META[resourceType]
   const cols = (columns || meta.defaultColumns).filter(c => meta.columns.includes(c))
+  const highlighted = new Set((highlightColumns || []).filter((col) => cols.includes(col)))
 
   // Build grid template: one column per field + fixed actions column
   const gridTemplate = [...cols.map(c => COL_WIDTHS[c] || '1fr'), '64px'].join(' ')
@@ -642,7 +643,13 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
           <div className="grid px-4 py-2.5 gap-3"
             style={{ gridTemplateColumns: gridTemplate, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
             {cols.map(col => (
-              <div key={col} className="text-[10px] font-bold uppercase tracking-widest text-gray-400 truncate">
+              <div
+                key={col}
+                className="text-[10px] font-bold uppercase tracking-widest truncate px-2 py-1 rounded-lg"
+                style={highlighted.has(col)
+                  ? { color: '#1d4ed8', background: 'rgba(59,130,246,0.10)', boxShadow: 'inset 0 0 0 1px rgba(59,130,246,0.14)' }
+                  : { color: '#94a3b8' }}
+              >
                 {col}
               </div>
             ))}
@@ -670,7 +677,11 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                 onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa' }}
               >
                 {cols.map(col => (
-                  <div key={col} className="min-w-0">
+                  <div
+                    key={col}
+                    className="min-w-0 px-2 py-1 rounded-lg transition-colors"
+                    style={highlighted.has(col) ? { background: 'rgba(59,130,246,0.06)' } : undefined}
+                  >
                     {cellContent(col, f, clr, resourceType, meta, showClientAccents)}
                   </div>
                 ))}
@@ -1532,7 +1543,7 @@ export default function SharedView() {
                 allExpanded={allExpanded}
               />
             )}
-            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} />}
+            {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} showClientAccents={showClientAccents} highlightColumns={vc.highlightColumns || []} />}
             {viewType === 'board' && <BoardView records={filtered} resourceType={resourceType} statusOptions={statusOptions} canEdit={canEdit} onEdit={setEditRecord} onDetail={setDetailRecord} onDropStatus={moveRecordToStatus} compact={compact} showClientAccents={showClientAccents} groupByField={activeBoardGroupBy} />}
           </>
         )}

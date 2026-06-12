@@ -2588,11 +2588,13 @@ export default function StatusBoard() {
   async function handleCreate(form) {
     setSaving(true)
     try {
-      await api.status.create(form)
-      showToast('Created', 'success')
-      setModal(null)
+      const created = await api.status.create(form)
+      if (created?.id) {
+        setRecords((current) => [created, ...current.filter((item) => item.id !== created.id)])
+      }
       clientCacheBust('/api/status')
-      await load()
+      showToast('Created. Any active shared status links will reflect it automatically.', 'success')
+      setModal(null)
     }
     catch (e) { showToast(e.message || 'Failed', 'error') }
     finally { setSaving(false) }
@@ -2601,11 +2603,16 @@ export default function StatusBoard() {
     if (!modal?.id) return
     setSaving(true)
     try {
-      await api.status.update(modal.id, form)
-      showToast('Saved', 'success')
-      setModal(null)
+      const updated = await api.status.update(modal.id, form)
+      if (updated?.id || updated?.fields) {
+        setRecords((current) => current.map((record) => {
+          if (record.id !== modal.id) return record
+          return updated?.fields ? { ...record, ...updated, fields: { ...(record.fields || {}), ...updated.fields } } : record
+        }))
+      }
       clientCacheBust('/api/status')
-      await load()
+      showToast('Saved. Any active shared status links will use the latest Teable data.', 'success')
+      setModal(null)
     }
     catch (e) { showToast(e.message || 'Failed', 'error') }
     finally { setSaving(false) }

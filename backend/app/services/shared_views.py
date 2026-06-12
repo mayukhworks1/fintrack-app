@@ -91,6 +91,7 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     period_label = view_config.get("periodLabel")
     period_from = view_config.get("periodFrom")
     period_to = view_config.get("periodTo")
+    highlight_columns = view_config.get("highlightColumns")
 
     clean: dict[str, Any] = {}
 
@@ -107,6 +108,17 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
                 safe_columns.append(normalized)
         if safe_columns:
             clean["columns"] = safe_columns
+
+    if isinstance(highlight_columns, list):
+        safe_highlights = []
+        for c in highlight_columns:
+            if not isinstance(c, str):
+                continue
+            normalized = _COLUMN_ALIASES.get(c, c.strip())
+            if normalized and len(normalized) <= 120 and normalized not in safe_highlights:
+                safe_highlights.append(normalized)
+        if safe_highlights:
+            clean["highlightColumns"] = safe_highlights[:12]
 
     if isinstance(filter_client, str) and filter_client.strip():
         clean["filterClient"] = filter_client.strip()[:255]

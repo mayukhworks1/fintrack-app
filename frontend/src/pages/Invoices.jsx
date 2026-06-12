@@ -179,6 +179,17 @@ const INVOICE_SHARE_COLUMNS = [
   'Last Modified',
 ]
 
+const INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS = [
+  'Agening (Days)',
+  'Raised Date',
+  'Cleared Date',
+  'Next followup',
+  'Amount Raised',
+  'Amount Received',
+  'Outstanding Amount',
+  'Amount with Tax',
+]
+
 const DEFAULT_INVOICE_COLUMN_WIDTHS = {
   row: 56,
   invoice_number: 150,
@@ -1793,8 +1804,9 @@ export default function Invoices() {
     overdueOnly,
     hasDocsOnly,
     followupDueOnly,
-    search,
+    search: typeof search === 'string' ? search.trim() : '',
     columns: INVOICE_SHARE_COLUMNS,
+    highlightColumns: ['Agening (Days)', 'Raised Date', 'Outstanding Amount'],
   }), [
     agingBandFilter,
     billingFilter,
@@ -3303,6 +3315,7 @@ export default function Invoices() {
           selectedRecords={records}
           title={shareTitle}
           recordLabel="invoice"
+          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
           enableLiveMode
           viewConfig={sharedViewConfig}
           onClose={() => setShareModal(false)}
@@ -3314,6 +3327,7 @@ export default function Invoices() {
           recordLabel="invoice"
           currentViewConfig={sharedViewConfig}
           visibleRecords={records}
+          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
           onClose={() => setManageModal(false)}
         />
       )}
