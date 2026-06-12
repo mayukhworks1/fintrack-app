@@ -32,6 +32,7 @@ import { useTheme } from '../context/ThemeContext'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { formatInr } from '../utils/format'
 import EmptyState from '../components/EmptyState'
+import { DocPreviewModal, AttachmentList, fileTypeInfo } from '../components/DocPreviewModal'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 // Fallback only — real options are fetched dynamically from the picklist API
@@ -305,6 +306,7 @@ function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus 
 // ─────────────────────────────────────────────────────────────────────────────
 function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   const navigate = useNavigate()
+  const [previewDocs, setPreviewDocs] = useState(null)
   const f = record?.fields || {}
   const client  = f['Client']  || ''
   const project = f['Project'] || ''
@@ -425,30 +427,22 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                 {detail?.trim() || short?.trim() || 'No detailed update added yet.'}
               </div>
             </div>
-            {attachments.length > 0 && (
-              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Attachments</p>
-                <div className="space-y-2">
-                  {attachments.map((item, index) => {
-                    const name = item?.name || item?.filename || `Attachment ${index + 1}`
-                    const url = item?.url || item?.presignedUrl || ''
-                    return (
-                      <div key={`${name}-${index}`} className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <Paperclip size={12} style={{ color: 'var(--text-3)' }} />
-                        <span className="flex-1 truncate text-sm" style={{ color: 'var(--text-2)' }}>{name}</span>
-                        {url && (
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5">
-                            <ExternalLink size={11} />
-                          </a>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </div>
+
+          {/* Attachments — full-width below the grid */}
+          {attachments.length > 0 && (
+            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+                Attachments <span className="font-normal normal-case" style={{ color: 'var(--text-3)' }}>· click to preview</span>
+              </p>
+              <AttachmentList
+                attachments={attachments}
+                onPreview={(i) => setPreviewDocs({ docs: attachments, index: i })}
+              />
+            </div>
+          )}
+
+          <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
         </div>
       </div>
 
@@ -651,13 +645,25 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
           </span>
         </div>
       )}
-      {columns.includes('Attachments') && (
-        <div className="min-w-0">
-          <span className="text-[11px] font-semibold block" style={{ color: 'var(--text-2)' }}>
-            {parseAttachments(f['Attachments']).length ? `${parseAttachments(f['Attachments']).length} file${parseAttachments(f['Attachments']).length === 1 ? '' : 's'}` : '—'}
-          </span>
-        </div>
-      )}
+      {columns.includes('Attachments') && (() => {
+        const files = parseAttachments(f['Attachments'])
+        if (!files.length) return <div className="min-w-0"><span style={{ color: 'var(--text-3)', fontSize: 11 }}>—</span></div>
+        const first = fileTypeInfo(files[0])
+        return (
+          <div className="min-w-0">
+            <button
+              onClick={e => { e.stopPropagation(); onDetail(record) }}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-all hover:opacity-80"
+              style={{ background: first.bg, border: `1px solid ${first.color}33` }}
+              title="Click to preview files">
+              <first.Icon size={10} style={{ color: first.color }} />
+              <span className="text-[11px] font-semibold" style={{ color: first.color }}>
+                {files.length} file{files.length === 1 ? '' : 's'}
+              </span>
+            </button>
+          </div>
+        )
+      })()}
       {columns.includes('Last Modified') && (
         <div className="min-w-0">
           <span className="text-[11px] block tabular-nums" style={{ color: 'var(--text-3)' }}>
@@ -841,6 +847,7 @@ function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDet
 function StatusAttachmentField({ value, onChange, recordId }) {
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
+  const [dragOver,  setDragOver]  = useState(false)
   const fileInputRef = useRef(null)
   const attachments = Array.isArray(value) ? value : []
   const disabled = !recordId
@@ -864,6 +871,18 @@ function StatusAttachmentField({ value, onChange, recordId }) {
     }
   }
 
+  function handleDrop(e) {
+    e.preventDefault()
+    setDragOver(false)
+    if (disabled || uploading) return
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length) processFiles(files)
+  }
+
+  function removeAt(index) {
+    onChange(attachments.filter((_, i) => i !== index))
+  }
+
   return (
     <div>
       <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
@@ -873,37 +892,52 @@ function StatusAttachmentField({ value, onChange, recordId }) {
         <div className="space-y-1.5 mb-2">
           {attachments.map((item, index) => {
             const name = item?.name || item?.filename || `Attachment ${index + 1}`
-            const url = item?.url || item?.presignedUrl || ''
+            const url  = item?.url  || item?.presignedUrl || ''
+            const info = fileTypeInfo(item)
             return (
               <div key={`${name}-${index}`} className="flex items-center gap-2 px-3 py-2 rounded-xl"
                 style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <Paperclip size={12} style={{ color: 'var(--text-3)' }} />
+                <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                  style={{ background: info.bg }}>
+                  <info.Icon size={11} style={{ color: info.color }} />
+                </div>
                 <span className="flex-1 truncate text-xs font-medium" style={{ color: 'var(--text-2)' }}>{name}</span>
                 {url && (
                   <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="btn-icon p-1.5" aria-label="Open attachment">
+                    className="btn-icon p-1" style={{ opacity: 0.5 }} aria-label="Open">
                     <ExternalLink size={11} />
                   </a>
                 )}
+                <button type="button" onClick={() => removeAt(index)}
+                  className="btn-icon p-1" style={{ color: '#ef4444', opacity: 0.6 }}
+                  aria-label="Remove attachment" title="Remove">
+                  <X size={11} />
+                </button>
               </div>
             )
           })}
         </div>
       )}
-      <button
-        type="button"
-        onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
-        disabled={disabled || uploading}
-        className="w-full rounded-xl border border-dashed px-3 py-4 flex items-center justify-center gap-2 text-sm font-medium transition-all"
-        style={{
-          borderColor: disabled ? 'var(--border)' : 'rgba(59,130,246,0.28)',
-          background: disabled ? 'var(--bg-input)' : 'rgba(59,130,246,0.04)',
-          color: disabled ? 'var(--text-3)' : 'var(--text-2)',
-          opacity: disabled ? 0.8 : 1,
-        }}>
-        {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-        {disabled ? 'Save the status first to upload files' : 'Upload attachment'}
-      </button>
+      <div
+        onDragOver={e => { e.preventDefault(); if (!disabled && !uploading) setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}>
+        <button
+          type="button"
+          onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
+          disabled={disabled || uploading}
+          className="w-full rounded-xl border border-dashed px-3 py-4 flex items-center justify-center gap-2 text-sm font-medium transition-all"
+          style={{
+            borderColor: dragOver ? 'rgba(59,130,246,0.6)' : (disabled ? 'var(--border)' : 'rgba(59,130,246,0.28)'),
+            background: dragOver ? 'rgba(59,130,246,0.08)' : (disabled ? 'var(--bg-input)' : 'rgba(59,130,246,0.04)'),
+            color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+            opacity: disabled ? 0.8 : 1,
+            transform: dragOver ? 'scale(1.01)' : 'scale(1)',
+          }}>
+          {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+          {disabled ? 'Save the status first to upload files' : dragOver ? 'Drop files here' : 'Upload or drag & drop files'}
+        </button>
+      </div>
       <input
         ref={fileInputRef}
         type="file"
@@ -2754,7 +2788,8 @@ export default function StatusBoard() {
     if (!modal?.id) return
     setSaving(true)
     try {
-      const { attachments, ...payload } = form
+      const { attachments, ...rest } = form
+      const payload = { ...rest, attachments }
       const updated = await api.status.update(modal.id, payload)
       if (updated?.id || updated?.fields) {
         setRecords((current) => current.map((record) => {

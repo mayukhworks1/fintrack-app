@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -177,6 +177,7 @@ class StatusUpdate(BaseModel):
     current_status_detailed: Optional[str] = Field(None, max_length=5000)
     short_status: Optional[str] = Field(None, max_length=500)
     status: Optional[str] = None          # single-select: Completed | On Hold | Input Pending | In progress | Not started
+    attachments: Optional[List[Any]] = None  # full attachment array; send to persist removals
 
     def to_teable_fields(self) -> dict:
         m: dict = {}
@@ -190,4 +191,6 @@ class StatusUpdate(BaseModel):
             m["Short Status"] = self.short_status
         if self.status is not None:
             m["Status"] = self.status
+        if self.attachments is not None:
+            m["Attachments"] = self.attachments
         return m

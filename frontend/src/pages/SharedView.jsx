@@ -5,6 +5,7 @@ import {
   Loader2, Pencil, RefreshCw, Search, Shield, X,
 } from 'lucide-react'
 import { api } from '../services/api'
+import { DocPreviewModal, AttachmentList, fileTypeInfo } from '../components/DocPreviewModal'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -615,9 +616,13 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   )
   if (col === 'Reference' || col === 'Invoice PDF' || col === 'Attachments') {
     const files = parseAttachments(f[col])
+    if (!files.length) return <span className="text-[11px] text-gray-400">—</span>
+    const first = fileTypeInfo(files[0])
     return (
-      <span className="text-[12px] font-medium text-gray-700">
-        {files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : '—'}
+      <span className="inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold"
+        style={{ background: first.bg, color: first.color }}>
+        <first.Icon size={10} />
+        {files.length} file{files.length === 1 ? '' : 's'}
       </span>
     )
   }
@@ -818,12 +823,13 @@ function DetailModal({ resourceType, record, onClose }) {
   const titleValue = f[meta.titleField] || 'Untitled'
   const statusValue = f[meta.statusField] || ''
   const accent = clientColor(groupValue)
+  const [previewDocs, setPreviewDocs] = useState(null)
 
   useEffect(() => {
-    const h = e => { if (e.key === 'Escape') onClose() }
+    const h = e => { if (e.key === 'Escape') { if (previewDocs) { setPreviewDocs(null) } else { onClose() } } }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [onClose])
+  }, [onClose, previewDocs])
 
   if (!record) return null
 
@@ -880,27 +886,49 @@ function DetailModal({ resourceType, record, onClose }) {
                   <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{f['Current Status (Detailed)']}</p>
                 </div>
               )}
-              {parseAttachments(f['Attachments']).length > 0 && (
-                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Attachments</p>
-                  <div className="space-y-2">
-                    {parseAttachments(f['Attachments']).map((item, index) => {
-                      const name = item?.name || item?.filename || `Attachment ${index + 1}`
-                      const url = item?.url || item?.presignedUrl || ''
-                      return (
-                        <div key={`${name}-${index}`} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
-                          <span className="flex-1 truncate text-[13px] text-slate-700">{name}</span>
-                          {url && (
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-blue-600 hover:text-blue-700">
-                              Open
-                            </a>
-                          )}
-                        </div>
-                      )
-                    })}
+              {parseAttachments(f['Attachments']).length > 0 && (() => {
+                const files = parseAttachments(f['Attachments'])
+                return (
+                  <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-3">
+                      Attachments <span className="font-normal normal-case text-slate-400">· click to preview</span>
+                    </p>
+                    <div className="space-y-2">
+                      {files.map((item, index) => {
+                        const name = item?.name || item?.filename || `File ${index + 1}`
+                        const url  = item?.url  || item?.presignedUrl || ''
+                        const info = fileTypeInfo(item)
+                        return (
+                          <div
+                            key={`${name}-${index}`}
+                            className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer transition-all"
+                            style={{ background: '#fff', border: '1px solid #e2e8f0' }}
+                            onClick={() => setPreviewDocs({ docs: files, index })}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = info.color + '55'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                            <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                              style={{ background: info.bg }}>
+                              <info.Icon size={11} style={{ color: info.color }} />
+                            </div>
+                            <span className="flex-1 truncate text-[13px] text-slate-700 font-medium">{name}</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: info.bg, color: info.color }}>
+                              {info.label}
+                            </span>
+                            {url && (
+                              <a href={url} target="_blank" rel="noopener noreferrer"
+                                className="text-[11px] text-slate-400 hover:text-slate-600"
+                                onClick={e => e.stopPropagation()} title="Open in new tab">
+                                ↗
+                              </a>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
                   </div>
-                </div>
-              )}
+                )
+              })()}
               {f['Notes'] && (
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
