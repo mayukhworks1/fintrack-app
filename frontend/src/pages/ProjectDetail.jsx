@@ -242,7 +242,7 @@ export default function ProjectDetail() {
       filterClient: clientName || '',
       filterStatus: '',
       search: projectName || '',
-      columns: ['Client', 'Project', 'Status', 'Short Status'],
+      columns: ['Client', 'Project', 'Status', 'Short Status', 'Attachments'],
       boardGroupBy: 'Status',
       cardGroupBy: 'Client',
       cardGroupSort: 'count-desc',

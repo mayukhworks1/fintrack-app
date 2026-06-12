@@ -23,7 +23,7 @@ import {
   LayoutGrid, List, Columns,
   Bookmark, BookmarkPlus, Trash, SlidersHorizontal,
   GripVertical, ArrowRight, ChevronRight, TrendingUp, Filter,
-  CheckSquare, Square,
+  CheckSquare, Square, Paperclip, Upload,
 } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -91,7 +91,7 @@ function statusStyle(s) {
 }
 
 // ── List view columns ─────────────────────────────────────────────────────────
-const ALL_COLUMNS = ['Client', 'Project', 'Status', 'Short Status', 'Detailed Status', 'Last Modified']
+const ALL_COLUMNS = ['Client', 'Project', 'Status', 'Short Status', 'Detailed Status', 'Attachments', 'Last Modified']
 const DEFAULT_COLUMNS = ['Client', 'Project', 'Status', 'Short Status']
 const LIST_COLUMN_META = {
   'Client': { label: 'Client', track: 'minmax(150px, 1.05fr)', minWidth: 150 },
@@ -99,6 +99,7 @@ const LIST_COLUMN_META = {
   'Status': { label: 'Status', track: '144px', minWidth: 144 },
   'Short Status': { label: 'Headline', track: 'minmax(260px, 1.55fr)', minWidth: 260 },
   'Detailed Status': { label: 'Detail', track: 'minmax(320px, 1.75fr)', minWidth: 320 },
+  'Attachments': { label: 'Files', track: '120px', minWidth: 120 },
   'Last Modified': { label: 'Modified', track: '112px', minWidth: 112 },
 }
 
@@ -130,6 +131,20 @@ function clientColor(name) {
 function hexToRgba(hex, a) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
   return `rgba(${r},${g},${b},${a})`
+}
+
+function parseAttachments(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter(Boolean)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 // ── Expiry presets ─────────────────────────────────────────────────────────────
@@ -296,6 +311,7 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   const status  = f['Status']  || ''
   const short   = f['Short Status'] || ''
   const detail  = f['Current Status (Detailed)'] || ''
+  const attachments = parseAttachments(f['Attachments'])
   const modified = f['lastModifiedTime'] || record?.createdTime || ''
   const clrHex  = clientColor(client)
   const sc      = statusStyle(status)
@@ -409,6 +425,29 @@ function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                 {detail?.trim() || short?.trim() || 'No detailed update added yet.'}
               </div>
             </div>
+            {attachments.length > 0 && (
+              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Attachments</p>
+                <div className="space-y-2">
+                  {attachments.map((item, index) => {
+                    const name = item?.name || item?.filename || `Attachment ${index + 1}`
+                    const url = item?.url || item?.presignedUrl || ''
+                    return (
+                      <div key={`${name}-${index}`} className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                        <Paperclip size={12} style={{ color: 'var(--text-3)' }} />
+                        <span className="flex-1 truncate text-sm" style={{ color: 'var(--text-2)' }}>{name}</span>
+                        {url && (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5">
+                            <ExternalLink size={11} />
+                          </a>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -612,6 +651,13 @@ function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail, select
           </span>
         </div>
       )}
+      {columns.includes('Attachments') && (
+        <div className="min-w-0">
+          <span className="text-[11px] font-semibold block" style={{ color: 'var(--text-2)' }}>
+            {parseAttachments(f['Attachments']).length ? `${parseAttachments(f['Attachments']).length} file${parseAttachments(f['Attachments']).length === 1 ? '' : 's'}` : '—'}
+          </span>
+        </div>
+      )}
       {columns.includes('Last Modified') && (
         <div className="min-w-0">
           <span className="text-[11px] block tabular-nums" style={{ color: 'var(--text-3)' }}>
@@ -792,7 +838,85 @@ function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDet
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Modal — create/edit
 // ─────────────────────────────────────────────────────────────────────────────
-function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptions, onAddStatusOption }) {
+function StatusAttachmentField({ value, onChange, recordId }) {
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const fileInputRef = useRef(null)
+  const attachments = Array.isArray(value) ? value : []
+  const disabled = !recordId
+
+  async function processFiles(files) {
+    if (!files?.length || !recordId) return
+    setUploading(true)
+    setUploadErr('')
+    try {
+      let latest = attachments
+      for (const file of files) {
+        const result = await api.status.upload(recordId, 'Attachments', file)
+        latest = result?.attachments || latest
+      }
+      onChange(latest)
+    } catch (e) {
+      setUploadErr(e.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
+        Attachments <span className="font-normal" style={{ color: 'var(--text-3)' }}>· shared with public views</span>
+      </label>
+      {attachments.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {attachments.map((item, index) => {
+            const name = item?.name || item?.filename || `Attachment ${index + 1}`
+            const url = item?.url || item?.presignedUrl || ''
+            return (
+              <div key={`${name}-${index}`} className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                <Paperclip size={12} style={{ color: 'var(--text-3)' }} />
+                <span className="flex-1 truncate text-xs font-medium" style={{ color: 'var(--text-2)' }}>{name}</span>
+                {url && (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="btn-icon p-1.5" aria-label="Open attachment">
+                    <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
+        disabled={disabled || uploading}
+        className="w-full rounded-xl border border-dashed px-3 py-4 flex items-center justify-center gap-2 text-sm font-medium transition-all"
+        style={{
+          borderColor: disabled ? 'var(--border)' : 'rgba(59,130,246,0.28)',
+          background: disabled ? 'var(--bg-input)' : 'rgba(59,130,246,0.04)',
+          color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+          opacity: disabled ? 0.8 : 1,
+        }}>
+        {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+        {disabled ? 'Save the status first to upload files' : 'Upload attachment'}
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        multiple
+        onChange={e => processFiles(Array.from(e.target.files || []))}
+      />
+      {uploadErr && <p className="mt-1.5 text-xs" style={{ color: '#ef4444' }}>{uploadErr}</p>}
+    </div>
+  )
+}
+
+function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptions, onAddStatusOption, options }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
     client:                  initial?.fields?.['Client'] || '',
@@ -800,11 +924,16 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
     status:                  initial?.fields?.['Status'] || '',
     short_status:            initial?.fields?.['Short Status'] || '',
     current_status_detailed: initial?.fields?.['Current Status (Detailed)'] || '',
+    attachments:             parseAttachments(initial?.fields?.['Attachments']),
   })
   const [newStatusOption, setNewStatusOption] = useState('')
   const [addingStatusOption, setAddingStatusOption] = useState(false)
-  const allClients  = [...new Set(allRecords.map(r => r.fields?.['Client']).filter(Boolean))].sort()
-  const allProjects = [...new Set(allRecords.map(r => r.fields?.['Project']).filter(Boolean))].sort()
+  const allClients  = (options?.clients?.length ? options.clients : [...new Set(allRecords.map(r => r.fields?.['Client']).filter(Boolean))].sort())
+  const allProjects = (options?.projects?.length ? options.projects : [...new Set(allRecords.map(r => r.fields?.['Project']).filter(Boolean))].sort())
+  const projectsByClient = options?.projects_by_client || {}
+  const projectOptions = form.client && projectsByClient[form.client]?.length
+    ? projectsByClient[form.client]
+    : allProjects
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
   async function addStatusOptionInline() {
     const trimmed = newStatusOption.trim()
@@ -847,17 +976,28 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Client <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <input list="cl-list" className="input-field w-full text-sm" placeholder="Type or select…"
-                value={form.client} onChange={e => set('client', e.target.value)} required />
-              <datalist id="cl-list">{allClients.map(c => <option key={c} value={c} />)}</datalist>
+              <select
+                className="input-field w-full text-sm"
+                value={form.client}
+                onChange={e => setForm(f => ({ ...f, client: e.target.value, project: '' }))}
+                required>
+                <option value="">Select client…</option>
+                {allClients.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Project <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <input list="pr-list" className="input-field w-full text-sm" placeholder="Type or select…"
-                value={form.project} onChange={e => set('project', e.target.value)} required />
-              <datalist id="pr-list">{allProjects.map(p => <option key={p} value={p} />)}</datalist>
+              <select
+                className="input-field w-full text-sm"
+                value={form.project}
+                onChange={e => set('project', e.target.value)}
+                required
+                disabled={!projectOptions.length}>
+                <option value="">{form.client ? 'Select project…' : 'Select client first…'}</option>
+                {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
           </div>
 
@@ -928,6 +1068,12 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
               value={form.current_status_detailed}
               onChange={e => set('current_status_detailed', e.target.value)} />
           </div>
+
+          <StatusAttachmentField
+            value={form.attachments}
+            onChange={(attachments) => set('attachments', attachments)}
+            recordId={initial?.id || ''}
+          />
 
           <div className="flex items-center justify-end gap-2 pt-1">
             <button type="button" className="btn-ghost text-sm px-4 py-2" onClick={onClose} disabled={saving}>Cancel</button>
@@ -2274,6 +2420,7 @@ export default function StatusBoard() {
   // ── Core data ──────────────────────────────────────────────────────────────
   const [records,     setRecords]     = useState([])
   const [statusPicklists, setStatusPicklists] = useState({})
+  const [statusScopeOptions, setStatusScopeOptions] = useState({ clients: [], projects: [], projects_by_client: {} })
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState(null)
 
@@ -2377,6 +2524,9 @@ export default function StatusBoard() {
       if (!silent) setPendingStatusById({})
       api.status.picklists.get()
         .then(picklists => setStatusPicklists(picklists || {}))
+        .catch(() => {})
+      api.status.options()
+        .then((opts) => setStatusScopeOptions(opts || { clients: [], projects: [], projects_by_client: {} }))
         .catch(() => {})
     }
     catch (e) { if (!silent) setError(e.message || 'Failed to load') }
@@ -2588,7 +2738,8 @@ export default function StatusBoard() {
   async function handleCreate(form) {
     setSaving(true)
     try {
-      const created = await api.status.create(form)
+      const { attachments, ...payload } = form
+      const created = await api.status.create(payload)
       if (created?.id) {
         setRecords((current) => [created, ...current.filter((item) => item.id !== created.id)])
       }
@@ -2603,7 +2754,8 @@ export default function StatusBoard() {
     if (!modal?.id) return
     setSaving(true)
     try {
-      const updated = await api.status.update(modal.id, form)
+      const { attachments, ...payload } = form
+      const updated = await api.status.update(modal.id, payload)
       if (updated?.id || updated?.fields) {
         setRecords((current) => current.map((record) => {
           if (record.id !== modal.id) return record
@@ -3302,6 +3454,7 @@ export default function StatusBoard() {
           allRecords={records}
           statusOptions={statusOptions}
           onAddStatusOption={isEditor ? addStatusOption : null}
+          options={statusScopeOptions}
         />
       )}
       {aiModal && (

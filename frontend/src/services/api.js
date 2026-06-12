@@ -508,11 +508,32 @@ export const api = {
     },
   },
   status: {
+    upload: (recordId, fieldName, file) => {
+      const form = new FormData()
+      form.append('file', file)
+      const token = getAuthToken()
+      return fetch(`${BASE_URL}/api/status/upload/${encodeURIComponent(recordId)}/${encodeURIComponent(fieldName)}`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }))
+          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          e.status = res.status
+          throw e
+        }
+        const data = await res.json()
+        clientCacheBust('/api/status')
+        return data
+      })
+    },
     list: (params = {}) => {
       const q = new URLSearchParams()
       Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
       return request(`/api/status?${q}`)
     },
+    options: (opts = {}) => request('/api/status/options', { fresh: true, cacheTtl: 0, ...opts }),
     get:    (id)       => request(`/api/status/${id}`),
     create: (data)     => request('/api/status',      { method: 'POST',   body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/status/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),

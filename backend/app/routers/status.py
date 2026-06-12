@@ -14,7 +14,9 @@ Security:
 import asyncio
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -45,6 +47,22 @@ def _ip(request: Request) -> str:
         if v:
             return v.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
+    try:
+        payload = exc.response.json()
+        if isinstance(payload, dict):
+            return (
+                payload.get("message")
+                or payload.get("detail")
+                or payload.get("error")
+                or exc.response.text
+                or str(exc)
+            )
+    except Exception:
+        pass
+    return exc.response.text or str(exc)
 
 
 async def _check_write_rate(request: Request) -> None:
@@ -200,6 +218,14 @@ async def get_status_picklists(_auth=Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/options")
+async def get_status_options(_auth=Depends(require_auth)):
+    try:
+        return await StatusService().get_client_project_options()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/picklists/{field_name}")
 async def add_status_picklist_option(
     field_name: str,
@@ -247,9 +273,20 @@ async def create_status(
     if not fields.get("Client") or not fields.get("Project"):
         raise HTTPException(status_code=422, detail="client and project are required")
     try:
+        options = await svc.get_client_project_options()
+        known_clients = set(options.get("clients") or [])
+        known_projects = set(options.get("projects") or [])
+        if known_clients and fields["Client"] not in known_clients:
+            raise HTTPException(status_code=422, detail="Select a valid existing client from the status list")
+        if known_projects and fields["Project"] not in known_projects:
+            raise HTTPException(status_code=422, detail="Select a valid existing project from the status list")
         result = await svc.create_record(fields, request=request, role=role)
         await _bust_status_cache()
         return result
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=_http_error_detail(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -271,9 +308,20 @@ async def update_status(
     if not fields:
         raise HTTPException(status_code=422, detail="No fields provided to update")
     try:
+        options = await svc.get_client_project_options()
+        known_clients = set(options.get("clients") or [])
+        known_projects = set(options.get("projects") or [])
+        if "Client" in fields and known_clients and fields["Client"] not in known_clients:
+            raise HTTPException(status_code=422, detail="Select a valid existing client from the status list")
+        if "Project" in fields and known_projects and fields["Project"] not in known_projects:
+            raise HTTPException(status_code=422, detail="Select a valid existing project from the status list")
         result = await svc.update_record(record_id, fields, request=request, role=role)
         await _bust_status_cache()
         return result
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=_http_error_detail(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -293,5 +341,36 @@ async def delete_status(
     try:
         await svc.delete_record(record_id, request=request, role=role)
         await _bust_status_cache()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=_http_error_detail(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload/{record_id}/{field_name}")
+async def upload_status_attachment(
+    record_id: str,
+    field_name: str,
+    request: Request,
+    file: UploadFile = File(...),
+    role: str = Depends(require_editor),
+):
+    await _check_write_rate(request)
+    svc = _svc()
+    try:
+        content = await file.read()
+        result = await svc.upload_attachment_to_field(
+            record_id=record_id,
+            field_name=field_name,
+            filename=file.filename or "upload.bin",
+            content=content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+        await _bust_status_cache()
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=_http_error_detail(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

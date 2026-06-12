@@ -40,7 +40,7 @@ const RESOURCE_META = {
     primaryLabel: 'All clients',
     defaultView: 'card',
     showDashboardByDefault: true,
-    columns: ['Client', 'Project', 'Status', 'Short Status', 'Current Status (Detailed)', 'Last Modified'],
+    columns: ['Client', 'Project', 'Status', 'Short Status', 'Current Status (Detailed)', 'Attachments', 'Last Modified'],
     defaultColumns: ['Client', 'Project', 'Status', 'Short Status'],
   },
   projects: {
@@ -535,6 +535,7 @@ const COL_WIDTHS = {
   'Payment Status':             '120px',
   'Short Status':               '200px',
   'Current Status (Detailed)': '1fr',
+  'Attachments':               '120px',
   'Health':                     '100px',
   'Amount Billed So far':       '120px',
   'Actual Profit':              '110px',
@@ -612,7 +613,7 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (['Raised Date', 'Cleared Date', 'Next followup'].includes(col)) return (
     <span className="text-[11px] text-gray-600 whitespace-nowrap">{fmtDate(f[col])}</span>
   )
-  if (col === 'Reference' || col === 'Invoice PDF') {
+  if (col === 'Reference' || col === 'Invoice PDF' || col === 'Attachments') {
     const files = parseAttachments(f[col])
     return (
       <span className="text-[12px] font-medium text-gray-700">
@@ -877,6 +878,27 @@ function DetailModal({ resourceType, record, onClose }) {
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Detailed Status</p>
                   <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{f['Current Status (Detailed)']}</p>
+                </div>
+              )}
+              {parseAttachments(f['Attachments']).length > 0 && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Attachments</p>
+                  <div className="space-y-2">
+                    {parseAttachments(f['Attachments']).map((item, index) => {
+                      const name = item?.name || item?.filename || `Attachment ${index + 1}`
+                      const url = item?.url || item?.presignedUrl || ''
+                      return (
+                        <div key={`${name}-${index}`} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+                          <span className="flex-1 truncate text-[13px] text-slate-700">{name}</span>
+                          {url && (
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-blue-600 hover:text-blue-700">
+                              Open
+                            </a>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
               {f['Notes'] && (

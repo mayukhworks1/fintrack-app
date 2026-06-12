@@ -343,6 +343,36 @@ class StatusService:
         updated = await self.get_picklists()
         return {"options": updated.get(field_name, {}).get("options", [])}
 
+    async def get_client_project_options(self) -> dict[str, Any]:
+        records = await self.list_all()
+        clients = sorted({
+            str((record.get("fields") or {}).get("Client") or "").strip()
+            for record in records
+            if str((record.get("fields") or {}).get("Client") or "").strip()
+        })
+        projects = sorted({
+            str((record.get("fields") or {}).get("Project") or "").strip()
+            for record in records
+            if str((record.get("fields") or {}).get("Project") or "").strip()
+        })
+        projects_by_client: dict[str, list[str]] = {}
+        for record in records:
+            fields = record.get("fields") or {}
+            client = str(fields.get("Client") or "").strip()
+            project = str(fields.get("Project") or "").strip()
+            if not client or not project:
+                continue
+            bucket = projects_by_client.setdefault(client, [])
+            if project not in bucket:
+                bucket.append(project)
+        for client, bucket in projects_by_client.items():
+            bucket.sort()
+        return {
+            "clients": clients,
+            "projects": projects,
+            "projects_by_client": projects_by_client,
+        }
+
     # ── Write operations ────────────────────────────────────────────────────
 
     async def _sync_to_pg(self, teable_id: str, fields: dict) -> None:
@@ -405,6 +435,38 @@ class StatusService:
         cache.bust(prefix="status:picklists")
         notify_status_change()
         return new_record
+
+    async def upload_attachment_to_field(
+        self,
+        record_id: str,
+        field_name: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> dict[str, Any]:
+        field_id = STATUS_TABLE_FIELD_IDS.get(field_name)
+        if field_name != "Attachments" or not field_id:
+            raise ValueError(f"Unknown attachment field: {field_name}")
+
+        url = f"{self._record_url}/{record_id}/{field_id}/uploadAttachment"
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {self.record_token}"},
+                files={"file": (filename, content, content_type or "application/octet-stream")},
+            )
+            res.raise_for_status()
+            data = res.json()
+
+        if data.get("id") and data.get("fields"):
+            await self._sync_to_pg(data["id"], data["fields"])
+
+        _bust_all_status_caches()
+        await _bust_valkey_status()
+        notify_status_change()
+        fields = data.get("fields", {})
+        attachments = fields.get(field_id) or fields.get(field_name) or []
+        return {"record": data, "attachments": attachments}
 
     async def update_record(
         self,

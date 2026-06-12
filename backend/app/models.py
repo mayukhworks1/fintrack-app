@@ -38,6 +38,7 @@ STATUS_TABLE_FIELD_IDS = {
     "Current Status (Detailed)":"fld4MneRM2LeXS15cpv",
     "Short Status":             "fldyfl9bugT9bLJzWuv",
     "Status":                   "fldKC43dvuXF91zMTaU",
+    "Attachments":             "fldieCxA0yJyG764AWc",
 }
 
 STATUS_OPTIONS = ["Completed", "On Hold", "Input Pending", "In progress", "Not started"]
