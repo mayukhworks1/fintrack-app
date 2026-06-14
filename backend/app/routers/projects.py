@@ -9,6 +9,13 @@ from .deps import require_auth, require_editor
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
+async def _bust_projects_cache():
+    try:
+        await cache_bust("projects:")
+    except Exception:
+        pass
+
+
 def get_teable():
     return TeableService()
 

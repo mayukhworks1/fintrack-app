@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Activity, AlertCircle, ChevronDown, ChevronUp, Clock, Columns, Eye, LayoutGrid, List,
@@ -1074,67 +1074,73 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl" style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh', overflow: 'auto' }}>
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0 z-10" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+        style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh' }}>
+        {/* sticky header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid #e5e7eb' }}>
           <h2 className="text-base font-bold text-gray-900">Update {resourceType === 'status' ? 'Status' : resourceType === 'projects' ? 'Project' : 'Invoice'}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600"><X size={16} /></button>
         </div>
-        <form onSubmit={e => { e.preventDefault(); onSave(form) }} className="px-5 py-4 space-y-4">
-          {resourceType === 'status' && (
-            <>
-              <div>
-                <label className="block text-xs font-semibold mb-2 text-gray-700">Status</label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-                  {statusOptions.map(opt => {
-                    const st = simpleStatusStyle(opt)
-                    const active = form.status === opt
-                    return (
-                      <button key={opt} type="button" onClick={() => setForm(v => ({ ...v, status: active ? '' : opt }))}
-                        className="py-2 px-1 rounded-xl text-[11px] font-semibold text-center transition-all leading-tight"
-                        style={{ background: active ? st.bg : '#f8fafc', color: active ? st.text : '#64748b', border: `1.5px solid ${active ? st.border : '#e5e7eb'}` }}>
-                        {opt}
-                      </button>
-                    )
-                  })}
+        {/* scrollable body */}
+        <form onSubmit={e => { e.preventDefault(); onSave(form) }} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {resourceType === 'status' && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-gray-700">Status</label>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                    {statusOptions.map(opt => {
+                      const st = simpleStatusStyle(opt)
+                      const active = form.status === opt
+                      return (
+                        <button key={opt} type="button" onClick={() => setForm(v => ({ ...v, status: active ? '' : opt }))}
+                          className="py-2 px-1 rounded-xl text-[11px] font-semibold text-center transition-all leading-tight"
+                          style={{ background: active ? st.bg : '#f8fafc', color: active ? st.text : '#64748b', border: `1.5px solid ${active ? st.border : '#e5e7eb'}` }}>
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1.5 text-gray-700">Headline</label>
-                <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1.5 text-gray-700">Detail</label>
-                <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
-              </div>
-            </>
-          )}
-          {resourceType === 'projects' && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
-              </div>
-            </>
-          )}
-          {resourceType === 'invoices' && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
-              </div>
-              <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
-              <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
-            </>
-          )}
-          <div className="flex items-center justify-end gap-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 text-gray-700">Headline</label>
+                  <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 text-gray-700">Detail</label>
+                  <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
+                </div>
+              </>
+            )}
+            {resourceType === 'projects' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
+                </div>
+              </>
+            )}
+            {resourceType === 'invoices' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
+                </div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
+              </>
+            )}
+          </div>
+          {/* sticky footer */}
+          <div className="flex items-center justify-end gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid #e5e7eb' }}>
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e5e7eb', color: '#475569' }}>Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
