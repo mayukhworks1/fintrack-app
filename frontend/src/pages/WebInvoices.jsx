@@ -3593,16 +3593,3 @@ export default function WebInvoices() {
     </div>
   )
 }
-                        {isAll && f['Payment Status'] === 'Pending' && (
-                          <div className="flex justify-end mt-3">
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); openRecordPayment(r) }}
-                              className="btn-primary"
-                              style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem' }}
-                            >
-                              <CheckCircle2 size={12} />
-                              <span className="text-[11px] font-semibold">Pay</span>
-                            </button>
-                          </div>
-                        )}
