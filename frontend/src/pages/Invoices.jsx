@@ -655,6 +655,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
   ) : null
 
   return (
+    <>
     <Drawer
       open={open}
       onClose={onClose}
@@ -803,6 +804,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
       </div>,
       document.body
     )}
+    </>
   )
 }
 
