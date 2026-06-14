@@ -2742,7 +2742,7 @@ async def permission_matrix(_role: str = Depends(require_admin)):
             FROM auth_users u
             LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
             LEFT JOIN auth_roles r ON r.id = ur.role_id
-            WHERE u.approved = true AND u.disabled = false
+            WHERE u.status = 'active'
             GROUP BY u.id ORDER BY u.email
             """
         )
@@ -2809,7 +2809,7 @@ async def user_avatar_map(_role: str = Depends(require_admin)):
             """
             SELECT email, teable_email, avatar_url, full_name
             FROM auth_users
-            WHERE approved = true AND disabled = false AND avatar_url IS NOT NULL
+            WHERE status = 'active' AND avatar_url IS NOT NULL
             """
         )
     result = {}
