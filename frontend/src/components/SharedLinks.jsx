@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Check, CheckCheck, Clock, Copy, ExternalLink, Eye, Globe, Link2,
   Loader2, MapPin, Monitor, Pencil, Shield, Smartphone, ToggleLeft,
@@ -173,9 +174,9 @@ export function ShareLinkModal({
     setTimeout(() => setCopied(false), 2200)
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         {/* sticky header */}
@@ -384,7 +385,8 @@ export function ShareLinkModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -438,9 +440,9 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -545,7 +547,8 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
