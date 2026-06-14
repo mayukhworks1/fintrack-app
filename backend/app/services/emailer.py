@@ -93,12 +93,15 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
         "to":          [{"email": addr} for addr in recipients],
         "subject":     subject,
         "textContent": text,
+        # Transactional email headers — NO List-Unsubscribe (that's for newsletters
+        # and triggers spam-folder treatment for 1:1 transactional mail).
+        # X-Mailer + Reply-To improve deliverability and give recipients a clear
+        # reply path. Brevo's sending domain must have SPF + DKIM set up.
         "headers": {
-            # List-Unsubscribe is required by Gmail/Yahoo for deliverability (2024 rules).
-            # Even for transactional email it signals good sender hygiene.
-            "List-Unsubscribe":      f"<mailto:{from_email}?subject=unsubscribe>",
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            "X-Entity-Ref-ID":       "fintrack-transactional",
+            "X-Mailer":          "FinTrack/2.0",
+            "X-Entity-Ref-ID":   "fintrack-transactional",
+            "Reply-To":          from_email,
+            "Precedence":        "normal",         # NOT bulk/list — avoids spam filters
         },
         "tags": ["transactional"],
     }

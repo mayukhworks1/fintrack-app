@@ -377,7 +377,7 @@ export const api = {
       return result
     },
     agingBuckets: (opts = {}) => request('/api/invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
-    sendReminder: (id) => request(`/api/invoices/${id}/send-reminder`, { method: 'POST' }),
+    sendReminder: (id, body = {}) => request(`/api/invoices/${id}/send-reminder`, { method: 'POST', body: JSON.stringify(body) }),
     exportUrl: (params = {}) => {
       const q = new URLSearchParams({ fmt: 'csv' })
       Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))

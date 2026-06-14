@@ -3,7 +3,7 @@ Invoice Tracking router — /api/invoices
 GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional, Iterable, List, Any
 from pydantic import BaseModel
 import httpx
@@ -493,10 +493,15 @@ async def aging_buckets(
 
 # ── Send Payment Reminder ─────────────────────────────────────────────────────
 
+class ReminderBody(BaseModel):
+    to_email: str | None = None
+
+
 @router.post("/{record_id}/send-reminder")
 async def send_invoice_reminder(
     record_id: str,
     request:   Request,
+    body:      ReminderBody = Body(ReminderBody()),
     role:      str = Depends(require_auth),
 ):
     """Send a payment reminder email for a specific invoice."""
@@ -526,10 +531,14 @@ async def send_invoice_reminder(
         if not is_email_configured():
             raise HTTPException(status_code=503, detail="Email is not configured on this server. Set BREVOAPIKEY and SMTP_FROM_EMAIL.")
 
-        # Send to the configured admin/notify address; fall back to from-address.
-        recipient = settings.auth_admin_notify_email or settings.smtp_from_email or settings.smtp_username
+        # Use caller-supplied address; fall back to configured admin/notify address.
+        recipient = (body.to_email or "").strip() or settings.auth_admin_notify_email or settings.smtp_from_email or settings.smtp_username
         if not recipient:
             raise HTTPException(status_code=503, detail="No recipient address configured. Set AUTH_ADMIN_NOTIFY_EMAIL.")
+
+        import re as _re
+        if not _re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", recipient):
+            raise HTTPException(status_code=422, detail=f"Invalid email address: {recipient}")
 
         amount_str = f"₹{float(amount):,.0f}"
         subject = f"Payment Reminder — {inv_no}"
