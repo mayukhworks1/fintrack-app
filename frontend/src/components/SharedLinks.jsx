@@ -131,6 +131,12 @@ export function ShareLinkModal({
   }, [onClose])
 
   useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
     setHighlightColumns(normalizeHighlightColumns(viewConfig?.highlightColumns, highlightableColumns))
   }, [viewConfig, highlightableColumns])
 
@@ -168,11 +174,12 @@ export function ShareLinkModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
-        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
+        {/* sticky header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
               style={{ background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)' }}>
@@ -188,7 +195,8 @@ export function ShareLinkModal({
           <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
-        <div className="p-5 space-y-4">
+        {/* scrollable body */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
           {step === 'form' && (
             <>
               {enableLiveMode && viewConfig && (
@@ -317,12 +325,6 @@ export function ShareLinkModal({
                     : `This creates a public snapshot of the currently visible ${noun}${selectedRecords.length !== 1 ? 's' : ''}. Unique viewers are counted without inflating on every refresh, and edit events are logged separately.`}
                 </p>
               </div>
-              <div className="flex items-center justify-end gap-2">
-                <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-                <button onClick={createShare} disabled={saving || (mode === 'snapshot' && (selectedRecords.length > MAX_SHARED_VIEW_RECORDS || selectedRecords.length === 0))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Generate Link
-                </button>
-              </div>
             </>
           )}
 
@@ -358,12 +360,26 @@ export function ShareLinkModal({
                   <Clock size={11} /> Expires {fmtDate(shareData.expires_at)}
                 </p>
               )}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <a href={shareUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--accent)' }}>
-                  <ExternalLink size={11} /> Preview
-                </a>
-                <button onClick={onClose} className="btn-primary text-sm px-4 py-2">Done</button>
-              </div>
+            </>
+          )}
+        </div>
+
+        {/* sticky footer — always visible */}
+        <div className="flex items-center justify-between gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+          {step === 'form' && (
+            <>
+              <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+              <button onClick={createShare} disabled={saving || (mode === 'snapshot' && (selectedRecords.length > MAX_SHARED_VIEW_RECORDS || selectedRecords.length === 0))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Generate Link
+              </button>
+            </>
+          )}
+          {step === 'created' && shareData && (
+            <>
+              <a href={shareUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--accent)' }}>
+                <ExternalLink size={11} /> Preview
+              </a>
+              <button onClick={onClose} className="btn-primary text-sm px-4 py-2">Done</button>
             </>
           )}
         </div>
@@ -389,6 +405,12 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   useEffect(() => {
     setHighlightColumns(normalizeHighlightColumns(view?.view_config?.highlightColumns || currentViewConfig?.highlightColumns, highlightableColumns))
   }, [view, currentViewConfig, highlightableColumns])
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   async function handleSave() {
     if (!currentViewConfig) {
@@ -417,18 +439,18 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
-        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <h3 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Edit Link Scope</h3>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>You are updating one existing public URL, not creating a new one.</p>
           </div>
           <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="overflow-y-auto flex-1 p-5 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>{view.title || 'Untitled link'}</p>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{window.location.origin}/view/{view.token}</p>
@@ -513,13 +535,14 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
               </div>
             </div>
           )}
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-            <button onClick={handleSave} disabled={saving || visibleCount <= 0 || (mode === 'snapshot' && snapshotTooLarge)} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              Update Link
-            </button>
-          </div>
+        </div>
+        {/* sticky footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+          <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+          <button onClick={handleSave} disabled={saving || visibleCount <= 0 || (mode === 'snapshot' && snapshotTooLarge)} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Update Link
+          </button>
         </div>
       </div>
     </div>
