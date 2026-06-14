@@ -2734,7 +2734,7 @@ async def permission_matrix(_role: str = Depends(require_admin)):
         # Active users with their roles
         users = await conn.fetch(
             """
-            SELECT u.id, u.email, u.name, u.approved, u.disabled,
+            SELECT u.id, u.email, u.full_name, u.avatar_url, u.teable_email,
                    COALESCE(
                      json_agg(json_build_object('role_key', r.role_key, 'role_id', r.id::text))
                      FILTER (WHERE r.id IS NOT NULL), '[]'::json
@@ -2782,7 +2782,9 @@ async def permission_matrix(_role: str = Depends(require_admin)):
         user_list.append({
             "id": uid,
             "email": u["email"],
-            "name": u["name"] or u["email"],
+            "teable_email": u["teable_email"],
+            "name": u["full_name"] or u["email"],
+            "avatar_url": u["avatar_url"],
             "roles": user_roles,
             "effective_permission_ids": [pid for pid, g in effective.items() if g],
             "overrides": {pid: g for pid, g in overrides.items()},
@@ -2794,6 +2796,30 @@ async def permission_matrix(_role: str = Depends(require_admin)):
         "role_permissions": {k: list(v) for k, v in role_perm_map.items()},
         "users": user_list,
     }
+
+
+@router.get("/users/avatar-map")
+async def user_avatar_map(_role: str = Depends(require_admin)):
+    """Return email → avatar_url mapping for all approved users (used by dashboards)."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT email, teable_email, avatar_url, full_name
+            FROM auth_users
+            WHERE approved = true AND disabled = false AND avatar_url IS NOT NULL
+            """
+        )
+    result = {}
+    for r in rows:
+        url = r["avatar_url"]
+        entry = {"avatar_url": url, "name": r["full_name"] or r["email"]}
+        result[r["email"].lower()] = entry
+        if r["teable_email"]:
+            result[r["teable_email"].lower()] = entry
+    return result
 
 
 @router.put("/permissions/users/{user_id}/{permission_key}")

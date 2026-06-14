@@ -216,6 +216,33 @@ function sortByRaisedDateDesc(records = []) {
   })
 }
 
+// Shows profile pic + email for a "Raised By" value. avatarMap = {email: {avatar_url, name}}
+function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
+  if (!email) return null
+  const entry = avatarMap[email.toLowerCase()] || {}
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+      {entry.avatar_url ? (
+        <img
+          src={entry.avatar_url}
+          alt=""
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+        />
+      ) : (
+        <span style={{
+          width: size, height: size, borderRadius: '50%', flexShrink: 0,
+          background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: size * 0.5, color: 'var(--accent)', fontWeight: 600,
+        }}>
+          {(entry.name || email)[0].toUpperCase()}
+        </span>
+      )}
+      <span style={{ fontSize: '0.75em' }}>{entry.name || email}</span>
+    </span>
+  )
+}
+
 function MonthStatusPill({ status, active }) {
   const map = {
     Raised:   { bg: 'var(--fin-pos-bg)',  fg: 'var(--fin-positive)', border: 'var(--fin-pos-border)' },
@@ -800,7 +827,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
             )}
             {f['Raised By'] && (
               <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                <User size={9} />{f['Raised By']}
+                <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={14} />
               </span>
             )}
           </div>
@@ -1767,6 +1794,8 @@ export default function WebInvoices() {
 
   const [agingBuckets,  setAgingBuckets]  = useState(null)
   const [gstSummary,    setGstSummary]    = useState(null)
+  const [gstError,      setGstError]      = useState(false)
+  const [avatarMap,     setAvatarMap]     = useState({})
   const [gstMonths,     setGstMonths]     = useState(3)
   const [chartPreset,   setChartPreset]   = useState('60d')
   const [chartFrom,     setChartFrom]     = useState('')
@@ -1784,10 +1813,17 @@ export default function WebInvoices() {
   }, [])
 
   useEffect(() => {
+    api.webInvoices.avatarMap().then(setAvatarMap).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setGstSummary(null)
+    setGstError(false)
     const now = new Date()
     const from = new Date(now.getFullYear(), now.getMonth() - gstMonths + 1, 1)
     api.reports.webGstSummary({ from: from.toISOString().slice(0, 10) })
-      .then(setGstSummary).catch(() => {})
+      .then(data => { setGstSummary(data); setGstError(false) })
+      .catch(() => setGstError(true))
   }, [gstMonths])
 
   const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
@@ -2055,9 +2091,11 @@ export default function WebInvoices() {
       })
       .sort((a, b) => Number(b.count) - Number(a.count))
   }, [s])
+  // Dashboard overview widgets always use the full unfiltered set so search/status
+  // filters active in the invoice list view don't blank out the dashboard.
   const raisedTimeline = useMemo(() => {
     const buckets = new Map()
-    for (const record of records) {
+    for (const record of allRecords) {
       const key = monthKey(record.fields?.['Raised Date'])
       if (!key) continue
       const current = buckets.get(key) || { key, count: 0, amount: 0 }
@@ -2066,10 +2104,10 @@ export default function WebInvoices() {
       buckets.set(key, current)
     }
     return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
-  }, [records])
+  }, [allRecords])
   const clearedTimeline = useMemo(() => {
     const buckets = new Map()
-    for (const record of records) {
+    for (const record of allRecords) {
       const key = monthKey(record.fields?.['Cleared Date'])
       if (!key) continue
       const current = buckets.get(key) || { key, count: 0, amount: 0 }
@@ -2078,16 +2116,16 @@ export default function WebInvoices() {
       buckets.set(key, current)
     }
     return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
-  }, [records])
+  }, [allRecords])
   const dashboardAgingBuckets = useMemo(() => {
     const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
-    for (const record of records) {
+    for (const record of allRecords) {
       const f = record.fields || {}
       if (f['Payment Status'] !== 'Pending') continue
       buckets[classifyAgingBand(effectiveAging(f))] += 1
     }
     return buckets
-  }, [records])
+  }, [allRecords])
   const applyDashboardMonthDrilldown = useCallback((field, key) => {
     setDateFieldFilter(field)
     setDateFrom(`${key}-01`)
@@ -2565,6 +2603,67 @@ export default function WebInvoices() {
             </div>
             )}
 
+            {/* ── Raised vs Received bar chart ── */}
+            {lastThreeMonthBalance.length > 0 && (() => {
+              const maxVal = Math.max(1, ...lastThreeMonthBalance.flatMap(e => [e.gross, e.received]))
+              const barH = 120
+              const barW = Math.max(24, Math.floor(560 / (lastThreeMonthBalance.length * 2 + lastThreeMonthBalance.length + 1)))
+              const gap = Math.max(4, Math.floor(barW * 0.4))
+              const totalW = lastThreeMonthBalance.length * (barW * 2 + gap) + (lastThreeMonthBalance.length - 1) * gap
+              return (
+                <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Collections</p>
+                      <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Raised vs Received</h2>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, borderRadius: 2, display: 'inline-block', background: 'var(--accent)' }} />Raised</span>
+                      <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, borderRadius: 2, display: 'inline-block', background: 'var(--fin-positive)' }} />Received</span>
+                    </div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <svg viewBox={`0 0 ${Math.max(totalW + 20, 300)} ${barH + 40}`} style={{ width: '100%', minWidth: 260 }}>
+                      {lastThreeMonthBalance.map((entry, i) => {
+                        const x0 = i * (barW * 2 + gap * 2)
+                        const rH = Math.round((entry.gross / maxVal) * barH)
+                        const rcvH = Math.round((entry.received / maxVal) * barH)
+                        const fmt1 = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`
+                        return (
+                          <g key={entry.key}>
+                            {/* Raised bar */}
+                            <rect x={x0} y={barH - rH} width={barW} height={rH} rx={3} fill="var(--accent)" opacity={0.85} />
+                            {/* Received bar */}
+                            <rect x={x0 + barW + 3} y={barH - rcvH} width={barW} height={rcvH} rx={3} fill="var(--fin-positive)" opacity={0.85} />
+                            {/* Month label */}
+                            <text x={x0 + barW} y={barH + 14} textAnchor="middle" fontSize={9} fill="var(--text-3)">{entry.label}</text>
+                            {/* Raised tooltip */}
+                            {rH > 12 && <text x={x0 + barW / 2} y={barH - rH - 4} textAnchor="middle" fontSize={8} fill="var(--accent)">{fmt1(entry.gross)}</text>}
+                            {/* Received tooltip */}
+                            {rcvH > 12 && <text x={x0 + barW + 3 + barW / 2} y={barH - rcvH - 4} textAnchor="middle" fontSize={8} fill="var(--fin-positive)">{fmt1(entry.received)}</text>}
+                          </g>
+                        )
+                      })}
+                      {/* Baseline */}
+                      <line x1={0} y1={barH} x2={totalW + 20} y2={barH} stroke="var(--border)" strokeWidth={1} />
+                    </svg>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-1">
+                    {lastThreeMonthBalance.map(entry => {
+                      const cr = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
+                      return (
+                        <div key={entry.key} className="text-center">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{entry.label}</p>
+                          <p className="text-sm font-bold tabular-nums mt-0.5" style={{ color: cr >= 80 ? 'var(--fin-positive)' : cr >= 40 ? 'var(--fin-warning)' : 'var(--fin-negative)' }}>{cr.toFixed(0)}%</p>
+                          <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>collected</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* ── GST Summary ── */}
             <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2580,7 +2679,9 @@ export default function WebInvoices() {
                   ))}
                 </div>
               </div>
-              {!gstSummary ? (
+              {gstError ? (
+                <p className="text-sm" style={{ color: 'var(--fin-negative)' }}>Failed to load GST summary.</p>
+              ) : !gstSummary ? (
                 <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
               ) : gstSummary.months.length === 0 ? (
                 <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices in the selected range.</p>
@@ -3792,7 +3893,7 @@ export default function WebInvoices() {
                             {f['Raised By'] && (
                               <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0"
                                 style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                                <User size={8} />{f['Raised By']}
+                                <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={13} />
                               </span>
                             )}
                             {f['Next followup'] && (
@@ -3878,7 +3979,7 @@ export default function WebInvoices() {
                               <td className="tbl-cell">
                                 {f['Raised By']
                                   ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                                      <User size={9} />{f['Raised By']}
+                                      <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={14} />
                                     </span>
                                   : <span style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>

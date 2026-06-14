@@ -467,6 +467,7 @@ export const api = {
     },
     clientNames:  ()              => request('/api/web-invoices/client-names'),
     agingBuckets: (opts = {})    => request('/api/web-invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
+    avatarMap: ()                => request('/api/web-invoices/avatar-map', { cacheTtl: 120_000 }),
     exportUrl: (params = {}) => {
       const q = new URLSearchParams()
       const token = getAuthToken()

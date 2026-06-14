@@ -10,6 +10,7 @@ from typing import Optional, List, Any
 from pydantic import BaseModel
 from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
+from ..db.postgres import get_pool
 from ..config import settings
 from .deps import require_web_access, owner_scope_email
 
@@ -106,6 +107,29 @@ async def get_client_names(_role: str = Depends(require_web_access)):
         return await WebInvoiceService().get_distinct_client_names()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/avatar-map")
+async def get_avatar_map(_role: str = Depends(require_web_access)):
+    """Return email → {avatar_url, name} for approved users. Used by dashboards to show profile pics next to Raised By."""
+    pool = get_pool()
+    if not pool:
+        return {}
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT email, teable_email, avatar_url, full_name FROM auth_users "
+                "WHERE approved = true AND disabled = false AND avatar_url IS NOT NULL"
+            )
+        result = {}
+        for r in rows:
+            entry = {"avatar_url": r["avatar_url"], "name": r["full_name"] or r["email"]}
+            result[r["email"].lower()] = entry
+            if r["teable_email"]:
+                result[r["teable_email"].lower()] = entry
+        return result
+    except Exception:
+        return {}
 
 
 @router.get("/picklists")

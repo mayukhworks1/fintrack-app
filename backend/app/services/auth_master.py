@@ -746,6 +746,12 @@ async def _login_with_oidc_profile(
                         user["id"],
                     )
 
+    # Fire-and-forget: if picture is a provider CDN URL, download and re-upload to HF
+    # so the avatar is stable and user-owned (CDN URLs can expire/change).
+    if picture and not picture.startswith("/api/"):
+        import asyncio as _asyncio
+        _asyncio.create_task(_mirror_sso_avatar_to_hf(str(user["id"]), picture))
+
     if user["status"] != "active":
         event_type = f"{provider}_register_pending" if created_pending else f"{provider}_login_blocked"
         await _write_auth_event(
@@ -875,6 +881,35 @@ async def login_with_zoho_profile(profile: dict[str, Any], request: Request) -> 
         raw_profile=profile,
         request=request,
     )
+
+
+async def _mirror_sso_avatar_to_hf(user_id: str, picture_url: str) -> None:
+    """Download an SSO provider profile picture and store it in HF so it's stable."""
+    if not settings.hf_token:
+        return
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(picture_url)
+            if resp.status_code != 200:
+                return
+            content_type = (resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+            data = resp.content
+            if not data or len(data) > 4 * 1024 * 1024:
+                return
+        ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+        ext = ext_map.get(content_type, "jpg")
+        path_in_repo = f"profiles/{user_id}/avatar.{ext}"
+        from .storage import upload_bytes
+        hf_url = await upload_bytes(data, path_in_repo, content_type)
+        pool = get_pool()
+        if pool:
+            await pool.execute(
+                "UPDATE auth_users SET avatar_url = $1, updated_at = NOW() WHERE id = $2::uuid",
+                hf_url, user_id,
+            )
+    except Exception:
+        pass  # never fail login due to avatar mirroring
 
 
 async def create_password_reset(email: str, request: Request) -> dict[str, Any]:
