@@ -465,7 +465,36 @@ export const api = {
       bustWebInvoiceReads()
       return result
     },
-    clientNames: ()              => request('/api/web-invoices/client-names'),
+    clientNames:  ()              => request('/api/web-invoices/client-names'),
+    agingBuckets: (opts = {})    => request('/api/web-invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
+    exportUrl: (params = {}) => {
+      const q = new URLSearchParams()
+      const token = getAuthToken()
+      if (token) q.set('token', token)
+      if (params.status)  q.set('status',  params.status)
+      if (params.project) q.set('project', params.project)
+      if (params.from)    q.set('from',    params.from)
+      if (params.to)      q.set('to',      params.to)
+      return `${BASE_URL}/api/web-invoices/export?${q}`
+    },
+    parse: (file) => {
+      const form = new FormData()
+      form.append('file', file)
+      const token = getAuthToken()
+      return fetch(`${BASE_URL}/api/web-invoices/parse`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }))
+          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          e.status = res.status
+          throw e
+        }
+        return res.json()
+      })
+    },
     picklists: {
       get:    ()                   => request('/api/web-invoices/picklists'),
       add:    async (fieldName, option) => {
@@ -522,6 +551,12 @@ export const api = {
       if (params.from) q.set('from', params.from)
       if (params.to)   q.set('to',   params.to)
       return request(`/api/reports/gst-summary?${q}`, { fresh: true, cacheTtl: 0 })
+    },
+    webGstSummary: (params = {}) => {
+      const q = new URLSearchParams()
+      if (params.from) q.set('from', params.from)
+      if (params.to)   q.set('to',   params.to)
+      return request(`/api/reports/web-gst-summary?${q}`, { fresh: true, cacheTtl: 0 })
     },
   },
 

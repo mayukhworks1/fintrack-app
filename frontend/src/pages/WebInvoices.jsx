@@ -11,7 +11,8 @@ import {
   Sun, Moon, LogOut, Check, Loader2, Upload, Paperclip,
   ChevronLeft, ChevronRight, Briefcase, Repeat2,
   Users, HelpCircle, Mail, BookOpen, X as XIcon,
-  LayoutDashboard, Activity, ArrowRight, ShieldAlert
+  LayoutDashboard, Activity, ArrowRight, ShieldAlert,
+  Download, Sparkles, BarChart3, WifiOff
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -881,6 +882,11 @@ function InvoiceDrawer({
   const [error,      setError]      = useState('')
   const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
   const [categoryLocked, setCategoryLocked] = useState(false)
+  const [parsing,      setParsing]      = useState(false)
+  const [parseError,   setParseError]   = useState('')
+  const [parseNote,    setParseNote]    = useState('')
+  const [parseApplied, setParseApplied] = useState([])
+  const parseFileRef = useRef(null)
   const paidSelected = form.payment_status === 'Paid'
   const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
   const hasFormChanges = useMemo(
@@ -1018,6 +1024,43 @@ function InvoiceDrawer({
     try { await api.webInvoices.delete(invoice.id); onDeleted(invoice.id) }
     catch (e) { setError(e.message || 'Delete failed') }
     finally { setDeleting(false) }
+  }
+
+  async function handleParse(file) {
+    if (!file) return
+    setParsing(true); setParseError(''); setParseNote(''); setParseApplied([])
+    try {
+      const { fields } = await api.webInvoices.parse(file)
+      const next = { ...form }
+      const applied = []
+      const MAP = {
+        invoice_number: 'Invoice Number', project: 'Project', category: 'Category',
+        description: 'Description', milestone: 'Milestone', raised_by: 'Raised By',
+        raised_date: 'Raised Date', amount_raised: 'Amount Raised',
+        amount_with_tax: 'Amount with Tax',
+      }
+      let filled = 0
+      for (const [formKey, label] of Object.entries(MAP)) {
+        const val = fields[formKey] ?? fields[label]
+        if (val == null || val === '') continue
+        const isEmpty = !next[formKey] || next[formKey] === ''
+        const normalised = formKey.endsWith('_date') ? String(val).slice(0, 10) : val
+        next[formKey] = String(normalised)
+        applied.push({ key: formKey, label, value: String(normalised) })
+        if (isEmpty) filled++
+      }
+      setForm(next)
+      setParseApplied(applied)
+      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review`)
+    } catch (e) {
+      const msg = e.status === 400 ? e.message
+                : e.status === 413 ? 'File too large (max 10 MB)'
+                : e.message || 'AI parse failed — try a clearer image or PDF'
+      setParseError(msg)
+    } finally {
+      setParsing(false)
+      if (parseFileRef.current) parseFileRef.current.value = ''
+    }
   }
 
   return (
@@ -1169,6 +1212,34 @@ function InvoiceDrawer({
             <div className="rounded-xl p-3 text-xs"
               style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--text-2)' }}>
               Retainer mode uses the existing table only. Put the retainer/client name in `Project`. The latest retainer row becomes the monthly template, invoice number can be filled later by the account manager, and paused months are stored as zero-value cancelled records with a reason.
+            </div>
+          )}
+
+          {/* AI parse */}
+          {!paymentOnly && (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-layer)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles size={13} style={{ color: 'var(--accent)' }} />
+                  <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>AI autofill from PDF / image</span>
+                </div>
+                <label className={`btn-ghost cursor-pointer ${parsing ? 'opacity-50 pointer-events-none' : ''}`} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}>
+                  {parsing ? <><Loader2 size={12} className="animate-spin" />Parsing…</> : <><Upload size={12} />Upload & fill</>}
+                  <input ref={parseFileRef} type="file" accept="image/*,.pdf" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleParse(f) }} />
+                </label>
+              </div>
+              {parseError && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{parseError}</p>}
+              {parseNote && <p className="text-xs" style={{ color: 'var(--fin-positive)' }}>{parseNote}</p>}
+              {parseApplied.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {parseApplied.map(a => (
+                    <span key={a.key} className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}>
+                      {a.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1659,6 +1730,22 @@ export default function WebInvoices() {
     setCanEditPicklists(false)
     setPicklistPermissionMsg(message)
   }
+
+  const [agingBuckets,  setAgingBuckets]  = useState(null)
+  const [gstSummary,    setGstSummary]    = useState(null)
+  const [gstMonths,     setGstMonths]     = useState(3)
+  const isStaleData = listData?._stale === true
+
+  useEffect(() => {
+    api.webInvoices.agingBuckets().then(setAgingBuckets).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const now = new Date()
+    const from = new Date(now.getFullYear(), now.getMonth() - gstMonths + 1, 1)
+    api.reports.webGstSummary({ from: from.toISOString().slice(0, 10) })
+      .then(setGstSummary).catch(() => {})
+  }, [gstMonths])
 
   const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
@@ -2248,6 +2335,96 @@ export default function WebInvoices() {
               </div>
             </div>
 
+            {/* ── Aging Buckets ── */}
+            {agingBuckets && (
+            <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables aging</p>
+                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Pending invoice age</h2>
+                </div>
+                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{agingBuckets.total_pending} pending</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { key: '0_30',  label: '0–30 days',  color: 'var(--fin-positive)' },
+                  { key: '30_60', label: '30–60 days', color: 'var(--fin-warning)' },
+                  { key: '60_90', label: '60–90 days', color: '#f97316' },
+                  { key: '90+',   label: '90+ days',   color: 'var(--fin-negative)' },
+                ].map(({ key, label, color }) => {
+                  const b = agingBuckets.buckets.find(x => x.label.replace('–','-') === label.replace('–','-')) || agingBuckets.buckets.find((_, i) => ['0_30','30_60','60_90','90+'][i] === key) || { count: 0, amount: 0 }
+                  const pct = agingBuckets.total_outstanding > 0 ? (b.amount / agingBuckets.total_outstanding) * 100 : 0
+                  return (
+                    <div key={key} className="rounded-2xl p-3" style={{ background: 'var(--bg-layer)', border: `1px solid var(--card-border)` }}>
+                      <p className="text-[11px] font-semibold mb-1.5" style={{ color }}>{label}</p>
+                      <p className="text-lg font-bold tabular-nums leading-none mb-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{b.count}</p>
+                      <p className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>₹{(b.amount/100000).toFixed(1)}L</p>
+                      <div className="mt-2 h-1 rounded-full" style={{ background: 'var(--border)' }}>
+                        <div className="h-1 rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            )}
+
+            {/* ── GST Summary ── */}
+            <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>GST receivables</p>
+                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Month-wise GST summary</h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[3, 6, 12].map(m => (
+                    <button key={m} onClick={() => setGstMonths(m)}
+                      className={gstMonths === m ? 'btn-primary' : 'btn-ghost'}
+                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.6rem' }}>{m} mo</button>
+                  ))}
+                </div>
+              </div>
+              {!gstSummary ? (
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
+              ) : gstSummary.months.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices in the selected range.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        {['Month','Base','GST','Gross','Received','Outstanding','Invoices'].map(h => (
+                          <th key={h} className="text-left pb-2 pr-4 font-semibold" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gstSummary.months.slice().reverse().map(m => (
+                        <tr key={m.month} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td className="py-2 pr-4 font-medium" style={{ color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{m.label}</td>
+                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--text-2)' }}>₹{(m.base/1000).toFixed(0)}k</td>
+                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--accent)' }}>₹{(m.gst/1000).toFixed(0)}k</td>
+                          <td className="py-2 pr-4 tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>₹{(m.gross/1000).toFixed(0)}k</td>
+                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--fin-positive)' }}>₹{(m.received/1000).toFixed(0)}k</td>
+                          <td className="py-2 pr-4 tabular-nums" style={{ color: m.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>₹{(m.outstanding/1000).toFixed(0)}k</td>
+                          <td className="py-2 tabular-nums" style={{ color: 'var(--text-3)' }}>{m.count}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ borderTop: '2px solid var(--border)' }}>
+                        <td className="py-2 pr-4 font-bold" style={{ color: 'var(--text-1)' }}>Total</td>
+                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--text-2)' }}>₹{(gstSummary.totals.base/1000).toFixed(0)}k</td>
+                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--accent)' }}>₹{(gstSummary.totals.gst/1000).toFixed(0)}k</td>
+                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>₹{(gstSummary.totals.gross/1000).toFixed(0)}k</td>
+                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>₹{(gstSummary.totals.received/1000).toFixed(0)}k</td>
+                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: gstSummary.totals.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>₹{(gstSummary.totals.outstanding/1000).toFixed(0)}k</td>
+                        <td className="py-2 tabular-nums font-bold" style={{ color: 'var(--text-3)' }}>{gstSummary.totals.count}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_320px] gap-4">
               <div
                 className="rounded-[26px] p-4 sm:p-5"
@@ -2590,6 +2767,7 @@ export default function WebInvoices() {
           )}
 
           {workspace === 'invoices' && (
+          <>
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>Invoices</h1>
@@ -2599,7 +2777,11 @@ export default function WebInvoices() {
                 {syncing && <span style={{ color: 'var(--fin-warning)' }}>· syncing…</span>}
               </p>
             </div>
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+              <a href={api.webInvoices.exportUrl()} download className="btn-ghost" style={{ textDecoration: 'none' }}>
+                <Download size={14} />
+                <span className="hidden sm:inline">Export CSV</span>
+              </a>
               <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
                 <ExternalLink size={14} />
                 <span className="hidden sm:inline">Raise Externally</span>
@@ -2615,6 +2797,13 @@ export default function WebInvoices() {
               </button>
             </div>
           </div>
+          {isStaleData && (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--fin-warning)' }}>
+              <WifiOff size={14} />
+              <span>Live data unavailable — showing cached records. Some changes may not appear.</span>
+            </div>
+          )}
+          </>
           )}
 
           {/* ── Retainers header ── */}
@@ -3525,7 +3714,7 @@ export default function WebInvoices() {
                               </td>
                               <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center gap-2">
-                                  {isAll && f['Payment Status'] === 'Pending' && (
+                                  {f['Payment Status'] === 'Pending' && (
                                     <button
                                       type="button"
                                       onClick={() => openRecordPayment(r)}
@@ -3547,6 +3736,31 @@ export default function WebInvoices() {
                         })
                   }
                 </tbody>
+                {records.length > 0 && (() => {
+                  const tot = records.reduce((acc, r) => {
+                    const f = r.fields || {}
+                    acc.raised      += Number(f['Amount Raised']      || 0)
+                    acc.withTax     += Number(f['Amount with Tax']    || 0)
+                    acc.received    += Number(f['Amount Received']    || 0)
+                    acc.outstanding += Number(f['Outstanding Amount'] || 0)
+                    return acc
+                  }, { raised: 0, withTax: 0, received: 0, outstanding: 0 })
+                  const fmtTot = n => fmtCurrency(n, 'RS')
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-layer)' }}>
+                        <td colSpan={6} className="tbl-cell font-semibold text-xs" style={{ color: 'var(--text-2)' }}>
+                          Totals · {records.length} invoice{records.length !== 1 ? 's' : ''}
+                        </td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtTot(tot.raised)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtTot(tot.withTax)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--fin-positive)' }}>{fmtTot(tot.received)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: tot.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{fmtTot(tot.outstanding)}</td>
+                        <td colSpan={5} />
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
               </table>
             </div>
           </div>
@@ -3565,9 +3779,9 @@ export default function WebInvoices() {
         onClose={closeDrawer}
         onEdit={() => { setDrawerKey(k => k + 1); setDrawer({ mode: 'edit', invoice: drawer?.invoice }) }}
         onRecordPayment={() => {
-          if (isAll && drawer?.invoice) openRecordPayment(drawer.invoice)
+          if (drawer?.invoice) openRecordPayment(drawer.invoice)
         }}
-        isEditor={isAll}
+        isEditor={true}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
       />
       <InvoiceDrawer
