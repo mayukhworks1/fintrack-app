@@ -63,9 +63,9 @@ Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`, `sta
 ## Modules
 
 ### Main App (editor / viewer roles)
-- **Dashboard** — KPI grid, client P&L bars, at-risk projects, top projects
+- **Dashboard** — KPI grid, client P&L bars, at-risk projects, aging buckets (0–30/30–60/60–90/90+ days), invoice activity chart with date range picker
 - **Projects** — Full CRUD with filters, sort, search, AI autofill
-- **Invoices** — Invoice tracker, AI PDF parser, aging analysis
+- **Invoices** — Invoice tracker, AI PDF parser, aging analysis, CSV export, GST summary report, invoice totals row, stale-data banner, Send Reminder with email-prompt modal
 - **Analytics** — Cash flow charts, DSO, concentration risk
 - **AI Assistant** — Chat with full portfolio context (PG-backed, <10ms context build)
 - **Report** — Two-mode AI report: Board Pack (full financials) and Status Briefing (delivery only)
