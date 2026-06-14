@@ -520,17 +520,39 @@ async def send_invoice_reminder(
         raise HTTPException(status_code=400, detail="This invoice is already marked as paid.")
 
     try:
-        from ..services.email import send_email
+        from ..services.emailer import send_email, is_email_configured
+        from ..config import settings
+
+        if not is_email_configured():
+            raise HTTPException(status_code=503, detail="Email is not configured on this server. Set BREVOAPIKEY and SMTP_FROM_EMAIL.")
+
+        # Send to the configured admin/notify address; fall back to from-address.
+        recipient = settings.auth_admin_notify_email or settings.smtp_from_email or settings.smtp_username
+        if not recipient:
+            raise HTTPException(status_code=503, detail="No recipient address configured. Set AUTH_ADMIN_NOTIFY_EMAIL.")
+
+        amount_str = f"₹{float(amount):,.0f}"
         subject = f"Payment Reminder — {inv_no}"
-        body = (
-            f"<p>Dear Team,</p>"
-            f"<p>This is a reminder that invoice <strong>{inv_no}</strong> for project "
-            f"<strong>{project}</strong> ({client}) of amount <strong>₹{amount:,.0f}</strong> "
-            f"is currently <strong>{status}</strong> with {aging} days aging.</p>"
-            f"<p>Please arrange payment at the earliest or update us with the expected date.</p>"
-            f"<p>Thanks,<br/>FinTrack</p>"
+        text_body = (
+            f"Payment reminder: invoice {inv_no} for project {project} ({client}), "
+            f"amount {amount_str}, status {status}, aging {aging} days."
         )
-        await send_email(to=None, subject=subject, html=body, record_id=record_id)
-        return {"message": "Reminder sent", "invoice": inv_no}
+        html_body = (
+            f"<p>Hi,</p>"
+            f"<p>This is a payment follow-up for:</p>"
+            f"<table style='border-collapse:collapse;font-size:14px'>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Invoice</td><td><strong>{inv_no}</strong></td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Project</td><td>{project}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Client</td><td>{client}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Amount</td><td><strong>{amount_str}</strong></td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Status</td><td>{status}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Aging</td><td>{aging} days</td></tr>"
+            f"</table>"
+            f"<p>Please follow up with the client or update the payment status in FinTrack.</p>"
+        )
+        await send_email(to=recipient, subject=subject, text=text_body, html=html_body)
+        return {"message": "Reminder sent", "invoice": inv_no, "sent_to": recipient}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send reminder: {e}")
