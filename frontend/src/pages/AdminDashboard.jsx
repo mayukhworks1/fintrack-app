@@ -25,7 +25,7 @@ import {
   TrendingUp, ChevronLeft, ChevronRight, Search,
   Activity, Globe, Monitor, Smartphone, Tablet,
   CheckCircle2, XCircle, AlertCircle, History,
-  ShieldAlert, Zap, BarChart2, Link2, Play, MinusCircle,
+  ShieldAlert, ShieldCheck, Zap, BarChart2, Link2, Play, MinusCircle,
   Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
   SlidersHorizontal, Calendar, Terminal, Download, UserPlus, Mail, Save,
   SendHorizontal, KeyRound, ServerCrash, CheckSquare
@@ -4655,17 +4655,17 @@ function PermissionsTab() {
 const TABS = [
   { id: 'overview',  label: 'Overview',        icon: LayoutDashboard  },
   { id: 'requests',  label: 'Requests',         icon: ScrollText       },
-  { id: 'users',     label: 'Users & Sessions', icon: ShieldAlert      },
-  { id: 'ai',        label: 'AI',               icon: MessageSquareText},
-  { id: 'insights',  label: 'Insights',         icon: BarChart2        },
-  { id: 'sync',      label: 'Sync',             icon: RefreshCw        },
-  { id: 'projects',  label: 'Projects',         icon: Database         },
-  { id: 'invoices',  label: 'Invoices',         icon: FileText         },
-  { id: 'history',   label: 'History',          icon: History          },
-  { id: 'shared',    label: 'Shared',           icon: Link2            },
-  { id: 'hflogs',    label: 'HF Logs',          icon: Terminal         },
-  { id: 'deploy',    label: 'System Health',    icon: ServerCrash      },
-  { id: 'permissions', label: 'Permissions',   icon: ShieldAlert      },
+  { id: 'users',       label: 'Users & Sessions', icon: ShieldAlert   },
+  { id: 'permissions', label: 'Permissions',      icon: ShieldCheck   },
+  { id: 'ai',          label: 'AI',               icon: MessageSquareText},
+  { id: 'insights',    label: 'Insights',         icon: BarChart2     },
+  { id: 'sync',        label: 'Sync',             icon: RefreshCw     },
+  { id: 'projects',    label: 'Projects',         icon: Database      },
+  { id: 'invoices',    label: 'Invoices',         icon: FileText      },
+  { id: 'history',     label: 'History',          icon: History       },
+  { id: 'shared',      label: 'Shared',           icon: Link2         },
+  { id: 'hflogs',      label: 'HF Logs',          icon: Terminal      },
+  { id: 'deploy',      label: 'System Health',    icon: ServerCrash   },
 ]
 
 // Sub-tabs for composite tabs

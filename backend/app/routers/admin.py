@@ -2711,7 +2711,9 @@ async def permission_matrix(_role: str = Depends(require_admin)):
     Return all permissions, all roles with their permission sets,
     all active users with their roles and per-user overrides.
     """
-    pool = await get_pool()
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
     async with pool.acquire() as conn:
         # All defined permissions
         perms = await conn.fetch(
@@ -2764,8 +2766,7 @@ async def permission_matrix(_role: str = Depends(require_admin)):
     user_list = []
     for u in users:
         uid = str(u["id"])
-        import json as _json
-        user_roles = _json.loads(u["roles"]) if isinstance(u["roles"], str) else list(u["roles"])
+        user_roles = json.loads(u["roles"]) if isinstance(u["roles"], str) else list(u["roles"])
         user_role_ids = {r["role_id"] for r in user_roles if r.get("role_id")}
 
         # Effective permissions = union of role permissions, then apply overrides
@@ -2803,7 +2804,9 @@ async def set_user_permission(
     _role: str = Depends(require_admin),
 ):
     """Grant, deny, or clear a per-user permission override."""
-    pool = await get_pool()
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database unavailable")
     async with pool.acquire() as conn:
         perm = await conn.fetchrow(
             "SELECT id FROM auth_permissions WHERE permission_key = $1", permission_key
