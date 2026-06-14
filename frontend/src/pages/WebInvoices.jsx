@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../components/Drawer'
 import {
   Globe, RefreshCw, Plus, X, ChevronDown, AlertTriangle,
@@ -1692,12 +1692,29 @@ export default function WebInvoices() {
   const toast = useToast()
   const { isAll, logout } = useAuth()
   const { dark } = useTheme()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // URL-synced filters — bookmark-able and shareable
+  const initialWorkspace = searchParams.get('tab') || 'dashboard'
+  const initialStatus    = searchParams.get('status') || ''
+  const initialProject   = searchParams.get('project') || ''
+  const initialSearch    = searchParams.get('q') || ''
+
+  const updateUrlParam = useCallback((key, value) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
   const [sidebarOpen,    setSidebarOpen]    = useState(true)
   const [helpOpen,       setHelpOpen]       = useState(false)
-  const [workspace,      setWorkspace]      = useState('dashboard')
+  const [workspace,      setWorkspace]      = useState(initialWorkspace)
   const [selectedRetainer, setSelectedRetainer] = useState('')
-  const [statusFilter,   setStatusFilter]   = useState('')
-  const [projectFilter,  setProjectFilter]  = useState('')
+  const [statusFilter,   setStatusFilter]   = useState(initialStatus)
+  const [projectFilter,  setProjectFilter]  = useState(initialProject)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [raisedByFilter, setRaisedByFilter] = useState('')
   const [billingFilter,  setBillingFilter]  = useState('all')
@@ -1707,7 +1724,7 @@ export default function WebInvoices() {
   const [dateFrom,       setDateFrom]       = useState('')
   const [dateTo,         setDateTo]         = useState('')
   const [retainerMonth,  setRetainerMonth]  = useState(currentMonthKey())
-  const [search,         setSearch]         = useState('')
+  const [search,         setSearch]         = useState(initialSearch)
   const [overdueOnly,    setOverdueOnly]    = useState(false)
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
@@ -1755,7 +1772,12 @@ export default function WebInvoices() {
   const [chartFrom,     setChartFrom]     = useState('')
   const [chartTo,       setChartTo]       = useState('')
   const [balanceMonths, setBalanceMonths] = useState(3)
-  const isStaleData = listData?._stale === true
+
+  // Sync key filter state → URL so pages are bookmarkable / shareable
+  useEffect(() => { updateUrlParam('tab', workspace === 'dashboard' ? '' : workspace) }, [workspace])
+  useEffect(() => { updateUrlParam('status', statusFilter) }, [statusFilter])
+  useEffect(() => { updateUrlParam('project', projectFilter) }, [projectFilter])
+  useEffect(() => { updateUrlParam('q', search) }, [search])
 
   useEffect(() => {
     api.webInvoices.agingBuckets().then(setAgingBuckets).catch(() => {})
@@ -1784,6 +1806,7 @@ export default function WebInvoices() {
     }), [statusFilter, projectFilter, sortCol, sortDir])
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
+  const isStaleData = listData?._stale === true
   const serverRecords = listData?.records || []
   const [recordsState, setRecordsState] = useState([])
   useEffect(() => {
