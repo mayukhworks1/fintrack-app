@@ -1283,6 +1283,7 @@ export default function Invoices() {
   const [chartPreset, setChartPreset] = useState('60d')
   const [chartFrom,   setChartFrom]   = useState('')
   const [chartTo,     setChartTo]     = useState('')
+  const [balanceMonths, setBalanceMonths] = useState(3)
   const deferredSearch = useDeferredValue(search)
   const resizeRef = useRef(null)
 
@@ -1688,7 +1689,7 @@ export default function Invoices() {
   }, [scopedRecords])
   const lastThreeMonthBalance = useMemo(() => {
     const current = currentMonthKey()
-    const keys = [shiftMonthKey(current, -2), shiftMonthKey(current, -1), current]
+    const keys = Array.from({ length: balanceMonths }, (_, i) => shiftMonthKey(current, -(balanceMonths - 1 - i)))
     // Use allRecords (not scopedRecords) so this widget always shows complete
     // monthly totals regardless of any status/project/category filter the user
     // has active on the table view.
@@ -1727,7 +1728,7 @@ export default function Invoices() {
       const collectionRate = gross > 0 ? Math.min(100, Math.max(0, (received / gross) * 100)) : 0
       return { key, label: shortMonthLabel(key), base, gross, gst, received, deduction, outstanding, invoiceCount, collectionRate, change }
     })
-  }, [allRecords])
+  }, [allRecords, balanceMonths])
   const maxMonthlyBalanceMagnitude = useMemo(
     () => Math.max(1, ...lastThreeMonthBalance.map((entry) => entry.gross)),
     [lastThreeMonthBalance]
@@ -2295,10 +2296,24 @@ export default function Invoices() {
 
       {workspace === 'invoices' && (
         <div className="invoice-runey-widgets">
-          <section className="invoice-runey-card invoice-month-balance-card" aria-label="Last 3 months invoice balance">
-            <div>
-              <h2>Last 3 Months</h2>
-              <p>GST-aware receivables</p>
+          <section className="invoice-runey-card invoice-month-balance-card" aria-label="Last N months invoice balance">
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <div>
+                <h2>Last {balanceMonths} Month{balanceMonths !== 1 ? 's' : ''}</h2>
+                <p>GST-aware receivables</p>
+              </div>
+              <div className="inline-flex items-center rounded-lg p-0.5 gap-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', alignSelf: 'flex-start', flexShrink: 0 }}>
+                {[3, 6, 12].map(n => (
+                  <button key={n} type="button"
+                    onClick={() => setBalanceMonths(n)}
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+                    style={balanceMonths === n
+                      ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                      : { color: 'var(--text-3)' }}>
+                    {n} mo
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="invoice-month-bars">
               {lastThreeMonthBalance.map((entry) => {
