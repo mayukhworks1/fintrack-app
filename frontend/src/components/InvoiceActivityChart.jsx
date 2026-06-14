@@ -243,7 +243,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                 rx={rx - 0.5}
                 fill="white" opacity={isHov ? 0.30 : 0.18}
               />
-              {/* initials badge */}
+              {/* project badge */}
               {h > 32 && (
                 <g>
                   <circle
@@ -257,7 +257,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                     fill="white"
                     fontFamily="Inter, ui-sans-serif, system-ui"
                   >
-                    {initials(day.invoices[0].raisedBy)}
+                    {initials(day.invoices[0].project || day.invoices[0].client || day.invoices[0].raisedBy)}
                   </text>
                   {/* count badge */}
                   {day.invoices.length > 1 && (
