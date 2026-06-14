@@ -3,8 +3,26 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..services.teable import TeableService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
 from ..db.attribution import record_user_attribution
-from ..db.valkey import cache_bust
+from ..db.valkey import cache_bust, rate_check
 from .deps import require_auth, require_editor
+
+
+def _ip(request: Request) -> str:
+    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        v = request.headers.get(h, "")
+        if v:
+            return v.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _check_project_rate(request: Request) -> None:
+    allowed, _ = await rate_check(_ip(request), limit=30, window_sec=60, bucket="project_mutate")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many project mutations — limited to 30/min.",
+            headers={"Retry-After": "60"},
+        )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -112,6 +130,7 @@ async def get_project(record_id: str, _role: str = Depends(require_auth)):
 
 @router.post("", status_code=201)
 async def create_project(body: ProjectCreate, request: Request, role: str = Depends(require_editor)):
+    await _check_project_rate(request)
     teable = get_teable()
     fields = body.to_teable_fields()
     result = await teable.create_record(fields)
@@ -130,6 +149,7 @@ async def update_project(
     record_id: str, body: ProjectUpdate, request: Request,
     role: str = Depends(require_editor),
 ):
+    await _check_project_rate(request)
     teable = get_teable()
     fields = body.to_teable_fields()
     if not fields:
@@ -148,6 +168,7 @@ async def update_project(
 
 @router.delete("/{record_id}", status_code=204)
 async def delete_project(record_id: str, request: Request, role: str = Depends(require_editor)):
+    await _check_project_rate(request)
     teable = get_teable()
     try:
         try:

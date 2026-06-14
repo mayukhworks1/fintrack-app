@@ -8,7 +8,7 @@ import {
   ArrowUpDown, Save, Trash2, Image as ImageIcon, Filter,
   AlertOctagon, CalendarDays, User, Tag, ArrowRight, Eye,
   IndianRupee, TrendingUp, Percent, CalendarClock, Briefcase, RotateCcw,
-  Sparkles, Upload, Loader2, Paperclip, Mail
+  Sparkles, Upload, Loader2, Paperclip, Mail, Download, BellRing
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -583,11 +583,26 @@ function SuggestInput({ value, onChange, options = [], placeholder = 'Type or se
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
 function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
   const navigate = useNavigate()
+  const { showToast } = useToast()
+  const [sendingReminder, setSendingReminder] = useState(false)
   const f = (open && invoice) ? (invoice.fields || {}) : {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
   const allDetailFiles = [...refs, ...pdfs]
   const outstanding = Number(f['Outstanding Amount'] || 0)
+
+  async function handleSendReminder() {
+    if (!invoice?.id) return
+    setSendingReminder(true)
+    try {
+      await api.invoices.sendReminder(invoice.id)
+      showToast('Payment reminder sent successfully', 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to send reminder', 'error')
+    } finally {
+      setSendingReminder(false)
+    }
+  }
   const openProjects = () => {
     const params = new URLSearchParams()
     if (f['Client Name']) params.set('client', f['Client Name'])
@@ -619,6 +634,12 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
       {isEditor && f['Payment Status'] === 'Pending' && (
         <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
           <CheckCircle2 size={12} />Record Payment
+        </button>
+      )}
+      {isEditor && f['Payment Status'] !== 'Paid' && (
+        <button onClick={handleSendReminder} disabled={sendingReminder} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+          {sendingReminder ? <Loader2 size={12} className="animate-spin" /> : <BellRing size={12} />}
+          {sendingReminder ? 'Sending…' : 'Send Reminder'}
         </button>
       )}
       {isEditor && (
@@ -1324,6 +1345,7 @@ export default function Invoices() {
 
   const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const [recordsState, setRecordsState] = useState([])
+  const isStaleData = listData?._stale === true
   useEffect(() => {
     setRecordsState(listData?.records || [])
   }, [listData?.records])
@@ -2026,12 +2048,34 @@ export default function Invoices() {
             <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-ghost">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
             </button>
+            <a
+              href={api.invoices.exportUrl({
+                status: statusFilter || undefined,
+                project: projectFilter || undefined,
+                from: dateFrom || undefined,
+                to: dateTo || undefined,
+              })}
+              download
+              className="btn-ghost"
+              title="Download filtered invoices as CSV"
+            >
+              <Download size={14} />Export CSV
+            </a>
             {isEditor && (
               <button onClick={openNew} className="btn-primary"><Plus size={14} />New Invoice</button>
             )}
           </>
         }
       >
+        {/* Stale data banner — shown when Teable is unreachable and PG mirror is served */}
+        {isStaleData && (
+          <div className="flex items-center gap-2 mt-4 px-4 py-2.5 rounded-xl text-sm"
+            style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#92400e' }}>
+            <AlertTriangle size={14} style={{ color: '#ca8a04', flexShrink: 0 }} />
+            <span><strong>Live data unavailable.</strong> Showing cached data from the local mirror — figures may be a few minutes behind. <button onClick={refresh} className="underline font-medium ml-1" style={{ color: '#92400e' }}>Try refreshing</button></span>
+          </div>
+        )}
+
         <ExecutiveStatGrid className="mt-5">
           <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : fmt(s?.total_raised)} icon={IndianRupee} />
           <ExecutiveStatCard label="Incl. GST" value={sumLoading && !s ? '—' : fmt(s?.total_with_tax)} icon={Receipt} />
@@ -3353,6 +3397,26 @@ export default function Invoices() {
             </tbody>
           </table>
         </div>
+        {/* ── Totals row — sum of all currently filtered invoices ── */}
+        {records.length > 0 && (() => {
+          const totalRaised    = records.reduce((s, r) => s + Number(r.fields?.['Amount Raised']    || 0), 0)
+          const totalWithTax   = records.reduce((s, r) => s + Number(r.fields?.['Amount with Tax']  || 0), 0)
+          const totalReceived  = records.reduce((s, r) => s + Number(r.fields?.['Amount Received']  || 0), 0)
+          const totalOutstanding = records.reduce((s, r) => s + Number(r.fields?.['Outstanding Amount'] || 0), 0)
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-b-xl text-xs font-medium"
+              style={{ background: 'var(--bg-input)', borderTop: '1px solid var(--card-border)' }}>
+              <span style={{ color: 'var(--text-3)' }}>{records.length} invoice{records.length !== 1 ? 's' : ''} in view</span>
+              <div className="flex flex-wrap gap-4">
+                <span>Raised <strong style={{ color: 'var(--text-1)' }}>{fmt(totalRaised)}</strong></span>
+                <span>Incl. GST <strong style={{ color: 'var(--text-1)' }}>{fmt(totalWithTax)}</strong></span>
+                <span>Collected <strong style={{ color: 'var(--fin-positive, #16a34a)' }}>{fmt(totalReceived)}</strong></span>
+                <span>Outstanding <strong style={{ color: totalOutstanding > 0 ? 'var(--fin-warning, #ca8a04)' : 'var(--fin-positive, #16a34a)' }}>{fmt(totalOutstanding)}</strong></span>
+              </div>
+            </div>
+          )
+        })()}
+      </div>
       </div>
 
       </>

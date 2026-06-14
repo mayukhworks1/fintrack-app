@@ -7,12 +7,62 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from typing import Optional, Iterable, List, Any
 from pydantic import BaseModel
 import httpx
+import logging
 from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
+from ..db.valkey import rate_check
 from .deps import require_auth, owner_scope_email
 
+logger = logging.getLogger("fintrack.invoices")
+
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
+
+
+def _ip(request: Request) -> str:
+    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        v = request.headers.get(h, "")
+        if v:
+            return v.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _check_mutation_rate(request: Request) -> None:
+    """60 invoice mutations / min / IP — prevents bulk-scripted abuse."""
+    allowed, _ = await rate_check(_ip(request), limit=60, window_sec=60, bucket="invoice_mutate")
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many invoice mutations — limited to 60/min. Try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+
+
+def _validate_amounts(fields: dict) -> None:
+    """Reject negative or zero amounts — a real invoice always has a positive value."""
+    for key in ("Amount Raised", "Amount with Tax", "Amount Received"):
+        val = fields.get(key)
+        if val is None:
+            continue
+        try:
+            n = float(val)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{key} must be a number")
+        if key in ("Amount Raised", "Amount with Tax") and n <= 0:
+            raise HTTPException(status_code=400, detail=f"{key} must be greater than zero")
+        if key == "Amount Received" and n < 0:
+            raise HTTPException(status_code=400, detail="Amount Received cannot be negative")
+
+    # Cleared Date must not be before Raised Date
+    rd = fields.get("Raised Date")
+    cd = fields.get("Cleared Date")
+    if rd and cd:
+        from datetime import date as _date
+        try:
+            if _date.fromisoformat(cd[:10]) < _date.fromisoformat(rd[:10]):
+                raise HTTPException(status_code=400, detail="Cleared Date cannot be before Raised Date")
+        except (ValueError, TypeError):
+            pass
 
 
 def _validate_paid_invoice(fields: dict) -> None:
@@ -133,6 +183,8 @@ async def list_invoices(
                 limit=limit, skip=skip,
                 order_by=order_by, order=order,
             )
+            if result is not None:
+                result["_stale"] = True  # flag: served from PG mirror, Teable unreachable
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -166,11 +218,13 @@ def _require_invoice_write(request: Request, role: str) -> None:
 @router.post("", status_code=201)
 async def create_invoice(body: InvoiceFields, request: Request, role: str = Depends(require_auth)):
     try:
+        await _check_mutation_rate(request)
         _require_invoice_write(request, role)
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
             fields["Raised By"] = scoped_email
+        _validate_amounts(fields)
         _validate_paid_invoice(fields)
         result = await InvoiceService().create_invoice(fields)
         new_id = result.get("id") if isinstance(result, dict) else None
@@ -192,6 +246,7 @@ async def update_invoice(
     role: str = Depends(require_auth),
 ):
     try:
+        await _check_mutation_rate(request)
         _require_invoice_write(request, role)
         fields = body.to_teable_fields(include_null_fields={"Raised Date", "Cleared Date", "Next followup"})
         scoped_email = owner_scope_email(request)
@@ -200,6 +255,7 @@ async def update_invoice(
             if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
                 raise HTTPException(status_code=404, detail="Invoice not found")
             fields["Raised By"] = scoped_email
+        _validate_amounts(fields)
         _validate_paid_invoice(fields)
         try:
             await record_user_attribution(request, role, record_id)
@@ -215,6 +271,7 @@ async def update_invoice(
 @router.delete("/{record_id}", status_code=204)
 async def delete_invoice(record_id: str, request: Request, role: str = Depends(require_auth)):
     try:
+        await _check_mutation_rate(request)
         _require_invoice_write(request, role)
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -305,3 +362,175 @@ async def upload_attachment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── CSV / Excel Export ────────────────────────────────────────────────────────
+
+import csv
+import io
+from datetime import date
+from fastapi.responses import StreamingResponse as _StreamingResponse
+
+@router.get("/export")
+async def export_invoices(
+    request:    Request,
+    fmt:        str           = Query("csv", pattern="^(csv)$"),
+    status:     Optional[str] = Query(None),
+    project:    Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None, alias="from"),
+    date_to:    Optional[str] = Query(None, alias="to"),
+    _role:      str           = Depends(require_auth),
+):
+    """Download all matching invoices as CSV."""
+    svc = InvoiceService()
+    scoped_email = owner_scope_email(request)
+    result = await svc.list_invoices(
+        status=status, project=project, raised_by=scoped_email,
+        limit=2000, skip=0, order_by="Raised Date", order="desc",
+    )
+    if result is None:
+        result = await svc.list_invoices_from_pg(
+            status=status, project=project, raised_by=scoped_email,
+            limit=2000, skip=0,
+        )
+    records = (result or {}).get("records", [])
+
+    # Optional date filter
+    if date_from or date_to:
+        def _d(s):
+            try: return date.fromisoformat(s)
+            except Exception: return None
+        df, dt = _d(date_from), _d(date_to)
+        def in_range(r):
+            rd_str = r.get("fields", {}).get("Raised Date", "")
+            if not rd_str: return True
+            try: rd = date.fromisoformat(rd_str[:10])
+            except Exception: return True
+            if df and rd < df: return False
+            if dt and rd > dt: return False
+            return True
+        records = [r for r in records if in_range(r)]
+
+    COLS = [
+        ("Invoice Number",  "Invoice Number"),
+        ("Raised Date",     "Raised Date"),
+        ("Project",         "Project"),
+        ("Client Name",     "Client Name"),
+        ("Category",        "Category"),
+        ("Milestone",       "Milestone"),
+        ("Raised By",       "Raised By"),
+        ("Payment Status",  "Payment Status"),
+        ("Amount Raised",   "Amount Raised"),
+        ("Amount with Tax", "Amount with Tax"),
+        ("Amount Received", "Amount Received"),
+        ("Outstanding Amount", "Outstanding Amount"),
+        ("Cleared Date",    "Cleared Date"),
+        ("Agening (Days)",  "Aging Days"),
+        ("Next Follow-up",  "Next Follow-up"),
+        ("Remark",          "Remark"),
+    ]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([label for _, label in COLS])
+    for r in records:
+        f = r.get("fields", {})
+        writer.writerow([f.get(key, "") for key, _ in COLS])
+
+    filename = f"invoices_{date.today().isoformat()}.csv"
+    return _StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Aging Buckets ─────────────────────────────────────────────────────────────
+
+@router.get("/aging-buckets")
+async def aging_buckets(
+    request: Request,
+    _role:   str = Depends(require_auth),
+):
+    """Return invoice counts/amounts grouped into 0-30, 30-60, 60-90, 90+ day aging buckets."""
+    svc = InvoiceService()
+    scoped_email = owner_scope_email(request)
+    result = await svc.list_invoices(
+        status="Pending", raised_by=scoped_email, limit=2000, skip=0,
+    )
+    if result is None:
+        result = await svc.list_invoices_from_pg(
+            status="Pending", raised_by=scoped_email, limit=2000, skip=0,
+        )
+    records = (result or {}).get("records", [])
+
+    buckets = {
+        "0_30":  {"label": "0–30 days",  "count": 0, "amount": 0.0},
+        "30_60": {"label": "30–60 days", "count": 0, "amount": 0.0},
+        "60_90": {"label": "60–90 days", "count": 0, "amount": 0.0},
+        "90_plus":{"label": "90+ days",  "count": 0, "amount": 0.0},
+    }
+    total_outstanding = 0.0
+
+    for r in records:
+        f = r.get("fields", {})
+        aging = int(f.get("Agening (Days)") or 0)
+        amt   = float(f.get("Outstanding Amount") or f.get("Amount Raised") or 0)
+        total_outstanding += amt
+        if aging <= 30:   b = "0_30"
+        elif aging <= 60: b = "30_60"
+        elif aging <= 90: b = "60_90"
+        else:             b = "90_plus"
+        buckets[b]["count"]  += 1
+        buckets[b]["amount"] += amt
+
+    return {
+        "buckets": list(buckets.values()),
+        "total_outstanding": total_outstanding,
+        "total_pending": len(records),
+    }
+
+
+# ── Send Payment Reminder ─────────────────────────────────────────────────────
+
+@router.post("/{record_id}/send-reminder")
+async def send_invoice_reminder(
+    record_id: str,
+    request:   Request,
+    role:      str = Depends(require_auth),
+):
+    """Send a payment reminder email for a specific invoice."""
+    _require_invoice_write(request, role)
+    svc = InvoiceService()
+    record = await svc.get_invoice(record_id)
+    if record is None:
+        record = await svc.get_invoice_from_pg(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    f = record.get("fields", {})
+    inv_no  = f.get("Invoice Number", record_id)
+    project = f.get("Project", "")
+    client  = f.get("Client Name", "")
+    amount  = f.get("Amount Raised", 0)
+    aging   = f.get("Agening (Days)", 0)
+    status  = f.get("Payment Status", "Pending")
+
+    if status == "Paid":
+        raise HTTPException(status_code=400, detail="This invoice is already marked as paid.")
+
+    try:
+        from ..services.email import send_email
+        subject = f"Payment Reminder — {inv_no}"
+        body = (
+            f"<p>Dear Team,</p>"
+            f"<p>This is a reminder that invoice <strong>{inv_no}</strong> for project "
+            f"<strong>{project}</strong> ({client}) of amount <strong>₹{amount:,.0f}</strong> "
+            f"is currently <strong>{status}</strong> with {aging} days aging.</p>"
+            f"<p>Please arrange payment at the earliest or update us with the expected date.</p>"
+            f"<p>Thanks,<br/>FinTrack</p>"
+        )
+        await send_email(to=None, subject=subject, html=body, record_id=record_id)
+        return {"message": "Reminder sent", "invoice": inv_no}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send reminder: {e}")

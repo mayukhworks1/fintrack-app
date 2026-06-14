@@ -17,6 +17,7 @@ from .routers import insights as insights_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
 from .routers import storage as storage_router
+from .routers import reports as reports_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .db import postgres, valkey as vk
@@ -63,6 +64,19 @@ async def lifespan(app: FastAPI):
             "SECURITY: TEABLE_WEBHOOK_SECRET is not set — /api/webhooks/teable accepts "
             "unauthenticated writes into the PG mirrors. Set it and add the same value as "
             "the X-Webhook-Secret header in every Teable Automation."
+        )
+
+    # ── Critical env-var validation ───────────────────────────────────────────
+    missing_critical = []
+    if not settings.teable_api_token:
+        missing_critical.append("TEABLE_API_TOKEN")
+    if not settings.app_password:
+        missing_critical.append("APP_PASSWORD")
+    if missing_critical:
+        logger.error(
+            "STARTUP: Missing critical env vars: %s — core features will fail at runtime. "
+            "Set these in HF Space secrets or your .env file.",
+            ", ".join(missing_critical),
         )
 
     await postgres.init_pool()
@@ -113,6 +127,14 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Graceful shutdown ─────────────────────────────────────────────────
+    # 1. Flush the audit queue before cancelling the worker so no events are lost.
+    from .db.audit import _audit_queue as _aq
+    if _aq is not None:
+        try:
+            await asyncio.wait_for(_aq.join(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Audit queue did not drain within 5 s — some events may be lost")
+
     for task in (_sync_task, _audit_task, _aging_refresh_task, _embed_task):
         if task and not task.done():
             task.cancel()
@@ -136,13 +158,16 @@ app = FastAPI(
 def _cors_origins() -> list[str]:
     """
     Restrict CORS to the configured frontend origin(s). FRONTEND_URL may be a
-    comma-separated list. Falls back to "*" only when nothing is configured, so
-    local dev keeps working but production locks down once FRONTEND_URL is set.
+    comma-separated list. Falls back to "*" ONLY when nothing is configured (local dev).
+    If FRONTEND_URL is explicitly set, only those exact origins are allowed.
     """
     raw = (settings.frontend_url or "").strip()
     if not raw or raw == "*":
+        logger.warning("CORS: FRONTEND_URL not set — allowing all origins (*). Set FRONTEND_URL in production.")
         return ["*"]
-    return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    logger.info("CORS: restricting to %s", origins)
+    return origins
 
 
 app.add_middleware(
@@ -167,6 +192,7 @@ app.include_router(insights_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
 app.include_router(storage_router.router)
+app.include_router(reports_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────

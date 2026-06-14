@@ -376,6 +376,15 @@ export const api = {
       bustInvoiceReads()
       return result
     },
+    agingBuckets: (opts = {}) => request('/api/invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
+    sendReminder: (id) => request(`/api/invoices/${id}/send-reminder`, { method: 'POST' }),
+    exportUrl: (params = {}) => {
+      const q = new URLSearchParams({ fmt: 'csv' })
+      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
+      const token = getAuthToken()
+      if (token) q.set('token', token)
+      return `${BASE_URL}/api/invoices/export?${q}`
+    },
     // Upload an invoice file (PDF/image) and get AI-extracted fields back.
     // Uses multipart/form-data — do NOT set Content-Type header (browser sets boundary).
     parse: (file) => {
@@ -507,6 +516,15 @@ export const api = {
       unassign: (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'DELETE' }),
     },
   },
+  reports: {
+    gstSummary: (params = {}) => {
+      const q = new URLSearchParams()
+      if (params.from) q.set('from', params.from)
+      if (params.to)   q.set('to',   params.to)
+      return request(`/api/reports/gst-summary?${q}`, { fresh: true, cacheTtl: 0 })
+    },
+  },
+
   status: {
     upload: (recordId, fieldName, file) => {
       const form = new FormData()

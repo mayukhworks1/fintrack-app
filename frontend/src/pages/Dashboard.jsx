@@ -256,10 +256,14 @@ export default function Dashboard() {
   const [chartPreset, setChartPreset] = useState('60d')
   const [chartFrom,   setChartFrom]   = useState('')
   const [chartTo,     setChartTo]     = useState('')
+  const [agingBuckets, setAgingBuckets] = useState(null)
   useEffect(() => {
     let cancelled = false
     api.invoices.list({ limit: 400, order_by: 'Raised Date', order: 'desc' })
       .then(r => { if (!cancelled) setInvoiceRecords(r?.records || []) })
+      .catch(() => {})
+    api.invoices.agingBuckets()
+      .then(r => { if (!cancelled) setAgingBuckets(r) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -656,6 +660,44 @@ export default function Dashboard() {
           </section>
         )
       })()}
+
+      {/* ── Aging Buckets widget ── */}
+      {agingBuckets && agingBuckets.total_pending > 0 && (
+        <section aria-label="Invoice aging buckets">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>Collections aging</p>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  {agingBuckets.total_pending} pending invoice{agingBuckets.total_pending !== 1 ? 's' : ''} · ₹{Number(agingBuckets.total_outstanding).toLocaleString('en-IN')} outstanding
+                </p>
+              </div>
+              <a href="/invoices?status=Pending" className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>View all →</a>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(agingBuckets.buckets || []).map((b, i) => {
+                const colors = ['#22c55e','#eab308','#f97316','#ef4444']
+                const lightColors = ['#dcfce7','#fef9c3','#ffedd5','#fee2e2']
+                const color = colors[i] || '#6b7280'
+                const light = lightColors[i] || '#f3f4f6'
+                const pct = agingBuckets.total_outstanding > 0 ? (b.amount / agingBuckets.total_outstanding * 100) : 0
+                return (
+                  <div key={b.label} className="rounded-xl p-3" style={{ background: light, border: `1px solid ${color}30` }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color }}>{b.label}</p>
+                    <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
+                      ₹{Number(b.amount).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{b.count} invoice{b.count !== 1 ? 's' : ''}</p>
+                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: `${color}25` }}>
+                      <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 9999 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Middle row ── */}
       {(visibleWidgets.has('client_revenue') || visibleWidgets.has('needs_attention') || visibleWidgets.has('leaders')) && (
