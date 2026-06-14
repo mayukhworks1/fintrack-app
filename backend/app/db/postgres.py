@@ -641,6 +641,18 @@ CREATE TABLE IF NOT EXISTS auth_user_scopes (
 CREATE INDEX IF NOT EXISTS aus_user_idx ON auth_user_scopes (user_id);
 CREATE INDEX IF NOT EXISTS aus_scope_idx ON auth_user_scopes (scope_type, module_key);
 
+-- Per-user permission overrides (grant or deny a specific permission regardless of role)
+CREATE TABLE IF NOT EXISTS auth_user_permission_grants (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID        NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    permission_id UUID        NOT NULL REFERENCES auth_permissions(id) ON DELETE CASCADE,
+    granted       BOOLEAN     NOT NULL,
+    granted_by    UUID,
+    granted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, permission_id)
+);
+CREATE INDEX IF NOT EXISTS aupg_user_idx ON auth_user_permission_grants (user_id);
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
     id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id       UUID         NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,

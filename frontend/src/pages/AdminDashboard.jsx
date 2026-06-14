@@ -4434,6 +4434,221 @@ function UserTimelineDrawer({ userId, onClose }) {
   )
 }
 
+// ── Permissions Tab ───────────────────────────────────────────────────────────
+
+const MODULE_ORDER = ['dashboard','invoices','projects','tax','analytics','reports','ai','status','shared','admin','system']
+const MODULE_LABELS = {
+  dashboard:'Dashboard', invoices:'Invoices', projects:'Projects', tax:'Tax Ledger',
+  analytics:'Analytics', reports:'Reports', ai:'AI', status:'Status Board',
+  shared:'Shared Views', admin:'Admin', system:'System',
+}
+const ACTION_COLORS = { view:'#6366f1', create:'#22c55e', edit:'#f59e0b', delete:'#ef4444', payment:'#a855f7' }
+
+function PermissionsTab() {
+  const [matrix, setMatrix] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState({})
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [moduleFilter, setModuleFilter] = useState('all')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await api.admin.permissionMatrix()
+      setMatrix(data)
+      if (data.users.length > 0 && !selectedUser) setSelectedUser(data.users[0].id)
+    } catch (e) {
+      setError(e.message || 'Failed to load permissions')
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedUser])
+
+  useEffect(() => { load() }, [])
+
+  async function toggle(userId, permKey, currentlyGranted) {
+    const key = `${userId}:${permKey}`
+    setBusy(b => ({ ...b, [key]: true }))
+    try {
+      await api.admin.setUserPermission(userId, permKey, currentlyGranted ? false : true)
+      await load()
+    } catch (e) {
+      alert(e.message || 'Failed to update permission')
+    } finally {
+      setBusy(b => { const n = {...b}; delete n[key]; return n })
+    }
+  }
+
+  async function clearOverride(userId, permKey) {
+    const key = `${userId}:${permKey}`
+    setBusy(b => ({ ...b, [key]: true }))
+    try {
+      await api.admin.setUserPermission(userId, permKey, null)
+      await load()
+    } catch (e) {
+      alert(e.message || 'Failed to clear override')
+    } finally {
+      setBusy(b => { const n = {...b}; delete n[key]; return n })
+    }
+  }
+
+  if (loading) return <div className="p-8 text-center" style={{ color: 'var(--text-3)' }}>Loading permission matrix…</div>
+  if (error)   return <div className="p-8 text-center" style={{ color: 'var(--fin-negative)' }}>{error}</div>
+  if (!matrix) return null
+
+  const user = matrix.users.find(u => u.id === selectedUser)
+  const effectiveSet = new Set(user?.effective_permission_ids || [])
+  const overrides = user?.overrides || {}
+
+  const moduleGroups = MODULE_ORDER.reduce((acc, mk) => {
+    const perms = matrix.permissions.filter(p => p.module_key === mk)
+    if (perms.length > 0) acc.push({ module_key: mk, perms })
+    return acc
+  }, [])
+  // Catch any modules not in MODULE_ORDER
+  const knownModules = new Set(MODULE_ORDER)
+  matrix.permissions.forEach(p => {
+    if (!knownModules.has(p.module_key)) {
+      let g = moduleGroups.find(g => g.module_key === p.module_key)
+      if (!g) { g = { module_key: p.module_key, perms: [] }; moduleGroups.push(g) }
+      if (!g.perms.find(x => x.id === p.id)) g.perms.push(p)
+    }
+  })
+
+  const visibleModules = moduleFilter === 'all' ? moduleGroups : moduleGroups.filter(g => g.module_key === moduleFilter)
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>Permission Matrix</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+              Grant or revoke specific permissions per user. Overrides apply on top of role defaults.
+              <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>Role default</span>
+              <span className="ml-2 font-semibold" style={{ color: '#22c55e' }}>Granted override</span>
+              <span className="ml-2 font-semibold" style={{ color: '#ef4444' }}>Denied override</span>
+            </p>
+          </div>
+          <button onClick={load} className="btn-ghost text-xs">Refresh</button>
+        </div>
+
+        {/* User selector */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {matrix.users.map(u => (
+            <button
+              key={u.id}
+              onClick={() => setSelectedUser(u.id)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
+              style={selectedUser === u.id
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+            >
+              {u.name || u.email}
+              {u.roles.length > 0 && (
+                <span className="ml-1.5 opacity-70">({u.roles.map(r => r.role_key).join(', ')})</span>
+              )}
+            </button>
+          ))}
+          {matrix.users.length === 0 && (
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>No approved active users found.</p>
+          )}
+        </div>
+      </div>
+
+      {user && (
+        <>
+          {/* Module filter */}
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={() => setModuleFilter('all')}
+              className={moduleFilter === 'all' ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: '0.7rem', padding: '0.25rem 0.65rem' }}>All</button>
+            {moduleGroups.map(g => (
+              <button key={g.module_key} onClick={() => setModuleFilter(g.module_key)}
+                className={moduleFilter === g.module_key ? 'btn-primary' : 'btn-ghost'}
+                style={{ fontSize: '0.7rem', padding: '0.25rem 0.65rem' }}>
+                {MODULE_LABELS[g.module_key] || g.module_key}
+              </button>
+            ))}
+          </div>
+
+          {/* Permission cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {visibleModules.map(({ module_key, perms }) => (
+              <div key={module_key} className="card p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+                  {MODULE_LABELS[module_key] || module_key}
+                </p>
+                <div className="space-y-2">
+                  {perms.map(perm => {
+                    const isGranted = effectiveSet.has(perm.id)
+                    const hasOverride = perm.id in overrides
+                    const overrideVal = overrides[perm.id]
+                    const bKey = `${user.id}:${perm.permission_key}`
+                    const isBusy = !!busy[bKey]
+                    const actionColor = ACTION_COLORS[perm.action_key] || 'var(--accent)'
+
+                    return (
+                      <div key={perm.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2"
+                        style={{ background: 'var(--bg-input)', border: `1px solid var(--border)` }}>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{perm.label}</p>
+                          <p className="text-[10px]" style={{ color: actionColor }}>
+                            {perm.action_key}
+                            {hasOverride && (
+                              <span className="ml-1.5" style={{ color: overrideVal ? '#22c55e' : '#ef4444' }}>
+                                · override {overrideVal ? '(granted)' : '(denied)'}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {hasOverride && (
+                            <button
+                              onClick={() => clearOverride(user.id, perm.permission_key)}
+                              disabled={isBusy}
+                              title="Clear override (revert to role default)"
+                              className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: 'var(--border)', color: 'var(--text-3)', opacity: isBusy ? 0.5 : 1 }}>
+                              reset
+                            </button>
+                          )}
+                          <button
+                            onClick={() => toggle(user.id, perm.permission_key, isGranted)}
+                            disabled={isBusy}
+                            className="relative flex-shrink-0 rounded-full transition-all"
+                            style={{
+                              width: 36, height: 20,
+                              background: isGranted ? '#22c55e' : 'var(--border)',
+                              opacity: isBusy ? 0.6 : 1,
+                              cursor: isBusy ? 'wait' : 'pointer',
+                              border: 'none',
+                            }}
+                            title={isGranted ? 'Click to deny' : 'Click to grant'}
+                          >
+                            <span style={{
+                              position: 'absolute', top: 2, left: isGranted ? 18 : 2,
+                              width: 16, height: 16, borderRadius: '50%',
+                              background: '#fff', transition: 'left 0.15s',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                            }} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 
 // Top-level tabs — grouped by concern
@@ -4450,6 +4665,7 @@ const TABS = [
   { id: 'shared',    label: 'Shared',           icon: Link2            },
   { id: 'hflogs',    label: 'HF Logs',          icon: Terminal         },
   { id: 'deploy',    label: 'System Health',    icon: ServerCrash      },
+  { id: 'permissions', label: 'Permissions',   icon: ShieldAlert      },
 ]
 
 // Sub-tabs for composite tabs
@@ -4585,9 +4801,10 @@ export default function AdminDashboard({ embedded = false }) {
       {activeTab === 'projects'  && <ProjectsMirrorTab />}
       {activeTab === 'invoices'  && <InvoicesTab drilldown={invoiceDrilldown} />}
       {activeTab === 'history'   && <HistoryTab drilldown={historyDrilldown} onOpenRecord={openInvoiceDrilldown} />}
-      {activeTab === 'shared'    && <SharedLinksTab />}
-      {activeTab === 'hflogs'    && <HfLogsTab />}
-      {activeTab === 'deploy'    && <DeploymentHealthTab />}
+      {activeTab === 'shared'      && <SharedLinksTab />}
+      {activeTab === 'hflogs'      && <HfLogsTab />}
+      {activeTab === 'deploy'      && <DeploymentHealthTab />}
+      {activeTab === 'permissions' && <PermissionsTab />}
     </>
   )
 

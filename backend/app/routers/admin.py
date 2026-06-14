@@ -2697,3 +2697,134 @@ async def get_hf_logs(
         return JSONResponse(status_code=502, content={"error": str(exc)})
 
     return {"log_type": log_type, "count": len(collected), "lines": collected}
+
+
+# ── Permission Matrix ─────────────────────────────────────────────────────────
+
+class PermissionGrantBody(BaseModel):
+    granted: Optional[bool] = None  # None = clear override (use role default)
+
+
+@router.get("/permissions/matrix")
+async def permission_matrix(_role: str = Depends(require_admin)):
+    """
+    Return all permissions, all roles with their permission sets,
+    all active users with their roles and per-user overrides.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # All defined permissions
+        perms = await conn.fetch(
+            "SELECT id, permission_key, label, module_key, action_key FROM auth_permissions ORDER BY module_key, action_key"
+        )
+
+        # All roles
+        roles = await conn.fetch("SELECT id, role_key, label FROM auth_roles ORDER BY label")
+
+        # Role → permission mapping
+        role_perms = await conn.fetch(
+            "SELECT role_id, permission_id FROM auth_role_permissions"
+        )
+        role_perm_map: dict[str, set] = {}
+        for rp in role_perms:
+            role_perm_map.setdefault(str(rp["role_id"]), set()).add(str(rp["permission_id"]))
+
+        # Active users with their roles
+        users = await conn.fetch(
+            """
+            SELECT u.id, u.email, u.name, u.approved, u.disabled,
+                   COALESCE(
+                     json_agg(json_build_object('role_key', r.role_key, 'role_id', r.id::text))
+                     FILTER (WHERE r.id IS NOT NULL), '[]'::json
+                   ) AS roles
+            FROM auth_users u
+            LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+            LEFT JOIN auth_roles r ON r.id = ur.role_id
+            WHERE u.approved = true AND u.disabled = false
+            GROUP BY u.id ORDER BY u.email
+            """
+        )
+
+        # Per-user permission overrides
+        user_grants = await conn.fetch(
+            "SELECT user_id, permission_id, granted FROM auth_user_permission_grants"
+        )
+        user_grant_map: dict[str, dict] = {}
+        for ug in user_grants:
+            uid = str(ug["user_id"])
+            pid = str(ug["permission_id"])
+            user_grant_map.setdefault(uid, {})[pid] = ug["granted"]
+
+    perm_list = [dict(p) for p in perms]
+    for p in perm_list:
+        p["id"] = str(p["id"])
+
+    role_list = [{"id": str(r["id"]), "role_key": r["role_key"], "label": r["label"]} for r in roles]
+
+    user_list = []
+    for u in users:
+        uid = str(u["id"])
+        import json as _json
+        user_roles = _json.loads(u["roles"]) if isinstance(u["roles"], str) else list(u["roles"])
+        user_role_ids = {r["role_id"] for r in user_roles if r.get("role_id")}
+
+        # Effective permissions = union of role permissions, then apply overrides
+        effective: dict[str, bool] = {}
+        for rid in user_role_ids:
+            for pid in role_perm_map.get(rid, set()):
+                effective[pid] = True
+
+        overrides = user_grant_map.get(uid, {})
+        for pid, granted in overrides.items():
+            effective[pid] = granted
+
+        user_list.append({
+            "id": uid,
+            "email": u["email"],
+            "name": u["name"] or u["email"],
+            "roles": user_roles,
+            "effective_permission_ids": [pid for pid, g in effective.items() if g],
+            "overrides": {pid: g for pid, g in overrides.items()},
+        })
+
+    return {
+        "permissions": perm_list,
+        "roles": role_list,
+        "role_permissions": {k: list(v) for k, v in role_perm_map.items()},
+        "users": user_list,
+    }
+
+
+@router.put("/permissions/users/{user_id}/{permission_key}")
+async def set_user_permission(
+    user_id: str,
+    permission_key: str,
+    body: PermissionGrantBody,
+    _role: str = Depends(require_admin),
+):
+    """Grant, deny, or clear a per-user permission override."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        perm = await conn.fetchrow(
+            "SELECT id FROM auth_permissions WHERE permission_key = $1", permission_key
+        )
+        if not perm:
+            raise HTTPException(status_code=404, detail=f"Permission not found: {permission_key}")
+
+        if body.granted is None:
+            # Clear override — revert to role default
+            await conn.execute(
+                "DELETE FROM auth_user_permission_grants WHERE user_id = $1::uuid AND permission_id = $2",
+                user_id, perm["id"],
+            )
+            return {"status": "cleared", "user_id": user_id, "permission_key": permission_key}
+
+        await conn.execute(
+            """
+            INSERT INTO auth_user_permission_grants (user_id, permission_id, granted)
+            VALUES ($1::uuid, $2, $3)
+            ON CONFLICT (user_id, permission_id) DO UPDATE SET granted = EXCLUDED.granted, granted_at = NOW()
+            """,
+            user_id, perm["id"], body.granted,
+        )
+        return {"status": "granted" if body.granted else "denied", "user_id": user_id, "permission_key": permission_key}

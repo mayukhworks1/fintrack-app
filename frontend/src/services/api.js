@@ -683,6 +683,11 @@ export const api = {
     getLogs:  (logType, limit = 300) => request(`/api/admin/logs/${encodeURIComponent(logType)}?limit=${limit}`),
     insightConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/insight-configs?${q}`) },
     insightExports: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/insight-exports?${q}`) },
+    permissionMatrix: () => request('/api/admin/permissions/matrix'),
+    setUserPermission: (userId, permKey, granted) => request(
+      `/api/admin/permissions/users/${encodeURIComponent(userId)}/${encodeURIComponent(permKey)}`,
+      { method: 'PUT', body: JSON.stringify({ granted }) }
+    ),
   },
   insights: {
     listConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/insights/configs?${q}`) },

@@ -28,6 +28,7 @@ import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import clsx from 'clsx'
 import EmptyState from '../components/EmptyState'
+import InvoiceActivityChart from '../components/InvoiceActivityChart'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
@@ -112,6 +113,22 @@ const shortMonthLabel = (key) => {
 
 const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
 const currentMonthKey = () => monthKey(new Date().toISOString())
+
+const invoiceAmountParts = (fields = {}) => {
+  const base = Number(fields['Amount Raised'] || 0)
+  const gross = Number(fields['Amount with Tax'] || base)
+  const received = Number(fields['Amount Received'] || 0)
+  const status = String(fields['Payment Status'] || '').trim()
+  const isPaid = status === 'Paid'
+  const gst = Math.max(0, gross - base)
+  const variance = Math.max(0, gross - received)
+  return {
+    base, gross, gst, received,
+    deduction: isPaid ? variance : 0,
+    outstanding: isPaid || status === 'Cancelled' ? 0 : variance,
+    isPaid,
+  }
+}
 const firstDayIso = (key) => `${key}-01T00:00:00.000Z`
 const INVOICE_REQUEST_FORM_URL = 'https://forms.zohopublic.com/theworks/form/TheWorksInvoiceRequest/formperma/EeBkA0aaMt64sMe9n3mxlKggjA-QmVDmTVwrqMHPGOY'
 
@@ -1734,6 +1751,10 @@ export default function WebInvoices() {
   const [agingBuckets,  setAgingBuckets]  = useState(null)
   const [gstSummary,    setGstSummary]    = useState(null)
   const [gstMonths,     setGstMonths]     = useState(3)
+  const [chartPreset,   setChartPreset]   = useState('60d')
+  const [chartFrom,     setChartFrom]     = useState('')
+  const [chartTo,       setChartTo]       = useState('')
+  const [balanceMonths, setBalanceMonths] = useState(3)
   const isStaleData = listData?._stale === true
 
   useEffect(() => {
@@ -2052,6 +2073,39 @@ export default function WebInvoices() {
     setWorkspace('invoices')
   }, [])
 
+  const lastThreeMonthBalance = useMemo(() => {
+    const current = currentMonthKey()
+    const keys = Array.from({ length: balanceMonths }, (_, i) => shiftMonthKey(current, -(balanceMonths - 1 - i)))
+    return keys.map((key, index) => {
+      let base = 0, gross = 0, gst = 0, received = 0, deduction = 0, outstanding = 0, invoiceCount = 0
+      for (const record of allRecords) {
+        const fields = record.fields || {}
+        if (monthKey(fields['Raised Date']) === key) {
+          const parts = invoiceAmountParts(fields)
+          base += parts.base; gross += parts.gross; gst += parts.gst
+          received += parts.received; deduction += parts.deduction
+          outstanding += parts.outstanding; invoiceCount += 1
+        }
+      }
+      const previous = index > 0 ? keys[index - 1] : ''
+      let previousGross = 0
+      if (previous) {
+        for (const record of allRecords) {
+          const fields = record.fields || {}
+          if (monthKey(fields['Raised Date']) === previous) previousGross += invoiceAmountParts(fields).gross
+        }
+      }
+      const change = previous && previousGross ? ((gross - previousGross) / Math.abs(previousGross)) * 100 : null
+      const collectionRate = gross > 0 ? Math.min(100, Math.max(0, (received / gross) * 100)) : 0
+      return { key, label: shortMonthLabel(key), base, gross, gst, received, deduction, outstanding, invoiceCount, collectionRate, change }
+    })
+  }, [allRecords, balanceMonths])
+
+  const maxMonthlyBalanceMagnitude = useMemo(
+    () => Math.max(1, ...lastThreeMonthBalance.map(e => e.gross)),
+    [lastThreeMonthBalance]
+  )
+
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
       toast('No existing retainer template found for this project', 'warning')
@@ -2365,6 +2419,125 @@ export default function WebInvoices() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+            )}
+
+            {/* ── Invoice Activity Chart ── */}
+            {allRecords.length > 0 && (() => {
+              const CHART_PRESETS = [
+                { key: '30d',    label: '30d',   days: 30 },
+                { key: '60d',    label: '60d',   days: 60 },
+                { key: '3m',     label: '3 mo',  days: 90 },
+                { key: '6m',     label: '6 mo',  days: 180 },
+                { key: '1y',     label: '1 yr',  days: 365 },
+                { key: 'custom', label: 'Custom',days: null },
+              ]
+              const activePreset = CHART_PRESETS.find(p => p.key === chartPreset) || CHART_PRESETS[1]
+              const chartFromProp = chartPreset === 'custom' ? chartFrom : undefined
+              const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
+              const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
+              const labelText = chartPreset === 'custom' && chartFrom
+                ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
+                : `last ${activePreset.label}`
+              return (
+                <div className="rounded-[26px] overflow-hidden" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}`, padding: 0 }}>
+                  <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-2">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Invoice activity</p>
+                      <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Billing activity · {labelText}</h2>
+                      <p className="text-[11px] mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
+                        Bar height = amount ·&nbsp;
+                        <span className="inline-flex items-center gap-1">
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid&nbsp;
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#fb7185' }} />overdue&nbsp;
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />pending
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center rounded-lg p-0.5 gap-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                        {CHART_PRESETS.map(p => (
+                          <button key={p.key}
+                            onClick={() => setChartPreset(p.key)}
+                            className="text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+                            style={chartPreset === p.key
+                              ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                              : { color: 'var(--text-3)' }}>
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                      {chartPreset === 'custom' && (
+                        <div className="flex items-center gap-1.5">
+                          <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
+                            className="text-[11px] px-2 py-1 rounded-md"
+                            style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
+                          <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
+                            className="text-[11px] px-2 py-1 rounded-md"
+                            style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <InvoiceActivityChart
+                    records={allRecords}
+                    days={chartDaysProp}
+                    from={chartFromProp}
+                    to={chartToProp}
+                    className="px-2 pb-1"
+                  />
+                </div>
+              )
+            })()}
+
+            {/* ── Monthly Receivables (bar card widget) ── */}
+            {allRecords.length > 0 && (
+            <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables trend</p>
+                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} months</h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[3, 6, 12].map(m => (
+                    <button key={m} onClick={() => setBalanceMonths(m)}
+                      className={balanceMonths === m ? 'btn-primary' : 'btn-ghost'}
+                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.6rem' }}>{m} mo</button>
+                  ))}
+                </div>
+              </div>
+              <div className="invoice-month-bars">
+                {lastThreeMonthBalance.map((entry) => (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
+                    className="invoice-runey-card"
+                    style={{ textAlign: 'left', cursor: 'pointer', width: '100%', background: 'none', border: 'none', padding: 0 }}
+                  >
+                    <div className="invoice-month-bar">
+                      <div className="invoice-month-bar-item" style={{ '--bar-pct': `${maxMonthlyBalanceMagnitude > 0 ? (entry.gross / maxMonthlyBalanceMagnitude) * 100 : 0}%`, '--bar-color': 'var(--accent)' }} />
+                      <div className="invoice-month-bar-item" style={{ '--bar-pct': `${maxMonthlyBalanceMagnitude > 0 ? (entry.received / maxMonthlyBalanceMagnitude) * 100 : 0}%`, '--bar-color': 'var(--fin-positive)' }} />
+                    </div>
+                    <p className="invoice-month-label">{entry.label}</p>
+                    <p className="invoice-month-value">₹{(entry.gross / 100000).toFixed(1)}L</p>
+                    <div className="invoice-month-mini-grid">
+                      <span className="invoice-month-subvalue">Base ₹{(entry.base / 1000).toFixed(0)}k</span>
+                      <span className="invoice-month-subvalue" style={{ color: 'var(--accent)' }}>GST ₹{(entry.gst / 1000).toFixed(0)}k</span>
+                      <span className="invoice-month-subvalue" style={{ color: 'var(--fin-positive)' }}>Rcvd ₹{(entry.received / 1000).toFixed(0)}k</span>
+                      <span className="invoice-month-subvalue" style={{ color: entry.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
+                        Due ₹{(entry.outstanding / 1000).toFixed(0)}k
+                      </span>
+                    </div>
+                    {entry.change !== null && (
+                      <span className="invoice-month-change" style={{ color: entry.change >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
+                        {entry.change >= 0 ? '+' : ''}{entry.change.toFixed(1)}% vs prev
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
             )}
