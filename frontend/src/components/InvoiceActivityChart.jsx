@@ -58,7 +58,10 @@ const AREA_COLOR = '#22c55e'
 const AREA_GRADIENT_ID = 'iac-area-grad'
 const GLOW_ID = 'iac-area-glow'
 
-export default function InvoiceActivityChart({ records = [], days = 60, className = '' }) {
+// Accepts either:
+//   days={60}           → last N days ending today (legacy)
+//   from="2024-01-01" to="2024-06-30"  → explicit date range
+export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '' }) {
   const containerRef = useRef(null)
   const [width, setWidth]   = useState(800)
 
@@ -83,10 +86,17 @@ export default function InvoiceActivityChart({ records = [], days = 60, classNam
   const chartW    = width - PAD_L - PAD_R
 
   const data = useMemo(() => {
-    // Date range: last `days` days ending today
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const start = addDays(today, -(days - 1))
+
+    let start, end
+    if (from) {
+      start = new Date(from); start.setHours(0,0,0,0)
+      end   = to ? new Date(to) : today; end.setHours(0,0,0,0)
+    } else {
+      end   = today
+      start = addDays(today, -(days - 1))
+    }
 
     // Build day → invoices map
     const byDay = {}
@@ -114,7 +124,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, classNam
       const dt = parseDate(f['Raised Date'])
       if (dt && dt < start) cum += Number(f['Amount Raised'] || 0)
     }
-    for (let d = new Date(start); d <= today; d = addDays(d, 1)) {
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
       const key     = toDateKey(d)
       const invoices = byDay[key] || []
       const dayAmt  = invoices.reduce((s, i) => s + i.amount, 0)
@@ -122,7 +132,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, classNam
       allDays.push({ date: new Date(d), key, invoices, dayAmt, cum })
     }
     return allDays
-  }, [records, days])
+  }, [records, days, from, to])
 
   const maxCum    = Math.max(...data.map(d => d.cum), 1)
   const maxDayAmt = Math.max(...data.map(d => d.dayAmt), 1)

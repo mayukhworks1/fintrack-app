@@ -253,6 +253,9 @@ export default function Dashboard() {
 
   // Invoice records for the activity timeline chart
   const [invoiceRecords, setInvoiceRecords] = useState([])
+  const [chartPreset, setChartPreset] = useState('60d')
+  const [chartFrom,   setChartFrom]   = useState('')
+  const [chartTo,     setChartTo]     = useState('')
   useEffect(() => {
     let cancelled = false
     api.invoices.list({ limit: 400, order_by: 'Raised Date', order: 'desc' })
@@ -582,26 +585,77 @@ export default function Dashboard() {
       )}
 
       {/* ── Invoice activity timeline ── */}
-      {invoiceRecords.length > 0 && (
-        <section aria-label="Invoice activity timeline">
-          <div className="card overflow-hidden" style={{ padding: 0 }}>
-            <div className="flex items-center justify-between px-5 pt-4 pb-2">
-              <div>
-                <p className="text-sm font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>Invoice activity</p>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  Cumulative billing · bar height = amount ·
-                  <span className="inline-flex items-center gap-1 ml-1">
-                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid
-                    <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#fb7185' }} />overdue
-                    <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#94a3b8' }} />pending
-                  </span>
-                </p>
+      {invoiceRecords.length > 0 && (() => {
+        const PRESETS = [
+          { key: '30d',    label: '30d',   days: 30 },
+          { key: '60d',    label: '60d',   days: 60 },
+          { key: '3m',     label: '3 mo',  days: 90 },
+          { key: '6m',     label: '6 mo',  days: 180 },
+          { key: '1y',     label: '1 yr',  days: 365 },
+          { key: 'custom', label: 'Custom',days: null },
+        ]
+        const activePreset  = PRESETS.find(p => p.key === chartPreset) || PRESETS[1]
+        const chartFromProp = chartPreset === 'custom' ? chartFrom : undefined
+        const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
+        const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
+        const labelText = chartPreset === 'custom' && chartFrom
+          ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
+          : `last ${activePreset.label}`
+        return (
+          <section aria-label="Invoice activity timeline">
+            <div className="card overflow-hidden" style={{ padding: 0 }}>
+              <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-2">
+                <div>
+                  <p className="text-sm font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
+                    Invoice activity · {labelText}
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    Cumulative billing · bar height = amount ·
+                    <span className="inline-flex items-center gap-1 ml-1">
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#fb7185' }} />overdue
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#94a3b8' }} />pending
+                    </span>
+                  </p>
+                </div>
+                {/* ── Date range controls ── */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center rounded-lg p-0.5 gap-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                    {PRESETS.map(p => (
+                      <button key={p.key}
+                        onClick={() => setChartPreset(p.key)}
+                        className="text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+                        style={chartPreset === p.key
+                          ? { background: 'var(--card-bg)', color: 'var(--accent)', boxShadow: 'var(--shadow-sm)' }
+                          : { color: 'var(--text-3)' }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  {chartPreset === 'custom' && (
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
+                        className="text-[11px] px-2 py-1 rounded-md"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
+                      <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
+                        className="text-[11px] px-2 py-1 rounded-md"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                    </div>
+                  )}
+                </div>
               </div>
+              <InvoiceActivityChart
+                records={invoiceRecords}
+                days={chartDaysProp}
+                from={chartFromProp}
+                to={chartToProp}
+                className="px-2 pb-1"
+              />
             </div>
-            <InvoiceActivityChart records={invoiceRecords} days={60} className="px-2 pb-1" />
-          </div>
-        </section>
-      )}
+          </section>
+        )
+      })()}
 
       {/* ── Middle row ── */}
       {(visibleWidgets.has('client_revenue') || visibleWidgets.has('needs_attention') || visibleWidgets.has('leaders')) && (
