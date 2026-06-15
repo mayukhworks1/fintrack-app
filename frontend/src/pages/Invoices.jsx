@@ -2263,6 +2263,7 @@ export default function Invoices() {
               from={chartFromProp}
               to={chartToProp}
               className="px-2 pb-1"
+              avatarMap={avatarMap}
             />
           </div>
         )

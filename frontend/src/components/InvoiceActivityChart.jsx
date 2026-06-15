@@ -41,7 +41,7 @@ const UID = 'iac2'
 // Accepts either:
 //   days={60}          → last N days ending today
 //   from="…" to="…"   → explicit date range
-export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '' }) {
+export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '', avatarMap = {} }) {
   const containerRef = useRef(null)
   const svgRef       = useRef(null)
   const [width,      setWidth]   = useState(800)
@@ -387,7 +387,20 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                     <p style={{ fontSize: 12, fontWeight: 800, color: meta.dot, marginBottom: 2 }}>{fmtInr(inv.amount)}</p>
                     {inv.project && <p style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📁 {inv.project}</p>}
                     {inv.client  && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {inv.client}</p>}
-                    {inv.raisedBy && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>✍️ {inv.raisedBy}</p>}
+                    {inv.raisedBy && (() => {
+                      const entry = avatarMap[inv.raisedBy.toLowerCase()] || {}
+                      const label = entry.name || inv.raisedBy
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                          <span style={{
+                            width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                            background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 7, color: 'var(--accent)', fontWeight: 700,
+                          }}>{label[0].toUpperCase()}</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{label}</span>
+                        </div>
+                      )
+                    })()}
                     {inv.aging > 0 && inv.status !== 'Paid' && (
                       <p style={{ fontSize: 10, color: meta.fill, fontWeight: 600, marginTop: 2 }}>⏱ {inv.aging}d aging</p>
                     )}
