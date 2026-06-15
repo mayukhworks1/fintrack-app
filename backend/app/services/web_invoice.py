@@ -317,11 +317,7 @@ class WebInvoiceService:
                 ]
                 return {"records": scoped[skip:skip + limit], "total": len(scoped)}
 
-            params: dict[str, Any] = {
-                "fieldKeyType": "name",
-                "take": limit,
-                "skip": skip,
-            }
+            field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
             filter_set = []
             if status:
                 filter_set.append({
@@ -335,21 +331,40 @@ class WebInvoiceService:
                     "operator": "is",
                     "value": project,
                 })
-            if filter_set:
-                params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
-            field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
-            params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
 
-            async with httpx.AsyncClient(timeout=20) as client:
-                res = await client.get(self._record_url, params=params, headers=self._headers)
-                res.raise_for_status()
-                data = res.json()
-            records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
+            # Teable caps take at 1000 per request — paginate when limit is larger
+            PAGE = 1000
+            all_records: list[dict] = []
+            total = 0
+            async with httpx.AsyncClient(timeout=30) as client:
+                page_skip = skip
+                remaining = limit
+                while remaining > 0:
+                    params: dict[str, Any] = {
+                        "fieldKeyType": "name",
+                        "take": min(PAGE, remaining),
+                        "skip": page_skip,
+                        "orderBy": json.dumps([{"fieldId": field_id, "order": order}]),
+                    }
+                    if filter_set:
+                        params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
+                    res = await client.get(self._record_url, params=params, headers=self._headers)
+                    res.raise_for_status()
+                    data = res.json()
+                    batch = data.get("records", [])
+                    total = data.get("total", total)
+                    all_records.extend(batch)
+                    if len(batch) < min(PAGE, remaining):
+                        break
+                    page_skip += len(batch)
+                    remaining -= len(batch)
+
+            records = [_apply_runtime_invoice_derivatives(r) for r in all_records]
             # Python-side case-insensitive safety filter for ownership scoping
             if raised_by:
                 email_lc = raised_by.lower()
                 records = [r for r in records if r.get("fields", {}).get("Raised By", "").lower() == email_lc]
-            return {"records": records, "total": data.get("total", 0)}
+            return {"records": records, "total": total}
 
         # Owner-scoped views are security-sensitive and should reflect CRUD
         # immediately. Keep cache only for legacy/full-workspace reads.
