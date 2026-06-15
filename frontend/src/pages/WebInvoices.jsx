@@ -1643,7 +1643,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
         <button
           type="button"
           onClick={() => {
-            switchWorkspace('invoices')
+            setWorkspace('invoices')
             if (onNew) onNew()
           }}
           className={`runey-new-button ${open ? '' : 'is-collapsed'}`}
