@@ -23,15 +23,18 @@ import clsx from 'clsx'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip, ExecutiveMetricList } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
 
 /* ── RaisedByBadge ──────────────────────────────────────────────────────── */
 function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
+  const entry = avatarMap[email?.toLowerCase()] || {}
+  const resolvedSrc = useAvatarSrc(entry.avatar_url || null)
   if (!email) return null
-  const entry = avatarMap[email.toLowerCase()] || {}
+  const label = entry.name || email
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
-      {entry.avatar_url ? (
-        <img src={entry.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+      {resolvedSrc ? (
+        <img src={resolvedSrc} alt=""
           style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
       ) : (
         <span style={{
@@ -39,10 +42,10 @@ function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
           background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
           justifyContent: 'center', fontSize: size * 0.5, color: 'var(--accent)', fontWeight: 600,
         }}>
-          {(entry.name || email)[0].toUpperCase()}
+          {label[0].toUpperCase()}
         </span>
       )}
-      <span style={{ fontSize: '0.75em' }}>{entry.name || email}</span>
+      <span style={{ fontSize: '0.75em' }}>{label}</span>
     </span>
   )
 }

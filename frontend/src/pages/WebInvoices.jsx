@@ -219,27 +219,25 @@ function sortByRaisedDateDesc(records = []) {
 
 // Shows profile pic + email for a "Raised By" value. avatarMap = {email: {avatar_url, name}}
 function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
+  const entry = avatarMap[email?.toLowerCase()] || {}
+  const resolvedSrc = useAvatarSrc(entry.avatar_url || null)
   if (!email) return null
-  const entry = avatarMap[email.toLowerCase()] || {}
+  const label = entry.name || email
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
-      {entry.avatar_url ? (
-        <img
-          src={entry.avatar_url}
-          alt=""
-          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-          onError={e => { e.currentTarget.style.display = 'none' }}
-        />
+      {resolvedSrc ? (
+        <img src={resolvedSrc} alt=""
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
       ) : (
         <span style={{
           width: size, height: size, borderRadius: '50%', flexShrink: 0,
           background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
           justifyContent: 'center', fontSize: size * 0.5, color: 'var(--accent)', fontWeight: 600,
         }}>
-          {(entry.name || email)[0].toUpperCase()}
+          {label[0].toUpperCase()}
         </span>
       )}
-      <span style={{ fontSize: '0.75em' }}>{entry.name || email}</span>
+      <span style={{ fontSize: '0.75em' }}>{label}</span>
     </span>
   )
 }
