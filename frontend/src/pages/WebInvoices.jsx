@@ -12,7 +12,7 @@ import {
   ChevronLeft, ChevronRight, Briefcase, Repeat2,
   Users, HelpCircle, Mail, BookOpen, X as XIcon,
   LayoutDashboard, Activity, ArrowRight, ShieldAlert,
-  Download, Sparkles, BarChart3, WifiOff
+  Download, Sparkles, BarChart3, WifiOff, Printer
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
@@ -2284,6 +2284,62 @@ export default function WebInvoices() {
   const openNew     = ()  => { setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
   const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
 
+  function handlePrintInvoices() {
+    const INR = (n) => n != null ? '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+    const printRows = records.map(r => {
+      const f = r.fields || {}
+      return {
+        no: f['Invoice Number'] || '—',
+        date: String(f['Raised Date'] || '').slice(0, 10),
+        project: f['Project'] || '—',
+        category: f['Category'] || '—',
+        status: f['Payment Status'] || '—',
+        raised: f['Amount Raised'],
+        withTax: f['Amount with Tax'],
+        received: f['Amount Received'],
+        outstanding: f['Outstanding Amount'],
+      }
+    })
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Invoices</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Segoe UI',system-ui,sans-serif;font-size:10px;color:#111;padding:16px}
+      h1{font-size:15px;font-weight:700;margin-bottom:2px}
+      .sub{font-size:8.5px;color:#6b7280;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      th{background:#f3f4f6;font-weight:600;font-size:7.5px;text-transform:uppercase;letter-spacing:.04em;padding:3px 5px;border:1px solid #e5e7eb;white-space:nowrap;text-align:right}
+      th.l{text-align:left}
+      td{padding:3px 5px;border:1px solid #e5e7eb;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+      td.l{text-align:left}
+      tr:nth-child(even) td{background:#f9fafb}
+      .green{color:#059669}.red{color:#dc2626}
+      @page{margin:1cm;size:A4 landscape}
+      @media print{body{padding:0}}
+    </style></head><body>
+    <h1>Invoices</h1>
+    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${printRows.length} invoice${printRows.length !== 1 ? 's' : ''}</p>
+    <table>
+      <colgroup>
+        <col style="width:11%"><col style="width:7%"><col style="width:18%"><col style="width:9%"><col style="width:8%">
+        <col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:11%">
+      </colgroup>
+      <thead><tr>
+        <th class="l">Invoice #</th><th class="l">Date</th><th class="l">Project</th><th class="l">Category</th><th class="l">Status</th>
+        <th>Amount</th><th>With GST</th><th>Received</th><th>O/S</th>
+      </tr></thead>
+      <tbody>${printRows.map(r => `<tr>
+        <td class="l">${r.no}</td><td class="l">${r.date}</td><td class="l">${r.project}</td><td class="l">${r.category}</td><td class="l">${r.status}</td>
+        <td>${INR(r.raised)}</td><td>${INR(r.withTax)}</td><td class="green">${INR(r.received)}</td><td class="${Number(r.outstanding) > 0 ? 'red' : ''}">${INR(r.outstanding)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    </body></html>`
+    const w = window.open('', '_blank', 'width=1200,height=860')
+    w.document.write(html)
+    w.document.close()
+    w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close() }
+  }
+
   // Auto-open new invoice drawer when navigated with ?new=1 (e.g. from sidebar button)
   useEffect(() => {
     if (searchParams.get('new') !== '1') return
@@ -3076,6 +3132,10 @@ export default function WebInvoices() {
                 <Download size={14} />
                 <span className="hidden sm:inline">Export CSV</span>
               </a>
+              <button onClick={handlePrintInvoices} className="btn-ghost" title="Print invoice list">
+                <Printer size={14} />
+                <span className="hidden sm:inline">Print</span>
+              </button>
               <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
                 <ExternalLink size={14} />
                 <span className="hidden sm:inline">Raise Externally</span>
