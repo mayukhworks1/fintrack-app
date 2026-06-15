@@ -2588,89 +2588,128 @@ export default function WebInvoices() {
               )
             })()}
 
-            {/* ── Monthly Receivables ── */}
+            {/* ── Monthly Receivables + Recent Projects (side by side) ── */}
             {allRecords.length > 0 && (
-            <div className="rounded-[26px] p-4 sm:p-6" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-                <div>
-                  <h2 className="text-xl font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>GST-aware receivables</p>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 items-start">
+              {/* Left: compact pill widget */}
+              <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>GST-aware receivables</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[3, 6, 12].map(m => (
+                      <button key={m} onClick={() => setBalanceMonths(m)}
+                        className={balanceMonths === m ? 'btn-primary' : 'btn-ghost'}
+                        style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>{m} mo</button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {[3, 6, 12].map(m => (
-                    <button key={m} onClick={() => setBalanceMonths(m)}
-                      className={balanceMonths === m ? 'btn-primary' : 'btn-ghost'}
-                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.65rem' }}>{m} mo</button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '1rem' }}>
-                {lastThreeMonthBalance.map((entry, idx) => {
-                  const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
-                  const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.08, entry.gross / maxMonthlyBalanceMagnitude) : 0.08
-                  const barColor = collPct >= 80
-                    ? 'linear-gradient(180deg,#4ade80,#16a34a)'
-                    : collPct >= 50
-                    ? 'linear-gradient(180deg,#fbbf24,#d97706)'
-                    : 'linear-gradient(180deg,#f87171,#dc2626)'
-                  const isFirst = idx === 0
-                  const badgeLabel = entry.change !== null
-                    ? (entry.change >= 0 ? `up ${entry.change.toFixed(0)}%` : `down ${Math.abs(entry.change).toFixed(0)}%`)
-                    : `${collPct.toFixed(0)}% collected`
-                  const badgeColor = entry.change !== null
-                    ? (entry.change >= 0 ? { bg: 'rgba(34,197,94,0.18)', text: '#4ade80' } : { bg: 'rgba(239,68,68,0.2)', text: '#f87171' })
-                    : { bg: 'rgba(100,100,120,0.25)', text: dark ? '#cbd5e1' : '#64748b' }
-                  const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
-                  return (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}
-                    >
-                      {/* Pill bar */}
-                      <div style={{ width: '100%', height: 220, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 0 }}>
-                        <div style={{
-                          width: '65%', height: `${barH * 100}%`, minHeight: 24,
-                          background: barColor,
-                          borderRadius: 40,
-                          transition: 'height 0.4s ease',
-                          boxShadow: `0 4px 20px ${collPct >= 80 ? 'rgba(74,222,128,0.3)' : collPct >= 50 ? 'rgba(251,191,36,0.3)' : 'rgba(248,113,113,0.3)'}`,
-                        }} />
-                      </div>
-                      {/* Month */}
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginTop: 10, marginBottom: 6 }}>{entry.label}</p>
-                      {/* Gross */}
-                      <p style={{ fontSize: '1.25rem', fontWeight: 700, color: dark ? '#f8fafc' : 'var(--text-1)', tabularNums: true, marginBottom: 4 }}>
-                        {fmtAmt(entry.gross)}
-                      </p>
-                      {/* Received */}
-                      <p style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: 8 }}>
-                        {fmtAmt(entry.received)} received
-                      </p>
-                      {/* Stats */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', marginBottom: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
-                          <span>GST</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.gst)}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '0.75rem' }}>
+                  {lastThreeMonthBalance.map((entry, idx) => {
+                    const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
+                    const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.1, entry.gross / maxMonthlyBalanceMagnitude) : 0.1
+                    const barColor = collPct >= 80
+                      ? 'linear-gradient(180deg,#4ade80,#16a34a)'
+                      : collPct >= 50
+                      ? 'linear-gradient(180deg,#fbbf24,#d97706)'
+                      : 'linear-gradient(180deg,#f87171,#dc2626)'
+                    const badgeLabel = entry.change !== null
+                      ? (entry.change >= 0 ? `up ${entry.change.toFixed(0)}%` : `down ${Math.abs(entry.change).toFixed(0)}%`)
+                      : `${collPct.toFixed(0)}% collected`
+                    const badgeColor = entry.change !== null
+                      ? (entry.change >= 0 ? { bg: 'rgba(34,197,94,0.18)', text: '#4ade80' } : { bg: 'rgba(239,68,68,0.2)', text: '#f87171' })
+                      : { bg: 'rgba(100,100,120,0.22)', text: dark ? '#94a3b8' : '#64748b' }
+                    const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
+                    return (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                      >
+                        {/* Pill */}
+                        <div style={{ width: '100%', height: 130, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                          <div style={{
+                            width: '60%', height: `${barH * 100}%`, minHeight: 18,
+                            background: barColor, borderRadius: 32,
+                            transition: 'height 0.4s ease',
+                            boxShadow: `0 3px 14px ${collPct >= 80 ? 'rgba(74,222,128,0.28)' : collPct >= 50 ? 'rgba(251,191,36,0.28)' : 'rgba(248,113,113,0.28)'}`,
+                          }} />
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
-                          <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? '#f87171' : '#4ade80' }}>{fmtAmt(entry.outstanding)}</span>
-                        </div>
-                        {entry.deduction > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
-                            <span>TDS</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.deduction)}</span>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', margin: '7px 0 3px' }}>{entry.label}</p>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, color: dark ? '#f8fafc' : 'var(--text-1)', marginBottom: 2 }}>{fmtAmt(entry.gross)}</p>
+                        <p style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginBottom: 6 }}>{fmtAmt(entry.received)} rcvd</p>
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
+                            <span>GST</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.gst)}</span>
                           </div>
-                        )}
-                      </div>
-                      {/* Badge */}
-                      <span style={{
-                        fontSize: '0.72rem', fontWeight: 700, padding: '0.3rem 0.8rem',
-                        borderRadius: 999, background: badgeColor.bg, color: badgeColor.text,
-                      }}>{badgeLabel}</span>
-                    </button>
-                  )
-                })}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
+                            <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? '#f87171' : '#4ade80' }}>{fmtAmt(entry.outstanding)}</span>
+                          </div>
+                          {entry.deduction > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
+                              <span>TDS</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.deduction)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.22rem 0.6rem', borderRadius: 999, background: badgeColor.bg, color: badgeColor.text }}>{badgeLabel}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+
+              {/* Right: Recent Projects */}
+              {projectSummaryCards.length > 0 && (
+                <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="mb-4">
+                    <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Recent Projects</h2>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Active invoice pressure</p>
+                  </div>
+                  <div className="space-y-2">
+                    {projectSummaryCards.slice(0, 5).map(({ project, metrics }) => {
+                      const raised = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.raised || 0), 0)
+                      const received = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.received || 0), 0)
+                      const open = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.outstanding || 0), 0)
+                      const tds = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.tds_deducted || 0), 0)
+                      const collPct = raised > 0 ? Math.min(100, (received / raised) * 100) : 0
+                      const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
+                      return (
+                        <button
+                          key={project}
+                          type="button"
+                          onClick={() => { setProjectFilter(project); switchWorkspace('invoices') }}
+                          className="w-full text-left rounded-2xl px-4 py-3 transition-all"
+                          style={{ background: dark ? 'rgba(15,23,42,0.5)' : 'rgba(248,250,252,0.9)', border: `1px solid ${dashboardStyles.line}`, cursor: 'pointer' }}
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                                style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                                {project[0]?.toUpperCase()}
+                              </span>
+                              <span className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{project}</span>
+                            </div>
+                            <span className="text-xs font-bold tabular-nums" style={{ color: dark ? '#f8fafc' : 'var(--text-1)', flexShrink: 0 }}>{fmtAmt(raised)}</span>
+                          </div>
+                          <div className="flex items-center gap-1 mb-2">
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${collPct}%`, background: collPct >= 80 ? '#4ade80' : collPct >= 50 ? '#fbbf24' : '#f87171' }} />
+                            </div>
+                            <span className="text-[11px] font-semibold tabular-nums flex-shrink-0" style={{ color: collPct >= 80 ? '#4ade80' : collPct >= 50 ? '#d97706' : '#f87171' }}>{collPct.toFixed(0)}%</span>
+                          </div>
+                          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                            {metrics?.count || 0} invoices · <span style={{ color: '#f87171' }}>₹{(open/1000).toFixed(0)}k open</span>
+                            {tds > 0 && <> · <span style={{ color: dark ? '#94a3b8' : '#64748b' }}>₹{(tds/1000).toFixed(0)}k TDS</span></>}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             )}
 
