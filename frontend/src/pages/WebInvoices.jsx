@@ -29,6 +29,7 @@ import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import clsx from 'clsx'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
+import MonthlyCollectionsChart from '../components/MonthlyCollectionsChart'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
@@ -1570,7 +1571,7 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
       {navItems.map(({ value, label, icon: Icon }) => {
         const active = workspace === value
         return (
-          <button key={value} onClick={() => setWorkspace(value)}
+          <button key={value} onClick={() => switchWorkspace(value)}
             className="relative flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-colors"
             style={{ color: active ? 'var(--accent)' : 'var(--text-3)', minHeight: 52 }}>
             {active && (
@@ -1642,7 +1643,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
         <button
           type="button"
           onClick={() => {
-            setWorkspace('invoices')
+            switchWorkspace('invoices')
             if (onNew) onNew()
           }}
           className={`runey-new-button ${open ? '' : 'is-collapsed'}`}
@@ -1659,7 +1660,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
         {navItems.map(({ value, label, icon: Icon }) => {
           const active = workspace === value
           return (
-            <button key={value} onClick={() => setWorkspace(value)}
+            <button key={value} onClick={() => switchWorkspace(value)}
               title={!open ? label : undefined}
               className={`runey-nav-link ${open ? '' : 'is-collapsed'} ${active ? 'active' : ''}`}>
               <Icon size={15} className="flex-shrink-0" style={{ flexShrink: 0 }} />
@@ -1740,6 +1741,10 @@ export default function WebInvoices() {
   const [helpOpen,       setHelpOpen]       = useState(false)
   const [workspace,      setWorkspace]      = useState(initialWorkspace)
   const [selectedRetainer, setSelectedRetainer] = useState('')
+
+  // ── Invoice-workspace-only filters ────────────────────────────────────────
+  // These ONLY apply inside the 'invoices' workspace. Dashboard, retainers,
+  // and projects are completely isolated — they never read these values.
   const [statusFilter,   setStatusFilter]   = useState(initialStatus)
   const [projectFilter,  setProjectFilter]  = useState(initialProject)
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -1759,6 +1764,19 @@ export default function WebInvoices() {
   const [filterConditions, setFilterConditions] = useState([])
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
+
+  // switchWorkspace: clears invoice-list filters when moving AWAY from invoices
+  // so switching back starts fresh, and drilldowns from dashboard explicitly set what they need.
+  const switchWorkspace = useCallback((next) => {
+    if (next !== 'invoices') {
+      setStatusFilter(''); setProjectFilter(''); setCategoryFilter('')
+      setRaisedByFilter(''); setBillingFilter('all'); setMonthFilter('')
+      setAgingBandFilter(''); setDateFrom(''); setDateTo(''); setSearch('')
+      setOverdueOnly(false); setHasDocsOnly(false); setFollowupDueOnly(false)
+      setFilterConditions([]); setSortCol('Raised Date'); setSortDir('desc')
+    }
+    setWorkspace(next)
+  }, [])
   const [drawer,         setDrawer]         = useState(null)
   const [drawerKey,      setDrawerKey]      = useState(0)
   const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
@@ -1793,8 +1811,7 @@ export default function WebInvoices() {
   }
 
   const [agingBuckets,  setAgingBuckets]  = useState(null)
-  const [gstSummary,    setGstSummary]    = useState(null)
-  const [gstError,      setGstError]      = useState(false)
+  // GST summary computed client-side from allRecords — no extra API call needed
   const [avatarMap,     setAvatarMap]     = useState({})
   const [gstMonths,     setGstMonths]     = useState(3)
   const [chartPreset,   setChartPreset]   = useState('60d')
@@ -1802,11 +1819,9 @@ export default function WebInvoices() {
   const [chartTo,       setChartTo]       = useState('')
   const [balanceMonths, setBalanceMonths] = useState(3)
 
-  // Sync key filter state → URL so pages are bookmarkable / shareable
+  // Only persist the active tab in the URL — filter state is session-only
+  // (persisting filters caused stale filters to bleed across workspaces on reload)
   useEffect(() => { updateUrlParam('tab', workspace === 'dashboard' ? '' : workspace) }, [workspace])
-  useEffect(() => { updateUrlParam('status', statusFilter) }, [statusFilter])
-  useEffect(() => { updateUrlParam('project', projectFilter) }, [projectFilter])
-  useEffect(() => { updateUrlParam('q', search) }, [search])
 
   useEffect(() => {
     api.webInvoices.agingBuckets().then(setAgingBuckets).catch(() => {})
@@ -1816,15 +1831,6 @@ export default function WebInvoices() {
     api.webInvoices.avatarMap().then(setAvatarMap).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    setGstSummary(null)
-    setGstError(false)
-    const now = new Date()
-    const from = new Date(now.getFullYear(), now.getMonth() - gstMonths + 1, 1)
-    api.reports.webGstSummary({ from: from.toISOString().slice(0, 10) })
-      .then(data => { setGstSummary(data); setGstError(false) })
-      .catch(() => setGstError(true))
-  }, [gstMonths])
 
   const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
   const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
@@ -2131,7 +2137,7 @@ export default function WebInvoices() {
     setDateFrom(`${key}-01`)
     setDateTo(endOfMonthIso(key))
     setMonthFilter(field === 'Raised Date' ? key : '')
-    setWorkspace('invoices')
+    switchWorkspace('invoices')
   }, [])
 
   const lastThreeMonthBalance = useMemo(() => {
@@ -2166,6 +2172,35 @@ export default function WebInvoices() {
     () => Math.max(1, ...lastThreeMonthBalance.map(e => e.gross)),
     [lastThreeMonthBalance]
   )
+
+  // GST summary computed from already-loaded allRecords — instant, no extra API call
+  const gstSummary = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now.getFullYear(), now.getMonth() - gstMonths + 1, 1)
+    const months = {}
+    const totals = { base: 0, gst: 0, gross: 0, received: 0, outstanding: 0, count: 0 }
+    for (const r of allRecords) {
+      const f = r.fields || {}
+      const rd = f['Raised Date'] ? new Date(f['Raised Date']) : null
+      if (!rd || isNaN(rd) || rd < cutoff) continue
+      const base        = Number(f['Amount Raised'] || 0)
+      const gross       = Number(f['Amount with Tax'] || base)
+      const received    = Number(f['Amount Received'] || 0)
+      const outstanding = Number(f['Outstanding Amount'] || Math.max(0, gross - received))
+      const gst         = Math.max(0, gross - base)
+      const mk = `${rd.getFullYear()}-${String(rd.getMonth() + 1).padStart(2, '0')}`
+      if (!months[mk]) {
+        const label = rd.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+        months[mk] = { month: mk, label, base: 0, gst: 0, gross: 0, received: 0, outstanding: 0, count: 0, paid_count: 0, pending_count: 0 }
+      }
+      months[mk].base += base; months[mk].gst += gst; months[mk].gross += gross
+      months[mk].received += received; months[mk].outstanding += outstanding; months[mk].count += 1
+      if (f['Payment Status'] === 'Paid') months[mk].paid_count += 1; else months[mk].pending_count += 1
+      totals.base += base; totals.gst += gst; totals.gross += gross
+      totals.received += received; totals.outstanding += outstanding; totals.count += 1
+    }
+    return { months: Object.values(months).sort((a, b) => a.month.localeCompare(b.month)), totals }
+  }, [allRecords, gstMonths])
 
   async function createRetainerMonth(group, mode) {
     if (!group?.latestActive) {
@@ -2313,7 +2348,7 @@ export default function WebInvoices() {
       {/* ── Sidebar — desktop only ── */}
       <AppSidebar
         workspace={workspace}
-        setWorkspace={setWorkspace}
+        setWorkspace={switchWorkspace}
         isAll={isAll}
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(v => !v)}
@@ -2364,14 +2399,14 @@ export default function WebInvoices() {
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 w-full xl:w-auto">
-                <button onClick={() => setWorkspace('invoices')} className="btn-ghost justify-center whitespace-nowrap">
+                <button onClick={() => switchWorkspace('invoices')} className="btn-ghost justify-center whitespace-nowrap">
                   <FileText size={14} />Open invoices
                 </button>
-                <button onClick={() => setWorkspace('retainers')} className="btn-ghost justify-center whitespace-nowrap">
+                <button onClick={() => switchWorkspace('retainers')} className="btn-ghost justify-center whitespace-nowrap">
                   <Repeat2 size={14} />Retainers
                 </button>
                 {isAll && (
-                  <button onClick={() => setWorkspace('projects')} className="btn-ghost justify-center whitespace-nowrap">
+                  <button onClick={() => switchWorkspace('projects')} className="btn-ghost justify-center whitespace-nowrap">
                     <Briefcase size={14} />Projects
                   </button>
                 )}
@@ -2603,66 +2638,12 @@ export default function WebInvoices() {
             </div>
             )}
 
-            {/* ── Raised vs Received bar chart ── */}
-            {lastThreeMonthBalance.length > 0 && (() => {
-              const maxVal = Math.max(1, ...lastThreeMonthBalance.flatMap(e => [e.gross, e.received]))
-              const barH = 120
-              const barW = Math.max(24, Math.floor(560 / (lastThreeMonthBalance.length * 2 + lastThreeMonthBalance.length + 1)))
-              const gap = Math.max(4, Math.floor(barW * 0.4))
-              const totalW = lastThreeMonthBalance.length * (barW * 2 + gap) + (lastThreeMonthBalance.length - 1) * gap
-              return (
-                <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Collections</p>
-                      <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Raised vs Received</h2>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px]" style={{ color: 'var(--text-3)' }}>
-                      <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, borderRadius: 2, display: 'inline-block', background: 'var(--accent)' }} />Raised</span>
-                      <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, borderRadius: 2, display: 'inline-block', background: 'var(--fin-positive)' }} />Received</span>
-                    </div>
-                  </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <svg viewBox={`0 0 ${Math.max(totalW + 20, 300)} ${barH + 40}`} style={{ width: '100%', minWidth: 260 }}>
-                      {lastThreeMonthBalance.map((entry, i) => {
-                        const x0 = i * (barW * 2 + gap * 2)
-                        const rH = Math.round((entry.gross / maxVal) * barH)
-                        const rcvH = Math.round((entry.received / maxVal) * barH)
-                        const fmt1 = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`
-                        return (
-                          <g key={entry.key}>
-                            {/* Raised bar */}
-                            <rect x={x0} y={barH - rH} width={barW} height={rH} rx={3} fill="var(--accent)" opacity={0.85} />
-                            {/* Received bar */}
-                            <rect x={x0 + barW + 3} y={barH - rcvH} width={barW} height={rcvH} rx={3} fill="var(--fin-positive)" opacity={0.85} />
-                            {/* Month label */}
-                            <text x={x0 + barW} y={barH + 14} textAnchor="middle" fontSize={9} fill="var(--text-3)">{entry.label}</text>
-                            {/* Raised tooltip */}
-                            {rH > 12 && <text x={x0 + barW / 2} y={barH - rH - 4} textAnchor="middle" fontSize={8} fill="var(--accent)">{fmt1(entry.gross)}</text>}
-                            {/* Received tooltip */}
-                            {rcvH > 12 && <text x={x0 + barW + 3 + barW / 2} y={barH - rcvH - 4} textAnchor="middle" fontSize={8} fill="var(--fin-positive)">{fmt1(entry.received)}</text>}
-                          </g>
-                        )
-                      })}
-                      {/* Baseline */}
-                      <line x1={0} y1={barH} x2={totalW + 20} y2={barH} stroke="var(--border)" strokeWidth={1} />
-                    </svg>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 pt-1">
-                    {lastThreeMonthBalance.map(entry => {
-                      const cr = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
-                      return (
-                        <div key={entry.key} className="text-center">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{entry.label}</p>
-                          <p className="text-sm font-bold tabular-nums mt-0.5" style={{ color: cr >= 80 ? 'var(--fin-positive)' : cr >= 40 ? 'var(--fin-warning)' : 'var(--fin-negative)' }}>{cr.toFixed(0)}%</p>
-                          <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>collected</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
+            {/* ── Monthly Collections Chart (bars=raised, line=collected) ── */}
+            {allRecords.length > 0 && (
+              <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <MonthlyCollectionsChart records={allRecords} />
+              </div>
+            )}
 
             {/* ── GST Summary ── */}
             <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
@@ -2679,11 +2660,7 @@ export default function WebInvoices() {
                   ))}
                 </div>
               </div>
-              {gstError ? (
-                <p className="text-sm" style={{ color: 'var(--fin-negative)' }}>Failed to load GST summary.</p>
-              ) : !gstSummary ? (
-                <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
-              ) : gstSummary.months.length === 0 ? (
+              {gstSummary.months.length === 0 ? (
                 <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices in the selected range.</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -2796,7 +2773,7 @@ export default function WebInvoices() {
                     <button
                       key={label}
                       type="button"
-                      onClick={() => { setAgingBandFilter(agingBandFilter === label ? '' : label); setWorkspace('invoices') }}
+                      onClick={() => { setAgingBandFilter(agingBandFilter === label ? '' : label); switchWorkspace('invoices') }}
                       className="w-full flex items-center justify-between gap-3 rounded-2xl px-3 py-2 text-left"
                       style={{ background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)', border: `1px solid ${dashboardStyles.line}` }}
                     >
@@ -2822,7 +2799,7 @@ export default function WebInvoices() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Status distribution</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Collection pulse</h2>
                   </div>
-                  <button onClick={() => setWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
+                  <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
                     Open invoice table <ArrowRight size={12} />
                   </button>
                 </div>
@@ -2858,7 +2835,7 @@ export default function WebInvoices() {
                         <button
                           key={project}
                           type="button"
-                          onClick={() => { setProjectFilter(project); setWorkspace('invoices') }}
+                          onClick={() => { setProjectFilter(project); switchWorkspace('invoices') }}
                           className="rounded-2xl p-4 text-left transition-all"
                           style={{
                             background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.85)',
@@ -2913,7 +2890,7 @@ export default function WebInvoices() {
                             <button
                               key={record.id}
                               type="button"
-                              onClick={() => { setWorkspace('invoices'); openView(record) }}
+                              onClick={() => { switchWorkspace('invoices'); openView(record) }}
                               className="w-full text-left rounded-2xl p-3 transition-all"
                               style={{
                                 background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
@@ -2946,7 +2923,7 @@ export default function WebInvoices() {
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Retainer desk</p>
                       <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Coverage snapshot</h2>
                     </div>
-                    <button onClick={() => setWorkspace('retainers')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                    <button onClick={() => switchWorkspace('retainers')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
                       Open retainers
                     </button>
                   </div>
@@ -2955,7 +2932,7 @@ export default function WebInvoices() {
                       <button
                         key={group.project}
                         type="button"
-                        onClick={() => { setSelectedRetainer(group.project); setWorkspace('retainers') }}
+                        onClick={() => { setSelectedRetainer(group.project); switchWorkspace('retainers') }}
                         className="w-full rounded-2xl p-3 text-left"
                         style={{
                           background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
@@ -2989,7 +2966,7 @@ export default function WebInvoices() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Latest movement</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Newest invoices</h2>
                   </div>
-                  <button onClick={() => setWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                  <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
                     Open all
                   </button>
                 </div>
@@ -3001,7 +2978,7 @@ export default function WebInvoices() {
                       <button
                         key={record.id}
                         type="button"
-                        onClick={() => { setWorkspace('invoices'); openView(record) }}
+                        onClick={() => { switchWorkspace('invoices'); openView(record) }}
                         className="w-full rounded-2xl p-3 text-left transition-all"
                         style={{
                           background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
