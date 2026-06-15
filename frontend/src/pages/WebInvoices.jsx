@@ -2590,10 +2590,10 @@ export default function WebInvoices() {
 
             {/* ── Monthly Receivables + Recent Projects (side by side) ── */}
             {allRecords.length > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
               {/* Left: compact pill widget */}
-              <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-center justify-between gap-2 mb-4 flex-shrink-0">
                   <div>
                     <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Receivables at a glance</p>
@@ -2606,7 +2606,7 @@ export default function WebInvoices() {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '0.75rem', flex: 1 }}>
                   {lastThreeMonthBalance.map((entry, idx) => {
                     const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
                     const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.1, entry.gross / maxMonthlyBalanceMagnitude) : 0.1
@@ -2627,10 +2627,10 @@ export default function WebInvoices() {
                         key={entry.key}
                         type="button"
                         onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
                       >
                         {/* Pill */}
-                        <div style={{ width: '100%', height: 130, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                        <div style={{ width: '100%', flex: 1, maxHeight: 220, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                           <div style={{
                             width: '60%', height: `${barH * 100}%`, minHeight: 18,
                             background: barColor, borderRadius: 32,
