@@ -990,10 +990,20 @@ export default function TaxLedger({ source = 'main' } = {}) {
       {/* Print styles */}
       <style>{`
         @media print {
-          body > *:not(#root) { display: none; }
-          .runey-app-sidebar, .runey-collapse-button, nav, header { display: none !important; }
+          /* Remove height/overflow constraints from app shell so full content renders */
+          html, body, #root { height: auto !important; overflow: visible !important; }
+          .app-layout-shell { height: auto !important; overflow: visible !important; display: block !important; }
+          .app-layout-shell > div { height: auto !important; overflow: visible !important; }
+          /* Hide chrome */
+          .runey-app-sidebar, .runey-collapse-button, nav, header,
+          .mobile-bottom-nav, [class*="mobile-bottom"] { display: none !important; }
           button { display: none !important; }
+          /* Expand all collapsed sections */
+          details { open: true; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          /* Page breaks */
+          .card { break-inside: avoid; }
+          @page { margin: 1.5cm; }
         }
       `}</style>
       {canShare && shareModal && createPortal(

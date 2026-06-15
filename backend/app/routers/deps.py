@@ -20,15 +20,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Query, Request
 from ..db.postgres import get_pool
 from .auth import verify_token
 
 
-def _get_token(authorization: str | None = Header(default=None)) -> str:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Missing authorization token")
-    return authorization.split(" ", 1)[1].strip()
+def _get_token(
+    authorization: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+) -> str:
+    # Accept Bearer header first; fall back to ?token= query param (for download links)
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    if token:
+        return token
+    raise HTTPException(status_code=401, detail="Missing authorization token")
 
 
 PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance", "web_admin"}
