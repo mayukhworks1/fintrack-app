@@ -2672,6 +2672,11 @@ export default function WebInvoices() {
                     from={chartFromProp}
                     to={chartToProp}
                     className="px-2 pb-1"
+                    avatarMap={avatarMap}
+                    onInvoiceClick={id => {
+                      const rec = allRecords.find(r => r.id === id)
+                      if (rec) openView(rec)
+                    }}
                   />
                 </div>
               )

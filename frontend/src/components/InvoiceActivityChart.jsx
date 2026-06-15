@@ -1,4 +1,27 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react'
+import { useAvatarSrc } from '../hooks/useAvatarSrc'
+
+/* ── AvatarChip — shows resolved photo or initial circle + name ── */
+function AvatarChip({ email, avatarMap }) {
+  const entry = avatarMap[email?.toLowerCase()] || {}
+  const src   = useAvatarSrc(entry.avatar_url || null)
+  const label = entry.name || email || ''
+  if (!label) return null
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+      {src ? (
+        <img src={src} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+      ) : (
+        <span style={{
+          width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+          background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 7, color: 'var(--accent)', fontWeight: 700,
+        }}>{label[0].toUpperCase()}</span>
+      )}
+      <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{label}</span>
+    </div>
+  )
+}
 
 /* ── helpers ── */
 function parseDate(iso) {
@@ -41,7 +64,7 @@ const UID = 'iac2'
 // Accepts either:
 //   days={60}          → last N days ending today
 //   from="…" to="…"   → explicit date range
-export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '', avatarMap = {} }) {
+export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '', avatarMap = {}, onInvoiceClick }) {
   const containerRef = useRef(null)
   const svgRef       = useRef(null)
   const [width,      setWidth]   = useState(800)
@@ -85,12 +108,13 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
       const key = toDateKey(dt)
       if (!byDay[key]) byDay[key] = []
       byDay[key].push({
+        recordId:  r.id || '',
         amount:    Number(f['Amount Raised'] || 0),
         status:    f['Payment Status'] || 'Pending',
         raisedBy:  f['Raised By']      || '',
         invoiceNo: f['Invoice Number'] || f['Invoice No'] || '',
         project:   f['Project Name']   || f['Project']   || '',
-        client:    f['Client']         || '',
+        client:    f['Client']         || f['Client Name'] || '',
         aging:     Number(f['Agening (Days)'] || 0),
       })
     }
@@ -366,43 +390,38 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
               {hoverDay.invoices.map((inv, ii) => {
                 const meta = statusMeta(inv.status, inv.aging)
                 return (
-                  <div key={ii} style={{
-                    background: 'var(--bg-input)',
-                    border: `1px solid ${meta.light}`,
-                    borderRadius: 8,
-                    padding: '7px 9px',
-                  }}>
+                  <div key={ii}
+                    onClick={() => onInvoiceClick && inv.recordId && onInvoiceClick(inv.recordId)}
+                    style={{
+                      background: 'var(--bg-input)',
+                      border: `1px solid ${meta.light}`,
+                      borderRadius: 8,
+                      padding: '7px 9px',
+                      cursor: onInvoiceClick ? 'pointer' : 'default',
+                      transition: 'opacity 0.1s',
+                    }}
+                    onMouseEnter={e => { if (onInvoiceClick) e.currentTarget.style.opacity = '0.8' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
                         {inv.invoiceNo || `Invoice #${ii + 1}`}
                       </span>
                       <span style={{
                         fontSize: 9.5, fontWeight: 700,
-                        color: meta.fill,
-                        background: meta.light,
-                        borderRadius: 20,
-                        padding: '2px 7px',
+                        color: meta.fill, background: meta.light,
+                        borderRadius: 20, padding: '2px 7px',
                       }}>{meta.label}</span>
                     </div>
                     <p style={{ fontSize: 12, fontWeight: 800, color: meta.dot, marginBottom: 2 }}>{fmtInr(inv.amount)}</p>
                     {inv.project && <p style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📁 {inv.project}</p>}
                     {inv.client  && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {inv.client}</p>}
-                    {inv.raisedBy && (() => {
-                      const entry = avatarMap[inv.raisedBy.toLowerCase()] || {}
-                      const label = entry.name || inv.raisedBy
-                      return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                          <span style={{
-                            width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                            background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
-                            justifyContent: 'center', fontSize: 7, color: 'var(--accent)', fontWeight: 700,
-                          }}>{label[0].toUpperCase()}</span>
-                          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{label}</span>
-                        </div>
-                      )
-                    })()}
+                    {inv.raisedBy && <AvatarChip email={inv.raisedBy} avatarMap={avatarMap} />}
                     {inv.aging > 0 && inv.status !== 'Paid' && (
                       <p style={{ fontSize: 10, color: meta.fill, fontWeight: 600, marginTop: 2 }}>⏱ {inv.aging}d aging</p>
+                    )}
+                    {onInvoiceClick && (
+                      <p style={{ fontSize: 9, color: 'var(--accent)', marginTop: 4, opacity: 0.7 }}>Tap to open →</p>
                     )}
                   </div>
                 )

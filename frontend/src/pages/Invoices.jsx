@@ -2264,6 +2264,10 @@ export default function Invoices() {
               to={chartToProp}
               className="px-2 pb-1"
               avatarMap={avatarMap}
+              onInvoiceClick={id => {
+                const rec = allRecords.find(r => r.id === id)
+                if (rec) setDrawer({ mode: 'view', invoice: rec })
+              }}
             />
           </div>
         )
