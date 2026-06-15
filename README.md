@@ -65,11 +65,41 @@ Mirror tables: `projects_mirror`, `invoices_mirror`, `web_invoices_mirror`, `sta
 ### Main App (editor / viewer roles)
 - **Dashboard** — KPI grid, client P&L bars, at-risk projects, aging buckets (0–30/30–60/60–90/90+ days), invoice activity chart with date range picker
 - **Projects** — Full CRUD with filters, sort, search, AI autofill
-- **Invoices** — Invoice tracker, AI PDF parser, aging analysis, CSV export, GST summary report, invoice totals row, stale-data banner, Send Reminder with email-prompt modal
+- **Invoices** — Invoice tracker, AI PDF parser, aging analysis, CSV export, invoice totals row, stale-data banner, Send Reminder with email-prompt modal
 - **Analytics** — Cash flow charts, DSO, concentration risk
 - **AI Assistant** — Chat with full portfolio context (PG-backed, <10ms context build)
 - **Report** — Two-mode AI report: Board Pack (full financials) and Status Briefing (delivery only)
 - **Status Board** — Live project status board with Card / List / Board-kanban views
+
+### Web Invoices (`/web-invoices` → `WebInvoices.jsx`)
+
+Full billing workspace for the `web` role. Single-page app with URL-routed workspaces (`?tab=`):
+
+| Tab | Contents |
+|-----|----------|
+| Dashboard | KPI row, billing activity chart, receivables pill cards, recent projects, monthly cash flow chart, raised/cleared timelines, aging heat map, collection pulse, follow-ups, pending invoice alert |
+| Invoices | Filterable/sortable table with advanced filter builder, inline payment recording, CSV export |
+| Retainers | Grouped retainer management with monthly invoice creation |
+| Projects | Project pressure cards |
+
+**Dashboard widget details:**
+- **Receivables (Last N Months)** — Compact pill-bar cards (green/amber/red by collection %), Open amount, received, up/down % change badge; click to drilldown
+- **Recent Projects** — Beside receivables; project avatar, raised total, collection % progress bar, open amount; scrollable list
+- **Monthly cash flow chart** (`MonthlyCollectionsChart.jsx`) — Grouped bars (raised) + smooth green collected line, 3/6/12/custom date range
+- **Billing activity** (`InvoiceActivityChart.jsx`) — 60d/3mo/6mo/1yr/Custom SVG timeline with invoice pins, crosshair tooltip, avatar initials
+- **Aging heat map** — 0-14d / 15-30d / 31-60d / 60d+ clickable buckets
+- **GST/TDS** — deliberately NOT on dashboard; belongs in Tax Ledger (`?tab=tax`) only
+
+**Key implementation rules:**
+- Dashboard widgets use `allRecords` (unfiltered) — using `records` (client-filtered) blanks them when filters are active
+- `switchWorkspace(next)` resets all invoice filters when leaving the invoices tab
+- `AppSidebar` / `MobileBottomNav` receive `setWorkspace` as prop — must NOT use `switchWorkspace`
+- `RaisedByBadge` and `InvoiceDetail` are top-level functions; receive `avatarMap` as prop
+
+**Profile avatars:**
+- `GET /api/web-invoices/avatar-map` returns `{email → {avatar_url, name}}`
+- Google/Zoho SSO avatars mirrored to HF storage on every SSO login (`_mirror_sso_avatar_to_hf()` in `auth_master.py`)
+- Shown in "Raised By" column, invoice detail drawer, and dashboard badges
 
 ### Status Board (`/status`)
 - Three view modes: **Card** (grid by client) · **List** (compact table) · **Board** (Kanban by Status)
@@ -226,13 +256,22 @@ Accessible at `/admin` (editor role) or standalone (admin role):
 |-----|----------|
 | Overview | Stats including status_mirror count |
 | Audit Log | 12 filters, geo/device detail, purge controls |
-| Sessions | 4-state status, active filter |
+| Users & Sessions | 4-state status, active filter, user management |
+| **Permissions** | Role-based permission matrix per user (next to Users & Sessions) |
 | AI Chats | Session list + thread viewer |
 | Sync Log | Per-table history + trigger button |
 | Projects | projects_mirror browser |
 | Invoices | All/Main/Web toggle |
 | Status | status_mirror browser |
 | History | Field-level change log with actor attribution |
+
+**Auth users table (`auth_users`):**
+- `full_name` (not `name`), `email`, `teable_email`, `avatar_url`
+- `status VARCHAR` enum: `'active'` / `'pending_approval'` / `'rejected'` / `'disabled'`
+- No boolean `approved` or `disabled` columns — always filter with `WHERE status = 'active'`
+- `get_pool()` in backend is **synchronous** — never `await get_pool()`
+
+**Pending account registration:** Users can request access; admin approves/rejects via admin panel. Invitation flow via email (Brevo).
 
 ---
 
