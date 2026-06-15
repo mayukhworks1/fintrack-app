@@ -2590,10 +2590,10 @@ export default function WebInvoices() {
 
             {/* ── Monthly Receivables + Recent Projects (side by side) ── */}
             {allRecords.length > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 items-start">
               {/* Left: compact pill widget */}
-              <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                <div className="flex items-center justify-between gap-2 mb-4 flex-shrink-0">
+              <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                <div className="flex items-center justify-between gap-2 mb-4">
                   <div>
                     <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Receivables at a glance</p>
@@ -2606,7 +2606,7 @@ export default function WebInvoices() {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '0.75rem', flex: 1, alignItems: 'stretch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '0.75rem' }}>
                   {lastThreeMonthBalance.map((entry, idx) => {
                     const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
                     const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.1, entry.gross / maxMonthlyBalanceMagnitude) : 0.1
@@ -2627,10 +2627,10 @@ export default function WebInvoices() {
                         key={entry.key}
                         type="button"
                         onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                       >
                         {/* Pill */}
-                        <div style={{ width: '100%', flex: 1, minHeight: 80, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                        <div style={{ width: '100%', height: 130, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                           <div style={{
                             width: '60%', height: `${barH * 100}%`, minHeight: 18,
                             background: barColor, borderRadius: 32,
@@ -2655,12 +2655,12 @@ export default function WebInvoices() {
 
               {/* Right: Recent Projects */}
               {projectSummaryCards.length > 0 && (
-                <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                  <div className="mb-4 flex-shrink-0">
+                <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="mb-4">
                     <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Recent Projects</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Active invoice pressure</p>
                   </div>
-                  <div className="space-y-2 overflow-y-auto flex-1" style={{ minHeight: 0 }}>
+                  <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 360 }}>
                     {projectSummaryCards.slice(0, 5).map(({ project, metrics }) => {
                       const raised = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.raised || 0), 0)
                       const received = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.received || 0), 0)
