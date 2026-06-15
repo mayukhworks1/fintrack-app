@@ -1571,7 +1571,7 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
       {navItems.map(({ value, label, icon: Icon }) => {
         const active = workspace === value
         return (
-          <button key={value} onClick={() => switchWorkspace(value)}
+          <button key={value} onClick={() => setWorkspace(value)}
             className="relative flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-colors"
             style={{ color: active ? 'var(--accent)' : 'var(--text-3)', minHeight: 52 }}>
             {active && (
@@ -1660,7 +1660,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
         {navItems.map(({ value, label, icon: Icon }) => {
           const active = workspace === value
           return (
-            <button key={value} onClick={() => switchWorkspace(value)}
+            <button key={value} onClick={() => setWorkspace(value)}
               title={!open ? label : undefined}
               className={`runey-nav-link ${open ? '' : 'is-collapsed'} ${active ? 'active' : ''}`}>
               <Icon size={15} className="flex-shrink-0" style={{ flexShrink: 0 }} />
