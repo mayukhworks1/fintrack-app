@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../components/Drawer'
@@ -1812,11 +1812,13 @@ export default function WebInvoices() {
   const [agingBuckets,  setAgingBuckets]  = useState(null)
   // GST summary computed client-side from allRecords — no extra API call needed
   const [avatarMap,     setAvatarMap]     = useState({})
+  const [hoveredRow,    setHoveredRow]    = useState(null)
   const [gstMonths,     setGstMonths]     = useState(3)
   const [chartPreset,   setChartPreset]   = useState('60d')
   const [chartFrom,     setChartFrom]     = useState('')
   const [chartTo,       setChartTo]       = useState('')
   const [balanceMonths, setBalanceMonths] = useState(3)
+  const hoverTimerRef = useRef(null)
 
   // Only persist the active tab in the URL — filter state is session-only
   // (persisting filters caused stale filters to bleed across workspaces on reload)
@@ -4061,17 +4063,40 @@ export default function WebInvoices() {
                             </p>
                           </div>
                         </td></tr>
-                      : records.map(r => {
+                      : records.map((r, rowIndex) => {
                           const f = r.fields || {}
                           const outstanding = Number(f['Outstanding Amount'] || 0)
                           const refs = parseAttachments(f['Reference'])
                           const pdfs = parseAttachments(f['Invoice PDF'])
                           const allFiles = [...refs, ...pdfs]
                           const cur = f['Currency'] || 'RS'
+                          const isHovered = hoveredRow === r.id
+                          const statusMeta = STATUS_META[f['Payment Status']] || {}
+                          const accentColor = statusMeta.color || 'var(--accent)'
+
+                          const handleRowEnter = () => {
+                            clearTimeout(hoverTimerRef.current)
+                            hoverTimerRef.current = setTimeout(() => setHoveredRow(r.id), 250)
+                          }
+                          const handleRowLeave = () => {
+                            clearTimeout(hoverTimerRef.current)
+                            hoverTimerRef.current = setTimeout(() => setHoveredRow(null), 150)
+                          }
+
                           return (
-                            <tr key={r.id} className="tbl-row" style={{ cursor: 'pointer' }} onClick={() => openView(r)}
-                              onMouseEnter={e => e.currentTarget.style.borderLeft = '2px solid var(--accent)'}
-                              onMouseLeave={e => e.currentTarget.style.borderLeft = ''}>
+                            <Fragment key={r.id}>
+                            <tr
+                              className="tbl-row"
+                              style={{
+                                cursor: 'pointer',
+                                background: isHovered ? 'var(--table-row-hover)' : rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
+                                borderLeft: isHovered ? `3px solid ${accentColor}` : '3px solid transparent',
+                                boxShadow: isHovered ? 'var(--table-row-shadow)' : 'none',
+                                transition: 'background-color 250ms cubic-bezier(0.4,0,0.2,1), border-color 250ms cubic-bezier(0.4,0,0.2,1), box-shadow 250ms cubic-bezier(0.4,0,0.2,1)',
+                              }}
+                              onClick={() => openView(r)}
+                              onMouseEnter={handleRowEnter}
+                              onMouseLeave={handleRowLeave}>
                               <td className="tbl-cell">
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{f['Invoice Number'] || '—'}</span>
@@ -4136,6 +4161,180 @@ export default function WebInvoices() {
                                 </div>
                               </td>
                             </tr>
+
+                            {/* ── Hover-expand detail row ── */}
+                            <tr
+                              style={{ background: 'transparent' }}
+                              onMouseEnter={handleRowEnter}
+                              onMouseLeave={handleRowLeave}>
+                              <td colSpan={15} style={{ padding: 0, border: 'none' }}>
+                                <div style={{
+                                  maxHeight: isHovered ? 320 : 0,
+                                  overflow: 'hidden',
+                                  transition: 'max-height 380ms cubic-bezier(0.4,0,0.2,1), opacity 300ms cubic-bezier(0.4,0,0.2,1)',
+                                  opacity: isHovered ? 1 : 0,
+                                }}>
+                                  <div
+                                    onClick={() => openView(r)}
+                                    style={{
+                                      cursor: 'pointer',
+                                      margin: '0 0 4px 0',
+                                      background: 'var(--glass-bg)',
+                                      borderLeft: `3px solid ${accentColor}`,
+                                      borderTop: '1px solid var(--glass-border)',
+                                      borderBottom: '1px solid var(--glass-border)',
+                                    }}>
+
+                                    {/* Section 1: Metrics strip */}
+                                    <div style={{
+                                      display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                                      padding: '10px 20px 10px 18px',
+                                      borderBottom: '1px solid var(--glass-border)',
+                                      background: `linear-gradient(90deg, ${accentColor}08 0%, transparent 60%)`,
+                                    }}>
+                                      <StatusPill status={f['Payment Status']} />
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 2 }}>
+                                        {f['Invoice Number'] || ''}
+                                      </span>
+                                      {cur !== 'RS' && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--accent-dim)', color: 'var(--accent)' }}>{cur}</span>
+                                      )}
+                                      <span style={{ width: 1, height: 16, background: 'var(--glass-border)', margin: '0 6px' }} />
+                                      {[
+                                        { label: 'Raised', value: fmtCurrency(f['Amount Raised'], cur), color: 'var(--text-1)' },
+                                        { label: 'Incl. GST', value: fmtCurrency(f['Amount with Tax'], cur), color: 'var(--text-2)' },
+                                        { label: 'Received', value: fmtCurrency(f['Amount Received'], cur), color: 'var(--fin-positive)' },
+                                        outstanding > 0 ? { label: 'Outstanding', value: fmtCurrency(outstanding, cur), color: 'var(--fin-warning)' } : null,
+                                      ].filter(Boolean).map((chip, ci) => (
+                                        <span key={chip.label} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                                          {ci > 0 && <span style={{ color: 'var(--text-3)', fontSize: 10 }}>·</span>}
+                                          <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500 }}>{chip.label}</span>
+                                          <span style={{ fontSize: 12, color: chip.color, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{chip.value}</span>
+                                        </span>
+                                      ))}
+                                      <span style={{ marginLeft: 'auto' }}>
+                                        <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
+                                      </span>
+                                    </div>
+
+                                    {/* Section 2: Two-column body */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+
+                                      {/* Left: entity fields */}
+                                      <div style={{
+                                        display: 'flex', flexDirection: 'column', gap: 10,
+                                        padding: '12px 20px 12px 18px',
+                                        borderRight: '1px solid var(--glass-border)',
+                                      }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 20px' }}>
+                                          {[
+                                            { label: 'Project', value: f['Project'] },
+                                            { label: 'Category', value: f['Category'] },
+                                            { label: 'Milestone', value: f['Milestone'] },
+                                          ].filter(x => x.value).map(x => (
+                                            <div key={x.label} style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 80 }}>
+                                              <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{x.label}</span>
+                                              <span style={{ fontSize: 12, color: x.label === 'Project' ? 'var(--text-1)' : 'var(--text-2)', fontWeight: x.label === 'Project' ? 600 : 400, lineHeight: 1.4 }}>{x.value}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        {f['Raised By'] && (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Raised By</span>
+                                            <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={18} />
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Right: text + dates */}
+                                      <div style={{
+                                        display: 'flex', flexDirection: 'column', gap: 8,
+                                        padding: '12px 20px',
+                                      }}>
+                                        {f['Description'] && (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Description</span>
+                                            <span style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{f['Description']}</span>
+                                          </div>
+                                        )}
+                                        {f['Remark'] && (
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Remark</span>
+                                            <span style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{f['Remark']}</span>
+                                          </div>
+                                        )}
+                                        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 'auto' }}>
+                                          {f['Raised Date'] && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                              <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Raised</span>
+                                              <span style={{ fontSize: 11, color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(f['Raised Date'])}</span>
+                                            </div>
+                                          )}
+                                          {f['Cleared Date'] && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                              <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cleared</span>
+                                              <span style={{ fontSize: 11, color: 'var(--fin-positive)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtDate(f['Cleared Date'])}</span>
+                                            </div>
+                                          )}
+                                          {f['Next followup'] && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                              <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Next Followup</span>
+                                              <span style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>{fmtDate(f['Next followup'])}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Section 3: Footer — attachments + actions */}
+                                    <div
+                                      onClick={e => e.stopPropagation()}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: '8px 20px 8px 18px',
+                                        borderTop: '1px solid var(--glass-border)',
+                                        background: 'var(--bg-input)',
+                                        gap: 12,
+                                      }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {allFiles.length > 0 ? (
+                                          <>
+                                            {allFiles.slice(0, 5).map((a, i) => (
+                                              <AttachThumb key={i} a={a} size={28} onPreview={() => setPreviewDocs({ docs: allFiles, index: i })} />
+                                            ))}
+                                            {allFiles.length > 5 && (
+                                              <span style={{ fontSize: 10, color: 'var(--text-3)' }}>+{allFiles.length - 5} more</span>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>No attachments</span>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {f['Payment Status'] === 'Pending' && (
+                                          <button
+                                            onClick={() => openRecordPayment(r)}
+                                            className="btn-ghost flex items-center gap-1.5"
+                                            style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.35)' }}>
+                                            <CheckCircle2 size={11} />
+                                            <span style={{ fontSize: 11, fontWeight: 600 }}>Record Payment</span>
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => openView(r)}
+                                          className="btn-ghost flex items-center gap-1.5"
+                                          style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.35)' }}>
+                                          <Eye size={11} />
+                                          <span style={{ fontSize: 11, fontWeight: 600 }}>View Details</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                            </Fragment>
                           )
                         })
                   }
