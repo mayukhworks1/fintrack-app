@@ -27,13 +27,13 @@ from .auth import verify_token
 
 def _get_token(
     authorization: str | None = Header(default=None),
-    token: str | None = Query(default=None),
+    auth_token: str | None = Query(default=None, alias="token"),
 ) -> str:
     # Accept Bearer header first; fall back to ?token= query param (for download links)
     if authorization and authorization.lower().startswith("bearer "):
         return authorization.split(" ", 1)[1].strip()
-    if token:
-        return token
+    if auth_token:
+        return auth_token
     raise HTTPException(status_code=401, detail="Missing authorization token")
 
 
