@@ -65,8 +65,9 @@ const UID = 'iac2'
 //   days={60}          → last N days ending today
 //   from="…" to="…"   → explicit date range
 export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '', avatarMap = {}, onInvoiceClick }) {
-  const containerRef = useRef(null)
-  const svgRef       = useRef(null)
+  const containerRef    = useRef(null)
+  const svgRef          = useRef(null)
+  const tooltipHovered  = useRef(false)
   const [width,      setWidth]   = useState(800)
   const [hoverIdx,   setHoverIdx] = useState(null)   // day index
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
@@ -166,7 +167,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
     setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
   }, [data, xOf])
 
-  const handleMouseLeave = () => setHoverIdx(null)
+  const handleMouseLeave = () => { if (!tooltipHovered.current) setHoverIdx(null) }
 
   const hoverDay = hoverIdx != null ? data[hoverIdx] : null
   const labelEvery = Math.max(1, Math.round(data.length / 9))
@@ -358,7 +359,8 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
       {/* ── Tooltip ── */}
       {hoverDay && (
         <div
-          pointerEvents="none"
+          onMouseEnter={() => { tooltipHovered.current = true }}
+          onMouseLeave={() => { tooltipHovered.current = false; setHoverIdx(null) }}
           style={{
             position:  'absolute',
             top:       Math.max(4, tooltipPos.y - 20),
@@ -370,7 +372,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
             boxShadow:  '0 8px 32px rgba(0,0,0,0.14)',
             padding:    '10px 12px',
             zIndex:     40,
-            pointerEvents: 'none',
+            pointerEvents: 'auto',
           }}
         >
           {/* date + cumulative */}
