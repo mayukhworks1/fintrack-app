@@ -12,7 +12,7 @@ from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..db.postgres import get_pool
 from ..config import settings
-from .deps import require_web_access, owner_scope_email
+from .deps import require_auth, require_web_access, owner_scope_email
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -110,7 +110,7 @@ async def get_client_names(_role: str = Depends(require_web_access)):
 
 
 @router.get("/avatar-map")
-async def get_avatar_map(_role: str = Depends(require_web_access)):
+async def get_avatar_map(_role: str = Depends(require_auth)):
     """Return email → {avatar_url, name} for approved users. Used by dashboards to show profile pics next to Raised By."""
     pool = get_pool()
     if not pool:
