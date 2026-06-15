@@ -2590,7 +2590,7 @@ export default function WebInvoices() {
 
             {/* ── Monthly Receivables + Recent Projects (side by side) ── */}
             {allRecords.length > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
               {/* Left: compact pill widget */}
               <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-2 mb-4">
@@ -2655,12 +2655,12 @@ export default function WebInvoices() {
 
               {/* Right: Recent Projects */}
               {projectSummaryCards.length > 0 && (
-                <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                  <div className="mb-4">
+                <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+                  <div className="mb-4 flex-shrink-0">
                     <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Recent Projects</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Active invoice pressure</p>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 overflow-y-auto flex-1" style={{ minHeight: 0 }}>
                     {projectSummaryCards.slice(0, 5).map(({ project, metrics }) => {
                       const raised = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.raised || 0), 0)
                       const received = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.received || 0), 0)
