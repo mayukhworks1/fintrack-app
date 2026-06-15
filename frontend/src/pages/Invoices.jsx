@@ -24,6 +24,29 @@ import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, Ex
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
 
+/* ── RaisedByBadge ──────────────────────────────────────────────────────── */
+function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
+  if (!email) return null
+  const entry = avatarMap[email.toLowerCase()] || {}
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+      {entry.avatar_url ? (
+        <img src={entry.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+      ) : (
+        <span style={{
+          width: size, height: size, borderRadius: '50%', flexShrink: 0,
+          background: 'var(--accent-dim)', display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: size * 0.5, color: 'var(--accent)', fontWeight: 600,
+        }}>
+          {(entry.name || email)[0].toUpperCase()}
+        </span>
+      )}
+      <span style={{ fontSize: '0.75em' }}>{entry.name || email}</span>
+    </span>
+  )
+}
+
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Dropdown options are derived live from invoice records — no hardcoded fallbacks
 const STATUSES = ['Paid', 'Pending', 'Cancelled']
@@ -1336,6 +1359,7 @@ export default function Invoices() {
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [avatarMap,      setAvatarMap]      = useState({})
   const [drawer, setDrawer] = useState(null)
   const [previewDocs, setPreviewDocs] = useState(null)
   const [shareModal, setShareModal] = useState(false)
@@ -1391,6 +1415,8 @@ export default function Invoices() {
     setRecordsState(listData?.records || [])
   }, [listData?.records])
   const allRecords = recordsState
+
+  useEffect(() => { api.webInvoices.avatarMap().then(setAvatarMap).catch(() => {}) }, [])
 
   /* ── Live project names from Projects table ──────────────────────────────
    * Merges names from actual invoices (already loaded) with names from the
@@ -3411,8 +3437,7 @@ export default function Invoices() {
                           <td className="tbl-cell min-w-0" style={{ width: columnWidths.raised_by, overflow: 'hidden' }}>
                             {f['Raised By']
                               ? <span className="inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" title={f['Raised By']} style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                                  <User size={9} style={{ flexShrink: 0 }} />
-                                  <span className="min-w-0 truncate">{f['Raised By']}</span>
+                                  <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={14} />
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
