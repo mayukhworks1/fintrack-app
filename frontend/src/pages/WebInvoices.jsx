@@ -2596,7 +2596,7 @@ export default function WebInvoices() {
                 <div className="flex items-center justify-between gap-2 mb-4">
                   <div>
                     <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
-                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>GST-aware receivables</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Receivables at a glance</p>
                   </div>
                   <div className="flex items-center gap-1">
                     {[3, 6, 12].map(m => (
@@ -2643,16 +2643,8 @@ export default function WebInvoices() {
                         <p style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginBottom: 6 }}>{fmtAmt(entry.received)} rcvd</p>
                         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
-                            <span>GST</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.gst)}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
                             <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? '#f87171' : '#4ade80' }}>{fmtAmt(entry.outstanding)}</span>
                           </div>
-                          {entry.deduction > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
-                              <span>TDS</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.deduction)}</span>
-                            </div>
-                          )}
                         </div>
                         <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.22rem 0.6rem', borderRadius: 999, background: badgeColor.bg, color: badgeColor.text }}>{badgeLabel}</span>
                       </button>
@@ -2673,7 +2665,6 @@ export default function WebInvoices() {
                       const raised = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.raised || 0), 0)
                       const received = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.received || 0), 0)
                       const open = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.outstanding || 0), 0)
-                      const tds = Object.values(metrics?.by_currency || {}).reduce((s, c) => s + Number(c?.tds_deducted || 0), 0)
                       const collPct = raised > 0 ? Math.min(100, (received / raised) * 100) : 0
                       const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
                       return (
@@ -2702,7 +2693,6 @@ export default function WebInvoices() {
                           </div>
                           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                             {metrics?.count || 0} invoices · <span style={{ color: '#f87171' }}>₹{(open/1000).toFixed(0)}k open</span>
-                            {tds > 0 && <> · <span style={{ color: dark ? '#94a3b8' : '#64748b' }}>₹{(tds/1000).toFixed(0)}k TDS</span></>}
                           </p>
                         </button>
                       )
@@ -2720,59 +2710,6 @@ export default function WebInvoices() {
               </div>
             )}
 
-            {/* ── GST Summary ── */}
-            <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>GST receivables</p>
-                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Month-wise GST summary</h2>
-                </div>
-                <div className="flex items-center gap-1">
-                  {[3, 6, 12].map(m => (
-                    <button key={m} onClick={() => setGstMonths(m)}
-                      className={gstMonths === m ? 'btn-primary' : 'btn-ghost'}
-                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.6rem' }}>{m} mo</button>
-                  ))}
-                </div>
-              </div>
-              {gstSummary.months.length === 0 ? (
-                <p className="text-sm" style={{ color: 'var(--text-3)' }}>No invoices in the selected range.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr>
-                        {['Month','Base','GST','Gross','Received','Outstanding','Invoices'].map(h => (
-                          <th key={h} className="text-left pb-2 pr-4 font-semibold" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {gstSummary.months.slice().reverse().map(m => (
-                        <tr key={m.month} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td className="py-2 pr-4 font-medium" style={{ color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{m.label}</td>
-                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--text-2)' }}>₹{(m.base/1000).toFixed(0)}k</td>
-                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--accent)' }}>₹{(m.gst/1000).toFixed(0)}k</td>
-                          <td className="py-2 pr-4 tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>₹{(m.gross/1000).toFixed(0)}k</td>
-                          <td className="py-2 pr-4 tabular-nums" style={{ color: 'var(--fin-positive)' }}>₹{(m.received/1000).toFixed(0)}k</td>
-                          <td className="py-2 pr-4 tabular-nums" style={{ color: m.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>₹{(m.outstanding/1000).toFixed(0)}k</td>
-                          <td className="py-2 tabular-nums" style={{ color: 'var(--text-3)' }}>{m.count}</td>
-                        </tr>
-                      ))}
-                      <tr style={{ borderTop: '2px solid var(--border)' }}>
-                        <td className="py-2 pr-4 font-bold" style={{ color: 'var(--text-1)' }}>Total</td>
-                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--text-2)' }}>₹{(gstSummary.totals.base/1000).toFixed(0)}k</td>
-                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--accent)' }}>₹{(gstSummary.totals.gst/1000).toFixed(0)}k</td>
-                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>₹{(gstSummary.totals.gross/1000).toFixed(0)}k</td>
-                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>₹{(gstSummary.totals.received/1000).toFixed(0)}k</td>
-                        <td className="py-2 pr-4 tabular-nums font-bold" style={{ color: gstSummary.totals.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>₹{(gstSummary.totals.outstanding/1000).toFixed(0)}k</td>
-                        <td className="py-2 tabular-nums font-bold" style={{ color: 'var(--text-3)' }}>{gstSummary.totals.count}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_320px] gap-4">
               <div
