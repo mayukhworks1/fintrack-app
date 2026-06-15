@@ -1651,7 +1651,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
           aria-label={open ? undefined : 'New invoice'}
         >
           <Plus size={open ? 15 : 18} />
-          {open && <span>New</span>}
+          {open && <span>New Invoice</span>}
         </button>
       </div>
 
@@ -3078,8 +3078,7 @@ export default function WebInvoices() {
               </button>
               <button onClick={openNew} className="btn-primary">
                 <Plus size={14} />
-                <span className="hidden sm:inline">New Invoice</span>
-                <span className="sm:hidden">New</span>
+                <span>New Invoice</span>
               </button>
             </div>
           </div>
