@@ -2590,11 +2590,11 @@ export default function WebInvoices() {
 
             {/* ── Monthly Receivables ── */}
             {allRecords.length > 0 && (
-            <div className="rounded-[26px] p-4 sm:p-6 space-y-4" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="rounded-[26px] p-4 sm:p-6" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables trend</p>
-                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Monthly breakdown</h2>
+                  <h2 className="text-xl font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>GST-aware receivables</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {[3, 6, 12].map(m => (
@@ -2604,85 +2604,69 @@ export default function WebInvoices() {
                   ))}
                 </div>
               </div>
-              <div className="space-y-3">
-                {lastThreeMonthBalance.map((entry) => {
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lastThreeMonthBalance.length}, 1fr)`, gap: '1rem' }}>
+                {lastThreeMonthBalance.map((entry, idx) => {
                   const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
-                  const raisedPct = maxMonthlyBalanceMagnitude > 0 ? (entry.gross / maxMonthlyBalanceMagnitude) * 100 : 0
+                  const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.08, entry.gross / maxMonthlyBalanceMagnitude) : 0.08
+                  const barColor = collPct >= 80
+                    ? 'linear-gradient(180deg,#4ade80,#16a34a)'
+                    : collPct >= 50
+                    ? 'linear-gradient(180deg,#fbbf24,#d97706)'
+                    : 'linear-gradient(180deg,#f87171,#dc2626)'
+                  const isFirst = idx === 0
+                  const badgeLabel = entry.change !== null
+                    ? (entry.change >= 0 ? `up ${entry.change.toFixed(0)}%` : `down ${Math.abs(entry.change).toFixed(0)}%`)
+                    : `${collPct.toFixed(0)}% collected`
+                  const badgeColor = entry.change !== null
+                    ? (entry.change >= 0 ? { bg: 'rgba(34,197,94,0.18)', text: '#4ade80' } : { bg: 'rgba(239,68,68,0.2)', text: '#f87171' })
+                    : { bg: 'rgba(100,100,120,0.25)', text: dark ? '#cbd5e1' : '#64748b' }
+                  const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
                   return (
                     <button
                       key={entry.key}
                       type="button"
                       onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
-                      className="w-full text-left rounded-2xl p-3 sm:p-4 transition-all hover:opacity-90"
-                      style={{ background: dark ? 'rgba(15,23,42,0.55)' : 'rgba(248,250,252,0.9)', border: `1px solid ${dashboardStyles.line}`, cursor: 'pointer' }}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}
                     >
-                      {/* Header row */}
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div>
-                          <p className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>{entry.label}</p>
-                          <p className="text-xl font-bold tabular-nums mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
-                            {entry.gross >= 100000 ? `₹${(entry.gross/100000).toFixed(2)}L` : `₹${(entry.gross/1000).toFixed(1)}k`}
-                          </p>
-                        </div>
-                        <div className="text-right flex flex-col items-end gap-1">
-                          {entry.change !== null && (
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{
-                              background: entry.change >= 0 ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                              color: entry.change >= 0 ? '#16a34a' : '#dc2626'
-                            }}>
-                              {entry.change >= 0 ? '↑' : '↓'} {Math.abs(entry.change).toFixed(1)}%
-                            </span>
-                          )}
-                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{entry.invoiceCount} invoice{entry.invoiceCount !== 1 ? 's' : ''}</span>
-                        </div>
+                      {/* Pill bar */}
+                      <div style={{ width: '100%', height: 220, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 0 }}>
+                        <div style={{
+                          width: '65%', height: `${barH * 100}%`, minHeight: 24,
+                          background: barColor,
+                          borderRadius: 40,
+                          transition: 'height 0.4s ease',
+                          boxShadow: `0 4px 20px ${collPct >= 80 ? 'rgba(74,222,128,0.3)' : collPct >= 50 ? 'rgba(251,191,36,0.3)' : 'rgba(248,113,113,0.3)'}`,
+                        }} />
                       </div>
-
-                      {/* Raised bar */}
-                      <div className="mb-2">
-                        <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-3)' }}>
-                          <span>Raised</span>
-                          <span className="tabular-nums font-medium" style={{ color: 'var(--accent)' }}>
-                            {entry.gross >= 100000 ? `₹${(entry.gross/100000).toFixed(2)}L` : `₹${(entry.gross/1000).toFixed(1)}k`}
-                          </span>
+                      {/* Month */}
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginTop: 10, marginBottom: 6 }}>{entry.label}</p>
+                      {/* Gross */}
+                      <p style={{ fontSize: '1.25rem', fontWeight: 700, color: dark ? '#f8fafc' : 'var(--text-1)', tabularNums: true, marginBottom: 4 }}>
+                        {fmtAmt(entry.gross)}
+                      </p>
+                      {/* Received */}
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: 8 }}>
+                        {fmtAmt(entry.received)} received
+                      </p>
+                      {/* Stats */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', marginBottom: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
+                          <span>GST</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.gst)}</span>
                         </div>
-                        <div className="rounded-full overflow-hidden" style={{ height: 6, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${raisedPct}%`, background: 'var(--accent)' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
+                          <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? '#f87171' : '#4ade80' }}>{fmtAmt(entry.outstanding)}</span>
                         </div>
+                        {entry.deduction > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
+                            <span>TDS</span><span style={{ fontWeight: 600, color: dark ? '#94a3b8' : '#475569' }}>{fmtAmt(entry.deduction)}</span>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Collected bar */}
-                      <div className="mb-3">
-                        <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-3)' }}>
-                          <span>Collected</span>
-                          <span className="tabular-nums font-medium" style={{ color: 'var(--fin-positive)' }}>
-                            {entry.received >= 100000 ? `₹${(entry.received/100000).toFixed(2)}L` : `₹${(entry.received/1000).toFixed(1)}k`}
-                          </span>
-                        </div>
-                        <div className="rounded-full overflow-hidden" style={{ height: 6, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${raisedPct > 0 ? (entry.received / maxMonthlyBalanceMagnitude) * 100 : 0}%`, background: 'var(--fin-positive)' }} />
-                        </div>
-                      </div>
-
-                      {/* Footer stats */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
-                          Base <span style={{ color: 'var(--text-2)' }}>₹{(entry.base/1000).toFixed(0)}k</span>
-                        </span>
-                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
-                          GST <span style={{ color: 'var(--accent)' }}>₹{(entry.gst/1000).toFixed(0)}k</span>
-                        </span>
-                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
-                          Due <span style={{ color: entry.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
-                            {entry.outstanding >= 100000 ? `₹${(entry.outstanding/100000).toFixed(2)}L` : `₹${(entry.outstanding/1000).toFixed(0)}k`}
-                          </span>
-                        </span>
-                        <span className="ml-auto text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full" style={{
-                          background: collPct >= 80 ? 'rgba(34,197,94,0.12)' : collPct >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
-                          color: collPct >= 80 ? '#16a34a' : collPct >= 50 ? '#d97706' : '#dc2626'
-                        }}>
-                          {collPct.toFixed(0)}% collected
-                        </span>
-                      </div>
+                      {/* Badge */}
+                      <span style={{
+                        fontSize: '0.72rem', fontWeight: 700, padding: '0.3rem 0.8rem',
+                        borderRadius: 999, background: badgeColor.bg, color: badgeColor.text,
+                      }}>{badgeLabel}</span>
                     </button>
                   )
                 })}
