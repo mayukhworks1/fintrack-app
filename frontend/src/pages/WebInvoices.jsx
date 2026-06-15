@@ -777,7 +777,7 @@ function AttachmentUploadField({ label, fieldKey, value, onChange, recordId, ens
 }
 
 /* ── Detail panel ── */
-function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
+function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview, avatarMap = {} }) {
   const f = (open && invoice) ? (invoice.fields || {}) : {}
   const refs = parseAttachments(f['Reference'])
   const pdfs = parseAttachments(f['Invoice PDF'])
@@ -4069,6 +4069,7 @@ export default function WebInvoices() {
         }}
         isEditor={true}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+        avatarMap={avatarMap}
       />
       <InvoiceDrawer
         key={`form-${drawerKey}`}
