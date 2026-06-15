@@ -607,7 +607,7 @@ function SuggestInput({ value, onChange, options = [], placeholder = 'Type or se
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview }) {
+function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview, avatarMap = {} }) {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [sendingReminder, setSendingReminder] = useState(false)
@@ -705,7 +705,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
             )}
             {f['Raised By'] && (
               <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
-                <User size={9} />{f['Raised By']}
+                <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={14} />
               </span>
             )}
           </div>
@@ -3193,7 +3193,7 @@ export default function Invoices() {
                     {f['Raised By'] && (
                       <div className="invoice-mobile-meta mt-1">
                         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-3)' }}>
-                          <User size={8} />{f['Raised By']}
+                          <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={12} />
                         </span>
                         {f['Milestone'] && <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-3)' }}>{f['Milestone']}</span>}
                       </div>
@@ -3533,6 +3533,7 @@ export default function Invoices() {
         onRecordPayment={() => isEditor && openRecordPayment(drawer?.invoice)}
         isEditor={isEditor}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+        avatarMap={avatarMap}
       />
       {isEditor && (
         <InvoiceDrawer
