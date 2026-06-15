@@ -1335,6 +1335,7 @@ export default function Invoices() {
   const [filterConditions, setFilterConditions] = useState([])
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const [drawer, setDrawer] = useState(null)
   const [previewDocs, setPreviewDocs] = useState(null)
   const [shareModal, setShareModal] = useState(false)
@@ -1969,6 +1970,32 @@ export default function Invoices() {
   const openNew     = () => setDrawer({ mode: 'new',  invoice: null })
   const openView    = r  => setDrawer({ mode: 'view', invoice: r   })
 
+  function exportCsv(useFiltered) {
+    const CSV_FIELDS = [
+      'Invoice Number', 'Raised Date', 'Project', 'Client', 'Category', 'Payment Status',
+      'Raised By', 'Milestone', 'Currency', 'Amount Raised', 'Amount with Tax',
+      'Amount Received', 'Outstanding Amount', 'Cleared Date', 'Remark',
+    ]
+    const escape = (v) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const data = useFiltered ? records : allRecords
+    const header = CSV_FIELDS.join(',')
+    const body = data.map(r => {
+      const f = r.fields || {}
+      return CSV_FIELDS.map(k => escape(f[k])).join(',')
+    }).join('\n')
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    setShowExportMenu(false)
+  }
+
   // Open new drawer when navigated here with ?new=1 (works even if already on /invoices)
   useEffect(() => {
     if (searchParams.get('new') === '1') {
@@ -2088,19 +2115,27 @@ export default function Invoices() {
             <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-ghost">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Refresh
             </button>
-            <a
-              href={api.invoices.exportUrl({
-                status: statusFilter || undefined,
-                project: projectFilter || undefined,
-                from: dateFrom || undefined,
-                to: dateTo || undefined,
-              })}
-              download
-              className="btn-ghost"
-              title="Download filtered invoices as CSV"
-            >
-              <Download size={14} />Export CSV
-            </a>
+            <div className="relative">
+              <button onClick={() => setShowExportMenu(m => !m)} className="btn-ghost" title="Download invoices as CSV">
+                <Download size={14} />Export CSV<ChevronDown size={11} />
+              </button>
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 rounded-xl shadow-lg border py-1 min-w-[190px]"
+                    style={{ background: 'var(--surface-1)', borderColor: 'var(--border-soft)' }}>
+                    <button onClick={() => exportCsv(true)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
+                      <Download size={13} />Filtered ({records.length})
+                    </button>
+                    <button onClick={() => exportCsv(false)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
+                      <Download size={13} />All records ({allRecords.length})
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             {isEditor && (
               <button onClick={openNew} className="btn-primary"><Plus size={14} />New Invoice</button>
             )}
@@ -3352,7 +3387,7 @@ export default function Invoices() {
                             </div>
                           </td>
                           <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
-                            <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
+                            <span className="text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
                           </td>
                           <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount }}>
                             {outstanding > 0

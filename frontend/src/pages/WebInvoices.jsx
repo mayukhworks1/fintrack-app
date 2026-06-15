@@ -1761,6 +1761,7 @@ export default function WebInvoices() {
   const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
   const [showFilters,    setShowFilters]    = useState(true)
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const [filterConditions, setFilterConditions] = useState([])
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
@@ -2338,6 +2339,32 @@ export default function WebInvoices() {
     w.document.write(html)
     w.document.close()
     w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close() }
+  }
+
+  function exportCsv(useFiltered) {
+    const CSV_FIELDS = [
+      'Invoice Number', 'Raised Date', 'Project', 'Category', 'Payment Status',
+      'Raised By', 'Milestone', 'Currency', 'Amount Raised', 'Amount with Tax',
+      'Amount Received', 'Outstanding Amount', 'Cleared Date', 'Remark',
+    ]
+    const escape = (v) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const data = useFiltered ? records : allRecords
+    const header = CSV_FIELDS.join(',')
+    const body = data.map(r => {
+      const f = r.fields || {}
+      return CSV_FIELDS.map(k => escape(f[k])).join(',')
+    }).join('\n')
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    setShowExportMenu(false)
   }
 
   // Auto-open new invoice drawer when navigated with ?new=1 (e.g. from sidebar button)
@@ -3128,10 +3155,31 @@ export default function WebInvoices() {
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
-              <a href={api.webInvoices.exportUrl()} download className="btn-ghost" style={{ textDecoration: 'none' }}>
-                <Download size={14} />
-                <span className="hidden sm:inline">Export CSV</span>
-              </a>
+              <div className="relative">
+                <button onClick={() => setShowExportMenu(m => !m)} className="btn-ghost">
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Export CSV</span>
+                  <ChevronDown size={11} />
+                </button>
+                {showExportMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-20 rounded-xl shadow-lg border py-1 min-w-[180px]"
+                      style={{ background: 'var(--surface-1)', borderColor: 'var(--border-soft)' }}>
+                      <button onClick={() => exportCsv(true)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
+                        <Download size={13} />
+                        <span>Filtered ({records.length})</span>
+                      </button>
+                      <button onClick={() => exportCsv(false)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
+                        <Download size={13} />
+                        <span>All records ({allRecords.length})</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button onClick={handlePrintInvoices} className="btn-ghost" title="Print invoice list">
                 <Printer size={14} />
                 <span className="hidden sm:inline">Print</span>
@@ -4039,7 +4087,7 @@ export default function WebInvoices() {
                                     </span>
                                   : <span style={{ color: 'var(--text-3)' }}>—</span>}
                               </td>
-                              <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span></td>
+                              <td className="tbl-cell"><span className="text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span></td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{fmtCurrency(f['Amount Raised'], cur)}</span></td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{fmtCurrency(f['Amount with Tax'], cur)}</span></td>
                               <td className="tbl-cell"><span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>{fmtCurrency(f['Amount Received'], cur)}</span></td>
