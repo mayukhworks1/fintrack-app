@@ -2283,6 +2283,14 @@ export default function WebInvoices() {
 
   const openNew     = ()  => { setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
   const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
+
+  // Auto-open new invoice drawer when navigated with ?new=1 (e.g. from sidebar button)
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.delete('new'); return n }, { replace: true })
+    setWorkspace('invoices')
+    openNew()
+  }, []) // eslint-disable-line
   const openRecordPayment = r => {
     setDrawerKey(k => k + 1)
     setDrawer({
