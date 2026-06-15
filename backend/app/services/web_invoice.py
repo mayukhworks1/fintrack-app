@@ -317,54 +317,48 @@ class WebInvoiceService:
                 ]
                 return {"records": scoped[skip:skip + limit], "total": len(scoped)}
 
-            field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
-            filter_set = []
-            if status:
-                filter_set.append({
-                    "fieldId": WEB_INVOICE_FIELD_IDS["Payment Status"],
-                    "operator": "is",
-                    "value": status,
-                })
-            if project:
-                filter_set.append({
-                    "fieldId": WEB_INVOICE_FIELD_IDS["Project"],
-                    "operator": "is",
-                    "value": project,
-                })
-
-            # Teable caps take at 1000 per request — paginate when limit is larger
+            # Fetch all pages with minimal params — no orderBy/filter sent to Teable
+            # (complex query params trigger a redirect to /record/export which 404s).
+            # Filter and sort in Python instead.
             PAGE = 1000
             all_records: list[dict] = []
-            total = 0
-            async with httpx.AsyncClient(timeout=30) as client:
-                page_skip = skip
-                remaining = limit
-                while remaining > 0:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+                page_skip = 0
+                while True:
                     params: dict[str, Any] = {
                         "fieldKeyType": "name",
-                        "take": min(PAGE, remaining),
+                        "take": PAGE,
                         "skip": page_skip,
-                        "orderBy": json.dumps([{"fieldId": field_id, "order": order}]),
                     }
-                    if filter_set:
-                        params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
                     res = await client.get(self._record_url, params=params, headers=self._headers)
                     res.raise_for_status()
                     data = res.json()
                     batch = data.get("records", [])
-                    total = data.get("total", total)
                     all_records.extend(batch)
-                    if len(batch) < min(PAGE, remaining):
+                    if len(batch) < PAGE:
                         break
-                    page_skip += len(batch)
-                    remaining -= len(batch)
+                    page_skip += PAGE
+            total = len(all_records)
 
             records = [_apply_runtime_invoice_derivatives(r) for r in all_records]
-            # Python-side case-insensitive safety filter for ownership scoping
+
+            # Python-side filtering
+            if status:
+                records = [r for r in records if r.get("fields", {}).get("Payment Status") == status]
+            if project:
+                records = [r for r in records if r.get("fields", {}).get("Project") == project]
             if raised_by:
                 email_lc = raised_by.lower()
-                records = [r for r in records if r.get("fields", {}).get("Raised By", "").lower() == email_lc]
-            return {"records": records, "total": total}
+                records = [r for r in records if str(r.get("fields", {}).get("Raised By", "")).lower() == email_lc]
+
+            # Python-side sorting
+            def _sort_key(r):
+                v = r.get("fields", {}).get(order_by, "")
+                return v or ""
+            records.sort(key=_sort_key, reverse=(order == "desc"))
+
+            total = len(records)
+            return {"records": records[skip:skip + limit], "total": total}
 
         # Owner-scoped views are security-sensitive and should reflect CRUD
         # immediately. Keep cache only for legacy/full-workspace reads.
@@ -394,40 +388,34 @@ class WebInvoiceService:
         order_by: str = "Raised Date",
         order: str = "desc",
     ) -> list[dict]:
-        records: list[dict[str, Any]] = []
-        skip = 0
-        field_id = WEB_INVOICE_FIELD_IDS.get(order_by, WEB_INVOICE_FIELD_IDS["Raised Date"])
-        async with httpx.AsyncClient(timeout=30) as client:
+        raw: list[dict[str, Any]] = []
+        page_skip = 0
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
             while True:
                 params: dict[str, Any] = {
                     "fieldKeyType": "name",
                     "take": 1000,
-                    "skip": skip,
-                    "orderBy": json.dumps([{"fieldId": field_id, "order": order}]),
+                    "skip": page_skip,
                 }
-                filter_set = []
-                if status:
-                    filter_set.append({
-                        "fieldId": WEB_INVOICE_FIELD_IDS["Payment Status"],
-                        "operator": "is",
-                        "value": status,
-                    })
-                if project:
-                    filter_set.append({
-                        "fieldId": WEB_INVOICE_FIELD_IDS["Project"],
-                        "operator": "is",
-                        "value": project,
-                    })
-                if filter_set:
-                    params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
                 res = await client.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 batch = res.json().get("records", [])
-                records.extend(batch)
+                raw.extend(batch)
                 if len(batch) < 1000:
                     break
-                skip += 1000
-        return [_apply_runtime_invoice_derivatives(r) for r in records]
+                page_skip += 1000
+
+        records = [_apply_runtime_invoice_derivatives(r) for r in raw]
+
+        if status:
+            records = [r for r in records if r.get("fields", {}).get("Payment Status") == status]
+        if project:
+            records = [r for r in records if r.get("fields", {}).get("Project") == project]
+
+        def _sort_key(r):
+            return r.get("fields", {}).get(order_by, "") or ""
+        records.sort(key=_sort_key, reverse=(order == "desc"))
+        return records
 
     async def get_invoice(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"

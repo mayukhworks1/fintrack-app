@@ -384,75 +384,61 @@ class InvoiceService:
         order_by: str = "Raised Date",
         order: str = "desc",
     ) -> dict:
-        # No in-process cache — always read live from Teable so the UI
-        # reflects edits (payment, dates, follow-ups) instantly.
-        params: dict[str, Any] = {
-            "fieldKeyType": "name",
-            "take": limit,
-            "skip": skip,
-        }
-        filter_set = []
-        if status:
-            filter_set.append({
-                "fieldId": INVOICE_FIELD_IDS["Payment Status"],
-                "operator": "is",
-                "value": status,
-            })
-        if project:
-            filter_set.append({
-                "fieldId": INVOICE_FIELD_IDS["Project"],
-                "operator": "is",
-                "value": project,
-            })
-        if raised_by:
-            filter_set.append({
-                "fieldId": INVOICE_FIELD_IDS["Raised By"],
-                "operator": "is",
-                "value": raised_by,
-            })
-        if filter_set:
-            params["filter"] = json.dumps({"conjunction": "and", "filterSet": filter_set})
-        field_id = INVOICE_FIELD_IDS.get(order_by, INVOICE_FIELD_IDS["Raised Date"])
-        params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
+        # Fetch all pages with minimal params — no orderBy/filter to Teable
+        # (complex query params trigger a redirect to /record/export which 404s).
+        PAGE = 1000
+        raw: list[dict[str, Any]] = []
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+            page_skip = 0
+            while True:
+                params: dict[str, Any] = {"fieldKeyType": "name", "take": PAGE, "skip": page_skip}
+                res = await client.get(self._record_url, params=params, headers=self._headers)
+                res.raise_for_status()
+                batch = res.json().get("records", [])
+                raw.extend(batch)
+                if len(batch) < PAGE:
+                    break
+                page_skip += PAGE
 
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.get(self._record_url, params=params, headers=self._headers)
-            res.raise_for_status()
-            data = res.json()
-        records = [_apply_runtime_invoice_derivatives(r) for r in data.get("records", [])]
-        return {"records": records, "total": data.get("total", 0)}
+        records = [_apply_runtime_invoice_derivatives(r) for r in raw]
+
+        if status:
+            records = [r for r in records if r.get("fields", {}).get("Payment Status") == status]
+        if project:
+            records = [r for r in records if r.get("fields", {}).get("Project") == project]
+        if raised_by:
+            email_lc = raised_by.lower()
+            records = [r for r in records if str(r.get("fields", {}).get("Raised By", "")).lower() == email_lc]
+
+        def _sort_key(r):
+            return r.get("fields", {}).get(order_by, "") or ""
+        records.sort(key=_sort_key, reverse=(order == "desc"))
+
+        total = len(records)
+        return {"records": records[skip:skip + limit], "total": total}
 
     # ── Fetch all records (for summary / AI) ──────────────────────────────
     async def get_all_invoices(self, raised_by: Optional[str] = None) -> list[dict]:
         cache_key = "invoice:all" if not raised_by else f"invoice:all:raised_by:{raised_by}"
 
         async def _load():
-            records, skip = [], 0
-            async with httpx.AsyncClient(timeout=30) as client:
+            raw, page_skip = [], 0
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
                 while True:
-                    params = {
-                        "fieldKeyType": "name",
-                        "take": 1000,
-                        "skip": skip,
-                        "orderBy": json.dumps([{"fieldId": INVOICE_FIELD_IDS["Raised Date"], "order": "desc"}]),
-                    }
-                    if raised_by:
-                        params["filter"] = json.dumps({
-                            "conjunction": "and",
-                            "filterSet": [{
-                                "fieldId": INVOICE_FIELD_IDS["Raised By"],
-                                "operator": "is",
-                                "value": raised_by,
-                            }],
-                        })
+                    params = {"fieldKeyType": "name", "take": 1000, "skip": page_skip}
                     res = await client.get(self._record_url, params=params, headers=self._headers)
                     res.raise_for_status()
                     batch = res.json().get("records", [])
-                    records.extend(batch)
+                    raw.extend(batch)
                     if len(batch) < 1000:
                         break
-                    skip += 1000
-            return [_apply_runtime_invoice_derivatives(r) for r in records]
+                    page_skip += 1000
+            records = [_apply_runtime_invoice_derivatives(r) for r in raw]
+            if raised_by:
+                email_lc = raised_by.lower()
+                records = [r for r in records if str(r.get("fields", {}).get("Raised By", "")).lower() == email_lc]
+            records.sort(key=lambda r: r.get("fields", {}).get("Raised Date", "") or "", reverse=True)
+            return records
         return await cache.get_or_set(cache_key, ttl=_TTL_ALL, loader=_load)
 
     # ── Get single invoice ────────────────────────────────────────────────
