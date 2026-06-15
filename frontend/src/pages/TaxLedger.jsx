@@ -399,7 +399,82 @@ export default function TaxLedger({ source = 'main' } = {}) {
     exportCSV(csvRows, `tax-ledger-${period.label.replace(/[^a-z0-9]/gi, '-')}.csv`)
   }
 
-  function handlePrint() { window.print() }
+  function handlePrint() {
+    const INR = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const PCT = (n) => Number(n || 0).toFixed(1) + '%'
+
+    const rows = filteredInvoices.map(r => {
+      const f = r.fields || {}
+      const p = taxParts(f)
+      return { no: f['Invoice Number'] || r.id, date: String(f['Raised Date'] || '').slice(0,10),
+               project: f['Project'] || '', client: f['Client Name'] || f['Project'] || '',
+               status: f['Payment Status'] || '', ...p }
+    })
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Tax Ledger — ${period.label}</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; color: #1a1a1a; padding: 24px; }
+      h1 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+      .sub { font-size: 11px; color: #6b7280; margin-bottom: 20px; }
+      h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #374151; margin: 20px 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+      th { background: #f3f4f6; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; padding: 5px 8px; text-align: right; border: 1px solid #e5e7eb; }
+      th:first-child, th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: left; }
+      td { padding: 5px 8px; border: 1px solid #e5e7eb; text-align: right; }
+      td:first-child, td:nth-child(2), td:nth-child(3), td:nth-child(4) { text-align: left; }
+      tr:nth-child(even) { background: #f9fafb; }
+      .tfoot td { font-weight: 700; background: #f3f4f6; border-top: 2px solid #d1d5db; }
+      .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+      .stat { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; }
+      .stat-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; }
+      .stat-value { font-size: 14px; font-weight: 700; margin-top: 2px; }
+      .green { color: #059669; } .red { color: #dc2626; } .blue { color: #2563eb; }
+      @page { margin: 1.2cm; size: A4 landscape; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>Tax Ledger · ${period.label}</h1>
+    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${rows.length} invoices</p>
+
+    <h2>Summary</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Taxable Value</div><div class="stat-value">${INR(totals.taxable)}</div></div>
+      <div class="stat"><div class="stat-label">GST Amount</div><div class="stat-value blue">${INR(totals.gstAmt)} (${PCT(totals.effectiveGstPct)})</div></div>
+      <div class="stat"><div class="stat-label">TDS Amount</div><div class="stat-value red">${INR(totals.tdsAmt)} (${PCT(totals.effectiveTdsPct)})</div></div>
+      <div class="stat"><div class="stat-label">Gross Billed</div><div class="stat-value">${INR(totals.gross)}</div></div>
+      <div class="stat"><div class="stat-label">Received</div><div class="stat-value green">${INR(totals.received)}</div></div>
+      <div class="stat"><div class="stat-label">Outstanding</div><div class="stat-value red">${INR(totals.outstanding)}</div></div>
+      <div class="stat"><div class="stat-label">Net Receivable</div><div class="stat-value">${INR(totals.netReceivable)}</div></div>
+      <div class="stat"><div class="stat-label">Collection Rate</div><div class="stat-value ${totals.collectionRate >= 90 ? 'green' : totals.collectionRate >= 70 ? '' : 'red'}">${PCT(totals.collectionRate)}</div></div>
+    </div>
+
+    <h2>Monthly Breakdown</h2>
+    <table>
+      <thead><tr><th>Month</th><th style="text-align:right">Invoices</th><th style="text-align:right">Taxable</th><th style="text-align:right">GST</th><th style="text-align:right">TDS</th><th style="text-align:right">Gross</th><th style="text-align:right">Received</th><th style="text-align:right">Outstanding</th></tr></thead>
+      <tbody>${monthlyRows.map(m => `<tr>
+        <td>${m.label}</td><td style="text-align:right">${m.count}</td><td>${INR(m.taxable)}</td><td>${INR(m.gstAmt)}</td><td>${INR(m.tdsAmt)}</td><td>${INR(m.gross)}</td><td class="green">${INR(m.received)}</td><td class="red">${INR(m.outstanding)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr class="tfoot"><td>Total</td><td style="text-align:right">${totals.count}</td><td>${INR(totals.taxable)}</td><td>${INR(totals.gstAmt)}</td><td>${INR(totals.tdsAmt)}</td><td>${INR(totals.gross)}</td><td>${INR(totals.received)}</td><td>${INR(totals.outstanding)}</td></tr></tfoot>
+    </table>
+
+    <h2>Invoice Register (${rows.length} invoices)</h2>
+    <table>
+      <thead><tr><th>Invoice No</th><th>Date</th><th>Project / Client</th><th>Status</th><th style="text-align:right">Taxable</th><th style="text-align:right">GST</th><th style="text-align:right">TDS</th><th style="text-align:right">Gross</th><th style="text-align:right">Received</th><th style="text-align:right">Outstanding</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.no}</td><td>${r.date}</td><td>${r.client || r.project}</td><td>${r.status}</td>
+        <td>${INR(r.base)}</td><td>${INR(r.gstAmt)}</td><td>${INR(r.tdsAmt)}</td><td>${INR(r.gross)}</td>
+        <td class="green">${INR(r.received)}</td><td class="${r.outstanding > 0 ? 'red' : ''}">${INR(r.outstanding)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr class="tfoot"><td colspan="4">Total (${rows.length})</td><td>${INR(totals.taxable)}</td><td>${INR(totals.gstAmt)}</td><td>${INR(totals.tdsAmt)}</td><td>${INR(totals.gross)}</td><td>${INR(totals.received)}</td><td>${INR(totals.outstanding)}</td></tr></tfoot>
+    </table>
+    </body></html>`
+
+    const w = window.open('', '_blank', 'width=1100,height=800')
+    w.document.write(html)
+    w.document.close()
+    w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close() }
+  }
 
   function toggleClient(c) {
     setExpandedClients(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
