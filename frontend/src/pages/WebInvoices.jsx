@@ -2588,52 +2588,104 @@ export default function WebInvoices() {
               )
             })()}
 
-            {/* ── Monthly Receivables (bar card widget) ── */}
+            {/* ── Monthly Receivables ── */}
             {allRecords.length > 0 && (
-            <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
+            <div className="rounded-[26px] p-4 sm:p-6 space-y-4" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables trend</p>
-                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} months</h2>
+                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Monthly breakdown</h2>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   {[3, 6, 12].map(m => (
                     <button key={m} onClick={() => setBalanceMonths(m)}
                       className={balanceMonths === m ? 'btn-primary' : 'btn-ghost'}
-                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.6rem' }}>{m} mo</button>
+                      style={{ fontSize: '0.7rem', padding: '0.25rem 0.65rem' }}>{m} mo</button>
                   ))}
                 </div>
               </div>
-              <div className="invoice-month-bars">
-                {lastThreeMonthBalance.map((entry) => (
-                  <button
-                    key={entry.key}
-                    type="button"
-                    onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
-                    className="invoice-runey-card"
-                    style={{ textAlign: 'left', cursor: 'pointer', width: '100%', background: 'none', border: 'none', padding: 0 }}
-                  >
-                    <div className="invoice-month-bar">
-                      <div className="invoice-month-bar-item" style={{ '--bar-pct': `${maxMonthlyBalanceMagnitude > 0 ? (entry.gross / maxMonthlyBalanceMagnitude) * 100 : 0}%`, '--bar-color': 'var(--accent)' }} />
-                      <div className="invoice-month-bar-item" style={{ '--bar-pct': `${maxMonthlyBalanceMagnitude > 0 ? (entry.received / maxMonthlyBalanceMagnitude) * 100 : 0}%`, '--bar-color': 'var(--fin-positive)' }} />
-                    </div>
-                    <p className="invoice-month-label">{entry.label}</p>
-                    <p className="invoice-month-value">₹{(entry.gross / 100000).toFixed(1)}L</p>
-                    <div className="invoice-month-mini-grid">
-                      <span className="invoice-month-subvalue">Base ₹{(entry.base / 1000).toFixed(0)}k</span>
-                      <span className="invoice-month-subvalue" style={{ color: 'var(--accent)' }}>GST ₹{(entry.gst / 1000).toFixed(0)}k</span>
-                      <span className="invoice-month-subvalue" style={{ color: 'var(--fin-positive)' }}>Rcvd ₹{(entry.received / 1000).toFixed(0)}k</span>
-                      <span className="invoice-month-subvalue" style={{ color: entry.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
-                        Due ₹{(entry.outstanding / 1000).toFixed(0)}k
-                      </span>
-                    </div>
-                    {entry.change !== null && (
-                      <span className="invoice-month-change" style={{ color: entry.change >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
-                        {entry.change >= 0 ? '+' : ''}{entry.change.toFixed(1)}% vs prev
-                      </span>
-                    )}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                {lastThreeMonthBalance.map((entry) => {
+                  const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
+                  const raisedPct = maxMonthlyBalanceMagnitude > 0 ? (entry.gross / maxMonthlyBalanceMagnitude) * 100 : 0
+                  return (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
+                      className="w-full text-left rounded-2xl p-3 sm:p-4 transition-all hover:opacity-90"
+                      style={{ background: dark ? 'rgba(15,23,42,0.55)' : 'rgba(248,250,252,0.9)', border: `1px solid ${dashboardStyles.line}`, cursor: 'pointer' }}
+                    >
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div>
+                          <p className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>{entry.label}</p>
+                          <p className="text-xl font-bold tabular-nums mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                            {entry.gross >= 100000 ? `₹${(entry.gross/100000).toFixed(2)}L` : `₹${(entry.gross/1000).toFixed(1)}k`}
+                          </p>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          {entry.change !== null && (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{
+                              background: entry.change >= 0 ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                              color: entry.change >= 0 ? '#16a34a' : '#dc2626'
+                            }}>
+                              {entry.change >= 0 ? '↑' : '↓'} {Math.abs(entry.change).toFixed(1)}%
+                            </span>
+                          )}
+                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{entry.invoiceCount} invoice{entry.invoiceCount !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+
+                      {/* Raised bar */}
+                      <div className="mb-2">
+                        <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-3)' }}>
+                          <span>Raised</span>
+                          <span className="tabular-nums font-medium" style={{ color: 'var(--accent)' }}>
+                            {entry.gross >= 100000 ? `₹${(entry.gross/100000).toFixed(2)}L` : `₹${(entry.gross/1000).toFixed(1)}k`}
+                          </span>
+                        </div>
+                        <div className="rounded-full overflow-hidden" style={{ height: 6, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${raisedPct}%`, background: 'var(--accent)' }} />
+                        </div>
+                      </div>
+
+                      {/* Collected bar */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-[11px] mb-1" style={{ color: 'var(--text-3)' }}>
+                          <span>Collected</span>
+                          <span className="tabular-nums font-medium" style={{ color: 'var(--fin-positive)' }}>
+                            {entry.received >= 100000 ? `₹${(entry.received/100000).toFixed(2)}L` : `₹${(entry.received/1000).toFixed(1)}k`}
+                          </span>
+                        </div>
+                        <div className="rounded-full overflow-hidden" style={{ height: 6, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${raisedPct > 0 ? (entry.received / maxMonthlyBalanceMagnitude) * 100 : 0}%`, background: 'var(--fin-positive)' }} />
+                        </div>
+                      </div>
+
+                      {/* Footer stats */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                          Base <span style={{ color: 'var(--text-2)' }}>₹{(entry.base/1000).toFixed(0)}k</span>
+                        </span>
+                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                          GST <span style={{ color: 'var(--accent)' }}>₹{(entry.gst/1000).toFixed(0)}k</span>
+                        </span>
+                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                          Due <span style={{ color: entry.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
+                            {entry.outstanding >= 100000 ? `₹${(entry.outstanding/100000).toFixed(2)}L` : `₹${(entry.outstanding/1000).toFixed(0)}k`}
+                          </span>
+                        </span>
+                        <span className="ml-auto text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full" style={{
+                          background: collPct >= 80 ? 'rgba(34,197,94,0.12)' : collPct >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                          color: collPct >= 80 ? '#16a34a' : collPct >= 50 ? '#d97706' : '#dc2626'
+                        }}>
+                          {collPct.toFixed(0)}% collected
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
             )}
