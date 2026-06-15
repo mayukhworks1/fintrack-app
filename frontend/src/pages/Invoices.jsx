@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Drawer from '../components/Drawer'
@@ -1369,12 +1369,14 @@ export default function Invoices() {
   const [manageModal, setManageModal] = useState(false)
   const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
   const [tableDensity, setTableDensity] = useState('comfortable')
+  const [hoveredRow,   setHoveredRow]   = useState(null)
   const [chartPreset, setChartPreset] = useState('60d')
   const [chartFrom,   setChartFrom]   = useState('')
   const [chartTo,     setChartTo]     = useState('')
   const [balanceMonths, setBalanceMonths] = useState(3)
   const deferredSearch = useDeferredValue(search)
-  const resizeRef = useRef(null)
+  const resizeRef    = useRef(null)
+  const hoverTimerRef = useRef(null)
 
   useEffect(() => { setStatusFilter(searchParams.get('status') || '') }, [searchParams])
   useEffect(() => { setProjectFilter(searchParams.get('project') || '') }, [searchParams])
@@ -3361,29 +3363,33 @@ export default function Invoices() {
                       const refs = parseAttachments(f['Reference'])
                       const pdfs = parseAttachments(f['Invoice PDF'])
                       const allFiles = [...refs, ...pdfs]
+                      const isHovered = hoveredRow === r.id
+                      const statusMeta = STATUS_META[f['Payment Status']] || {}
+                      const accentColor = statusMeta.color || 'var(--accent)'
+
+                      const handleRowEnter = () => {
+                        clearTimeout(hoverTimerRef.current)
+                        hoverTimerRef.current = setTimeout(() => setHoveredRow(r.id), 120)
+                      }
+                      const handleRowLeave = () => {
+                        clearTimeout(hoverTimerRef.current)
+                        hoverTimerRef.current = setTimeout(() => setHoveredRow(null), 80)
+                      }
 
                       return (
+                        <Fragment key={r.id}>
                         <tr
-                          key={r.id}
                           className="tbl-row"
                           style={{
                             cursor: 'pointer',
-                            background: rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
-                            transition: 'transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease',
+                            background: isHovered ? 'var(--table-row-hover)' : rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
+                            borderLeft: isHovered ? `2px solid ${accentColor}` : '',
+                            boxShadow: isHovered ? 'var(--table-row-shadow)' : '',
+                            transition: 'background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease',
                           }}
                           onClick={() => openView(r)}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.borderLeft = '2px solid var(--accent)'
-                            e.currentTarget.style.background = 'var(--table-row-hover)'
-                            e.currentTarget.style.boxShadow = 'var(--table-row-shadow)'
-                            e.currentTarget.style.transform = 'translateY(-1px)'
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.borderLeft = ''
-                            e.currentTarget.style.background = rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)'
-                            e.currentTarget.style.boxShadow = ''
-                            e.currentTarget.style.transform = ''
-                          }}>
+                          onMouseEnter={handleRowEnter}
+                          onMouseLeave={handleRowLeave}>
 
                           <td className="tbl-cell" style={{ width: columnWidths.row }}>
                             <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
@@ -3499,6 +3505,173 @@ export default function Invoices() {
                             </div>
                           </td>
                         </tr>
+
+                        {/* ── Hover-expand detail row ── */}
+                        <tr
+                          style={{ background: 'transparent' }}
+                          onMouseEnter={handleRowEnter}
+                          onMouseLeave={handleRowLeave}>
+                          <td colSpan={17} style={{ padding: 0, border: 'none' }}>
+                            <div style={{
+                              maxHeight: isHovered ? 260 : 0,
+                              overflow: 'hidden',
+                              transition: 'max-height 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease',
+                              opacity: isHovered ? 1 : 0,
+                            }}>
+                              <div
+                                onClick={() => openView(r)}
+                                style={{
+                                  cursor: 'pointer',
+                                  margin: '0 0 6px 0',
+                                  padding: '14px 20px',
+                                  background: 'var(--glass-bg)',
+                                  borderLeft: `3px solid ${accentColor}`,
+                                  borderBottom: '1px solid var(--glass-border)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 10,
+                                }}>
+
+                                {/* Row 1: Metric chips */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  {[
+                                    { label: 'Raised', value: fmt(f['Amount Raised']), color: 'var(--text-1)', bg: 'var(--bg-input)' },
+                                    { label: 'Incl. GST', value: fmt(f['Amount with Tax']), color: 'var(--text-2)', bg: 'var(--bg-input)' },
+                                    { label: 'Received', value: fmt(f['Amount Received']), color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)' },
+                                    outstanding > 0 && { label: 'Outstanding', value: fmt(outstanding), color: 'var(--fin-warning)', bg: 'var(--fin-warn-bg)' },
+                                  ].filter(Boolean).map(chip => (
+                                    <span key={chip.label} style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                                      padding: '4px 10px', borderRadius: 8,
+                                      background: chip.bg, border: '1px solid var(--glass-border)',
+                                    }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500 }}>{chip.label}</span>
+                                      <span style={{ fontSize: 12, color: chip.color, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{chip.value}</span>
+                                    </span>
+                                  ))}
+                                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
+                                  </span>
+                                </div>
+
+                                {/* Row 2: Meta fields */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
+                                  {f['Client Name'] || f['Client'] ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Client</span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 600 }}>{f['Client Name'] || f['Client']}</span>
+                                    </div>
+                                  ) : null}
+                                  {f['Project'] ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project</span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 600 }}>{f['Project']}</span>
+                                    </div>
+                                  ) : null}
+                                  {f['Category'] ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category</span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{f['Category']}</span>
+                                    </div>
+                                  ) : null}
+                                  {f['Milestone'] ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Milestone</span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{f['Milestone']}</span>
+                                    </div>
+                                  ) : null}
+                                  {f['Raised By'] ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Raised By</span>
+                                      <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={18} />
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                {/* Row 3: Description / Remark / Dates */}
+                                {(f['Description'] || f['Remark'] || f['Cleared Date'] || f['Next followup']) && (
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
+                                    {f['Description'] && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 320 }}>
+                                        <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>{f['Description']}</span>
+                                      </div>
+                                    )}
+                                    {f['Remark'] && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 280 }}>
+                                        <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Remark</span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>{f['Remark']}</span>
+                                      </div>
+                                    )}
+                                    {f['Cleared Date'] && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                        <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cleared</span>
+                                        <span style={{ fontSize: 12, color: 'var(--fin-positive)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtDate(f['Cleared Date'])}</span>
+                                      </div>
+                                    )}
+                                    {f['Next followup'] && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                        <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Next Followup</span>
+                                        <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>{fmtDate(f['Next followup'])}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Row 4: Attachments + Actions */}
+                                <div
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                                  {/* Attachments */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {allFiles.length > 0 ? (
+                                      <>
+                                        {allFiles.slice(0, 4).map((a, i) => (
+                                          <AttachThumb key={i} a={a} size={30} onPreview={() => setPreviewDocs({ docs: allFiles, index: i })} />
+                                        ))}
+                                        {allFiles.length > 4 && (
+                                          <span style={{ fontSize: 10, color: 'var(--text-3)', padding: '0 4px' }}>+{allFiles.length - 4} more</span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>No attachments</span>
+                                    )}
+                                  </div>
+                                  {/* Quick actions */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {isEditor && f['Payment Status'] === 'Pending' && (
+                                      <button
+                                        onClick={() => openRecordPayment(r)}
+                                        className="btn-ghost flex items-center gap-1.5"
+                                        style={{ fontSize: '0.6875rem', padding: '0.3rem 0.75rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.35)' }}>
+                                        <CheckCircle2 size={12} />
+                                        <span style={{ fontSize: 11, fontWeight: 600 }}>Record Payment</span>
+                                      </button>
+                                    )}
+                                    {isEditor && (
+                                      <button
+                                        onClick={() => setDrawer({ mode: 'edit', invoice: r })}
+                                        className="btn-ghost flex items-center gap-1.5"
+                                        style={{ fontSize: '0.6875rem', padding: '0.3rem 0.75rem', color: 'var(--text-2)', borderColor: 'var(--glass-border)' }}>
+                                        <Save size={12} />
+                                        <span style={{ fontSize: 11, fontWeight: 600 }}>Edit</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => openView(r)}
+                                      className="btn-ghost flex items-center gap-1.5"
+                                      style={{ fontSize: '0.6875rem', padding: '0.3rem 0.75rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.35)' }}>
+                                      <Eye size={12} />
+                                      <span style={{ fontSize: 11, fontWeight: 600 }}>View Details</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        </Fragment>
                       )
                     })
               }
