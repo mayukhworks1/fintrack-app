@@ -119,7 +119,7 @@ async def get_avatar_map(_role: str = Depends(require_web_access)):
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT email, teable_email, avatar_url, full_name FROM auth_users "
-                "WHERE status = 'active' AND avatar_url IS NOT NULL"
+                "WHERE status = 'active'"
             )
         result = {}
         for r in rows:
