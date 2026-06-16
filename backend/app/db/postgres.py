@@ -563,6 +563,9 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS company VARCHAR(160);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS location VARCHAR(160);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(80);
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- TRUE once the user has manually uploaded a profile picture — SSO login must
+-- never overwrite it again after that point.
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS avatar_is_custom BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
 CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);

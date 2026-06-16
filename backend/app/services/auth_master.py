@@ -662,7 +662,7 @@ async def _login_with_oidc_profile(
         async with conn.transaction():
             user = await conn.fetchrow(
                 """
-                SELECT u.id, u.email, u.full_name, u.status
+                SELECT u.id, u.email, u.full_name, u.status, u.avatar_is_custom
                 FROM auth_identities i
                 JOIN auth_users u ON u.id = i.user_id
                 WHERE i.provider = $1 AND i.provider_user_id = $2
@@ -672,7 +672,7 @@ async def _login_with_oidc_profile(
             )
             if not user:
                 user = await conn.fetchrow(
-                    "SELECT id, email, full_name, status FROM auth_users WHERE email_normalized = $1",
+                    "SELECT id, email, full_name, status, avatar_is_custom FROM auth_users WHERE email_normalized = $1",
                     email_norm,
                 )
                 if not user:
@@ -683,7 +683,7 @@ async def _login_with_oidc_profile(
                             email_verified_at, teable_email, metadata, avatar_url, updated_at
                         )
                         VALUES ($1, $2, $3, 'pending_approval', NOW(), $1, $4::jsonb, $5, NOW())
-                        RETURNING id, email, full_name, status
+                        RETURNING id, email, full_name, status, avatar_is_custom
                         """,
                         email_orig,
                         email_norm,
@@ -748,7 +748,9 @@ async def _login_with_oidc_profile(
 
     # Fire-and-forget: if picture is a provider CDN URL, download and re-upload to HF
     # so the avatar is stable and user-owned (CDN URLs can expire/change).
-    if picture and not picture.startswith("/api/"):
+    # Never run this once the user has manually uploaded their own avatar —
+    # otherwise every SSO login would silently overwrite their custom photo.
+    if picture and not picture.startswith("/api/") and not user["avatar_is_custom"]:
         import asyncio as _asyncio
         _asyncio.create_task(_mirror_sso_avatar_to_hf(str(user["id"]), picture))
 
@@ -904,8 +906,10 @@ async def _mirror_sso_avatar_to_hf(user_id: str, picture_url: str) -> None:
         hf_url = await upload_bytes(data, path_in_repo, content_type)
         pool = get_pool()
         if pool:
+            # Defense in depth — never clobber an avatar the user uploaded themselves,
+            # even if this stale background task races with a fresh upload.
             await pool.execute(
-                "UPDATE auth_users SET avatar_url = $1, updated_at = NOW() WHERE id = $2::uuid",
+                "UPDATE auth_users SET avatar_url = $1, updated_at = NOW() WHERE id = $2::uuid AND avatar_is_custom = FALSE",
                 hf_url, user_id,
             )
     except Exception:

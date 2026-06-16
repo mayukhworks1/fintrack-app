@@ -908,7 +908,7 @@ async def upload_avatar(
     pool = get_pool()
     if pool:
         await pool.execute(
-            "UPDATE auth_users SET avatar_url = $1, updated_at = NOW() WHERE id = $2::uuid",
+            "UPDATE auth_users SET avatar_url = $1, avatar_is_custom = TRUE, updated_at = NOW() WHERE id = $2::uuid",
             proxy_url, user_id,
         )
 
@@ -940,7 +940,7 @@ async def delete_avatar(
 
     if pool:
         await pool.execute(
-            "UPDATE auth_users SET avatar_url = NULL, updated_at = NOW() WHERE id = $1::uuid",
+            "UPDATE auth_users SET avatar_url = NULL, avatar_is_custom = FALSE, updated_at = NOW() WHERE id = $1::uuid",
             user_id,
         )
 
