@@ -903,16 +903,20 @@ async def upload_avatar(
 
     from ..services.storage import upload_bytes
     proxy_url = await upload_bytes(data, path_in_repo, content_type)
+    # Cache-bust: every re-upload writes to the same path, but the file is served
+    # with a 24h Cache-Control. Without a version suffix the browser would keep
+    # showing the old cached bytes for this exact URL indefinitely.
+    versioned_url = f"{proxy_url}?v={int(time.time())}"
 
     from ..db.postgres import get_pool
     pool = get_pool()
     if pool:
         await pool.execute(
             "UPDATE auth_users SET avatar_url = $1, avatar_is_custom = TRUE, updated_at = NOW() WHERE id = $2::uuid",
-            proxy_url, user_id,
+            versioned_url, user_id,
         )
 
-    return {"ok": True, "avatar_url": proxy_url}
+    return {"ok": True, "avatar_url": versioned_url}
 
 
 @router.delete("/profile/avatar")
@@ -936,7 +940,8 @@ async def delete_avatar(
         prefix = "/api/storage/file/"
         if old_url.startswith(prefix):
             from ..services.storage import delete_path
-            await delete_path(old_url[len(prefix):])
+            file_path = old_url[len(prefix):].split("?", 1)[0]   # strip ?v= cache-bust suffix
+            await delete_path(file_path)
 
     if pool:
         await pool.execute(
