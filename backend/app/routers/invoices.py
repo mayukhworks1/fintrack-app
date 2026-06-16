@@ -12,7 +12,7 @@ from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
-from .deps import require_auth, owner_scope_email
+from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
 
 logger = logging.getLogger("fintrack.invoices")
 
@@ -135,7 +135,11 @@ class InvoiceFields(BaseModel):
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/summary")
-async def invoice_summary(request: Request, _role: str = Depends(require_auth)):
+async def invoice_summary(
+    request: Request,
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
     try:
         svc = InvoiceService()
         scoped_email = owner_scope_email(request)
@@ -168,6 +172,7 @@ async def list_invoices(
     order_by: str           = Query("Raised Date"),
     order:    str           = Query("desc"),
     _role:    str           = Depends(require_auth),
+    _perm:    str           = Depends(require_permission("module.invoices.view")),
 ):
     try:
         svc = InvoiceService()
@@ -191,7 +196,11 @@ async def list_invoices(
 
 
 @router.get("/{record_id}")
-async def get_invoice(record_id: str, request: Request, _role: str = Depends(require_auth)):
+async def get_invoice(
+    record_id: str, request: Request,
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
     try:
         svc = InvoiceService()
         record = await svc.get_invoice(record_id)
@@ -207,19 +216,24 @@ async def get_invoice(record_id: str, request: Request, _role: str = Depends(req
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 
 
-def _require_invoice_write(request: Request, role: str) -> None:
-    if role == "editor":
-        return
-    if owner_scope_email(request):
-        return
-    raise HTTPException(status_code=403, detail="This action requires invoice write access")
+async def _require_invoice_write(request: Request, role: str, permission_key: str) -> None:
+    if role != "editor" and not owner_scope_email(request):
+        raise HTTPException(status_code=403, detail="This action requires invoice write access")
+    # Additionally enforce the granular permission matrix for email-auth sessions
+    if getattr(request.state, "is_email_auth", False):
+        auth_role = getattr(request.state, "auth_role", "") or ""
+        if auth_role != "superadmin":
+            user_id = getattr(request.state, "auth_user_id", None)
+            effective = await get_effective_permissions(user_id)
+            if permission_key not in effective:
+                raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
 
 
 @router.post("", status_code=201)
 async def create_invoice(body: InvoiceFields, request: Request, role: str = Depends(require_auth)):
     try:
         await _check_mutation_rate(request)
-        _require_invoice_write(request, role)
+        await _require_invoice_write(request, role, "module.invoices.create")
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -247,7 +261,8 @@ async def update_invoice(
 ):
     try:
         await _check_mutation_rate(request)
-        _require_invoice_write(request, role)
+        perm_key = "module.invoices.payment" if body.payment_status == "Paid" else "module.invoices.edit"
+        await _require_invoice_write(request, role, perm_key)
         fields = body.to_teable_fields(include_null_fields={"Raised Date", "Cleared Date", "Next followup"})
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -272,7 +287,7 @@ async def update_invoice(
 async def delete_invoice(record_id: str, request: Request, role: str = Depends(require_auth)):
     try:
         await _check_mutation_rate(request)
-        _require_invoice_write(request, role)
+        await _require_invoice_write(request, role, "module.invoices.delete")
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await InvoiceService().get_invoice(record_id)
@@ -293,6 +308,7 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
 async def parse_invoice(
     file: UploadFile = File(...),
     _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.invoices.create")),
 ):
     """
     Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
@@ -340,7 +356,7 @@ async def upload_attachment(
     """Upload a file into a specific attachment field on an existing invoice record."""
     service = InvoiceService()
     try:
-        _require_invoice_write(request, role)
+        await _require_invoice_write(request, role, "module.invoices.edit")
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await service.get_invoice(record_id)
@@ -380,6 +396,7 @@ async def export_invoices(
     date_from:  Optional[str] = Query(None, alias="from"),
     date_to:    Optional[str] = Query(None, alias="to"),
     _role:      str           = Depends(require_auth),
+    _perm:      str           = Depends(require_permission("module.invoices.view")),
 ):
     """Download all matching invoices as CSV."""
     svc = InvoiceService()
@@ -451,6 +468,7 @@ async def export_invoices(
 async def aging_buckets(
     request: Request,
     _role:   str = Depends(require_auth),
+    _perm:   str = Depends(require_permission("module.invoices.view")),
 ):
     """Return invoice counts/amounts grouped into 0-30, 30-60, 60-90, 90+ day aging buckets."""
     svc = InvoiceService()
@@ -505,7 +523,7 @@ async def send_invoice_reminder(
     role:      str = Depends(require_auth),
 ):
     """Send a payment reminder email for a specific invoice."""
-    _require_invoice_write(request, role)
+    await _require_invoice_write(request, role, "module.invoices.edit")
     svc = InvoiceService()
     record = await svc.get_invoice(record_id)
     if record is None:

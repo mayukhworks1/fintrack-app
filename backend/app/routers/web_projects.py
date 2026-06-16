@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 from ..services.web_project import WebProjectService, WebResourceService
 from ..db.attribution import record_user_attribution
-from .deps import require_all, require_web_access
+from .deps import require_all, require_web_access, require_permission
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,10 @@ async def list_web_project_names(_role: str = Depends(require_web_access)):
 
 
 @projects_router.get("/summary")
-async def web_project_summary(_role: str = Depends(require_all)):
+async def web_project_summary(
+    _role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.view")),
+):
     try:
         return await WebProjectService().get_summary()
     except Exception as e:
@@ -129,6 +132,7 @@ async def list_web_projects(
     order_by: str           = Query("Project Name"),
     order:    str           = Query("asc"),
     _role:    str           = Depends(require_all),
+    _perm:    str           = Depends(require_permission("module.projects.view")),
 ):
     try:
         return await WebProjectService().list_projects(
@@ -144,6 +148,7 @@ async def list_project_resources(
     project_id: str,
     bust: bool = Query(False, description="Set true to bypass cache"),
     _role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.view")),
 ):
     """List all resources linked to a specific project."""
     from ..utils.cache import cache as _cache
@@ -156,7 +161,11 @@ async def list_project_resources(
 
 
 @projects_router.get("/{project_id}")
-async def get_web_project(project_id: str, _role: str = Depends(require_all)):
+async def get_web_project(
+    project_id: str,
+    _role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.view")),
+):
     try:
         return await WebProjectService().get_project(project_id)
     except Exception as e:
@@ -167,7 +176,11 @@ async def get_web_project(project_id: str, _role: str = Depends(require_all)):
 
 
 @projects_router.post("", status_code=201)
-async def create_web_project(body: ProjectFields, request: Request, role: str = Depends(require_all)):
+async def create_web_project(
+    body: ProjectFields, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.create")),
+):
     if not body.project_name:
         raise HTTPException(status_code=400, detail="Project Name is required")
     try:
@@ -189,6 +202,7 @@ async def create_web_project(body: ProjectFields, request: Request, role: str = 
 async def update_web_project(
     project_id: str, body: ProjectFields, request: Request,
     role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.edit")),
 ):
     try:
         try:
@@ -201,7 +215,11 @@ async def update_web_project(
 
 
 @projects_router.delete("/{project_id}", status_code=204)
-async def delete_web_project(project_id: str, request: Request, role: str = Depends(require_all)):
+async def delete_web_project(
+    project_id: str, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.delete")),
+):
     try:
         try:
             await record_user_attribution(request, role, project_id)
@@ -219,6 +237,7 @@ async def list_all_web_resources(
     limit: int = Query(500, ge=1, le=1000),
     skip:  int = Query(0,   ge=0),
     _role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.view")),
 ):
     """List all resources across all projects."""
     try:
@@ -228,7 +247,11 @@ async def list_all_web_resources(
 
 
 @resources_router.get("/{resource_id}")
-async def get_web_resource(resource_id: str, _role: str = Depends(require_all)):
+async def get_web_resource(
+    resource_id: str,
+    _role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.view")),
+):
     try:
         return await WebResourceService().get_resource(resource_id)
     except Exception as e:
@@ -239,7 +262,11 @@ async def get_web_resource(resource_id: str, _role: str = Depends(require_all)):
 
 
 @resources_router.post("", status_code=201)
-async def create_web_resource(body: ResourceFields, request: Request, role: str = Depends(require_all)):
+async def create_web_resource(
+    body: ResourceFields, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.create")),
+):
     if not body.resource_name:
         raise HTTPException(status_code=400, detail="Resource Name is required")
     try:
@@ -261,6 +288,7 @@ async def create_web_resource(body: ResourceFields, request: Request, role: str 
 async def update_web_resource(
     resource_id: str, body: ResourceFields, request: Request,
     role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.edit")),
 ):
     try:
         try:
@@ -273,7 +301,11 @@ async def update_web_resource(
 
 
 @resources_router.delete("/{resource_id}", status_code=204)
-async def delete_web_resource(resource_id: str, request: Request, role: str = Depends(require_all)):
+async def delete_web_resource(
+    resource_id: str, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.delete")),
+):
     try:
         try:
             await record_user_attribution(request, role, resource_id)
@@ -285,7 +317,11 @@ async def delete_web_resource(resource_id: str, request: Request, role: str = De
 
 
 @resources_router.post("/{resource_id}/assign/{project_id}", status_code=200)
-async def assign_resource(resource_id: str, project_id: str, request: Request, role: str = Depends(require_all)):
+async def assign_resource(
+    resource_id: str, project_id: str, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.edit")),
+):
     """Add a project link to a resource (supports multi-project resources)."""
     try:
         try:
@@ -298,7 +334,11 @@ async def assign_resource(resource_id: str, project_id: str, request: Request, r
 
 
 @resources_router.delete("/{resource_id}/assign/{project_id}", status_code=204)
-async def unassign_resource(resource_id: str, project_id: str, request: Request, role: str = Depends(require_all)):
+async def unassign_resource(
+    resource_id: str, project_id: str, request: Request,
+    role: str = Depends(require_all),
+    _perm: str = Depends(require_permission("module.projects.edit")),
+):
     """Remove a project link from a resource."""
     try:
         try:

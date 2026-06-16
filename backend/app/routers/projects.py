@@ -4,7 +4,7 @@ from ..services.teable import TeableService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
 from ..db.attribution import record_user_attribution
 from ..db.valkey import cache_bust, rate_check
-from .deps import require_auth, require_editor
+from .deps import require_auth, require_editor, require_permission
 
 
 def _ip(request: Request) -> str:
@@ -47,6 +47,7 @@ async def list_projects(
     limit: int = Query(100, le=1000),
     skip: int = Query(0),
     _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.projects.view")),
 ):
     # No cache — read directly from Teable so new projects and status changes
     # appear immediately without any stale-window.
@@ -64,7 +65,10 @@ async def list_projects(
 
 
 @router.get("/summary")
-async def get_summary(_role: str = Depends(require_auth)):
+async def get_summary(
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.projects.view")),
+):
     teable = get_teable()
     summary = await teable.get_summary_from_pg()
     if summary is not None:
@@ -120,7 +124,11 @@ async def search_projects(
 
 
 @router.get("/{record_id}")
-async def get_project(record_id: str, _role: str = Depends(require_auth)):
+async def get_project(
+    record_id: str,
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.projects.view")),
+):
     teable = get_teable()
     try:
         return await teable.get_record(record_id)
@@ -129,7 +137,11 @@ async def get_project(record_id: str, _role: str = Depends(require_auth)):
 
 
 @router.post("", status_code=201)
-async def create_project(body: ProjectCreate, request: Request, role: str = Depends(require_editor)):
+async def create_project(
+    body: ProjectCreate, request: Request,
+    role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.projects.create")),
+):
     await _check_project_rate(request)
     teable = get_teable()
     fields = body.to_teable_fields()
@@ -148,6 +160,7 @@ async def create_project(body: ProjectCreate, request: Request, role: str = Depe
 async def update_project(
     record_id: str, body: ProjectUpdate, request: Request,
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.projects.edit")),
 ):
     await _check_project_rate(request)
     teable = get_teable()
@@ -167,7 +180,11 @@ async def update_project(
 
 
 @router.delete("/{record_id}", status_code=204)
-async def delete_project(record_id: str, request: Request, role: str = Depends(require_editor)):
+async def delete_project(
+    record_id: str, request: Request,
+    role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.projects.delete")),
+):
     await _check_project_rate(request)
     teable = get_teable()
     try:

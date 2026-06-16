@@ -218,3 +218,75 @@ async def require_admin(request: Request, role: str = Depends(require_auth)) -> 
     if role == "admin":
         return role
     raise HTTPException(status_code=403, detail="Admin access required")
+
+
+# ── Granular permission matrix enforcement ─────────────────────────────────────
+#
+# auth_permissions / auth_role_permissions / auth_user_permission_grants back the
+# admin "Permission Matrix" UI. This resolves a user's *effective* permission set
+# (role defaults, with per-user overrides applied on top) and gates routes on it.
+#
+# Only applies to email-auth sessions (request.state.is_email_auth == True) —
+# legacy password-based tokens ("editor"/"web"/"all"/"admin"/"viewer") have no
+# associated user_id/auth_roles row and keep their existing coarse role gating
+# unchanged, so nothing here can lock out the legacy password logins.
+
+async def get_effective_permissions(user_id: str | None) -> set[str]:
+    """Resolve a user's effective permission_keys: union of their role(s) permissions, with per-user overrides applied."""
+    if not user_id:
+        return set()
+    pool = get_pool()
+    if not pool:
+        return set()
+    rows = await pool.fetch(
+        """
+        SELECT
+            p.permission_key,
+            bool_or(rp.permission_id IS NOT NULL) AS from_role,
+            (
+                SELECT g.granted FROM auth_user_permission_grants g
+                WHERE g.user_id = $1::uuid AND g.permission_id = p.id
+            ) AS override
+        FROM auth_permissions p
+        LEFT JOIN auth_user_roles ur ON ur.user_id = $1::uuid
+        LEFT JOIN auth_role_permissions rp ON rp.role_id = ur.role_id AND rp.permission_id = p.id
+        GROUP BY p.id, p.permission_key
+        """,
+        user_id,
+    )
+    effective: set[str] = set()
+    for r in rows:
+        granted = r["override"] if r["override"] is not None else bool(r["from_role"])
+        if granted:
+            effective.add(r["permission_key"])
+    return effective
+
+
+def require_permission(permission_key: str):
+    """
+    Dependency factory — additionally requires `permission_key` to be in the
+    caller's effective permission set, but ONLY for email-auth sessions.
+
+    Legacy password sessions and DB role 'superadmin' always pass through —
+    superadmin is the role that manages the matrix itself and must never be
+    lockable out of the app by its own overrides.
+
+    Usage (compose alongside the existing role dependency, do not replace it):
+        @router.post("")
+        async def create_x(
+            role: str = Depends(require_auth),
+            _perm: str = Depends(require_permission("module.invoices.create")),
+        ): ...
+    """
+    async def _check(request: Request, role: str = Depends(require_auth)) -> str:
+        if not getattr(request.state, "is_email_auth", False):
+            return role
+        auth_role = getattr(request.state, "auth_role", "") or ""
+        if auth_role == "superadmin":
+            return role
+        user_id = getattr(request.state, "auth_user_id", None)
+        effective = await get_effective_permissions(user_id)
+        if permission_key not in effective:
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
+        return role
+    return _check

@@ -12,7 +12,7 @@ from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..db.postgres import get_pool
 from ..config import settings
-from .deps import require_auth, require_web_access, owner_scope_email
+from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -166,6 +166,7 @@ async def upload_attachment(
     service = WebInvoiceService()
     try:
         await _assert_web_invoice_owner(service, record_id, request)
+        await _require_web_permission(request, "module.invoices.edit")
         content = await file.read()
         return await service.upload_attachment_to_field(
             record_id=record_id,
@@ -185,7 +186,11 @@ async def upload_attachment(
 
 
 @router.get("/summary")
-async def web_invoice_summary(request: Request, _role: str = Depends(require_web_access)):
+async def web_invoice_summary(
+    request: Request,
+    _role: str = Depends(require_web_access),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
     try:
         return await WebInvoiceService().get_summary(raised_by=owner_scope_email(request))
     except Exception as e:
@@ -202,6 +207,7 @@ async def list_web_invoices(
     order_by: str           = Query("Raised Date"),
     order:    str           = Query("desc"),
     _role:    str           = Depends(require_web_access),
+    _perm:    str           = Depends(require_permission("module.invoices.view")),
 ):
     try:
         result = await WebInvoiceService().list_invoices(
@@ -217,7 +223,11 @@ async def list_web_invoices(
 
 
 @router.get("/{record_id}")
-async def get_web_invoice(record_id: str, request: Request, _role: str = Depends(require_web_access)):
+async def get_web_invoice(
+    record_id: str, request: Request,
+    _role: str = Depends(require_web_access),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
     try:
         svc = WebInvoiceService()
         record = await svc.get_invoice(record_id)
@@ -229,9 +239,23 @@ async def get_web_invoice(record_id: str, request: Request, _role: str = Depends
         raise HTTPException(status_code=404 if "404" in str(e) else 500, detail=str(e))
 
 
+async def _require_web_permission(request: Request, permission_key: str) -> None:
+    """Enforce the granular permission matrix for email-auth sessions (no-op for legacy password tokens)."""
+    if not getattr(request.state, "is_email_auth", False):
+        return
+    auth_role = getattr(request.state, "auth_role", "") or ""
+    if auth_role == "superadmin":
+        return
+    user_id = getattr(request.state, "auth_user_id", None)
+    effective = await get_effective_permissions(user_id)
+    if permission_key not in effective:
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
+
+
 @router.post("", status_code=201)
 async def create_web_invoice(body: WebInvoiceFields, request: Request, role: str = Depends(require_web_access)):
     try:
+        await _require_web_permission(request, "module.invoices.create")
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -259,6 +283,7 @@ async def update_web_invoice(
     try:
         svc = WebInvoiceService()
         await _assert_web_invoice_owner(svc, record_id, request)
+        await _require_web_permission(request, "module.invoices.payment" if body.payment_status == "Paid" else "module.invoices.edit")
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -280,6 +305,7 @@ async def delete_web_invoice(record_id: str, request: Request, role: str = Depen
     try:
         svc = WebInvoiceService()
         await _assert_web_invoice_owner(svc, record_id, request)
+        await _require_web_permission(request, "module.invoices.delete")
         try:
             await record_user_attribution(request, role, record_id)
         except Exception:
@@ -297,6 +323,7 @@ async def delete_web_invoice(record_id: str, request: Request, role: str = Depen
 async def parse_web_invoice(
     file: UploadFile = File(...),
     _role: str = Depends(require_web_access),
+    _perm: str = Depends(require_permission("module.invoices.create")),
 ):
     """Upload an invoice PDF or image; returns AI-extracted field values."""
     from ..services.openrouter import parse_invoice_document
@@ -336,6 +363,7 @@ async def export_web_invoices(
     date_from: Optional[str] = Query(None, alias="from"),
     date_to:   Optional[str] = Query(None, alias="to"),
     _role:     str           = Depends(require_web_access),
+    _perm:     str           = Depends(require_permission("module.invoices.view")),
 ):
     """Download all matching web invoices as CSV."""
     svc = WebInvoiceService()
@@ -401,6 +429,7 @@ async def export_web_invoices(
 async def web_aging_buckets(
     request: Request,
     _role:   str = Depends(require_web_access),
+    _perm:   str = Depends(require_permission("module.invoices.view")),
 ):
     """Return pending invoice counts/amounts in 0-30, 30-60, 60-90, 90+ day buckets."""
     svc = WebInvoiceService()

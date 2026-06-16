@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
-from .deps import require_auth, require_editor
+from .deps import require_auth, require_editor, require_permission
 from .auth import verify_token
 from ..db.valkey import rate_check, cache_bust
 
@@ -138,6 +138,7 @@ async def list_statuses(
     client: str = "",
     project: str = "",
     _auth=Depends(require_auth),
+    _perm: str = Depends(require_permission("module.status.view")),
 ):
     """
     List all current-status records.
@@ -174,6 +175,7 @@ async def generate_ai_status_update(
     request: Request,
     body: AIUpdateRequest,
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.status.edit")),
 ):
     """
     Generate an AI-written status update narrative for selected records.
@@ -249,6 +251,7 @@ async def add_status_picklist_option(
 async def get_status(
     record_id: str,
     _auth=Depends(require_auth),
+    _perm: str = Depends(require_permission("module.status.view")),
 ):
     svc = _svc()
     try:
@@ -264,6 +267,7 @@ async def create_status(
     request: Request,
     body: StatusCreate,
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.status.edit")),
 ):
     """Create a new status record (editor role required)."""
     await _check_write_rate(request)
@@ -299,6 +303,7 @@ async def update_status(
     request: Request,
     body: StatusUpdate,
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.status.edit")),
 ):
     """Update an existing status record (editor role required)."""
     await _check_write_rate(request)
@@ -333,6 +338,7 @@ async def delete_status(
     record_id: str,
     request: Request,
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.status.edit")),
 ):
     """Delete a status record (editor role required)."""
     await _check_write_rate(request)
@@ -354,6 +360,7 @@ async def upload_status_attachment(
     request: Request,
     file: UploadFile = File(...),
     role: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.status.edit")),
 ):
     await _check_write_rate(request)
     svc = _svc()

@@ -38,7 +38,7 @@ from ..services.openrouter import (
     stream_chat_with_ai,
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
-from .deps import require_auth
+from .deps import require_auth, require_permission
 from ..db.postgres import get_pool
 from ..db.valkey import rate_check
 
@@ -1199,7 +1199,11 @@ def _client_ip(request: Request) -> str:
 
 
 @router.post("/chat")
-async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(require_auth)):
+async def ai_chat(
+    body: ChatRequest, request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+):
     """
     Natural language chat about projects + invoices.
 
@@ -1359,7 +1363,11 @@ async def ai_chat(body: ChatRequest, request: Request, role: str = Depends(requi
 
 
 @router.post("/chat/stream")
-async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depends(require_auth)):
+async def ai_chat_stream(
+    body: ChatRequest, request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+):
     """Streaming variant of chat for lower perceived latency."""
     ip = _client_ip(request)
     allowed, _remaining = await rate_check(ip, limit=30, window_sec=60)
@@ -1513,7 +1521,11 @@ async def ai_chat_stream(body: ChatRequest, request: Request, role: str = Depend
 
 
 @router.post("/autofill")
-async def ai_autofill(body: AutofillRequest, _role: str = Depends(require_auth)):
+async def ai_autofill(
+    body: AutofillRequest,
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+):
     """Describe a project in plain text, AI extracts structured fields."""
     try:
         fields = await autofill_project(body.description)
@@ -1523,7 +1535,11 @@ async def ai_autofill(body: AutofillRequest, _role: str = Depends(require_auth))
 
 
 @router.post("/analyze")
-async def ai_analyze(body: AnalyzeRequest, _role: str = Depends(require_auth)):
+async def ai_analyze(
+    body: AnalyzeRequest,
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+):
     """Deep AI analysis of a specific project."""
     try:
         teable = TeableService()
@@ -2218,6 +2234,7 @@ async def ai_report(
     force: bool = False,
     template: str = Query("board-pack"),
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.reports.create")),
 ):
     """
     Generate an executive report for the full portfolio.
@@ -2394,6 +2411,7 @@ async def ai_report_invalidate(_role: str = Depends(require_auth)):
 async def ai_report_history(
     limit: int = 20,
     _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.reports.create")),
 ):
     """List generated reports, newest first."""
     pool = get_pool()
@@ -2431,6 +2449,7 @@ async def ai_report_history(
 async def ai_report_history_detail(
     history_id: str,
     _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.reports.create")),
 ):
     """Return one stored generated report."""
     pool = get_pool()

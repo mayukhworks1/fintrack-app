@@ -43,7 +43,7 @@ from pydantic import BaseModel, Field
 from ..config import settings
 from ..db.postgres import get_pool
 from ..services.shared_views import SharedViewService
-from .deps import require_admin
+from .deps import require_admin, require_permission
 
 logger = logging.getLogger("fintrack.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -529,6 +529,7 @@ async def admin_approve_auth_user(
     body: AuthUserDecision,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.approve")),
 ):
     pool = get_pool()
     if not pool:
@@ -586,6 +587,7 @@ async def admin_reject_auth_user(
     body: AuthUserDecision,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.approve")),
 ):
     pool = get_pool()
     if not pool:
@@ -626,6 +628,7 @@ async def admin_disable_auth_user(
     body: AuthUserDecision,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     pool = get_pool()
     if not pool:
@@ -666,6 +669,7 @@ async def admin_reactivate_auth_user(
     body: AuthUserDecision,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     pool = get_pool()
     if not pool:
@@ -724,6 +728,7 @@ async def admin_update_auth_user_role(
     body: AuthUserRoleUpdate,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     pool = get_pool()
     if not pool:
@@ -788,6 +793,7 @@ async def admin_revoke_auth_user_sessions(
     user_id: str,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     pool = get_pool()
     if not pool:
@@ -833,6 +839,7 @@ async def admin_update_auth_user_name(
     body: AuthUserNameUpdate,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     """Update a user's display name from the admin panel."""
     pool = get_pool()
@@ -868,6 +875,7 @@ async def admin_set_teable_email(
     body: AuthUserTeableEmail,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     """
     Set the Teable 'Raised By' email for a user.
@@ -905,6 +913,7 @@ async def admin_delete_auth_user(
     request: Request,
     force: bool = False,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     """
     Permanently delete a user and all related records.
@@ -1123,6 +1132,7 @@ async def admin_resend_invite(
     user_id: str,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     """Generate a fresh invite link and email it to the user."""
     pool = get_pool()
@@ -1204,6 +1214,7 @@ async def admin_force_password_reset(
     user_id: str,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     """Revoke all sessions and send a password-reset link to the user."""
     pool = get_pool()
@@ -1571,7 +1582,10 @@ async def admin_test_email(
 # ── Manual sync trigger ───────────────────────────────────────────────────────
 
 @router.post("/sync/trigger")
-async def admin_trigger_sync(_: str = Depends(require_admin)):
+async def admin_trigger_sync(
+    _: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("system.sync.trigger")),
+):
     """
     Kick off a full Teable → PostgreSQL sync immediately (fire-and-forget).
     The sync result will appear in the Sync Log within a few seconds.
@@ -1594,7 +1608,10 @@ async def admin_trigger_sync(_: str = Depends(require_admin)):
 
 
 @router.post("/sync/aging-refresh")
-async def admin_trigger_aging_refresh(_: str = Depends(require_admin)):
+async def admin_trigger_aging_refresh(
+    _: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("system.sync.trigger")),
+):
     """
     Run invoice aging refresh immediately for both invoice tables.
     This writes numeric Agening (Days) values when those Teable fields are numeric.
@@ -1857,6 +1874,7 @@ async def admin_audit_log(
     to_ts:       Optional[str] = Query(None, description="ISO datetime range end"),
     errors_only: bool          = Query(False, description="Only 4xx/5xx responses"),
     _:           str           = Depends(require_admin),
+    _perm:       str           = Depends(require_permission("module.admin.audit.view")),
 ):
     """
     Paginated audit log with rich filters.
@@ -1971,6 +1989,7 @@ async def admin_purge_audit_log(
     older_than_days:  Optional[int]   = Query(None, ge=1,  le=3650, description="Delete rows older than N days"),
     older_than_hours: Optional[float] = Query(None, ge=0.5, le=8760, description="Delete rows older than N hours (overrides days)"),
     _: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.audit.view")),
 ):
     """
     Bulk-delete audit log rows older than the specified age.
@@ -2828,6 +2847,7 @@ async def set_user_permission(
     permission_key: str,
     body: PermissionGrantBody,
     _role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("system.roles.manage")),
 ):
     """Grant, deny, or clear a per-user permission override."""
     pool = get_pool()

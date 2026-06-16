@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ..services.shared_views import SharedViewService
-from .deps import require_editor
+from .deps import require_editor, require_permission, get_effective_permissions
 
 router = APIRouter(tags=["shared-views"])
 
@@ -97,6 +97,14 @@ async def create_shared_view(
     role: str = Depends(require_editor),
 ):
     """Create a shared link for selected records."""
+    # Tax ledger shares need module.tax.share; every other module uses module.shared.manage
+    perm_key = "module.tax.share" if (body.resource_type or "") in ("tax", "gst") else "module.shared.manage"
+    if getattr(request.state, "is_email_auth", False):
+        auth_role = getattr(request.state, "auth_role", "") or ""
+        if auth_role != "superadmin":
+            effective = await get_effective_permissions(getattr(request.state, "auth_user_id", None))
+            if perm_key not in effective:
+                raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
     if not body.record_ids:
         raise HTTPException(status_code=422, detail="At least one record must be selected")
     if len(body.record_ids) > 50:
@@ -125,6 +133,7 @@ async def create_shared_view(
 async def list_shared_views(
     resource_type: Optional[str] = Query(None),
     _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
 ):
     """List shared links (newest first), optionally filtered by module."""
     svc = SharedViewService()
@@ -133,7 +142,11 @@ async def list_shared_views(
 
 
 @router.get("/api/shared-views/{token}")
-async def get_shared_view(token: str, _: str = Depends(require_editor)):
+async def get_shared_view(
+    token: str,
+    _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
+):
     svc = SharedViewService()
     view = await svc.get(token)
     if not view:
@@ -146,6 +159,7 @@ async def update_shared_view(
     token: str,
     body: SharedViewUpdate,
     _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
 ):
     """Update title, active state, or expiry of a shared view."""
     svc = SharedViewService()
@@ -177,7 +191,11 @@ async def update_shared_view(
 
 
 @router.delete("/api/shared-views/{token}", status_code=204)
-async def delete_shared_view(token: str, _: str = Depends(require_editor)):
+async def delete_shared_view(
+    token: str,
+    _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
+):
     svc = SharedViewService()
     ok = await svc.delete(token)
     if not ok:

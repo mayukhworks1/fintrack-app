@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from .deps import require_auth, require_web_access, owner_scope_email
+from .deps import require_auth, require_web_access, owner_scope_email, require_permission
 from ..services.invoice import InvoiceService
 from ..services.web_invoice import WebInvoiceService
 
@@ -20,6 +20,7 @@ async def gst_summary(
     date_from:  Optional[str] = Query(None, alias="from"),
     date_to:    Optional[str] = Query(None, alias="to"),
     _role:      str = Depends(require_auth),
+    _perm:      str = Depends(require_permission("module.tax.view")),
 ):
     """
     GST-aware summary for a date range. Groups invoices by month and returns:
@@ -110,6 +111,7 @@ async def web_gst_summary(
     date_from:  Optional[str] = Query(None, alias="from"),
     date_to:    Optional[str] = Query(None, alias="to"),
     _role:      str = Depends(require_web_access),
+    _perm:      str = Depends(require_permission("module.tax.view")),
 ):
     """GST-aware summary for web invoices, grouped by month."""
     svc = WebInvoiceService()
