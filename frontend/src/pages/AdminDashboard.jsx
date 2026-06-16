@@ -4452,42 +4452,77 @@ function PermissionsTab() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [moduleFilter, setModuleFilter] = useState('all')
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts = {}) => {
+    if (!opts.silent) setLoading(true)
     setError('')
     try {
       const data = await api.admin.permissionMatrix()
       setMatrix(data)
       if (data.users.length > 0 && !selectedUser) setSelectedUser(data.users[0].id)
+      return data
     } catch (e) {
-      setError(e.message || 'Failed to load permissions')
+      if (!opts.silent) setError(e.message || 'Failed to load permissions')
+      throw e
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }, [selectedUser])
 
   useEffect(() => { load() }, [])
 
-  async function toggle(userId, permKey, currentlyGranted) {
+  // Is `permId` granted by role default for this user (ignoring any override)?
+  function roleDefaultGranted(targetUser, permId) {
+    const roleIds = (targetUser?.roles || []).map(r => r.role_id).filter(Boolean)
+    return roleIds.some(rid => (matrix.role_permissions[rid] || []).includes(permId))
+  }
+
+  // Apply an override locally — used for instant optimistic UI updates.
+  // granted: true | false | null (null = clear override, revert to role default)
+  function applyLocalOverride(userId, permId, granted) {
+    setMatrix(m => {
+      if (!m) return m
+      return {
+        ...m,
+        users: m.users.map(u => {
+          if (u.id !== userId) return u
+          const nextOverrides = { ...u.overrides }
+          if (granted === null) delete nextOverrides[permId]
+          else nextOverrides[permId] = granted
+          const isGranted = granted === null ? roleDefaultGranted(u, permId) : granted
+          const nextEffective = new Set(u.effective_permission_ids)
+          if (isGranted) nextEffective.add(permId)
+          else nextEffective.delete(permId)
+          return { ...u, overrides: nextOverrides, effective_permission_ids: [...nextEffective] }
+        }),
+      }
+    })
+  }
+
+  async function toggle(userId, permKey, permId, currentlyGranted) {
     const key = `${userId}:${permKey}`
+    const nextGranted = !currentlyGranted
     setBusy(b => ({ ...b, [key]: true }))
+    applyLocalOverride(userId, permId, nextGranted)   // instant feedback, no full reload
     try {
-      await api.admin.setUserPermission(userId, permKey, currentlyGranted ? false : true)
-      await load()
+      await api.admin.setUserPermission(userId, permKey, nextGranted)
+      load({ silent: true }).catch(() => {})           // background reconcile, no flash
     } catch (e) {
+      applyLocalOverride(userId, permId, currentlyGranted)  // revert on failure
       alert(e.message || 'Failed to update permission')
     } finally {
       setBusy(b => { const n = {...b}; delete n[key]; return n })
     }
   }
 
-  async function clearOverride(userId, permKey) {
+  async function clearOverride(userId, permKey, permId, previousGranted) {
     const key = `${userId}:${permKey}`
     setBusy(b => ({ ...b, [key]: true }))
+    applyLocalOverride(userId, permId, null)
     try {
       await api.admin.setUserPermission(userId, permKey, null)
-      await load()
+      load({ silent: true }).catch(() => {})
     } catch (e) {
+      applyLocalOverride(userId, permId, previousGranted)
       alert(e.message || 'Failed to clear override')
     } finally {
       setBusy(b => { const n = {...b}; delete n[key]; return n })
@@ -4607,7 +4642,7 @@ function PermissionsTab() {
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {hasOverride && (
                             <button
-                              onClick={() => clearOverride(user.id, perm.permission_key)}
+                              onClick={() => clearOverride(user.id, perm.permission_key, perm.id, overrideVal)}
                               disabled={isBusy}
                               title="Clear override (revert to role default)"
                               className="text-[10px] px-1.5 py-0.5 rounded"
@@ -4616,15 +4651,16 @@ function PermissionsTab() {
                             </button>
                           )}
                           <button
-                            onClick={() => toggle(user.id, perm.permission_key, isGranted)}
+                            onClick={() => toggle(user.id, perm.permission_key, perm.id, isGranted)}
                             disabled={isBusy}
-                            className="relative flex-shrink-0 rounded-full transition-all"
+                            className="relative flex-shrink-0 rounded-full"
                             style={{
                               width: 36, height: 20,
                               background: isGranted ? '#22c55e' : 'var(--border)',
                               opacity: isBusy ? 0.6 : 1,
                               cursor: isBusy ? 'wait' : 'pointer',
                               border: 'none',
+                              transition: 'background-color 150ms ease, opacity 150ms ease',
                             }}
                             title={isGranted ? 'Click to deny' : 'Click to grant'}
                           >
