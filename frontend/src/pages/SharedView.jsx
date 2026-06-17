@@ -1079,44 +1079,44 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5 text-gray-700">Headline</label>
-                  <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
+                  <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5 text-gray-700">Detail</label>
-                  <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
+                  <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e2e8f0' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
                 </div>
               </>
             )}
             {resourceType === 'projects' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
                 </div>
               </>
             )}
             {resourceType === 'invoices' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
                 </div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e2e8f0' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
               </>
             )}
           </div>
           {/* sticky footer */}
           <div className="flex items-center justify-end gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid #e5e7eb' }}>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e5e7eb', color: '#475569' }}>Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e2e8f0', color: '#475569' }}>Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
               Save
@@ -1406,10 +1406,10 @@ export default function SharedView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f1f5f9' }}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin text-blue-500" />
-          <p className="text-sm text-gray-500">Loading shared view…</p>
+          <Loader2 size={28} className="animate-spin" style={{ color: '#3b82f6' }} />
+          <p className="text-sm font-medium" style={{ color: '#64748b' }}>Loading shared view…</p>
         </div>
       </div>
     )
@@ -1450,26 +1450,39 @@ export default function SharedView() {
   const createdAt = data?.created_at
   const expired = isExpired(expiresAt)
 
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc', ...accentStyle }}>
-      <header style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
-                <Activity size={18} style={{ color: theme.accent }} />
+    <div className="min-h-screen" style={{ background: '#f1f5f9', ...accentStyle }}>
+      <header className="sticky top-0 z-30" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(15,23,42,0.06)' }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
+                <Activity size={16} style={{ color: theme.accent }} />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {filtered.length} shown of {records.length} {meta.plural} · {primaryOptions.length} clients
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-gray-900 leading-tight truncate">{title}</h1>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {filtered.length} of {records.length} {meta.plural}
                   {createdAt && ` · ${fmtDate(createdAt)}`}
                 </p>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
-              <Shield size={11} />
-              FinTrack
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => load({ silent: true })}
+                className="w-8 h-8 rounded-lg border flex items-center justify-center"
+                style={{ borderColor: '#e2e8f0', color: '#64748b', background: '#f8fafc' }}>
+                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+              </button>
+              <button onClick={() => setFiltersOpen(v => !v)}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold sm:hidden"
+                style={{ borderColor: filtersOpen ? theme.accentSoft : '#e2e8f0', color: filtersOpen ? theme.accent : '#475569', background: filtersOpen ? theme.accentDim : '#f8fafc' }}>
+                <Search size={12} /> Filters
+              </button>
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
+                <Shield size={11} /> FinTrack
+              </span>
             </div>
           </div>
 
@@ -1496,37 +1509,37 @@ export default function SharedView() {
             )
           )}
 
-          <div className="flex flex-col lg:flex-row gap-2">
-            <div className="relative flex-1">
+          <div className={`${filtersOpen || window.innerWidth >= 640 ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row flex-wrap gap-2`}>
+            <div className="relative flex-1 min-w-[180px]">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
               <input type="text" className="w-full rounded-xl border bg-white pl-8 pr-3 py-2 text-sm outline-none"
-                style={{ borderColor: '#e5e7eb' }}
+                style={{ borderColor: '#e2e8f0' }}
                 placeholder={`Search ${meta.plural}…`}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterPrimary} onChange={e => setFilterPrimary(e.target.value)}>
+            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterPrimary} onChange={e => setFilterPrimary(e.target.value)}>
               <option value="">{meta.primaryLabel}</option>
               {primaryOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
-            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All statuses</option>
               {statusOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
             {isInvoiceLike && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                 <option value="">All categories</option>
                 {categoryOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
             {isInvoiceLike && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
                 <option value="">All owners</option>
                 {raisedByOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
-            <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e5e7eb' }}>
+            <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e2e8f0' }}>
               {[
                 { id: 'card', Icon: LayoutGrid, label: 'Card' },
                 { id: 'list', Icon: List, label: 'List' },
@@ -1540,7 +1553,7 @@ export default function SharedView() {
               ))}
             </div>
             {viewType === 'board' && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
                 {boardGroupOptions.map(v => <option key={v} value={v}>Group by {v}</option>)}
               </select>
             )}
@@ -1548,13 +1561,13 @@ export default function SharedView() {
               <button
                 onClick={() => setAllExpanded(v => !v)}
                 className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2"
-                style={{ borderColor: '#e5e7eb', color: '#475569' }}
+                style={{ borderColor: '#e2e8f0', color: '#475569' }}
               >
                 {allExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                 {allExpanded ? 'Collapse all' : 'Expand all'}
               </button>
             )}
-            <button onClick={() => load({ silent: true })} className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2" style={{ borderColor: '#e5e7eb', color: '#475569' }}>
+            <button onClick={() => load({ silent: true })} className="hidden sm:flex rounded-xl border bg-white px-3 py-2 text-sm font-medium items-center gap-2" style={{ borderColor: '#e2e8f0', color: '#475569' }}>
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
@@ -1562,29 +1575,29 @@ export default function SharedView() {
           {isInvoiceLike && (
             <div className="mt-3 flex flex-wrap gap-2">
               {resourceType === 'tax-ledger' && (
-                <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={invoiceScope} onChange={e => setInvoiceScope(e.target.value)}>
+                <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={invoiceScope} onChange={e => setInvoiceScope(e.target.value)}>
                   <option value="all">All valid invoices</option>
                   <option value="tax">Paid tax register</option>
                   <option value="open">Open invoices only</option>
                 </select>
               )}
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
                 <option value="all">All billing</option>
                 <option value="project">Projects only</option>
                 <option value="retainer">Retainers only</option>
               </select>
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
                 <option value="">All raised months</option>
                 {monthOptions.map(v => <option key={v} value={v}>{new Date(`${v}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>)}
               </select>
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
                 <option value="Raised Date">Raised Date</option>
                 <option value="Cleared Date">Cleared Date</option>
                 <option value="Next followup">Next Follow-up</option>
               </select>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={agingBandFilter} onChange={e => setAgingBandFilter(e.target.value)}>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={agingBandFilter} onChange={e => setAgingBandFilter(e.target.value)}>
                 <option value="">All aging</option>
                 {['0-14d', '15-30d', '31-60d', '60d+'].map(v => <option key={v} value={v}>{v}</option>)}
               </select>
@@ -1609,7 +1622,7 @@ export default function SharedView() {
         </div>
       )}
 
-      <main className={`mx-auto px-4 sm:px-6 py-8 ${viewType === 'board' ? 'max-w-full' : 'max-w-6xl'}`}>
+      <main className={`mx-auto px-4 sm:px-6 py-6 ${viewType === 'board' ? 'max-w-full' : 'max-w-6xl'}`}>
         {saveError && <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#dc2626' }}>{saveError}</div>}
         {filtered.length === 0 ? (
           <div className="text-center py-16">
