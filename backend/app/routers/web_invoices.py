@@ -208,8 +208,9 @@ async def get_avatar_map(_role: str = Depends(require_auth)):
 
 
 @router.get("/picklists")
-async def get_picklists(_role: str = Depends(require_web_access)):
+async def get_picklists(request: Request, _role: str = Depends(require_web_access)):
     """Return current single-select options for all editable picklist fields."""
+    await _require_web_permission(request, "module.invoices.view")
     try:
         return await WebInvoiceService().get_picklists()
     except Exception as e:
@@ -218,9 +219,10 @@ async def get_picklists(_role: str = Depends(require_web_access)):
 
 @router.post("/picklists/{field_name}")
 async def add_picklist_option(
-    field_name: str, body: AddOptionRequest, _role: str = Depends(require_web_access)
+    field_name: str, body: AddOptionRequest, request: Request, _role: str = Depends(require_web_access)
 ):
     """Append a new option to a single-select field and return updated list."""
+    await _require_web_permission(request, "module.invoices.edit")
     try:
         return await WebInvoiceService().add_picklist_option(field_name, body.option.strip())
     except ValueError as e:

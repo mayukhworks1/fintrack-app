@@ -220,8 +220,9 @@ async def invoice_summary(
 
 
 @router.get("/picklists")
-async def get_invoice_picklists(_role: str = Depends(require_auth)):
+async def get_invoice_picklists(request: Request, _role: str = Depends(require_auth)):
     """Return single-select options (Project, Client Name, Category, etc.) from Teable schema."""
+    await _require_invoice_write(request, _role, "module.invoices.view")
     try:
         return await InvoiceService().get_picklists()
     except Exception as e:
