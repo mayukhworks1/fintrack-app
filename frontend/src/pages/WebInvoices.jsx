@@ -1568,15 +1568,13 @@ function MobileHeader({ onHelp, onLogout }) {
 }
 
 /* ── Mobile-only bottom navigation bar ── */
-function MobileBottomNav({ workspace, setWorkspace, isAll }) {
+function MobileBottomNav({ workspace, setWorkspace, isAll, canViewProjects, canViewTax }) {
   const navItems = [
     { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { value: 'invoices',  label: 'Invoices',  icon: FileText },
     { value: 'retainers', label: 'Retainers', icon: Repeat2 },
-    ...(isAll ? [
-      { value: 'projects', label: 'Projects', icon: Briefcase },
-      { value: 'tax', label: 'Tax', icon: Receipt },
-    ] : []),
+    ...(canViewProjects ? [{ value: 'projects', label: 'Projects', icon: Briefcase }] : []),
+    ...(canViewTax      ? [{ value: 'tax',      label: 'Tax',      icon: Receipt }]   : []),
   ]
   return (
     <nav className="sm:hidden flex-shrink-0 flex items-stretch border-t"
@@ -1606,7 +1604,7 @@ function MobileBottomNav({ workspace, setWorkspace, isAll }) {
 }
 
 /* ── Collapsible app sidebar ── */
-function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, onNew }) {
+function AppSidebar({ workspace, setWorkspace, isAll, canViewProjects, canViewTax, open, onToggle, onHelp, onNew }) {
   const { logout, user } = useAuth()
   const { dark, toggle } = useTheme()
   const avatarSrc = useAvatarSrc(user?.avatar_url)
@@ -1624,10 +1622,8 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
     { value: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
     { value: 'invoices',   label: 'Invoices',   icon: FileText },
     { value: 'retainers',  label: 'Retainers',  icon: Repeat2 },
-    ...(isAll ? [
-      { value: 'projects',  label: 'Projects',  icon: Briefcase },
-      { value: 'tax',       label: 'Tax Ledger', icon: Receipt },
-    ] : []),
+    ...(canViewProjects ? [{ value: 'projects', label: 'Projects',  icon: Briefcase }] : []),
+    ...(canViewTax      ? [{ value: 'tax',      label: 'Tax Ledger', icon: Receipt }]  : []),
   ]
 
   return (
@@ -1736,11 +1732,16 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
 export default function WebInvoices() {
   const toast = useToast()
   const { isAll, logout, hasPerm } = useAuth()
-  const canCreateInvoice = hasPerm('module.invoices.create')
-  const canEditInvoice   = hasPerm('module.invoices.edit')
-  const canDeleteInvoice = hasPerm('module.invoices.delete')
-  const canPayInvoice    = hasPerm('module.invoices.payment')
-  const canViewInvoice   = hasPerm('module.invoices.view')
+  const canCreateInvoice  = hasPerm('module.invoices.create')
+  const canEditInvoice    = hasPerm('module.invoices.edit')
+  const canDeleteInvoice  = hasPerm('module.invoices.delete')
+  const canPayInvoice     = hasPerm('module.invoices.payment')
+  const canViewInvoice    = hasPerm('module.invoices.view')
+  // Projects and Tax tabs are shown for web_admin (isAll) OR if the user has been granted
+  // the permission explicitly via the Permission Matrix — this lets web-role users access
+  // these sections without needing to be promoted to web_admin.
+  const canViewProjects   = isAll || hasPerm('module.projects.view')
+  const canViewTax        = isAll || hasPerm('module.tax.view')
   const { dark } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -2467,6 +2468,8 @@ export default function WebInvoices() {
         workspace={workspace}
         setWorkspace={switchWorkspace}
         isAll={isAll}
+        canViewProjects={canViewProjects}
+        canViewTax={canViewTax}
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(v => !v)}
         onHelp={() => setHelpOpen(true)}
@@ -2522,7 +2525,7 @@ export default function WebInvoices() {
                 <button onClick={() => switchWorkspace('retainers')} className="btn-ghost justify-center whitespace-nowrap">
                   <Repeat2 size={14} />Retainers
                 </button>
-                {isAll && (
+                {canViewProjects && (
                   <button onClick={() => switchWorkspace('projects')} className="btn-ghost justify-center whitespace-nowrap">
                     <Briefcase size={14} />Projects
                   </button>
@@ -3155,7 +3158,7 @@ export default function WebInvoices() {
                   {[
                     ['Invoices', 'Track pending, overdue, and fully collected billing records with live filters and file previews.'],
                     ['Retainers', 'Raise externally in Zoho, then record the final invoice details internally for month-by-month continuity.'],
-                    ['Projects', isAll ? 'Open the admin project workspace for project health, cashflow, and invoice context.' : 'Project workspace is only available to admin access.'],
+                    ['Projects', canViewProjects ? 'Open the project workspace for project health, cashflow, and invoice context.' : 'Project workspace access not granted for your account.'],
                   ].map(([title, body]) => (
                     <div
                       key={title}
@@ -3377,13 +3380,13 @@ export default function WebInvoices() {
             </>
           )}
 
-          {workspace === 'projects' && isAll && (
+          {workspace === 'projects' && canViewProjects && (
             <section>
               <ProjectsWorkspace />
             </section>
           )}
 
-          {workspace === 'tax' && isAll && (
+          {workspace === 'tax' && canViewTax && (
             <section>
               <TaxLedger source="web" />
             </section>
@@ -4422,7 +4425,7 @@ export default function WebInvoices() {
         </div>
       </main>
       {/* Mobile bottom nav — hidden sm+ */}
-      <MobileBottomNav workspace={workspace} setWorkspace={setWorkspace} isAll={isAll} />
+      <MobileBottomNav workspace={workspace} setWorkspace={setWorkspace} isAll={isAll} canViewProjects={canViewProjects} canViewTax={canViewTax} />
 
       {/* Drawers — always rendered so exit animations play */}
       <InvoiceDetail

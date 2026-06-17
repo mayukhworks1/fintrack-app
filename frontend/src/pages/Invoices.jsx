@@ -661,7 +661,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
 
   const actions = open && invoice ? (
     <>
-      {isEditor && f['Payment Status'] === 'Pending' && (
+      {canPayment && f["Payment Status"] === "Pending" && (
         <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
           <CheckCircle2 size={12} />Record Payment
         </button>
@@ -672,7 +672,7 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
           {sendingReminder ? 'Sending…' : 'Send Reminder'}
         </button>
       )}
-      {isEditor && (
+      {onEdit && (
         <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
           Edit
         </button>
@@ -840,9 +840,10 @@ function Field({ label, children }) {
 }
 
 function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
-  const { userEmail, authRole, isEmailAuth } = useAuth()
+  const { userEmail, authRole, isEmailAuth, hasPerm } = useAuth()
   const isEdit = Boolean(invoice?.id)
   const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance'].includes(authRole))
+  const _canDelete = hasPerm('module.invoices.delete')
   const [form,       setForm]      = useState(EMPTY_FORM)
   const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [workingRecordId, setWorkingRecordId] = useState(invoice?.id || null)
@@ -1047,7 +1048,7 @@ function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onClose, o
       accent
       footer={
         <div className="flex items-center justify-between gap-3">
-          {isEdit ? (
+          {isEdit && _canDelete ? (
             <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
               <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
             </button>
@@ -1332,7 +1333,12 @@ function SkeletonRow() {
 /* ── Main page ────────────────────────────────────────────────────────────── */
 export default function Invoices() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { isEditor } = useAuth()
+  const { isEditor, hasPerm } = useAuth()
+  // Granular permission flags — these override the coarse isEditor check for email-auth users
+  const canCreate  = isEditor && hasPerm('module.invoices.create')
+  const canEdit    = isEditor && hasPerm('module.invoices.edit')
+  const canDelete  = isEditor && hasPerm('module.invoices.delete')
+  const canPayment = isEditor && hasPerm('module.invoices.payment')
   const toast = useToast()
   const initialStatus = searchParams.get('status') || ''
   const initialProject = searchParams.get('project') || ''
@@ -2171,7 +2177,7 @@ export default function Invoices() {
                 </>
               )}
             </div>
-            {isEditor && (
+            {canCreate && (
               <button onClick={openNew} className="btn-primary"><Plus size={14} />New Invoice</button>
             )}
           </>
@@ -3183,7 +3189,7 @@ export default function Invoices() {
                 icon={<Receipt size={22} />}
                 title="No invoices found"
                 subtitle="Adjust your filters or create your first invoice to get started."
-                action={isEditor && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                action={canCreate && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
                 compact
               />
             : records.map(r => {
@@ -3260,7 +3266,7 @@ export default function Invoices() {
                       </div>
                     </div>
                     <div className="invoice-mobile-actions" onClick={e => e.stopPropagation()}>
-                      {isEditor && isPending && (
+                      {canPayment && isPending && (
                         <button type="button" onClick={() => openRecordPayment(r)} className="btn-primary">
                           <CheckCircle2 size={13} />Record payment
                         </button>
@@ -3377,7 +3383,7 @@ export default function Invoices() {
                         icon={<Receipt size={22} />}
                         title="No invoices found"
                         subtitle="Adjust your filters or create your first invoice."
-                        action={isEditor && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                        action={canCreate && <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
                         compact
                       />
                     </td></tr>
@@ -3509,7 +3515,7 @@ export default function Invoices() {
                           {/* View action */}
                           <td className="tbl-cell" onClick={e => e.stopPropagation()} style={{ width: columnWidths.actions }}>
                             <div className="flex flex-wrap gap-2">
-                              {isEditor && f['Payment Status'] === 'Pending' && (
+                              {canPayment && f["Payment Status"] === "Pending" && (
                                 <button
                                   onClick={() => openRecordPayment(r)}
                                   className="btn-ghost flex items-center gap-1.5"
@@ -3679,7 +3685,7 @@ export default function Invoices() {
                                     )}
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {isEditor && f['Payment Status'] === 'Pending' && (
+                                    {canPayment && f["Payment Status"] === "Pending" && (
                                       <button
                                         onClick={() => openRecordPayment(r)}
                                         className="btn-ghost flex items-center gap-1.5"
@@ -3688,7 +3694,7 @@ export default function Invoices() {
                                         <span style={{ fontSize: 11, fontWeight: 600 }}>Record Payment</span>
                                       </button>
                                     )}
-                                    {isEditor && (
+                                    {canEdit && (
                                       <button
                                         onClick={() => setDrawer({ mode: 'edit', invoice: r })}
                                         className="btn-ghost flex items-center gap-1.5"
@@ -3782,13 +3788,13 @@ export default function Invoices() {
         open={drawer?.mode === 'view'}
         invoice={drawer?.mode === 'view' ? drawer.invoice : null}
         onClose={closeDrawer}
-        onEdit={() => isEditor && setDrawer({ mode: 'edit', invoice: drawer?.invoice })}
-        onRecordPayment={() => isEditor && openRecordPayment(drawer?.invoice)}
+        onEdit={canEdit ? () => setDrawer({ mode: 'edit', invoice: drawer?.invoice }) : null}
+        onRecordPayment={canPayment ? () => openRecordPayment(drawer?.invoice) : null}
         isEditor={isEditor}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
         avatarMap={avatarMap}
       />
-      {isEditor && (
+      {(canCreate || canEdit || canPayment) && (
         <InvoiceDrawer
           open={drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment'}
           invoice={drawer?.mode === 'edit' || drawer?.mode === 'payment' ? drawer.invoice : null}
