@@ -621,14 +621,15 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
     <span className="text-[12px] font-semibold tabular-nums text-amber-700">{tax.outstanding > 0 ? fmtInr(tax.outstanding) : '—'}</span>
   )
   if (col === meta.clientField) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full truncate"
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full"
+      title={f[col] || ''}
       style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexRgba(clr, 0.2) : '#e2e8f0'}` }}>
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: clr }} />
       <span className="truncate">{f[col] || '—'}</span>
     </span>
   )
   if (col === meta.titleField) return (
-    <span className="text-[13px] font-semibold text-gray-900 block truncate">{f[col] || '—'}</span>
+    <span className="text-[13px] font-semibold text-gray-900 block truncate" title={f[col] || ''}>{f[col] || '—'}</span>
   )
   if (col === meta.statusField) return <StatusBadge value={f[col]} />
   if (col === 'Short Status') return (
@@ -676,7 +677,7 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (col === 'Last Modified') return (
     <span className="text-[11px] text-gray-400 whitespace-nowrap">{fmtDate(f.lastModifiedTime || '')}</span>
   )
-  return <span className="text-[12px] text-gray-700 truncate block">{f[col] || '—'}</span>
+  return <span className="text-[12px] text-gray-700 truncate block" title={f[col] ? String(f[col]) : ''}>{f[col] || '—'}</span>
 }
 
 function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true, highlightColumns = [] }) {
@@ -995,12 +996,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
           {/* INVOICES resource */}
           {resourceType === 'invoices' && (
             <>
+              {/* Financial summary row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   ['Raised', fmtInr(f['Amount Raised'])],
+                  ['With Tax', fmtInr(f['Amount with Tax'])],
                   ['Received', fmtInr(f['Amount Received'])],
-                  ['Raised Date', fmtDate(f['Raised Date'])],
-                  ['Cleared Date', fmtDate(f['Cleared Date'])],
+                  ['Outstanding', fmtInr(f['Outstanding Amount'])],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
@@ -1008,25 +1010,71 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Dates + aging */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
-                  ['Project', f['Project'] || '—'],
-                  ['Category', f['Category'] || '—'],
-                  ['Payment Status', f['Payment Status'] || '—'],
-                  ['Next Follow-up', fmtDate(f['Next followup'])],
+                  ['Raised Date', fmtDate(f['Raised Date'])],
+                  ['Cleared Date', fmtDate(f['Cleared Date'])],
+                  ['Aging', effectiveAging(f) > 0 ? `${effectiveAging(f)} days` : '—'],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
+                  <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700">{value}</p>
                   </div>
                 ))}
               </div>
-              {f['Remark'] && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed">{f['Remark']}</p>
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Project', f['Project'] || '—'],
+                  ['Category', f['Category'] || '—'],
+                  ['Milestone', f['Milestone'] || '—'],
+                  ['Raised By', f['Raised By'] || '—'],
+                  ['Next Follow-up', fmtDate(f['Next followup'])],
+                  ['Reference', f['Reference'] || '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
+                    <p className="text-[13px] font-semibold text-slate-700 break-words">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Description */}
+              {f['Description'] && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Description</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Description']}</p>
                 </div>
               )}
+              {/* Remark */}
+              {f['Remark'] && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Remark']}</p>
+                </div>
+              )}
+              {/* Invoice PDF + Attachments */}
+              {(['Invoice PDF', 'Attachments', 'Reference'].some(k => parseAttachments(f[k]).length > 0)) && (() => {
+                const allFiles = [
+                  ...parseAttachments(f['Invoice PDF']),
+                  ...parseAttachments(f['Attachments']),
+                ]
+                if (!allFiles.length) return null
+                return (
+                  <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-3">
+                      Files <span className="font-normal normal-case">· {allFiles.length} file{allFiles.length !== 1 ? 's' : ''} · click to preview</span>
+                    </p>
+                    <AttachmentList
+                      attachments={allFiles}
+                      onPreview={index => {
+                        setPreviewDocs({ docs: allFiles, index })
+                      }}
+                    />
+                  </div>
+                )
+              })()}
+              <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
             </>
           )}
 
