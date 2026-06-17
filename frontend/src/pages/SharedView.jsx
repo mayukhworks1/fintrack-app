@@ -436,16 +436,41 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Margin</p><p className="font-semibold text-gray-700">{f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'}</p></div>
           </div>
         )}
-        {resourceType === 'invoices' && (
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Project</p><p className="font-semibold text-gray-700">{f['Project'] || '—'}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Category</p><p className="font-semibold text-gray-700">{f['Category'] || '—'}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Amount</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Raised'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Received</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Received'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Raised</p><p className="font-semibold text-gray-700">{fmtDate(f['Raised Date'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>
-          </div>
-        )}
+        {resourceType === 'invoices' && (() => {
+          const aging = effectiveAging(f)
+          const outstanding = f['Outstanding Amount']
+          return (
+            <div className="space-y-2">
+              {/* Key financial figures */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Raised</p>
+                  <p className="text-xs font-bold text-gray-800 tabular-nums">{fmtInr(f['Amount Raised'])}</p>
+                </div>
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Received</p>
+                  <p className="text-xs font-bold text-gray-800 tabular-nums">{fmtInr(f['Amount Received'])}</p>
+                </div>
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: outstanding > 0 ? 'rgba(245,158,11,0.07)' : '#f8fafc', border: outstanding > 0 ? '1px solid rgba(245,158,11,0.25)' : '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: outstanding > 0 ? '#b45309' : '#94a3b8' }}>Outstanding</p>
+                  <p className="text-xs font-bold tabular-nums" style={{ color: outstanding > 0 ? '#b45309' : '#64748b' }}>{fmtInr(outstanding)}</p>
+                </div>
+              </div>
+              {/* Secondary info */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Project</p><p className="font-semibold text-gray-700 truncate">{f['Project'] || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Category</p><p className="font-semibold text-gray-700 truncate">{f['Category'] || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Raised</p><p className="font-semibold text-gray-700">{fmtDate(f['Raised Date'])}</p></div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Aging</p>
+                  <p className="font-semibold" style={{ color: aging > 60 ? '#dc2626' : aging > 30 ? '#d97706' : '#374151' }}>{aging > 0 ? `${aging}d` : '—'}</p>
+                </div>
+                {f['Next followup'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>}
+                {f['Milestone'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Milestone</p><p className="font-semibold text-gray-700 truncate">{f['Milestone']}</p></div>}
+              </div>
+            </div>
+          )
+        })()}
         {resourceType === 'tax-ledger' && (() => {
           const tax = taxParts(f)
           return (
@@ -1526,7 +1551,7 @@ export default function SharedView() {
   return (
     <div className="min-h-screen" style={{ background: '#f1f5f9', ...accentStyle }}>
       <header className="sticky top-0 z-30" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(15,23,42,0.06)' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-3">
+        <div className="px-4 sm:px-6 py-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
