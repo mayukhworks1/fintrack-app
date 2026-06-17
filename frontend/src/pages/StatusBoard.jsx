@@ -2828,7 +2828,9 @@ export default function StatusBoard() {
     setSaving(true)
     try {
       const { attachments, ...rest } = form
-      const payload = { ...rest, attachments: sanitizeAttachmentsForSave(attachments) }
+      const sanitized = sanitizeAttachmentsForSave(attachments)
+      // Teable rejects Attachments:[] — only include the field when there are actual items
+      const payload = sanitized.length > 0 ? { ...rest, attachments: sanitized } : rest
       const updated = await api.status.update(modal.id, payload)
       if (updated?.id || updated?.fields) {
         setRecords((current) => current.map((record) => {
