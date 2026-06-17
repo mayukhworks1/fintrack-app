@@ -162,11 +162,14 @@ export function AuthProvider({ children }) {
   }, [])
 
   // Helper: check if a permission key is granted.
+  // Superadmin/admin bypass all permission checks on the backend — mirror that here.
   // Returns true for legacy/non-email sessions (backwards-compatible).
+  const BYPASS_ROLES = new Set(['superadmin', 'admin'])
   const hasPerm = useCallback((key) => {
-    if (permissions === null) return true  // legacy session — no restriction
+    if (permissions === null) return true        // legacy session — no restriction
+    if (BYPASS_ROLES.has(authRole)) return true // superadmin/admin bypass everything
     return permissions.has(key)
-  }, [permissions])
+  }, [permissions, authRole])
 
   return (
     <AuthContext.Provider value={{
