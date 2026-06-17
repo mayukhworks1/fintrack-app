@@ -554,32 +554,56 @@ const COL_WIDTHS = {
   'Client':                     '140px',
   'Project':                    '160px',
   'Project Name':               '180px',
-  'Status':                     '130px',
-  'Project Status':             '130px',
-  'Payment Status':             '120px',
+  'Status':                     '120px',
+  'Project Status':             '120px',
+  'Payment Status':             '110px',
   'Short Status':               '200px',
   'Current Status (Detailed)': '1fr',
-  'Attachments':               '120px',
-  'Health':                     '100px',
-  'Amount Billed So far':       '120px',
+  'Attachments':               '100px',
+  'Health':                     '90px',
+  'Amount Billed So far':       '110px',
   'Actual Profit':              '110px',
-  'Profit percentage':          '90px',
-  'Invoice Number':             '140px',
+  'Profit percentage':          '80px',
+  'Invoice Number':             '130px',
   'Client Name':                '150px',
-  'Amount Raised':              '120px',
-  'Amount with Tax':            '120px',
-  'Amount Received':            '120px',
-  'GST Amount':                 '115px',
-  'TDS Amount':                 '115px',
-  'TDS %':                      '75px',
-  'Outstanding Amount':         '125px',
-  'Agening (Days)':             '90px',
-  'Raised Date':                '110px',
-  'Cleared Date':               '110px',
-  'Next followup':              '110px',
-  'Reference':                  '120px',
-  'Invoice PDF':                '120px',
-  'Last Modified':              '130px',
+  'Category':                   '110px',
+  'Milestone':                  '110px',
+  'Raised By':                  '110px',
+  'Amount Raised':              '110px',
+  'Amount with Tax':            '110px',
+  'Amount Received':            '110px',
+  'GST Amount':                 '100px',
+  'TDS Amount':                 '100px',
+  'TDS %':                      '70px',
+  'Outstanding Amount':         '110px',
+  'Agening (Days)':             '80px',
+  'Raised Date':                '100px',
+  'Cleared Date':               '100px',
+  'Next followup':              '100px',
+  'Reference':                  '100px',
+  'Invoice PDF':                '100px',
+  'Description':                '1fr',
+  'Remark':                     '140px',
+  'Last Modified':              '110px',
+}
+
+const COL_LABELS = {
+  'Payment Status':             'Status',
+  'Amount Raised':              'Raised',
+  'Amount with Tax':            'With Tax',
+  'Amount Received':            'Received',
+  'Outstanding Amount':         'Outstanding',
+  'Agening (Days)':             'Aging',
+  'Amount Billed So far':       'Billed',
+  'Current Status (Detailed)': 'Detail',
+  'Profit percentage':          'Profit %',
+  'Resource contribution percentage': 'Resource %',
+  'Next followup':              'Follow-up',
+  'Project Status':             'Status',
+  'Project Name':               'Project',
+  'Short Status':               'Headline',
+  'Invoice PDF':                'PDF',
+  'Last Modified':              'Modified',
 }
 
 function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
@@ -667,14 +691,14 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
     <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
       {/* Sticky header */}
       <div className="overflow-x-auto">
-        <div style={{ minWidth: 600 }}>
+        <div style={{ minWidth: 900 }}>
           {/* Header row */}
           <div className="grid px-4 py-2.5 gap-3"
             style={{ gridTemplateColumns: gridTemplate, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
             {cols.map(col => (
               <div
                 key={col}
-                className="text-[10px] font-bold uppercase tracking-widest truncate px-3 py-2"
+                className="text-[10px] font-bold uppercase tracking-wide px-3 py-2 whitespace-nowrap overflow-hidden"
                 style={highlighted.has(col)
                   ? {
                       color: '#1d4ed8',
@@ -688,7 +712,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                     }
                   : { color: '#94a3b8' }}
               >
-                {col}
+                {COL_LABELS[col] || col}
               </div>
             ))}
             <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">–</div>
