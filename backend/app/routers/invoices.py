@@ -5,9 +5,11 @@ POST / PATCH / DELETE: require editor token — viewers get 403.
 """
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional, Iterable, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import httpx
 import logging
+import re
+from datetime import date as _date
 from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
@@ -103,6 +105,68 @@ class InvoiceFields(BaseModel):
     client_name:      Optional[str]   = None   # single-select: Birla Open Minds / Maitrimetal / Innovine
     reference:        Optional[List[Any]] = None
     invoice_pdf:      Optional[List[Any]] = None
+
+    @field_validator('raised_by')
+    @classmethod
+    def validate_raised_by(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        # Email-like format check
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v.strip()):
+            raise ValueError('Raised By must be a valid email format')
+        return v.strip()
+
+    @field_validator('invoice_number')
+    @classmethod
+    def validate_invoice_number(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 50:
+            raise ValueError('Invoice Number cannot exceed 50 characters')
+        return v.strip()
+
+    @field_validator('amount_raised', 'amount_with_tax')
+    @classmethod
+    def validate_positive_amounts(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError('Amount must be greater than zero')
+        if v > 10_000_000:  # 1 crore max
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('amount_received')
+    @classmethod
+    def validate_non_negative_received(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v < 0:
+            raise ValueError('Amount Received cannot be negative')
+        if v > 10_000_000:
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('raised_date', 'cleared_date', 'next_followup', mode='before')
+    @classmethod
+    def validate_iso_dates(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        try:
+            # Try parsing as ISO date (YYYY-MM-DD or with time)
+            _date.fromisoformat(v[:10])
+            return v
+        except (ValueError, TypeError):
+            raise ValueError('Dates must be in ISO 8601 format (YYYY-MM-DD)')
+
+    @field_validator('description', 'remark')
+    @classmethod
+    def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 1000:
+            raise ValueError('Text fields cannot exceed 1000 characters')
+        return v.strip()
 
     def to_teable_fields(self, include_null_fields: Iterable[str] | None = None) -> dict:
         m = {

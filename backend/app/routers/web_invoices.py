@@ -5,9 +5,11 @@ Routes accept 'web' OR 'all' role (require_web_access).
 'all'  — invoice tracker + project tracker (All@2026)
 """
 import httpx
+import re
+from datetime import date as _date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..db.postgres import get_pool
@@ -49,6 +51,77 @@ class WebInvoiceFields(BaseModel):
     reference:       Optional[List[Any]]  = None  # attachment objects from Teable
     invoice_pdf:     Optional[List[Any]]  = None  # attachment objects from Teable
     currency:        Optional[str]        = None  # e.g. "RS", "USD"
+
+    @field_validator('raised_by')
+    @classmethod
+    def validate_raised_by(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v.strip()):
+            raise ValueError('Raised By must be a valid email format')
+        return v.strip()
+
+    @field_validator('invoice_number')
+    @classmethod
+    def validate_invoice_number(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 50:
+            raise ValueError('Invoice Number cannot exceed 50 characters')
+        return v.strip()
+
+    @field_validator('amount_raised', 'amount_with_tax')
+    @classmethod
+    def validate_positive_amounts(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError('Amount must be greater than zero')
+        if v > 10_000_000:
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('amount_received')
+    @classmethod
+    def validate_non_negative_received(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v < 0:
+            raise ValueError('Amount Received cannot be negative')
+        if v > 10_000_000:
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('raised_date', 'cleared_date', 'next_followup', mode='before')
+    @classmethod
+    def validate_iso_dates(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        try:
+            _date.fromisoformat(v[:10])
+            return v
+        except (ValueError, TypeError):
+            raise ValueError('Dates must be in ISO 8601 format (YYYY-MM-DD)')
+
+    @field_validator('description', 'remark')
+    @classmethod
+    def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 1000:
+            raise ValueError('Text fields cannot exceed 1000 characters')
+        return v.strip()
+
+    @field_validator('currency')
+    @classmethod
+    def validate_currency(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        # Validate against known currencies
+        valid_currencies = {'RS', 'USD', 'EUR', 'GBP', 'INR'}
+        if v.upper() not in valid_currencies:
+            raise ValueError(f'Currency must be one of: {", ".join(valid_currencies)}')
+        return v.upper()
 
     def to_teable_fields(self) -> dict:
         m = {
