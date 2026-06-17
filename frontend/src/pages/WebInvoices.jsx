@@ -2229,6 +2229,7 @@ export default function WebInvoices() {
   }, [allRecords, gstMonths])
 
   async function createRetainerMonth(group, mode) {
+    if (!canCreateInvoice) return
     if (!group?.latestActive) {
       toast('No existing retainer template found for this project', 'warning')
       return
@@ -3576,14 +3577,18 @@ export default function WebInvoices() {
                                         className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
                                         Open request form
                                       </button>
-                                      <button onClick={() => openRetainerRecordForm(group, item.key)}
-                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                        Record raised invoice
-                                      </button>
-                                      <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                                        className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
-                                        {busyPause ? 'Pausing…' : 'Pause month'}
-                                      </button>
+                                      {canCreateInvoice && (
+                                        <>
+                                          <button onClick={() => openRetainerRecordForm(group, item.key)}
+                                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                            Record raised invoice
+                                          </button>
+                                          <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                                            {busyPause ? 'Pausing…' : 'Pause month'}
+                                          </button>
+                                        </>
+                                      )}
                                     </>
                                   ) : (
                                     <button onClick={() => setRetainerMonth(item.key)}
@@ -3611,14 +3616,18 @@ export default function WebInvoices() {
                             className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
                             <ExternalLink size={12} />Open invoice request form
                           </button>
-                          <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
-                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                            Record already raised invoice
-                          </button>
-                          <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                            className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
-                            {busyPause ? 'Pausing…' : 'Pause month'}
-                          </button>
+                          {canCreateInvoice && (
+                            <>
+                              <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
+                                className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                Record already raised invoice
+                              </button>
+                              <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                                className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                                {busyPause ? 'Pausing…' : 'Pause month'}
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3976,7 +3985,7 @@ export default function WebInvoices() {
                     icon={<Receipt size={22} />}
                     title="No invoices found"
                     subtitle="Try adjusting your filters, or create a new invoice to get started."
-                    action={<button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button>}
+                    action={canCreateInvoice ? <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button> : null}
                     compact
                   />
                 : records.map(r => {
