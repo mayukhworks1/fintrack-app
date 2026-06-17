@@ -108,5 +108,11 @@ export function ToastProvider({ children }) {
 export function useToast() {
   const ctx = useContext(ToastCtx)
   if (!ctx) throw new Error('useToast must be inside ToastProvider')
-  return ctx.toast
+  // Return the toast fn directly AND attach .showToast so both usage patterns work:
+  //   const toast = useToast(); toast('msg', 'success')          ← function call
+  //   const { showToast } = useToast(); showToast('msg', 'type') ← destructuring
+  const fn = ctx.toast
+  fn.showToast = fn
+  fn.dismiss = ctx.dismiss
+  return fn
 }

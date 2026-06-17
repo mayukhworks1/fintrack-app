@@ -984,6 +984,66 @@ function StatusAttachmentField({ value, onChange, recordId }) {
   )
 }
 
+function ComboBox({ value, onChange, options, placeholder, required, id }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(value || '')
+  const ref = useRef(null)
+  const filtered = query
+    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    : options
+
+  useEffect(() => { setQuery(value || '') }, [value])
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function select(opt) {
+    onChange(opt)
+    setQuery(opt)
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative" ref={ref} id={id}>
+      <div className="relative">
+        <input
+          className="input-field w-full text-sm pr-8"
+          value={query}
+          required={required}
+          placeholder={placeholder}
+          autoComplete="off"
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+        />
+        <button type="button" tabIndex={-1}
+          className="absolute right-2 top-1/2 -translate-y-1/2"
+          style={{ color: 'var(--text-3)' }}
+          onClick={() => setOpen(o => !o)}>
+          <ChevronDown size={14} />
+        </button>
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl shadow-xl overflow-y-auto"
+          style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: 220, boxShadow: '0 8px 32px rgba(0,0,0,0.22)' }}>
+          {filtered.map(opt => (
+            <button key={opt} type="button"
+              className="w-full text-left px-3 py-2 text-sm transition-colors"
+              style={{ color: opt === value ? 'var(--accent)' : 'var(--text-1)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              onClick={() => select(opt)}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptions, onAddStatusOption, options }) {
   const isEdit = !!initial
   const [form, setForm] = useState({
@@ -1038,39 +1098,31 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
         <form onSubmit={e => { e.preventDefault(); if (form.client && form.project) onSave(form) }}
           className="px-5 py-4 space-y-4">
 
-          {/* Client + Project — editable comboboxes: pick an existing value or type a new one */}
+          {/* Client + Project — styled comboboxes */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Client <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <input
-                className="input-field w-full text-sm"
-                list="status-client-options"
+              <ComboBox
                 value={form.client}
-                onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+                onChange={v => { setForm(f => ({ ...f, client: v, project: '' })) }}
+                options={allClients}
                 placeholder="Select or type a client…"
-                autoComplete="off"
-                required />
-              <datalist id="status-client-options">
-                {allClients.map(c => <option key={c} value={c} />)}
-              </datalist>
+                required
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Project <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <input
-                className="input-field w-full text-sm"
-                list="status-project-options"
+              <ComboBox
                 value={form.project}
-                onChange={e => set('project', e.target.value)}
+                onChange={v => set('project', v)}
+                options={projectOptions}
                 placeholder="Select or type a project…"
-                autoComplete="off"
-                required />
-              <datalist id="status-project-options">
-                {projectOptions.map(p => <option key={p} value={p} />)}
-              </datalist>
+                required
+              />
             </div>
           </div>
 
