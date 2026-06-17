@@ -41,6 +41,11 @@ INVOICE_FIELD_IDS = {
 # Single-select fields whose options we expose as picklists
 INVOICE_PICKLIST_FIELDS = {"Project", "Client Name", "Category", "Milestone", "Raised By", "Payment Status"}
 
+# ── Field name constants for Teable schema ─────────────────────────────────
+RAISED_BY_FIELD = "Raised By"
+
+logger = logging.getLogger(__name__)
+
 # ── Cache config ───────────────────────────────────────────────────────────
 # All entries live in the shared ../utils/cache singleton, namespaced by
 # the "invoice:" prefix so writes can bust just our slice.
@@ -134,14 +139,22 @@ class InvoiceService:
         if not email:
             return email
         try:
-            options = (await self.get_picklists()).get("Raised By") or []
+            picklists = await self.get_picklists()
+            options = picklists.get(RAISED_BY_FIELD) or []
+            if not options:
+                logger.warning(f"resolve_raised_by: no '{RAISED_BY_FIELD}' options in Teable picklist")
+                return email
             email_lc = email.lower()
-            for opt in options:
-                if opt.lower() == email_lc:
-                    return opt
-        except Exception:
-            pass
-        return email
+            matches = [opt for opt in options if opt.lower() == email_lc]
+            if not matches:
+                logger.debug(f"resolve_raised_by: no case-insensitive match for '{email}' in Teable options")
+                return email
+            if len(matches) > 1:
+                logger.warning(f"resolve_raised_by: multiple case-insensitive matches for '{email}': {matches}, using first: {matches[0]}")
+            return matches[0]
+        except Exception as e:
+            logger.error(f"resolve_raised_by: failed to resolve '{email}': {e}", exc_info=True)
+            return email
 
     def _system_actor(self, path: str) -> dict[str, Any]:
         actor = empty_actor()

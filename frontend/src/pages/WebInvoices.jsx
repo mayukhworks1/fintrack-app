@@ -3883,7 +3883,7 @@ export default function WebInvoices() {
 
           {(workspace === 'invoices' || workspace === 'retainers') && <>
           {/* Error */}
-          {errorStatus === 403 ? (
+          {(errorStatus === 403 || errorStatus === 401) ? (
             <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-2xl text-center"
               style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.15)' }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(248,113,113,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3891,10 +3891,16 @@ export default function WebInvoices() {
               </div>
               <div>
                 <div className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Access Restricted</div>
-                <div className="text-xs" style={{ color: 'var(--text-3)' }}>
+                <div className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>
                   You don't have permission to view web invoices.<br />
                   Please contact your administrator to request access.
                 </div>
+                <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: 'none', cursor: 'pointer', transition: 'background-color 150ms' }}
+                  onMouseEnter={e => e.target.style.background = 'rgba(248,113,113,0.22)'}
+                  onMouseLeave={e => e.target.style.background = 'rgba(248,113,113,0.15)'}>
+                  Refresh
+                </button>
               </div>
             </div>
           ) : error && (

@@ -4444,13 +4444,25 @@ const MODULE_LABELS = {
 }
 const ACTION_COLORS = { view:'#6366f1', create:'#22c55e', edit:'#f59e0b', delete:'#ef4444', payment:'#a855f7' }
 
-function PermissionsTab() {
+function PermissionsTab({ searchParams, setSearchParams }) {
   const [matrix, setMatrix] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState({})
-  const [selectedUser, setSelectedUser] = useState(null)
   const [moduleFilter, setModuleFilter] = useState('all')
+
+  // Get selected user from URL, default to first user
+  const selectedUser = searchParams.get('user')
+
+  // Persist user selection to URL
+  const setSelectedUser = useCallback((userId) => {
+    setSearchParams(p => {
+      const n = new URLSearchParams(p)
+      if (userId) n.set('user', userId)
+      else n.delete('user')
+      return n
+    })
+  }, [setSearchParams])
 
   const load = useCallback(async (opts = {}) => {
     if (!opts.silent) setLoading(true)
@@ -4458,7 +4470,10 @@ function PermissionsTab() {
     try {
       const data = await api.admin.permissionMatrix()
       setMatrix(data)
-      if (data.users.length > 0 && !selectedUser) setSelectedUser(data.users[0].id)
+      // Auto-select first user if none selected
+      if (!selectedUser && data.users.length > 0) {
+        setSelectedUser(data.users[0].id)
+      }
       return data
     } catch (e) {
       if (!opts.silent) setError(e.message || 'Failed to load permissions')
@@ -4466,7 +4481,7 @@ function PermissionsTab() {
     } finally {
       if (!opts.silent) setLoading(false)
     }
-  }, [selectedUser])
+  }, [selectedUser, setSelectedUser])
 
   useEffect(() => { load() }, [])
 
@@ -4840,7 +4855,7 @@ export default function AdminDashboard({ embedded = false }) {
       {activeTab === 'shared'      && <SharedLinksTab />}
       {activeTab === 'hflogs'      && <HfLogsTab />}
       {activeTab === 'deploy'      && <DeploymentHealthTab />}
-      {activeTab === 'permissions' && <PermissionsTab />}
+      {activeTab === 'permissions' && <PermissionsTab searchParams={searchParams} setSearchParams={setSearchParams} />}
     </>
   )
 
