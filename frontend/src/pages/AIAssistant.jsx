@@ -709,11 +709,18 @@ export default function AIAssistant() {
         )))
       } else {
         const raw = e.message || ''
-        const errMsg = /OPENROUTER_API_KEY|Invalid OPENROUTER_API_KEY|quota exceeded/i.test(raw)
-          ? raw
-          : raw
+        let errMsg = ''
+
+        if (e.status === 403) {
+          errMsg = 'Access Restricted — This feature requires full account access. Contact your admin to upgrade your account.'
+        } else if (/OPENROUTER_API_KEY|Invalid OPENROUTER_API_KEY|quota exceeded/i.test(raw)) {
+          errMsg = raw
+        } else {
+          errMsg = raw
             ? `AI error: ${raw}`
             : 'AI error: Something went wrong while generating the response.'
+        }
+
         setHistory(prev => prev.map((entry, index) => (
           index === assistantIndex
             ? { ...entry, content: errMsg, error: true, streaming: false }

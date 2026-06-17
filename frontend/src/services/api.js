@@ -300,7 +300,9 @@ export const api = {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+        const error = new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+        error.status = res.status
+        throw error
       }
       return res
     },
