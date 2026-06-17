@@ -1,4 +1,4 @@
-import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText, TrendingUp,
@@ -310,6 +310,32 @@ export default function Layout({ children }) {
   const [collapsed,  setCollapsed]  = useState(() => {
     try { return localStorage.getItem('ft-sidebar-collapsed') === '1' } catch { return false }
   })
+  const location = useLocation()
+  const mainRef  = useRef(null)
+  const scrollKey = `ft-scroll:${location.pathname}`
+
+  // Save scroll position before navigating away
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    const save = () => {
+      try { sessionStorage.setItem(`ft-scroll:${location.pathname}`, String(el.scrollTop)) } catch {}
+    }
+    el.addEventListener('scroll', save, { passive: true })
+    return () => el.removeEventListener('scroll', save)
+  }, [location.pathname])
+
+  // Restore scroll position when route changes
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    try {
+      const saved = sessionStorage.getItem(scrollKey)
+      el.scrollTop = saved ? parseInt(saved, 10) : 0
+    } catch {
+      el.scrollTop = 0
+    }
+  }, [location.pathname, scrollKey])
 
   const toggleCollapse = useCallback(() => {
     setCollapsed(c => {
@@ -430,6 +456,7 @@ export default function Layout({ children }) {
         </header>
 
         <main
+          ref={mainRef}
           id="main-content"
           className="flex-1 overflow-y-auto animate-fade-in pb-16 lg:pb-0"
           style={{ background: 'var(--bg-base)' }}

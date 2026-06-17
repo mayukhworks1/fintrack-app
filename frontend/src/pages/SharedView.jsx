@@ -575,7 +575,7 @@ const COL_WIDTHS = {
   'GST Amount':                 '100px',
   'TDS Amount':                 '100px',
   'TDS %':                      '70px',
-  'Outstanding Amount':         '110px',
+  'Outstanding Amount':         '120px',
   'Agening (Days)':             '80px',
   'Raised Date':                '100px',
   'Cleared Date':               '100px',
@@ -698,7 +698,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
             {cols.map(col => (
               <div
                 key={col}
-                className="text-[10px] font-bold uppercase tracking-wide px-3 py-2 whitespace-nowrap overflow-hidden"
+                className="text-[10px] font-bold uppercase tracking-wide py-2 whitespace-nowrap"
                 style={highlighted.has(col)
                   ? {
                       color: '#1d4ed8',
