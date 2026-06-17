@@ -1645,7 +1645,7 @@ export default function SharedView() {
         </div>
       )}
 
-      <main className={`mx-auto px-4 sm:px-6 py-6 ${viewType === 'board' ? 'max-w-full' : 'max-w-6xl'}`}>
+      <main className="mx-auto px-4 sm:px-6 py-6 max-w-full">
         {saveError && <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#dc2626' }}>{saveError}</div>}
         {filtered.length === 0 ? (
           <div className="text-center py-16">
