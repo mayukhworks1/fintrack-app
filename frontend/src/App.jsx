@@ -56,13 +56,21 @@ const TaxLedger     = lazyWithReload(() => import('./pages/TaxLedger'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
 const Profile       = lazyWithReload(() => import('./pages/Profile'))
 
-const WARM_IMPORTERS = [
+// Main-app pages to prefetch on idle for editor/viewer sessions only.
+// Web/'all' users render WebInvoices exclusively, so prefetching these
+// (incl. the ~382KB recharts chunk pulled by Analytics/AIAssistant) would
+// be pure wasted bandwidth for them — especially on mobile.
+const WARM_IMPORTERS_MAIN = [
   () => import('./pages/Projects'),
   () => import('./pages/Invoices'),
   () => import('./pages/StatusBoard'),
   () => import('./pages/Analytics'),
   () => import('./pages/AIAssistant'),
   () => import('./pages/Report'),
+]
+// Web/'all' users only ever need the web project workspace.
+const WARM_IMPORTERS_WEB = [
+  () => import('./pages/TaxLedger'),
 ]
 
 /* Lightweight chunk-loading fallback */
@@ -80,8 +88,9 @@ export default function App() {
 
   useEffect(() => {
     if (status !== 'authed' || isAdmin) return
+    const importers = (isWeb || isAll) ? WARM_IMPORTERS_WEB : WARM_IMPORTERS_MAIN
     const runner = () => {
-      for (const load of WARM_IMPORTERS) load().catch(() => {})
+      for (const load of importers) load().catch(() => {})
     }
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
       const id = window.requestIdleCallback(runner, { timeout: 1200 })
@@ -89,7 +98,7 @@ export default function App() {
     }
     const t = window.setTimeout(runner, 600)
     return () => window.clearTimeout(t)
-  }, [status, isAdmin])
+  }, [status, isAdmin, isWeb, isAll])
 
   // ── Public routes — no authentication required ──────────────────────────
   if (location.pathname.startsWith('/view/')) {
