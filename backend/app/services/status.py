@@ -493,7 +493,12 @@ class StatusService:
         role: Optional[str] = None,
     ) -> dict[str, Any]:
         if "Attachments" in fields:
-            fields = {**fields, "Attachments": _sanitize_teable_attachments(fields.get("Attachments"))}
+            sanitized = _sanitize_teable_attachments(fields.get("Attachments"))
+            if sanitized:
+                fields = {**fields, "Attachments": sanitized}
+            else:
+                # Teable rejects Attachments:[] — omit the field entirely when empty
+                fields = {k: v for k, v in fields.items() if k != "Attachments"}
         if request and role:
             try:
                 from ..db.attribution import record_user_attribution
