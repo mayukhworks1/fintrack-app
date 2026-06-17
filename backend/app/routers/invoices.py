@@ -15,6 +15,7 @@ from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
 from ..utils.ownership import is_record_owner
+from ..utils.teable_errors import translate_teable_error
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
 
 logger = logging.getLogger("fintrack.invoices")
@@ -315,6 +316,17 @@ async def create_invoice(body: InvoiceFields, request: Request, role: str = Depe
         return result
     except HTTPException:
         raise
+    except httpx.HTTPError as e:
+        # Teable API error — translate to user-friendly message
+        try:
+            error_data = e.response.json() if hasattr(e, 'response') and e.response else str(e)
+            user_msg = translate_teable_error(error_data, "creating invoice")
+            status_code = e.response.status_code if hasattr(e, 'response') and e.response else 400
+            raise HTTPException(status_code=status_code, detail=user_msg)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to create invoice")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -345,6 +357,17 @@ async def update_invoice(
         return await InvoiceService().update_invoice(record_id, fields)
     except HTTPException:
         raise
+    except httpx.HTTPError as e:
+        # Teable API error — translate to user-friendly message
+        try:
+            error_data = e.response.json() if hasattr(e, 'response') and e.response else str(e)
+            user_msg = translate_teable_error(error_data, "updating invoice")
+            status_code = e.response.status_code if hasattr(e, 'response') and e.response else 400
+            raise HTTPException(status_code=status_code, detail=user_msg)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to update invoice")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
