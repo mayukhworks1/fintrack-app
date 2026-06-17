@@ -845,18 +845,20 @@ INSERT INTO auth_role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth_roles r
 JOIN auth_permissions p ON p.permission_key IN (
-  'module.dashboard.view', 'module.invoices.view', 'module.invoices.create',
+  'module.invoices.view', 'module.invoices.create',
   'module.invoices.edit', 'module.invoices.payment'
 )
 WHERE r.role_key = 'web'
 ON CONFLICT DO NOTHING;
 
+-- 'user' maps to 'viewer' legacy role — AI route is blocked by ViewerGuard regardless,
+-- so module.ai.use is removed to keep the permission matrix accurate.
 INSERT INTO auth_role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth_roles r
 JOIN auth_permissions p ON p.permission_key IN (
   'module.dashboard.view', 'module.projects.view', 'module.invoices.view',
-  'module.status.view', 'module.ai.use'
+  'module.status.view'
 )
 WHERE r.role_key = 'user'
 ON CONFLICT DO NOTHING;

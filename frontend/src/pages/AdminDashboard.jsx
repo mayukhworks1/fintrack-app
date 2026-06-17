@@ -4552,15 +4552,30 @@ function PermissionsTab({ searchParams, setSearchParams }) {
   const effectiveSet = new Set(user?.effective_permission_ids || [])
   const overrides = user?.overrides || {}
 
+  // Determine which modules are applicable for this user's role(s).
+  // web/web_admin users live in the WebInvoices module — they can never reach
+  // AI, Reports, Tax, Analytics, Status, Admin, System, Shared, Projects, or Dashboard
+  // via the main app. Showing those permissions in the matrix confuses admins.
+  const userRoleKeys = new Set((user?.roles || []).map(r => r.role_key))
+  const isWebExperience = userRoleKeys.has('web') || userRoleKeys.has('web_admin')
+  const WEB_APPLICABLE_MODULES = new Set(['invoices'])
+  const WEB_ADMIN_APPLICABLE_MODULES = new Set(['invoices', 'projects', 'tax'])
+
+  function isModuleApplicable(mk) {
+    if (!isWebExperience) return true
+    if (userRoleKeys.has('web_admin')) return WEB_ADMIN_APPLICABLE_MODULES.has(mk)
+    return WEB_APPLICABLE_MODULES.has(mk)
+  }
+
   const moduleGroups = MODULE_ORDER.reduce((acc, mk) => {
-    const perms = matrix.permissions.filter(p => p.module_key === mk)
+    const perms = matrix.permissions.filter(p => p.module_key === mk && isModuleApplicable(mk))
     if (perms.length > 0) acc.push({ module_key: mk, perms })
     return acc
   }, [])
   // Catch any modules not in MODULE_ORDER
   const knownModules = new Set(MODULE_ORDER)
   matrix.permissions.forEach(p => {
-    if (!knownModules.has(p.module_key)) {
+    if (!knownModules.has(p.module_key) && isModuleApplicable(p.module_key)) {
       let g = moduleGroups.find(g => g.module_key === p.module_key)
       if (!g) { g = { module_key: p.module_key, perms: [] }; moduleGroups.push(g) }
       if (!g.perms.find(x => x.id === p.id)) g.perms.push(p)
@@ -4654,6 +4669,19 @@ function PermissionsTab({ searchParams, setSearchParams }) {
               )}
             </div>
           </div>
+
+          {/* Web experience notice */}
+          {isWebExperience && (
+            <div className="rounded-xl px-4 py-2.5 text-xs flex items-start gap-2"
+              style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: 'var(--text-2)' }}>
+              <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>ℹ</span>
+              <span>
+                This user has a <strong>{userRoleKeys.has('web_admin') ? 'web_admin' : 'web'}</strong> role — they only access the{' '}
+                <strong>Web Billing module</strong> (not the main app). Only relevant permissions are shown.
+                Granting AI, Reports, Admin, or other main-app permissions here has no effect.
+              </span>
+            </div>
+          )}
 
           {/* Module filter */}
           <div className="flex flex-wrap gap-1.5">

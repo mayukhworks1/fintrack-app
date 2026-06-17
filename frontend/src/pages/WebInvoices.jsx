@@ -914,9 +914,13 @@ function InvoiceDrawer({
   canEditPicklists,
   onPicklistPermissionError,
 }) {
-  const { userEmail, authRole, isEmailAuth } = useAuth()
+  const { userEmail, authRole, isEmailAuth, hasPerm } = useAuth()
   const isEdit = Boolean(invoice?.id)
   const ownerLocked = Boolean(isEmailAuth && userEmail && !['superadmin', 'admin', 'manager', 'finance', 'web_admin'].includes(authRole))
+  const canDelete = hasPerm('module.invoices.delete')
+  const canCreate = hasPerm('module.invoices.create')
+  const canEditInvoice = hasPerm('module.invoices.edit')
+  const canPayment = hasPerm('module.invoices.payment')
   const [form,       setForm]       = useState(EMPTY_FORM)
   const [initialForm, setInitialForm] = useState(EMPTY_FORM)
   const [saving,     setSaving]     = useState(false)
@@ -1117,22 +1121,38 @@ function InvoiceDrawer({
       accent
       footer={
         <div className="flex items-center justify-between gap-3">
-          {isEdit ? (
+          {isEdit && canDelete ? (
             <button onClick={handleDelete} disabled={deleting} className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
               <Trash2 size={12} />{deleting ? 'Deleting…' : confirmDel ? 'Confirm?' : 'Delete'}
             </button>
           ) : <div />}
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Cancel</button>
-            <button
-              onClick={handleSave}
-              disabled={!saving && isEdit && !paymentOnly ? !hasFormChanges : saving}
-              className={!saving && isEdit && !paymentOnly && !hasFormChanges ? 'btn-ghost' : 'btn-primary'}
-              style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: !saving && isEdit && !paymentOnly && !hasFormChanges ? 0.62 : 1 }}
-              title={!saving && isEdit && !paymentOnly && !hasFormChanges ? 'No form changes to save' : undefined}
-            >
-              <Save size={12} />{saving ? 'Saving…' : (!paymentOnly && isEdit && !hasFormChanges) ? 'No changes' : paymentOnly ? 'Record payment' : currentRecordId ? 'Save changes' : 'Create invoice'}
-            </button>
+            {(() => {
+              const needsCreatePerm = !isEdit && !canCreate
+              const needsEditPerm   = isEdit && !paymentOnly && !canEditInvoice
+              const needsPayPerm    = isEdit && paymentOnly && !canPayment
+              if (needsCreatePerm || needsEditPerm || needsPayPerm) {
+                return (
+                  <button disabled className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: 0.5 }}
+                    title="You don't have permission to perform this action">
+                    No permission
+                  </button>
+                )
+              }
+              const noChanges = !saving && isEdit && !paymentOnly && !hasFormChanges
+              return (
+                <button
+                  onClick={handleSave}
+                  disabled={noChanges || saving}
+                  className={noChanges ? 'btn-ghost' : 'btn-primary'}
+                  style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', opacity: noChanges ? 0.62 : 1 }}
+                  title={noChanges ? 'No form changes to save' : undefined}
+                >
+                  <Save size={12} />{saving ? 'Saving…' : noChanges ? 'No changes' : paymentOnly ? 'Record payment' : currentRecordId ? 'Save changes' : 'Create invoice'}
+                </button>
+              )
+            })()}
           </div>
         </div>
       }
@@ -1637,21 +1657,20 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
         </button>
       </div>
 
-      <div className="runey-quick-action">
-        <button
-          type="button"
-          onClick={() => {
-            setWorkspace('invoices')
-            if (onNew) onNew()
-          }}
-          className={`runey-new-button ${open ? '' : 'is-collapsed'}`}
-          title={open ? undefined : 'New invoice'}
-          aria-label={open ? undefined : 'New invoice'}
-        >
-          <Plus size={open ? 15 : 18} />
-          {open && <span>New Invoice</span>}
-        </button>
-      </div>
+      {onNew && (
+        <div className="runey-quick-action">
+          <button
+            type="button"
+            onClick={() => { setWorkspace('invoices'); onNew() }}
+            className={`runey-new-button ${open ? '' : 'is-collapsed'}`}
+            title={open ? undefined : 'New invoice'}
+            aria-label={open ? undefined : 'New invoice'}
+          >
+            <Plus size={open ? 15 : 18} />
+            {open && <span>New Invoice</span>}
+          </button>
+        </div>
+      )}
 
       {/* Nav items */}
       <nav className={`runey-nav ${open ? '' : 'is-collapsed'}`}>
@@ -1716,7 +1735,8 @@ function AppSidebar({ workspace, setWorkspace, isAll, open, onToggle, onHelp, on
 /* ── Main page ── */
 export default function WebInvoices() {
   const toast = useToast()
-  const { isAll, logout } = useAuth()
+  const { isAll, logout, hasPerm } = useAuth()
+  const canCreateInvoice = hasPerm('module.invoices.create')
   const { dark } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -2444,7 +2464,7 @@ export default function WebInvoices() {
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(v => !v)}
         onHelp={() => setHelpOpen(true)}
-        onNew={openNew}
+        onNew={canCreateInvoice ? openNew : null}
       />
 
       {/* ── Content area ── */}
@@ -3197,10 +3217,12 @@ export default function WebInvoices() {
               <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-icon">
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
-              <button onClick={openNew} className="btn-primary">
-                <Plus size={14} />
-                <span>New Invoice</span>
-              </button>
+              {canCreateInvoice && (
+                <button onClick={openNew} className="btn-primary">
+                  <Plus size={14} />
+                  <span>New Invoice</span>
+                </button>
+              )}
             </div>
           </div>
           {isStaleData && (
