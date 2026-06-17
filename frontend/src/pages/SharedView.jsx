@@ -1451,8 +1451,6 @@ export default function SharedView() {
   const createdAt = data?.created_at
   const expired = isExpired(expiresAt)
 
-  const [filtersOpen, setFiltersOpen] = useState(false)
-
   return (
     <div className="min-h-screen" style={{ background: '#f1f5f9', ...accentStyle }}>
       <header className="sticky top-0 z-30" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(15,23,42,0.06)' }}>
