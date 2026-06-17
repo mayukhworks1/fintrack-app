@@ -785,12 +785,12 @@ function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEdit
 
   const actions = open && invoice ? (
     <>
-      {isEditor && f['Payment Status'] === 'Pending' && (
+      {isEditor && onRecordPayment && f['Payment Status'] === 'Pending' && (
         <button onClick={onRecordPayment} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
           <CheckCircle2 size={12} />Record Payment
         </button>
       )}
-      <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>
+      {onEdit && <button onClick={onEdit} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>Edit</button>}
     </>
   ) : null
 
@@ -1737,6 +1737,10 @@ export default function WebInvoices() {
   const toast = useToast()
   const { isAll, logout, hasPerm } = useAuth()
   const canCreateInvoice = hasPerm('module.invoices.create')
+  const canEditInvoice   = hasPerm('module.invoices.edit')
+  const canDeleteInvoice = hasPerm('module.invoices.delete')
+  const canPayInvoice    = hasPerm('module.invoices.payment')
+  const canViewInvoice   = hasPerm('module.invoices.view')
   const { dark } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -2276,6 +2280,7 @@ export default function WebInvoices() {
   }
 
   function openRetainerRecordForm(group, monthKeyValue) {
+    if (!canCreateInvoice) return
     const base = group?.latestActive?.fields || {}
     const label = monthLabel(monthKeyValue)
     setDrawer({
@@ -2302,7 +2307,7 @@ export default function WebInvoices() {
     })
   }
 
-  const openNew     = ()  => { setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
+  const openNew     = ()  => { if (!canCreateInvoice) return; setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
   const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
 
   function handlePrintInvoices() {
@@ -2395,6 +2400,7 @@ export default function WebInvoices() {
     openNew()
   }, []) // eslint-disable-line
   const openRecordPayment = r => {
+    if (!canPayInvoice) return
     setDrawerKey(k => k + 1)
     setDrawer({
       mode: 'payment',
@@ -4101,7 +4107,9 @@ export default function WebInvoices() {
                             <Receipt size={28} style={{ opacity: 0.3 }} />
                             <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
                             <p className="text-xs">Adjust your filters or{' '}
-                              <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
+                              {canCreateInvoice && (
+                                <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
+                              )}
                             </p>
                           </div>
                         </td></tr>
@@ -4185,7 +4193,7 @@ export default function WebInvoices() {
                               </td>
                               <td className="tbl-cell" onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center gap-2">
-                                  {f['Payment Status'] === 'Pending' && (
+                                  {f['Payment Status'] === 'Pending' && canPayInvoice && (
                                     <button
                                       type="button"
                                       onClick={() => openRecordPayment(r)}
@@ -4353,7 +4361,7 @@ export default function WebInvoices() {
                                         )}
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {f['Payment Status'] === 'Pending' && (
+                                        {f['Payment Status'] === 'Pending' && canPayInvoice && (
                                           <button
                                             onClick={() => openRecordPayment(r)}
                                             className="btn-ghost flex items-center gap-1.5"
@@ -4422,10 +4430,8 @@ export default function WebInvoices() {
         open={drawer?.mode === 'view'}
         invoice={drawer?.mode === 'view' ? drawer.invoice : null}
         onClose={closeDrawer}
-        onEdit={() => { setDrawerKey(k => k + 1); setDrawer({ mode: 'edit', invoice: drawer?.invoice }) }}
-        onRecordPayment={() => {
-          if (drawer?.invoice) openRecordPayment(drawer.invoice)
-        }}
+        onEdit={canEditInvoice ? () => { setDrawerKey(k => k + 1); setDrawer({ mode: 'edit', invoice: drawer?.invoice }) } : null}
+        onRecordPayment={canPayInvoice ? () => { if (drawer?.invoice) openRecordPayment(drawer.invoice) } : null}
         isEditor={true}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
         avatarMap={avatarMap}
