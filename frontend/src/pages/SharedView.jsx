@@ -688,9 +688,9 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
   const gridTemplate = [...cols.map(c => COL_WIDTHS[c] || '1fr'), '64px'].join(' ')
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
+    <div className="rounded-2xl overflow-x-auto" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
       {/* Sticky header */}
-      <div className="overflow-x-auto">
+      <div>
         <div style={{ minWidth: 900 }}>
           {/* Header row */}
           <div className="grid px-4 py-2.5 gap-3"
