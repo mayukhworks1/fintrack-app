@@ -1158,6 +1158,7 @@ export default function SharedView() {
   const [savingRecordId, setSavingRecordId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
   const [allExpanded, setAllExpanded] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const trackSharedEvent = useCallback((eventType, record, meta = {}) => {
     if (!token || !eventType || !record?.id) return
