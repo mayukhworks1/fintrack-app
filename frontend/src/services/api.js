@@ -194,6 +194,12 @@ async function _doRequest(path, options = {}, retries = 2) {
     if (res.status === 401 && token) {
       clearAuthToken()
       window.dispatchEvent(new CustomEvent('fintrack:auth-expired'))
+      // Redirect to login with message after a brief delay to allow context cleanup
+      setTimeout(() => {
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login?reason=session-expired'
+        }
+      }, 100)
     }
 
     if (!res.ok) {

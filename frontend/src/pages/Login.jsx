@@ -12,6 +12,10 @@ const OAUTH_ERROR_MESSAGES = {
   zoho_error:       'Zoho sign-in failed. Please try again or use email login.',
 }
 
+const SESSION_MESSAGES = {
+  'session-expired': 'Your session has expired. Please log in again.',
+}
+
 export default function Login() {
   const { login, acceptToken } = useAuth()
   const navigate = useNavigate()
@@ -27,6 +31,7 @@ export default function Login() {
   const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
   const [isInvite]   = useState(() => new URLSearchParams(window.location.search).get('invite') === '1')
   const [inviteEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
+  const [sessionReason] = useState(() => new URLSearchParams(window.location.search).get('reason') || '')
   const [legacyMode, setLegacyMode] = useState(false)
   const [registerMode, setRegisterMode] = useState(false)
   const [show, setShow] = useState(false)
@@ -38,6 +43,13 @@ export default function Login() {
   const [notice, setNotice] = useState('')
   const [pendingApproval, setPendingApproval] = useState(false)
   const inputRef = useRef(null)
+
+  // Show session-expired message if redirected from 401
+  useEffect(() => {
+    if (sessionReason && SESSION_MESSAGES[sessionReason]) {
+      setNotice(SESSION_MESSAGES[sessionReason])
+    }
+  }, [sessionReason])
 
   useEffect(() => {
     if (!oauthToken) inputRef.current?.focus()
