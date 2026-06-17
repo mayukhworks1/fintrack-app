@@ -12,20 +12,12 @@ from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
+from ..utils.ownership import is_record_owner
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
 
 logger = logging.getLogger("fintrack.invoices")
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
-
-
-def _owns_record(record: dict | None, scoped_email: str | None) -> bool:
-    """Case-insensitive ownership check — Teable's "Raised By" option casing
-    can differ from the normalized-lowercase login email (see resolve_raised_by)."""
-    if not scoped_email:
-        return True
-    raised_by = str((record or {}).get("fields", {}).get("Raised By") or "")
-    return raised_by.lower() == scoped_email.lower()
 
 
 def _ip(request: Request) -> str:
@@ -216,7 +208,7 @@ async def get_invoice(
         if record is None:
             record = await svc.get_invoice_from_pg(record_id)
         scoped_email = owner_scope_email(request)
-        if not _owns_record(record, scoped_email):
+        if not is_record_owner(record, scoped_email):
             raise HTTPException(status_code=404, detail="Invoice not found")
         return record
     except HTTPException:
@@ -277,7 +269,7 @@ async def update_invoice(
         if scoped_email:
             svc = InvoiceService()
             existing = await svc.get_invoice(record_id)
-            if not _owns_record(existing, scoped_email):
+            if not is_record_owner(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
             fields["Raised By"] = await svc.resolve_raised_by(scoped_email)
         _validate_amounts(fields)
@@ -301,7 +293,7 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await InvoiceService().get_invoice(record_id)
-            if not _owns_record(existing, scoped_email):
+            if not is_record_owner(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
         try:
             await record_user_attribution(request, role, record_id)
@@ -370,7 +362,7 @@ async def upload_attachment(
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await service.get_invoice(record_id)
-            if not _owns_record(existing, scoped_email):
+            if not is_record_owner(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
         content = await file.read()
         return await service.upload_attachment_to_field(

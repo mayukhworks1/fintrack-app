@@ -908,7 +908,8 @@ async def upload_avatar(
     # Cache-bust: every re-upload writes to the same path, but the file is served
     # with a 24h Cache-Control. Without a version suffix the browser would keep
     # showing the old cached bytes for this exact URL indefinitely.
-    versioned_url = f"{proxy_url}?v={int(time.time())}"
+    # Use milliseconds to handle multiple uploads in the same second.
+    versioned_url = f"{proxy_url}?v={int(time.time() * 1000)}"
 
     from ..db.postgres import get_pool
     pool = get_pool()

@@ -12,6 +12,7 @@ from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..db.postgres import get_pool
 from ..config import settings
+from ..utils.ownership import is_record_owner
 from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
@@ -468,13 +469,9 @@ async def web_aging_buckets(
 
 
 def _assert_record_owner(record: dict | None, request: Request) -> None:
+    """Assert that the requesting user owns this record, or raise 404."""
     scoped_email = owner_scope_email(request)
-    if not scoped_email:
-        return
-    # Case-insensitive — Teable's "Raised By" option casing can differ from
-    # the normalized-lowercase login email (see resolve_raised_by).
-    raised_by = str((record or {}).get("fields", {}).get("Raised By") or "")
-    if raised_by.lower() != scoped_email.lower():
+    if not is_record_owner(record, scoped_email):
         raise HTTPException(status_code=404, detail="Invoice not found")
 
 

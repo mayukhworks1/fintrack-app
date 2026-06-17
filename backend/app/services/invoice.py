@@ -41,9 +41,6 @@ INVOICE_FIELD_IDS = {
 # Single-select fields whose options we expose as picklists
 INVOICE_PICKLIST_FIELDS = {"Project", "Client Name", "Category", "Milestone", "Raised By", "Payment Status"}
 
-# ── Field name constants for Teable schema ─────────────────────────────────
-RAISED_BY_FIELD = "Raised By"
-
 logger = logging.getLogger(__name__)
 
 # ── Cache config ───────────────────────────────────────────────────────────
@@ -115,7 +112,15 @@ class InvoiceService:
         return f"{self.base_url}/api/table/{self.table_id}/field"
 
     async def get_picklists(self) -> dict[str, Any]:
-        """Return single-select options for Project, Client Name, Category, etc. directly from Teable schema."""
+        """
+        Return single-select options for Project, Client Name, Category, etc.
+        Cached for 5 minutes to avoid N+1 fetches on bulk operations.
+        """
+        cache_key = f"invoice:picklists:{self.base_url}:{self.table_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(self._field_url, headers=self._headers)
             res.raise_for_status()
@@ -126,35 +131,47 @@ class InvoiceService:
             if name in INVOICE_PICKLIST_FIELDS and field.get("type") == "singleSelect":
                 choices = field.get("options", {}).get("choices", [])
                 result[name] = [c["name"] for c in choices if c.get("name")]
+
+        cache.set(cache_key, result, ttl=300)  # 5 minute TTL
         return result
 
-    async def resolve_raised_by(self, email: str | None) -> str | None:
+    async def resolve_picklist_option(self, field_name: str, value: str | None) -> str | None:
         """
-        "Raised By" is a Teable singleSelect with a fixed list of exact-cased
-        option strings. Login emails are lowercase-normalized, but the Teable
-        option may use different casing (e.g. "Ujjawal@theworks.in") — match
-        case-insensitively and return the exact string Teable expects so the
-        write doesn't fail with "Invalid option".
+        Resolve a user value against a Teable singleSelect field's options,
+        matching case-insensitively and returning the exact-cased option string
+        that Teable expects. Prevents "Invalid option" errors when user input
+        casing differs from the schema (e.g., "ujjawal@theworks.in" vs "Ujjawal@theworks.in").
+
+        Args:
+            field_name: Name of the singleSelect field in Teable (e.g., "Raised By")
+            value: User-provided value to resolve
+
+        Returns:
+            Exact-cased option string if found, otherwise the original value
         """
-        if not email:
-            return email
+        if not value:
+            return value
         try:
             picklists = await self.get_picklists()
-            options = picklists.get(RAISED_BY_FIELD) or []
+            options = picklists.get(field_name) or []
             if not options:
-                logger.warning(f"resolve_raised_by: no '{RAISED_BY_FIELD}' options in Teable picklist")
-                return email
-            email_lc = email.lower()
-            matches = [opt for opt in options if opt.lower() == email_lc]
+                logger.warning(f"resolve_picklist_option: no '{field_name}' options in Teable picklist")
+                return value
+            value_lc = value.lower()
+            matches = [opt for opt in options if opt.lower() == value_lc]
             if not matches:
-                logger.debug(f"resolve_raised_by: no case-insensitive match for '{email}' in Teable options")
-                return email
+                logger.debug(f"resolve_picklist_option: no case-insensitive match for '{value}' in '{field_name}' options")
+                return value
             if len(matches) > 1:
-                logger.warning(f"resolve_raised_by: multiple case-insensitive matches for '{email}': {matches}, using first: {matches[0]}")
+                logger.warning(f"resolve_picklist_option: multiple case-insensitive matches for '{value}' in '{field_name}': {matches}, using first: {matches[0]}")
             return matches[0]
         except Exception as e:
-            logger.error(f"resolve_raised_by: failed to resolve '{email}': {e}", exc_info=True)
-            return email
+            logger.error(f"resolve_picklist_option: failed to resolve '{value}' in '{field_name}': {e}", exc_info=True)
+            return value
+
+    async def resolve_raised_by(self, email: str | None) -> str | None:
+        """Backward-compat wrapper for resolve_picklist_option("Raised By", email)."""
+        return await self.resolve_picklist_option("Raised By", email)
 
     def _system_actor(self, path: str) -> dict[str, Any]:
         actor = empty_actor()

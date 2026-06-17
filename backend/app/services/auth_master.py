@@ -905,7 +905,8 @@ async def _mirror_sso_avatar_to_hf(user_id: str, picture_url: str) -> None:
         path_in_repo = f"profiles/{user_id}/avatar.{ext}"
         from .storage import upload_bytes
         hf_url = await upload_bytes(data, path_in_repo, content_type)
-        versioned_url = f"{hf_url}?v={int(time.time())}"  # cache-bust — see auth.py upload_avatar
+        # cache-bust with milliseconds precision — see auth.py upload_avatar
+        versioned_url = f"{hf_url}?v={int(time.time() * 1000)}"
         pool = get_pool()
         if pool:
             # Defense in depth — never clobber an avatar the user uploaded themselves,

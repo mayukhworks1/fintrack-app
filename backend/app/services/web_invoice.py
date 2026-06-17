@@ -43,9 +43,6 @@ _TTL_ALL     = 30
 _TTL_SUMMARY = 30
 logger = logging.getLogger("fintrack.web_invoices")
 
-# ── Field name constants for Teable schema ─────────────────────────────────
-RAISED_BY_FIELD = "Raised By"
-
 def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
 
@@ -123,58 +120,74 @@ class WebInvoiceService:
     PICKLIST_FIELDS = ["Project", "Category", "Milestone", "Raised By", "Currency"]
 
     async def get_picklists(self) -> dict:
-        """Fetch current options for all single-select fields from Teable."""
-        async def _load():
-            async with httpx.AsyncClient(timeout=10) as client:
-                res = await client.get(self._field_url, headers=self._headers)
-                res.raise_for_status()
-                fields = res.json()
-
-            result = {}
-            for field in fields:
-                name = field.get("name", "")
-                if name in self.PICKLIST_FIELDS and field.get("type") == "singleSelect":
-                    choices = field.get("options", {}).get("choices", [])
-                    result[name] = {
-                        "field_id": field.get("id"),
-                        "options": [c["name"] for c in choices],
-                        # Preserve full choice objects (id+name) needed for PATCH
-                        "_choices": choices,
-                        "_field": field,
-                    }
-            return result
-
-        # No cache — always live from Teable so new options added in Teable
-        # (or via the form's + button) appear immediately on the next open.
-        return await _load()
-
-    async def resolve_raised_by(self, email: str | None) -> str | None:
         """
-        "Raised By" is a Teable singleSelect with a fixed list of exact-cased
-        option strings. Login emails are lowercase-normalized, but the Teable
-        option may use different casing (e.g. "Ujjawal@theworks.in") — match
-        case-insensitively and return the exact string Teable expects so the
-        write doesn't fail with "Invalid option".
+        Fetch current options for all single-select fields from Teable.
+        Cached for 30 seconds to avoid N+1 fetches on bulk operations,
+        while still allowing new options to appear within 30 seconds.
         """
-        if not email:
-            return email
+        cache_key = f"webinv:picklists:{self.base_url}:{self.table_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(self._field_url, headers=self._headers)
+            res.raise_for_status()
+            fields = res.json()
+
+        result = {}
+        for field in fields:
+            name = field.get("name", "")
+            if name in self.PICKLIST_FIELDS and field.get("type") == "singleSelect":
+                choices = field.get("options", {}).get("choices", [])
+                result[name] = {
+                    "field_id": field.get("id"),
+                    "options": [c["name"] for c in choices],
+                    # Preserve full choice objects (id+name) needed for PATCH
+                    "_choices": choices,
+                    "_field": field,
+                }
+
+        cache.set(cache_key, result, ttl=30)  # 30 second TTL for bulk ops
+        return result
+
+    async def resolve_picklist_option(self, field_name: str, value: str | None) -> str | None:
+        """
+        Resolve a user value against a Teable singleSelect field's options,
+        matching case-insensitively and returning the exact-cased option string
+        that Teable expects. Prevents "Invalid option" errors when user input
+        casing differs from the schema (e.g., "ujjawal@theworks.in" vs "Ujjawal@theworks.in").
+
+        Args:
+            field_name: Name of the singleSelect field in Teable (e.g., "Raised By")
+            value: User-provided value to resolve
+
+        Returns:
+            Exact-cased option string if found, otherwise the original value
+        """
+        if not value:
+            return value
         try:
             picklists = await self.get_picklists()
-            options = picklists.get(RAISED_BY_FIELD, {}).get("options") or []
+            options = picklists.get(field_name, {}).get("options") or []
             if not options:
-                logger.warning(f"resolve_raised_by: no '{RAISED_BY_FIELD}' options in Teable picklist")
-                return email
-            email_lc = email.lower()
-            matches = [opt for opt in options if opt.lower() == email_lc]
+                logger.warning(f"resolve_picklist_option: no '{field_name}' options in Teable picklist")
+                return value
+            value_lc = value.lower()
+            matches = [opt for opt in options if opt.lower() == value_lc]
             if not matches:
-                logger.debug(f"resolve_raised_by: no case-insensitive match for '{email}' in Teable options")
-                return email
+                logger.debug(f"resolve_picklist_option: no case-insensitive match for '{value}' in '{field_name}' options")
+                return value
             if len(matches) > 1:
-                logger.warning(f"resolve_raised_by: multiple case-insensitive matches for '{email}': {matches}, using first: {matches[0]}")
+                logger.warning(f"resolve_picklist_option: multiple case-insensitive matches for '{value}' in '{field_name}': {matches}, using first: {matches[0]}")
             return matches[0]
         except Exception as e:
-            logger.error(f"resolve_raised_by: failed to resolve '{email}': {e}", exc_info=True)
-            return email
+            logger.error(f"resolve_picklist_option: failed to resolve '{value}' in '{field_name}': {e}", exc_info=True)
+            return value
+
+    async def resolve_raised_by(self, email: str | None) -> str | None:
+        """Backward-compat wrapper for resolve_picklist_option("Raised By", email)."""
+        return await self.resolve_picklist_option("Raised By", email)
 
     def _field_convert_payload(self, field: dict, updated_choices: list[dict]) -> dict:
         payload = {
