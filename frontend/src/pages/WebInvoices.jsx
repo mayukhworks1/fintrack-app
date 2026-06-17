@@ -435,7 +435,7 @@ function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact 
       }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{label}</p>
+          <p className="text-[11px] font-semibold uppercase" style={{ color: 'var(--text-3)', letterSpacing: '0.1em', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}</p>
           {currencyMatch ? (
             <div
               className="mt-2 inline-flex items-end gap-1 font-bold tracking-tight min-w-0"

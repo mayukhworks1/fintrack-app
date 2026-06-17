@@ -277,13 +277,11 @@ async def create_status(
     if not fields.get("Client") or not fields.get("Project"):
         raise HTTPException(status_code=422, detail="client and project are required")
     try:
-        options = await svc.get_client_project_options()
-        known_clients = set(options.get("clients") or [])
-        known_projects = set(options.get("projects") or [])
-        if known_clients and fields["Client"] not in known_clients:
-            raise HTTPException(status_code=422, detail="Select a valid existing client from the status list")
-        if known_projects and fields["Project"] not in known_projects:
-            raise HTTPException(status_code=422, detail="Select a valid existing project from the status list")
+        # Client/Project are free-text Teable fields. We intentionally do NOT
+        # reject values that aren't already present in existing status records —
+        # doing so made it impossible to ever create the FIRST status for a new
+        # client or project (chicken-and-egg). The UI suggests existing values
+        # via a datalist to encourage reuse, but new entries are allowed.
         result = await svc.create_record(fields, request=request, role=role)
         await _bust_status_cache()
         return result
@@ -313,13 +311,7 @@ async def update_status(
     if not fields:
         raise HTTPException(status_code=422, detail="No fields provided to update")
     try:
-        options = await svc.get_client_project_options()
-        known_clients = set(options.get("clients") or [])
-        known_projects = set(options.get("projects") or [])
-        if "Client" in fields and known_clients and fields["Client"] not in known_clients:
-            raise HTTPException(status_code=422, detail="Select a valid existing client from the status list")
-        if "Project" in fields and known_projects and fields["Project"] not in known_projects:
-            raise HTTPException(status_code=422, detail="Select a valid existing project from the status list")
+        # See create_status: Client/Project are free-text; new values are allowed.
         result = await svc.update_record(record_id, fields, request=request, role=role)
         await _bust_status_cache()
         return result

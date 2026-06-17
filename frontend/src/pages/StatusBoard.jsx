@@ -1038,34 +1038,39 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
         <form onSubmit={e => { e.preventDefault(); if (form.client && form.project) onSave(form) }}
           className="px-5 py-4 space-y-4">
 
-          {/* Client + Project */}
+          {/* Client + Project — editable comboboxes: pick an existing value or type a new one */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Client <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <select
+              <input
                 className="input-field w-full text-sm"
+                list="status-client-options"
                 value={form.client}
-                onChange={e => setForm(f => ({ ...f, client: e.target.value, project: '' }))}
-                required>
-                <option value="">Select client…</option>
-                {allClients.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+                placeholder="Select or type a client…"
+                autoComplete="off"
+                required />
+              <datalist id="status-client-options">
+                {allClients.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
                 Project <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <select
+              <input
                 className="input-field w-full text-sm"
+                list="status-project-options"
                 value={form.project}
                 onChange={e => set('project', e.target.value)}
-                required
-                disabled={!projectOptions.length}>
-                <option value="">{form.client ? 'Select project…' : 'Select client first…'}</option>
-                {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+                placeholder="Select or type a project…"
+                autoComplete="off"
+                required />
+              <datalist id="status-project-options">
+                {projectOptions.map(p => <option key={p} value={p} />)}
+              </datalist>
             </div>
           </div>
 
