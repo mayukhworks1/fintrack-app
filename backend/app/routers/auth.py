@@ -598,11 +598,21 @@ async def verify(authorization: str | None = Header(default=None)):
                     row["session_id"],
                 )
                 auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
+                user_id_str = str(row["user_id"])
+                # Fetch effective permissions for this user (union of role defaults + overrides)
+                permissions: list[str] = []
+                try:
+                    from .deps import get_effective_permissions
+                    perm_set = await get_effective_permissions(user_id_str)
+                    permissions = sorted(perm_set)
+                except Exception:
+                    pass
                 payload.update({
                     "auth_role": auth_role,
                     "session_id": str(row["session_id"]),
+                    "permissions": permissions,
                     "user": {
-                        "id": str(row["user_id"]),
+                        "id": user_id_str,
                         "email": row["email"],
                         "full_name": row["full_name"],
                         "status": row["status"],

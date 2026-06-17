@@ -65,16 +65,16 @@ function BrandIcon({ size = 28 }) {
   )
 }
 
-// roles that can see each nav item
+// roles that can see each nav item; perm = permission key required (null = always show)
 const NAV_ITEMS = [
-  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true,  roles: ['editor','viewer'] },
-  { to: '/projects',  label: 'Projects',     icon: FolderKanban,                roles: ['editor','viewer'] },
-  { to: '/invoices',  label: 'Invoices',     icon: Receipt,                     roles: ['editor','viewer'] },
-  { to: '/tax',       label: 'Tax Ledger',   icon: Landmark,                    roles: ['editor'] },
-  { to: '/analytics', label: 'Analytics',    icon: BarChart3,                   roles: ['editor','viewer'] },
-  { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText,           roles: ['editor'] },
-  { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'] },
-  { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'] },
+  { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true,  roles: ['editor','viewer'], perm: 'module.dashboard.view' },
+  { to: '/projects',  label: 'Projects',     icon: FolderKanban,                roles: ['editor','viewer'], perm: 'module.projects.view' },
+  { to: '/invoices',  label: 'Invoices',     icon: Receipt,                     roles: ['editor','viewer'], perm: 'module.invoices.view' },
+  { to: '/tax',       label: 'Tax Ledger',   icon: Landmark,                    roles: ['editor'],          perm: 'module.tax.view' },
+  { to: '/analytics', label: 'Analytics',    icon: BarChart3,                   roles: ['editor','viewer'], perm: 'module.analytics.view' },
+  { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText,           roles: ['editor'],          perm: 'module.ai.use' },
+  { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'],          perm: 'module.reports.view' },
+  { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'], perm: 'module.status.view' },
 ]
 
 function OfflineBanner({ collapsed }) {
@@ -102,8 +102,11 @@ function OfflineBanner({ collapsed }) {
 
 function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
-  const { logout, isEditor, isViewer, role, user } = useAuth()
-  const visibleNav = NAV_ITEMS.filter(item => item.roles.includes(role))
+  const { logout, isEditor, isViewer, role, user, hasPerm } = useAuth()
+  // Filter by role first; then split into accessible vs permission-restricted
+  const roleNav = NAV_ITEMS.filter(item => item.roles.includes(role))
+  const visibleNav = roleNav.filter(item => !item.perm || hasPerm(item.perm))
+  const restrictedNav = roleNav.filter(item => item.perm && !hasPerm(item.perm))
 
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'My Account'
   const initials = user?.full_name
@@ -189,6 +192,25 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
               </>
             )}
           </NavLink>
+        ))}
+
+        {/* Permission-restricted nav items — shown dimmed with tooltip */}
+        {restrictedNav.length > 0 && restrictedNav.map(({ to, label, icon: Icon }) => (
+          <div
+            key={to}
+            title={`${label} — not available with your current permissions`}
+            aria-label={`${label} — access restricted`}
+            className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
+            style={{ opacity: 0.38, cursor: 'not-allowed', pointerEvents: 'auto' }}
+          >
+            <Icon size={15} aria-hidden="true" style={{ flexShrink: 0 }} />
+            {!collapsed && (
+              <span className="flex-1 truncate font-medium">{label}</span>
+            )}
+            {!collapsed && (
+              <span style={{ fontSize: '0.6rem', color: 'var(--text-3)', flexShrink: 0 }}>No access</span>
+            )}
+          </div>
         ))}
 
         {/* Admin — editor role only */}

@@ -1359,6 +1359,8 @@ export default function Invoices() {
   const [followupDueOnly,setFollowupDueOnly]= useState(false)
   const [showFilters,    setShowFilters]    = useState(false)
   const [filterConditions, setFilterConditions] = useState([])
+  const [tablePage,      setTablePage]      = useState(0)
+  const TABLE_PAGE_SIZE = 50
   const [sortCol,        setSortCol]        = useState('Raised Date')
   const [sortDir,        setSortDir]        = useState('desc')
   const [showExportMenu, setShowExportMenu] = useState(false)
@@ -1670,6 +1672,8 @@ export default function Invoices() {
     () => applyConditions(scopedRecords, filterConditions, r => r.fields ?? {}),
     [filterConditions, scopedRecords]
   )
+  // Reset to page 0 whenever the filtered set changes
+  useEffect(() => { setTablePage(0) }, [records])
 
   const s = summary
   const agingBuckets = useMemo(() => {
@@ -3377,7 +3381,8 @@ export default function Invoices() {
                         compact
                       />
                     </td></tr>
-                  : records.map((r, rowIndex) => {
+                  : records.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE).map((r, rowIndex) => {
+                      const globalIndex = tablePage * TABLE_PAGE_SIZE + rowIndex
                       const f = r.fields || {}
                       const outstanding = Number(f['Outstanding Amount'] || 0)
                       const refs = parseAttachments(f['Reference'])
@@ -3402,7 +3407,7 @@ export default function Invoices() {
                           className="tbl-row"
                           style={{
                             cursor: 'pointer',
-                            background: isHovered ? 'var(--table-row-hover)' : rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
+                            background: isHovered ? 'var(--table-row-hover)' : globalIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',
                             borderLeft: isHovered ? `3px solid ${accentColor}` : '3px solid transparent',
                             boxShadow: isHovered ? 'var(--table-row-shadow)' : 'none',
                             transition: 'background-color 250ms cubic-bezier(0.4,0,0.2,1), border-color 250ms cubic-bezier(0.4,0,0.2,1), box-shadow 250ms cubic-bezier(0.4,0,0.2,1)',
@@ -3413,7 +3418,7 @@ export default function Invoices() {
 
                           <td className="tbl-cell" style={{ width: columnWidths.row }}>
                             <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
-                              {rowIndex + 1}
+                              {globalIndex + 1}
                             </span>
                           </td>
 
@@ -3713,7 +3718,42 @@ export default function Invoices() {
             </tbody>
           </table>
         </div>
-        {/* ── Totals row — sum of all currently filtered invoices ── */}
+        {/* ── Table pagination ── */}
+        {records.length > TABLE_PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-2 border-t text-xs"
+            style={{ borderColor: 'var(--card-border)', background: 'var(--bg-input)' }}>
+            <span style={{ color: 'var(--text-3)' }}>
+              {tablePage * TABLE_PAGE_SIZE + 1}–{Math.min((tablePage + 1) * TABLE_PAGE_SIZE, records.length)} of {records.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setTablePage(p => Math.max(0, p - 1))}
+                disabled={tablePage === 0}
+                className="btn-icon p-1 text-xs"
+                style={{ opacity: tablePage === 0 ? 0.35 : 1 }}
+                aria-label="Previous page"
+              >‹</button>
+              {Array.from({ length: Math.ceil(records.length / TABLE_PAGE_SIZE) }, (_, i) => i)
+                .filter(i => Math.abs(i - tablePage) <= 2)
+                .map(i => (
+                  <button key={i} onClick={() => setTablePage(i)}
+                    className={i === tablePage ? 'btn-primary' : 'btn-ghost'}
+                    style={{ minWidth: 28, padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}>
+                    {i + 1}
+                  </button>
+                ))}
+              <button
+                onClick={() => setTablePage(p => Math.min(Math.ceil(records.length / TABLE_PAGE_SIZE) - 1, p + 1))}
+                disabled={(tablePage + 1) * TABLE_PAGE_SIZE >= records.length}
+                className="btn-icon p-1 text-xs"
+                style={{ opacity: (tablePage + 1) * TABLE_PAGE_SIZE >= records.length ? 0.35 : 1 }}
+                aria-label="Next page"
+              >›</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Totals row — sum of ALL currently filtered invoices (not just current page) ── */}
         {records.length > 0 && (() => {
           const totalRaised    = records.reduce((s, r) => s + Number(r.fields?.['Amount Raised']    || 0), 0)
           const totalWithTax   = records.reduce((s, r) => s + Number(r.fields?.['Amount with Tax']  || 0), 0)

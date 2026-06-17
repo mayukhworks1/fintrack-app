@@ -6,6 +6,7 @@ const AuthContext = createContext(null)
 const ROLE_KEY = 'fintrack-auth-role'
 const USER_KEY = 'fintrack-auth-user'
 const AUTH_ROLE_KEY = 'fintrack-auth-master-role'
+const PERMS_KEY = 'fintrack-auth-permissions'
 
 function getStoredRole() {
   try { return localStorage.getItem(ROLE_KEY) || 'editor' } catch { return 'editor' }
@@ -38,6 +39,32 @@ export function AuthProvider({ children }) {
     try { return localStorage.getItem(AUTH_ROLE_KEY) || '' } catch { return '' }
   })
   const [user, setUser] = useState(() => getStoredJson(USER_KEY, null))
+  // Set of effective permission keys for email-auth users; null = not loaded (legacy/anonymous)
+  const [permissions, setPermissions] = useState(() => {
+    const stored = getStoredJson(PERMS_KEY, null)
+    return Array.isArray(stored) ? new Set(stored) : null
+  })
+
+  function _applyVerifyResponse(res) {
+    const r = res?.role || 'editor'
+    setRole(r)
+    setStoredRole(r)
+    setAuthRole(res?.auth_role || '')
+    setStoredJson(USER_KEY, res?.user || null)
+    try {
+      if (res?.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
+      else localStorage.removeItem(AUTH_ROLE_KEY)
+    } catch {}
+    setUser(res?.user || null)
+    if (Array.isArray(res?.permissions)) {
+      const pset = new Set(res.permissions)
+      setPermissions(pset)
+      setStoredJson(PERMS_KEY, res.permissions)
+    } else {
+      setPermissions(null)
+      setStoredJson(PERMS_KEY, null)
+    }
+  }
 
   // Verify stored token on mount — also refreshes the role from server
   useEffect(() => {
@@ -47,22 +74,14 @@ export function AuthProvider({ children }) {
       try {
         const res = await api.auth.verify()
         if (!cancelled) {
-          const r = res?.role || 'editor'
-          setRole(r)
-          setStoredRole(r)
-          setAuthRole(res?.auth_role || '')
-          setStoredJson(USER_KEY, res?.user || null)
-          try {
-            if (res?.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
-            else localStorage.removeItem(AUTH_ROLE_KEY)
-          } catch {}
-          setUser(res?.user || null)
+          _applyVerifyResponse(res)
           setStatus('authed')
         }
       } catch {
         clearAuthToken()
         setStoredRole(null)
         setStoredJson(USER_KEY, null)
+        setStoredJson(PERMS_KEY, null)
         try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
         if (!cancelled) setStatus('unauthed')
       }
@@ -75,9 +94,11 @@ export function AuthProvider({ children }) {
     const onExpired = () => {
       setStoredRole(null)
       setStoredJson(USER_KEY, null)
+      setStoredJson(PERMS_KEY, null)
       try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
       setUser(null)
       setAuthRole('')
+      setPermissions(null)
       setStatus('unauthed')
     }
     window.addEventListener('fintrack:auth-expired', onExpired)
@@ -92,16 +113,7 @@ export function AuthProvider({ children }) {
       : await api.auth.login(password)
     if (!res?.token) throw new Error('Login failed')
     setAuthToken(res.token)
-    const r = res.role || 'editor'
-    setRole(r)
-    setStoredRole(r)
-    setAuthRole(res.auth_role || '')
-    setUser(res.user || null)
-    setStoredJson(USER_KEY, res.user || null)
-    try {
-      if (res.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
-      else localStorage.removeItem(AUTH_ROLE_KEY)
-    } catch {}
+    _applyVerifyResponse(res)
     setStatus('authed')
   }, [])
 
@@ -110,25 +122,18 @@ export function AuthProvider({ children }) {
     try {
       setAuthToken(token)
       const res = await api.auth.verify()
-      const r = res?.role || 'editor'
-      setRole(r)
-      setStoredRole(r)
-      setAuthRole(res?.auth_role || '')
-      setUser(res?.user || null)
-      setStoredJson(USER_KEY, res?.user || null)
-      try {
-        if (res?.auth_role) localStorage.setItem(AUTH_ROLE_KEY, res.auth_role)
-        else localStorage.removeItem(AUTH_ROLE_KEY)
-      } catch {}
+      _applyVerifyResponse(res)
       setStatus('authed')
       return res
     } catch (err) {
       clearAuthToken()
       setStoredRole(null)
       setStoredJson(USER_KEY, null)
+      setStoredJson(PERMS_KEY, null)
       try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
       setAuthRole('')
       setUser(null)
+      setPermissions(null)
       setStatus('unauthed')
       throw err
     }
@@ -143,19 +148,25 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
-    // Fire server-side session invalidation first (fire-and-forget).
-    // The backend marks is_active=false so the admin panel shows "Logged out"
-    // rather than "Idle/Valid" for the rest of the 7-day token TTL.
-    api.auth.logout().catch(() => {})  // never block logout on network failure
+    api.auth.logout().catch(() => {})
     clearAuthToken()
     setStoredRole(null)
     setStoredJson(USER_KEY, null)
+    setStoredJson(PERMS_KEY, null)
     try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
     setRole('editor')
     setAuthRole('')
     setUser(null)
+    setPermissions(null)
     setStatus('unauthed')
   }, [])
+
+  // Helper: check if a permission key is granted.
+  // Returns true for legacy/non-email sessions (backwards-compatible).
+  const hasPerm = useCallback((key) => {
+    if (permissions === null) return true  // legacy session — no restriction
+    return permissions.has(key)
+  }, [permissions])
 
   return (
     <AuthContext.Provider value={{
@@ -163,6 +174,8 @@ export function AuthProvider({ children }) {
       role,
       authRole,
       user,
+      permissions,
+      hasPerm,
       userEmail: user?.email || '',
       isEmailAuth: Boolean(user?.email),
       isEditor: role === 'editor',

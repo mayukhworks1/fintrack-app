@@ -4575,12 +4575,27 @@ function PermissionsTab({ searchParams, setSearchParams }) {
         <div className="flex items-start justify-between gap-3 mb-1">
           <div>
             <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>Permission Matrix</h2>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+            <p className="text-xs mt-0.5 mb-2" style={{ color: 'var(--text-3)' }}>
               Grant or revoke specific permissions per user. Overrides apply on top of role defaults.
-              <span className="ml-2 font-semibold" style={{ color: 'var(--accent)' }}>Role default</span>
-              <span className="ml-2 font-semibold" style={{ color: '#22c55e' }}>Granted override</span>
-              <span className="ml-2 font-semibold" style={{ color: '#ef4444' }}>Denied override</span>
             </p>
+            <div className="flex flex-wrap gap-3 text-[10px]">
+              <span className="flex items-center gap-1.5">
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'var(--accent)', flexShrink:0 }} />
+                <span style={{ color:'var(--text-2)' }}>Role default (granted)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'#22c55e', flexShrink:0 }} />
+                <span style={{ color:'var(--text-2)' }}>Override: granted</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'#ef4444', flexShrink:0 }} />
+                <span style={{ color:'var(--text-2)' }}>Override: denied</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'var(--border)', flexShrink:0 }} />
+                <span style={{ color:'var(--text-2)' }}>Not granted</span>
+              </span>
+            </div>
           </div>
           <button onClick={load} className="btn-ghost text-xs">Refresh</button>
         </div>
@@ -4610,6 +4625,36 @@ function PermissionsTab({ searchParams, setSearchParams }) {
 
       {user && (
         <>
+          {/* User role + permission summary strip */}
+          <div className="card p-3 sm:p-4 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <UserAvatar row={user} size={32} />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>{user.name || user.email}</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                  {user.roles.length > 0
+                    ? `Role: ${user.roles.map(r => r.role_key).join(', ')}`
+                    : 'No role assigned'}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[10px]">
+              <span style={{ background: 'rgba(34,197,94,0.1)', color: '#16a34a', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+                {user.effective_permission_ids?.length || 0} permissions effective
+              </span>
+              {Object.keys(user.overrides || {}).length > 0 && (
+                <span style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+                  {Object.keys(user.overrides).length} override{Object.keys(user.overrides).length !== 1 ? 's' : ''}
+                </span>
+              )}
+              {user.roles.length === 0 && (
+                <span style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+                  ⚠ No role — all permissions will be inherited from overrides only
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Module filter */}
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => setModuleFilter('all')}
@@ -4636,20 +4681,49 @@ function PermissionsTab({ searchParams, setSearchParams }) {
                     const isGranted = effectiveSet.has(perm.id)
                     const hasOverride = perm.id in overrides
                     const overrideVal = overrides[perm.id]
+                    const isRoleDefault = roleDefaultGranted(user, perm.id)
                     const bKey = `${user.id}:${perm.permission_key}`
                     const isBusy = !!busy[bKey]
                     const actionColor = ACTION_COLORS[perm.action_key] || 'var(--accent)'
 
+                    // 3-state toggle color:
+                    // override-deny (red) > override-grant (green) > role-default (accent) > not-granted (border)
+                    let toggleBg = 'var(--border)'
+                    let toggleTitle = 'Click to grant'
+                    if (hasOverride && !overrideVal) {
+                      toggleBg = '#ef4444'
+                      toggleTitle = 'Denied by override — click to grant'
+                    } else if (hasOverride && overrideVal) {
+                      toggleBg = '#22c55e'
+                      toggleTitle = 'Granted by override — click to deny'
+                    } else if (isGranted) {
+                      toggleBg = 'var(--accent)'
+                      toggleTitle = 'Granted by role — click to override-deny'
+                    }
+
+                    // Source label shown inline
+                    let sourceLabel = ''
+                    if (hasOverride && !overrideVal) sourceLabel = 'denied'
+                    else if (hasOverride && overrideVal) sourceLabel = 'override'
+                    else if (isGranted) sourceLabel = 'role'
+
                     return (
                       <div key={perm.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2"
-                        style={{ background: 'var(--bg-input)', border: `1px solid var(--border)` }}>
+                        style={{
+                          background: 'var(--bg-input)',
+                          border: hasOverride
+                            ? `1px solid ${overrideVal ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`
+                            : '1px solid var(--border)',
+                        }}>
                         <div className="min-w-0">
                           <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{perm.label}</p>
                           <p className="text-[10px]" style={{ color: actionColor }}>
                             {perm.action_key}
-                            {hasOverride && (
-                              <span className="ml-1.5" style={{ color: overrideVal ? '#22c55e' : '#ef4444' }}>
-                                · override {overrideVal ? '(granted)' : '(denied)'}
+                            {sourceLabel && (
+                              <span className="ml-1.5 font-semibold" style={{
+                                color: hasOverride && !overrideVal ? '#ef4444' : hasOverride ? '#22c55e' : 'var(--accent)'
+                              }}>
+                                · {sourceLabel}
                               </span>
                             )}
                           </p>
@@ -4659,7 +4733,7 @@ function PermissionsTab({ searchParams, setSearchParams }) {
                             <button
                               onClick={() => clearOverride(user.id, perm.permission_key, perm.id, overrideVal)}
                               disabled={isBusy}
-                              title="Clear override (revert to role default)"
+                              title={`Clear override — revert to role ${isRoleDefault ? 'default (granted)' : 'default (not granted)'}`}
                               className="text-[10px] px-1.5 py-0.5 rounded"
                               style={{ background: 'var(--border)', color: 'var(--text-3)', opacity: isBusy ? 0.5 : 1 }}>
                               reset
@@ -4671,13 +4745,13 @@ function PermissionsTab({ searchParams, setSearchParams }) {
                             className="relative flex-shrink-0 rounded-full"
                             style={{
                               width: 36, height: 20,
-                              background: isGranted ? '#22c55e' : 'var(--border)',
+                              background: toggleBg,
                               opacity: isBusy ? 0.6 : 1,
                               cursor: isBusy ? 'wait' : 'pointer',
                               border: 'none',
                               transition: 'background-color 150ms ease, opacity 150ms ease',
                             }}
-                            title={isGranted ? 'Click to deny' : 'Click to grant'}
+                            title={toggleTitle}
                           >
                             <span style={{
                               position: 'absolute', top: 2, left: isGranted ? 18 : 2,
