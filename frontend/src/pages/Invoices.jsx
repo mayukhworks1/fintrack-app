@@ -1413,7 +1413,7 @@ export default function Invoices() {
       ...opts,
     }), [sortCol, sortDir])
 
-  const { data: listData, loading, error, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
+  const { data: listData, loading, error, errorStatus, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const [recordsState, setRecordsState] = useState([])
   const isStaleData = listData?._stale === true
   useEffect(() => {
@@ -3135,7 +3135,21 @@ export default function Invoices() {
       </ExecutivePanel>
 
       {/* ── Error ── */}
-      {error && (
+      {errorStatus === 403 ? (
+        <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-2xl text-center"
+          style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.15)' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(248,113,113,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <AlertTriangle size={22} style={{ color: '#f87171' }} />
+          </div>
+          <div>
+            <div className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Access Restricted</div>
+            <div className="text-xs" style={{ color: 'var(--text-3)' }}>
+              You don't have permission to view invoices.<br />
+              Please contact your administrator to request access.
+            </div>
+          </div>
+        </div>
+      ) : error && (
         <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs"
           style={{ background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.18)', color: '#f87171' }}>
           <AlertTriangle size={13} className="shrink-0" />

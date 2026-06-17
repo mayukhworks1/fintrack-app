@@ -145,6 +145,26 @@ class WebInvoiceService:
         # (or via the form's + button) appear immediately on the next open.
         return await _load()
 
+    async def resolve_raised_by(self, email: str | None) -> str | None:
+        """
+        "Raised By" is a Teable singleSelect with a fixed list of exact-cased
+        option strings. Login emails are lowercase-normalized, but the Teable
+        option may use different casing (e.g. "Ujjawal@theworks.in") — match
+        case-insensitively and return the exact string Teable expects so the
+        write doesn't fail with "Invalid option".
+        """
+        if not email:
+            return email
+        try:
+            options = (await self.get_picklists()).get("Raised By", {}).get("options") or []
+            email_lc = email.lower()
+            for opt in options:
+                if opt.lower() == email_lc:
+                    return opt
+        except Exception:
+            pass
+        return email
+
     def _field_convert_payload(self, field: dict, updated_choices: list[dict]) -> dict:
         payload = {
             "type": field["type"],

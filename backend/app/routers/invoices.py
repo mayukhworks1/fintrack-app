@@ -19,6 +19,15 @@ logger = logging.getLogger("fintrack.invoices")
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
 
+def _owns_record(record: dict | None, scoped_email: str | None) -> bool:
+    """Case-insensitive ownership check — Teable's "Raised By" option casing
+    can differ from the normalized-lowercase login email (see resolve_raised_by)."""
+    if not scoped_email:
+        return True
+    raised_by = str((record or {}).get("fields", {}).get("Raised By") or "")
+    return raised_by.lower() == scoped_email.lower()
+
+
 def _ip(request: Request) -> str:
     for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
         v = request.headers.get(h, "")
@@ -207,7 +216,7 @@ async def get_invoice(
         if record is None:
             record = await svc.get_invoice_from_pg(record_id)
         scoped_email = owner_scope_email(request)
-        if scoped_email and (record or {}).get("fields", {}).get("Raised By") != scoped_email:
+        if not _owns_record(record, scoped_email):
             raise HTTPException(status_code=404, detail="Invoice not found")
         return record
     except HTTPException:
@@ -237,7 +246,7 @@ async def create_invoice(body: InvoiceFields, request: Request, role: str = Depe
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
-            fields["Raised By"] = scoped_email
+            fields["Raised By"] = await InvoiceService().resolve_raised_by(scoped_email)
         _validate_amounts(fields)
         _validate_paid_invoice(fields)
         result = await InvoiceService().create_invoice(fields)
@@ -266,10 +275,11 @@ async def update_invoice(
         fields = body.to_teable_fields(include_null_fields={"Raised Date", "Cleared Date", "Next followup"})
         scoped_email = owner_scope_email(request)
         if scoped_email:
-            existing = await InvoiceService().get_invoice(record_id)
-            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+            svc = InvoiceService()
+            existing = await svc.get_invoice(record_id)
+            if not _owns_record(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
-            fields["Raised By"] = scoped_email
+            fields["Raised By"] = await svc.resolve_raised_by(scoped_email)
         _validate_amounts(fields)
         _validate_paid_invoice(fields)
         try:
@@ -291,7 +301,7 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await InvoiceService().get_invoice(record_id)
-            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+            if not _owns_record(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
         try:
             await record_user_attribution(request, role, record_id)
@@ -360,7 +370,7 @@ async def upload_attachment(
         scoped_email = owner_scope_email(request)
         if scoped_email:
             existing = await service.get_invoice(record_id)
-            if (existing or {}).get("fields", {}).get("Raised By") != scoped_email:
+            if not _owns_record(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
         content = await file.read()
         return await service.upload_attachment_to_field(

@@ -256,12 +256,13 @@ async def _require_web_permission(request: Request, permission_key: str) -> None
 async def create_web_invoice(body: WebInvoiceFields, request: Request, role: str = Depends(require_web_access)):
     try:
         await _require_web_permission(request, "module.invoices.create")
+        svc = WebInvoiceService()
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
-            fields["Raised By"] = scoped_email
+            fields["Raised By"] = await svc.resolve_raised_by(scoped_email)
         _validate_paid_invoice(fields)
-        result = await WebInvoiceService().create_invoice(fields)
+        result = await svc.create_invoice(fields)
         new_id = result.get("id") if isinstance(result, dict) else None
         if new_id:
             try:
@@ -287,7 +288,7 @@ async def update_web_invoice(
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
-            fields["Raised By"] = scoped_email
+            fields["Raised By"] = await svc.resolve_raised_by(scoped_email)
         _validate_paid_invoice(fields)
         try:
             await record_user_attribution(request, role, record_id)
@@ -468,7 +469,12 @@ async def web_aging_buckets(
 
 def _assert_record_owner(record: dict | None, request: Request) -> None:
     scoped_email = owner_scope_email(request)
-    if scoped_email and (record or {}).get("fields", {}).get("Raised By") != scoped_email:
+    if not scoped_email:
+        return
+    # Case-insensitive — Teable's "Raised By" option casing can differ from
+    # the normalized-lowercase login email (see resolve_raised_by).
+    raised_by = str((record or {}).get("fields", {}).get("Raised By") or "")
+    if raised_by.lower() != scoped_email.lower():
         raise HTTPException(status_code=404, detail="Invoice not found")
 
 

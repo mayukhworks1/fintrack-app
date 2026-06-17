@@ -14,11 +14,15 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   const [loading,     setLoading]     = useState(true)
   const [syncing,     setSyncing]     = useState(false)
   const [error,       setError]       = useState(null)
+  const [errorStatus, setErrorStatus] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
 
   const mounted   = useRef(true)
   const lastHash  = useRef(null)
   const timerRef  = useRef(null)
+  // 403s mean "denied until an admin changes a permission" — polling every
+  // few seconds can't fix that and just hammers the server for nothing.
+  const deniedRef = useRef(false)
   // Always keep a ref to the latest fetchFn so the stable `run` callback
   // never calls a stale closure.
   const fetchRef  = useRef(fetchFn)
@@ -29,12 +33,18 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   // Stable run — never re-created, always reads fetchRef.current
   const run = useCallback(async (silent = false, forceFresh = false) => {
     if (!mounted.current) return
+    // Skip silent (interval-driven) polls once we know we're permission-denied —
+    // a 403 won't resolve itself, so don't keep hitting the server every tick.
+    // An explicit refresh() (e.g. user clicks retry) always goes through.
+    if (silent && deniedRef.current) return
     if (silent) setSyncing(true)
     else        setLoading(true)
     setError(null)
+    setErrorStatus(null)
     try {
       const result = await fetchRef.current(forceFresh ? { fresh: true } : {})
       if (!mounted.current) return
+      deniedRef.current = false
       const hash = JSON.stringify(result)
       if (hash !== lastHash.current) {
         lastHash.current = hash
@@ -43,7 +53,9 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
       setLastUpdated(new Date())
     } catch (e) {
       if (!mounted.current) return
+      deniedRef.current = e.status === 403
       setError(e.message || 'Failed to load')
+      setErrorStatus(e.status || null)
     } finally {
       if (mounted.current) {
         setLoading(false)
@@ -79,11 +91,12 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   }, [intervalMs]) // run is stable; we intentionally omit it to avoid re-mounting interval
 
   const refresh = useCallback(() => {
+    deniedRef.current = false   // explicit retry always re-tries, even after a 403
     lastHash.current = null
     run(false, true)
   }, [run])
 
-  return { data, loading, error, refresh, lastUpdated, syncing }
+  return { data, loading, error, errorStatus, refresh, lastUpdated, syncing }
 }
 
 /** Format last-updated as relative time string. */
