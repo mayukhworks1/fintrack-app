@@ -8,6 +8,7 @@ import {
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
+import { useToast } from '../context/ToastContext'
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 function ts(v) {
@@ -97,16 +98,6 @@ function InfoRow({ icon: Icon, label, value, mono = false, accent = false }) {
   )
 }
 
-function Msg({ msg }) {
-  if (!msg) return null
-  return (
-    <p className="text-xs mt-3 flex items-center gap-1.5"
-      style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>
-      {msg.ok ? <Check size={11} /> : <AlertCircle size={11} />}
-      {msg.text}
-    </p>
-  )
-}
 
 const PROVIDER_META = {
   google: {
@@ -123,6 +114,7 @@ const PROVIDER_META = {
 /* ── Main component ──────────────────────────────────────────────────── */
 export default function Profile() {
   const { logout, updateUser } = useAuth()
+  const toast = useToast()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -131,37 +123,33 @@ export default function Profile() {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ full_name: '', phone: '', job_title: '', department: '', company: '', location: '', timezone: '' })
   const [saving, setSaving] = useState(false)
-  const [profileMsg, setProfileMsg] = useState(null)
 
   // Password
   const [showPw, setShowPw] = useState(false)
   const [pw, setPw] = useState({ current: '', newPw: '', confirm: '' })
   const [pwSaving, setPwSaving] = useState(false)
-  const [pwMsg, setPwMsg] = useState(null)
 
   // Avatar upload
   const avatarInputRef = useRef(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
-  const [avatarMsg, setAvatarMsg] = useState(null)
 
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      setAvatarMsg({ ok: false, text: 'Only image files allowed' }); return
+      toast('Only image files allowed', 'error'); return
     }
     if (file.size > 4 * 1024 * 1024) {
-      setAvatarMsg({ ok: false, text: 'Image must be under 4 MB' }); return
+      toast('Image must be under 4 MB', 'error'); return
     }
-    setAvatarUploading(true); setAvatarMsg(null)
+    setAvatarUploading(true)
     try {
       const res = await api.auth.uploadAvatar(file)
       setProfile(p => ({ ...p, avatar_url: res.avatar_url }))
       updateUser({ avatar_url: res.avatar_url })
-      setAvatarMsg({ ok: true, text: 'Profile picture updated' })
-      setTimeout(() => setAvatarMsg(null), 3000)
+      toast('Profile picture updated', 'success')
     } catch (err) {
-      setAvatarMsg({ ok: false, text: err.message || 'Upload failed' })
+      toast(err.message || 'Upload failed', 'error')
     } finally {
       setAvatarUploading(false)
       e.target.value = ''
@@ -169,15 +157,14 @@ export default function Profile() {
   }
 
   const handleAvatarDelete = async () => {
-    setAvatarUploading(true); setAvatarMsg(null)
+    setAvatarUploading(true)
     try {
       await api.auth.deleteAvatar()
       setProfile(p => ({ ...p, avatar_url: null }))
       updateUser({ avatar_url: null })
-      setAvatarMsg({ ok: true, text: 'Profile picture removed' })
-      setTimeout(() => setAvatarMsg(null), 3000)
+      toast('Profile picture removed', 'success')
     } catch (err) {
-      setAvatarMsg({ ok: false, text: err.message || 'Failed to remove' })
+      toast(err.message || 'Failed to remove', 'error')
     } finally {
       setAvatarUploading(false)
     }
@@ -214,7 +201,7 @@ export default function Profile() {
   })
 
   const saveProfile = async () => {
-    setSaving(true); setProfileMsg(null)
+    setSaving(true)
     try {
       const payload = Object.fromEntries(
         Object.entries(form).map(([k, v]) => [k, String(v || '').trim() || null])
@@ -222,10 +209,9 @@ export default function Profile() {
       const res = await api.auth.updateProfile(payload)
       setProfile(p => ({ ...p, ...res }))
       setEditing(false)
-      setProfileMsg({ ok: true, text: 'Profile updated successfully' })
-      setTimeout(() => setProfileMsg(null), 3000)
+      toast('Profile updated successfully', 'success')
     } catch (e) {
-      setProfileMsg({ ok: false, text: e.message || 'Failed to update' })
+      toast(e.message || 'Failed to update', 'error')
     } finally {
       setSaving(false)
     }
@@ -233,17 +219,16 @@ export default function Profile() {
 
   const changePw = async (e) => {
     e.preventDefault()
-    if (pw.newPw !== pw.confirm) { setPwMsg({ ok: false, text: 'Passwords do not match' }); return }
-    if (pw.newPw.length < 8) { setPwMsg({ ok: false, text: 'Minimum 8 characters' }); return }
-    setPwSaving(true); setPwMsg(null)
+    if (pw.newPw !== pw.confirm) { toast('Passwords do not match', 'error'); return }
+    if (pw.newPw.length < 8) { toast('Minimum 8 characters', 'error'); return }
+    setPwSaving(true)
     try {
       const res = await api.auth.changePassword({ current_password: pw.current, new_password: pw.newPw })
-      setPwMsg({ ok: true, text: res.message || 'Password changed' })
+      toast(res.message || 'Password changed successfully', 'success')
       setPw({ current: '', newPw: '', confirm: '' })
       setShowPw(false)
-      setTimeout(() => setPwMsg(null), 4000)
     } catch (e) {
-      setPwMsg({ ok: false, text: e.message || 'Failed to change password' })
+      toast(e.message || 'Failed to change password', 'error')
     } finally {
       setPwSaving(false)
     }
@@ -359,13 +344,6 @@ export default function Profile() {
               >
                 <Trash2 size={10} /> Remove
               </button>
-            )}
-            {avatarMsg && (
-              <span className="text-[11px] flex items-center gap-1"
-                style={{ color: avatarMsg.ok ? '#16a34a' : '#dc2626' }}>
-                {avatarMsg.ok ? <Check size={10} /> : <AlertCircle size={10} />}
-                {avatarMsg.text}
-              </span>
             )}
           </div>
         </div>
@@ -490,7 +468,7 @@ export default function Profile() {
           </div>
           {!editing && (
             <button
-              onClick={() => { resetForm(); setEditing(true); setProfileMsg(null) }}
+              onClick={() => { resetForm(); setEditing(true) }}
               className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
               style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
@@ -538,21 +516,17 @@ export default function Profile() {
                 <X size={12} /> Cancel
               </button>
             </div>
-            <Msg msg={profileMsg} />
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-              <InfoRow icon={User}      label="Full name"   value={profile?.full_name} />
-              <InfoRow icon={Phone}     label="Phone"       value={profile?.phone} />
-              <InfoRow icon={Briefcase} label="Title"       value={profile?.job_title} />
-              <InfoRow icon={Building2} label="Department"  value={profile?.department} />
-              <InfoRow icon={Building2} label="Company"     value={profile?.company} />
-              <InfoRow icon={MapPin}    label="Location"    value={profile?.location} />
-              <InfoRow icon={Globe2}    label="Timezone"    value={profile?.timezone} />
-            </div>
-            <Msg msg={profileMsg} />
-          </>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+            <InfoRow icon={User}      label="Full name"   value={profile?.full_name} />
+            <InfoRow icon={Phone}     label="Phone"       value={profile?.phone} />
+            <InfoRow icon={Briefcase} label="Title"       value={profile?.job_title} />
+            <InfoRow icon={Building2} label="Department"  value={profile?.department} />
+            <InfoRow icon={Building2} label="Company"     value={profile?.company} />
+            <InfoRow icon={MapPin}    label="Location"    value={profile?.location} />
+            <InfoRow icon={Globe2}    label="Timezone"    value={profile?.timezone} />
+          </div>
         )}
       </Card>
 
@@ -561,7 +535,7 @@ export default function Profile() {
         <div className="flex items-center justify-between mb-1">
           <SectionLabel>Security</SectionLabel>
           <button
-            onClick={() => { setShowPw(v => !v); setPwMsg(null); setPw({ current: '', newPw: '', confirm: '' }) }}
+            onClick={() => { setShowPw(v => !v); setPw({ current: '', newPw: '', confirm: '' }) }}
             className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
             style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--bg-input)' }}
             onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
@@ -603,10 +577,8 @@ export default function Profile() {
               className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5">
               <Key size={12} /> {pwSaving ? 'Changing…' : 'Change password'}
             </button>
-            <Msg msg={pwMsg} />
           </form>
         )}
-        {!showPw && <Msg msg={pwMsg} />}
       </Card>
 
       {/* ── Sign out ── */}

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { FilterSelect, FilterMulti } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
@@ -1818,6 +1819,7 @@ function AuthStatusBadge({ status }) {
 }
 
 function AuthUsersTab() {
+  const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState(null)
   const [roles, setRoles] = useState([])
@@ -1831,7 +1833,6 @@ function AuthUsersTab() {
   const [search, setSearch] = useState('')
   const [roleByUser, setRoleByUser] = useState({})
   const [actingId, setActingId] = useState('')
-  const [message, setMessage] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [decisionHandled, setDecisionHandled] = useState(false)
   const [smtpTo, setSmtpTo] = useState('')
@@ -1896,7 +1897,6 @@ function AuthUsersTab() {
     if (action === 'revoke' && !window.confirm(`Revoke active sessions for ${row.email}?`)) return
     if (action === 'role' && !window.confirm(`Change ${row.email} role to ${role_key}? Their active sessions will be revoked so the new role applies safely.`)) return
     setActingId(`${row.id}:${action}`)
-    setMessage('')
     try {
       if (action === 'approve') await api.admin.approveAuthUser(row.id, { role_key })
       else if (action === 'reject') await api.admin.rejectAuthUser(row.id, { reason: 'Rejected from admin auth users tab' })
@@ -1904,10 +1904,10 @@ function AuthUsersTab() {
       else if (action === 'reactivate') await api.admin.reactivateAuthUser(row.id, { role_key })
       else if (action === 'role') await api.admin.updateAuthUserRole(row.id, { role_key, reason: 'Role changed from admin auth users tab', revoke_sessions: true })
       else if (action === 'revoke') await api.admin.revokeAuthUserSessions(row.id)
-      setMessage('Auth user updated. Event written to auth_events.')
+      toast('User updated successfully', 'success')
       await load({ silent: true })
     } catch (e) {
-      setMessage(e.message || 'Auth action failed')
+      toast(e.message || 'Auth action failed', 'error')
     } finally {
       setActingId('')
     }
@@ -1930,19 +1930,18 @@ function AuthUsersTab() {
     e?.preventDefault()
     if (!newUser.email.trim()) return
     setActingId('create-user')
-    setMessage('')
     try {
       const res = await api.admin.createAuthUser({
         ...newUser,
         email: newUser.email.trim(),
         full_name: newUser.full_name.trim() || undefined,
       })
-      setMessage(res.message || 'User created')
+      toast(res.message || 'User created successfully', 'success')
       setNewUser({ email: '', full_name: '', role_key: 'user', status: 'active', send_invite: true })
       setShowCreate(false)
       await load({ silent: true })
     } catch (e) {
-      setMessage(e.message || 'User creation failed')
+      toast(e.message || 'User creation failed', 'error')
     } finally {
       setActingId('')
     }
@@ -1950,12 +1949,11 @@ function AuthUsersTab() {
 
   const testSmtp = useCallback(async () => {
     setActingId('smtp-test')
-    setMessage('')
     try {
       const res = await api.admin.testSmtp({ to: smtpTo.trim() || undefined })
-      setMessage(res.message || 'SMTP checked')
+      toast(res.message || 'SMTP test passed', 'success')
     } catch (e) {
-      setMessage(e.message || 'SMTP test failed')
+      toast(e.message || 'SMTP test failed', 'error')
     } finally {
       setActingId('')
     }
@@ -1968,13 +1966,12 @@ function AuthUsersTab() {
       : `Permanently delete ${row.email}? This cannot be undone.`
     if (!window.confirm(msg)) return
     setActingId(`${row.id}:delete`)
-    setMessage('')
     try {
       await api.admin.deleteAuthUser(row.id, isActive)
-      setMessage(`User ${row.email} deleted.`)
+      toast(`User ${row.email} deleted`, 'success')
       await load({ silent: true })
     } catch (e) {
-      setMessage(e.message || 'Delete failed')
+      toast(e.message || 'Delete failed', 'error')
     } finally {
       setActingId('')
     }
@@ -1986,7 +1983,7 @@ function AuthUsersTab() {
       await api.admin.setTeableEmail(row.id, { teable_email: teableEmail || null })
       await load({ silent: true })
     } catch (e) {
-      setMessage(e.message || 'Teable email update failed')
+      toast(e.message || 'Teable email update failed', 'error')
     } finally {
       setActingId('')
     }
@@ -1995,24 +1992,22 @@ function AuthUsersTab() {
   const resendInvite = useCallback(async (row) => {
     if (!window.confirm(`Resend invite email to ${row.email}?`)) return
     setActingId(`${row.id}:invite`)
-    setMessage('')
     try {
       const res = await api.admin.resendInvite(row.id)
-      setMessage(res.delivery?.sent ? `Invite sent to ${row.email}` : `Invite failed: ${res.delivery?.reason || res.delivery?.detail || 'unknown'}`)
-    } catch (e) { setMessage(e.message || 'Resend failed') }
+      if (res.delivery?.sent) toast(`Invite sent to ${row.email}`, 'success')
+      else toast(`Invite failed: ${res.delivery?.reason || res.delivery?.detail || 'unknown'}`, 'error')
+    } catch (e) { toast(e.message || 'Resend failed', 'error') }
     finally { setActingId('') }
   }, [])
 
   const forcePasswordReset = useCallback(async (row) => {
     if (!window.confirm(`Force password reset for ${row.email}? This will revoke all their active sessions.`)) return
     setActingId(`${row.id}:forcereset`)
-    setMessage('')
     try {
       const res = await api.admin.forcePasswordReset(row.id)
-      setMessage(res.delivery?.sent
-        ? `Reset email sent. ${res.sessions_revoked} session(s) revoked.`
-        : `Sessions revoked but email failed: ${res.delivery?.reason || ''}`)
-    } catch (e) { setMessage(e.message || 'Force reset failed') }
+      if (res.delivery?.sent) toast(`Reset email sent. ${res.sessions_revoked} session(s) revoked.`, 'success')
+      else toast(`Sessions revoked but email failed: ${res.delivery?.reason || ''}`, 'warning')
+    } catch (e) { toast(e.message || 'Force reset failed', 'error') }
     finally { setActingId('') }
   }, [])
 
@@ -2022,7 +2017,7 @@ function AuthUsersTab() {
       await api.admin.updateAuthUserName(row.id, { full_name: name })
       await load({ silent: true })
     } catch (e) {
-      setMessage(e.message || 'Name update failed')
+      toast(e.message || 'Name update failed', 'error')
     } finally {
       setActingId('')
     }
@@ -2219,7 +2214,6 @@ function AuthUsersTab() {
         <div className="text-xs flex flex-wrap gap-2" style={{ color: 'var(--text-3)' }}>
           <span>{data.total.toLocaleString()} user{data.total !== 1 ? 's' : ''}</span>
           {refreshing && <span>Refreshing…</span>}
-          {message && <span style={{ color: message.includes('failed') || message.includes('Unknown') ? '#dc2626' : '#16a34a' }}>{message}</span>}
         </div>
       )}
 
