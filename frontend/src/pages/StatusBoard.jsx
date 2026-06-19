@@ -1190,8 +1190,14 @@ function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptio
             </label>
             <textarea className="input-field w-full text-sm resize-none" rows={5}
               placeholder="Full narrative — blockers, dependencies, billing notes…"
+              maxLength={10000}
               value={form.current_status_detailed}
               onChange={e => set('current_status_detailed', e.target.value)} />
+            {form.current_status_detailed?.length > 9000 && (
+              <p className="text-xs mt-1" style={{ color: form.current_status_detailed.length >= 10000 ? 'var(--error)' : 'var(--warning, #f59e0b)' }}>
+                {form.current_status_detailed.length}/10000 characters
+              </p>
+            )}
           </div>
 
           <StatusAttachmentField
