@@ -710,8 +710,11 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
   const cols = (columns || meta.defaultColumns).filter(c => meta.columns.includes(c))
   const highlighted = new Set((highlightColumns || []).filter((col) => cols.includes(col)))
 
-  // Build grid template: one column per field + fixed actions column
-  const gridTemplate = [...cols.map(c => COL_WIDTHS[c] || '1fr'), '64px'].join(' ')
+  // Build grid template: last data column always expands to fill remaining space
+  const gridTemplate = [
+    ...cols.map((c, i) => i === cols.length - 1 ? '1fr' : (COL_WIDTHS[c] || '120px')),
+    '48px',
+  ].join(' ')
 
   return (
     <div className="rounded-2xl overflow-x-auto" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
