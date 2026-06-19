@@ -436,16 +436,41 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Margin</p><p className="font-semibold text-gray-700">{f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'}</p></div>
           </div>
         )}
-        {resourceType === 'invoices' && (
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Project</p><p className="font-semibold text-gray-700">{f['Project'] || '—'}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Category</p><p className="font-semibold text-gray-700">{f['Category'] || '—'}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Amount</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Raised'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Received</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Received'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Raised</p><p className="font-semibold text-gray-700">{fmtDate(f['Raised Date'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>
-          </div>
-        )}
+        {resourceType === 'invoices' && (() => {
+          const aging = effectiveAging(f)
+          const outstanding = f['Outstanding Amount']
+          return (
+            <div className="space-y-2">
+              {/* Key financial figures */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Raised</p>
+                  <p className="text-xs font-bold text-gray-800 tabular-nums">{fmtInr(f['Amount Raised'])}</p>
+                </div>
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Received</p>
+                  <p className="text-xs font-bold text-gray-800 tabular-nums">{fmtInr(f['Amount Received'])}</p>
+                </div>
+                <div className="rounded-xl px-2 py-2 text-center" style={{ background: outstanding > 0 ? 'rgba(245,158,11,0.07)' : '#f8fafc', border: outstanding > 0 ? '1px solid rgba(245,158,11,0.25)' : '1px solid #e2e8f0' }}>
+                  <p className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: outstanding > 0 ? '#b45309' : '#94a3b8' }}>Outstanding</p>
+                  <p className="text-xs font-bold tabular-nums" style={{ color: outstanding > 0 ? '#b45309' : '#64748b' }}>{fmtInr(outstanding)}</p>
+                </div>
+              </div>
+              {/* Secondary info */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Project</p><p className="font-semibold text-gray-700 truncate">{f['Project'] || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Category</p><p className="font-semibold text-gray-700 truncate">{f['Category'] || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Raised</p><p className="font-semibold text-gray-700">{fmtDate(f['Raised Date'])}</p></div>
+                <div>
+                  <p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Aging</p>
+                  <p className="font-semibold" style={{ color: aging > 60 ? '#dc2626' : aging > 30 ? '#d97706' : '#374151' }}>{aging > 0 ? `${aging}d` : '—'}</p>
+                </div>
+                {f['Next followup'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>}
+                {f['Milestone'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Milestone</p><p className="font-semibold text-gray-700 truncate">{f['Milestone']}</p></div>}
+              </div>
+            </div>
+          )
+        })()}
         {resourceType === 'tax-ledger' && (() => {
           const tax = taxParts(f)
           return (
@@ -554,32 +579,56 @@ const COL_WIDTHS = {
   'Client':                     '140px',
   'Project':                    '160px',
   'Project Name':               '180px',
-  'Status':                     '130px',
-  'Project Status':             '130px',
-  'Payment Status':             '120px',
+  'Status':                     '120px',
+  'Project Status':             '120px',
+  'Payment Status':             '110px',
   'Short Status':               '200px',
   'Current Status (Detailed)': '1fr',
-  'Attachments':               '120px',
-  'Health':                     '100px',
-  'Amount Billed So far':       '120px',
+  'Attachments':               '100px',
+  'Health':                     '90px',
+  'Amount Billed So far':       '110px',
   'Actual Profit':              '110px',
-  'Profit percentage':          '90px',
-  'Invoice Number':             '140px',
+  'Profit percentage':          '80px',
+  'Invoice Number':             '130px',
   'Client Name':                '150px',
-  'Amount Raised':              '120px',
-  'Amount with Tax':            '120px',
-  'Amount Received':            '120px',
-  'GST Amount':                 '115px',
-  'TDS Amount':                 '115px',
-  'TDS %':                      '75px',
-  'Outstanding Amount':         '125px',
-  'Agening (Days)':             '90px',
-  'Raised Date':                '110px',
-  'Cleared Date':               '110px',
-  'Next followup':              '110px',
-  'Reference':                  '120px',
-  'Invoice PDF':                '120px',
-  'Last Modified':              '130px',
+  'Category':                   '110px',
+  'Milestone':                  '110px',
+  'Raised By':                  '110px',
+  'Amount Raised':              '110px',
+  'Amount with Tax':            '110px',
+  'Amount Received':            '110px',
+  'GST Amount':                 '100px',
+  'TDS Amount':                 '100px',
+  'TDS %':                      '70px',
+  'Outstanding Amount':         '120px',
+  'Agening (Days)':             '80px',
+  'Raised Date':                '100px',
+  'Cleared Date':               '100px',
+  'Next followup':              '100px',
+  'Reference':                  '100px',
+  'Invoice PDF':                '100px',
+  'Description':                '1fr',
+  'Remark':                     '140px',
+  'Last Modified':              '110px',
+}
+
+const COL_LABELS = {
+  'Payment Status':             'Status',
+  'Amount Raised':              'Raised',
+  'Amount with Tax':            'With Tax',
+  'Amount Received':            'Received',
+  'Outstanding Amount':         'Outstanding',
+  'Agening (Days)':             'Aging',
+  'Amount Billed So far':       'Billed',
+  'Current Status (Detailed)': 'Detail',
+  'Profit percentage':          'Profit %',
+  'Resource contribution percentage': 'Resource %',
+  'Next followup':              'Follow-up',
+  'Project Status':             'Status',
+  'Project Name':               'Project',
+  'Short Status':               'Headline',
+  'Invoice PDF':                'PDF',
+  'Last Modified':              'Modified',
 }
 
 function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
@@ -597,14 +646,15 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
     <span className="text-[12px] font-semibold tabular-nums text-amber-700">{tax.outstanding > 0 ? fmtInr(tax.outstanding) : '—'}</span>
   )
   if (col === meta.clientField) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full truncate"
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full"
+      title={f[col] || ''}
       style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexRgba(clr, 0.2) : '#e2e8f0'}` }}>
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: clr }} />
       <span className="truncate">{f[col] || '—'}</span>
     </span>
   )
   if (col === meta.titleField) return (
-    <span className="text-[13px] font-semibold text-gray-900 block truncate">{f[col] || '—'}</span>
+    <span className="text-[13px] font-semibold text-gray-900 block truncate" title={f[col] || ''}>{f[col] || '—'}</span>
   )
   if (col === meta.statusField) return <StatusBadge value={f[col]} />
   if (col === 'Short Status') return (
@@ -652,7 +702,7 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (col === 'Last Modified') return (
     <span className="text-[11px] text-gray-400 whitespace-nowrap">{fmtDate(f.lastModifiedTime || '')}</span>
   )
-  return <span className="text-[12px] text-gray-700 truncate block">{f[col] || '—'}</span>
+  return <span className="text-[12px] text-gray-700 truncate block" title={f[col] ? String(f[col]) : ''}>{f[col] || '—'}</span>
 }
 
 function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, showClientAccents = true, highlightColumns = [] }) {
@@ -664,17 +714,17 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
   const gridTemplate = [...cols.map(c => COL_WIDTHS[c] || '1fr'), '64px'].join(' ')
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
+    <div className="rounded-2xl overflow-x-auto" style={{ border: '1px solid #e2e8f0', background: '#fff' }}>
       {/* Sticky header */}
-      <div className="overflow-x-auto">
-        <div style={{ minWidth: 600 }}>
+      <div>
+        <div style={{ minWidth: 900 }}>
           {/* Header row */}
           <div className="grid px-4 py-2.5 gap-3"
             style={{ gridTemplateColumns: gridTemplate, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
             {cols.map(col => (
               <div
                 key={col}
-                className="text-[10px] font-bold uppercase tracking-widest truncate px-3 py-2"
+                className="text-[10px] font-bold uppercase tracking-wide py-2 whitespace-nowrap"
                 style={highlighted.has(col)
                   ? {
                       color: '#1d4ed8',
@@ -688,7 +738,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                     }
                   : { color: '#94a3b8' }}
               >
-                {col}
+                {COL_LABELS[col] || col}
               </div>
             ))}
             <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">–</div>
@@ -971,12 +1021,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
           {/* INVOICES resource */}
           {resourceType === 'invoices' && (
             <>
+              {/* Financial summary row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   ['Raised', fmtInr(f['Amount Raised'])],
+                  ['With Tax', fmtInr(f['Amount with Tax'])],
                   ['Received', fmtInr(f['Amount Received'])],
-                  ['Raised Date', fmtDate(f['Raised Date'])],
-                  ['Cleared Date', fmtDate(f['Cleared Date'])],
+                  ['Outstanding', fmtInr(f['Outstanding Amount'])],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
@@ -984,25 +1035,71 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Dates + aging */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
-                  ['Project', f['Project'] || '—'],
-                  ['Category', f['Category'] || '—'],
-                  ['Payment Status', f['Payment Status'] || '—'],
-                  ['Next Follow-up', fmtDate(f['Next followup'])],
+                  ['Raised Date', fmtDate(f['Raised Date'])],
+                  ['Cleared Date', fmtDate(f['Cleared Date'])],
+                  ['Aging', effectiveAging(f) > 0 ? `${effectiveAging(f)} days` : '—'],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
+                  <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700">{value}</p>
                   </div>
                 ))}
               </div>
-              {f['Remark'] && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed">{f['Remark']}</p>
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Project', f['Project'] || '—'],
+                  ['Category', f['Category'] || '—'],
+                  ['Milestone', f['Milestone'] || '—'],
+                  ['Raised By', f['Raised By'] || '—'],
+                  ['Next Follow-up', fmtDate(f['Next followup'])],
+                  ['Reference', f['Reference'] || '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
+                    <p className="text-[13px] font-semibold text-slate-700 break-words">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Description */}
+              {f['Description'] && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Description</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Description']}</p>
                 </div>
               )}
+              {/* Remark */}
+              {f['Remark'] && (
+                <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Remark']}</p>
+                </div>
+              )}
+              {/* Invoice PDF + Attachments */}
+              {(['Invoice PDF', 'Attachments', 'Reference'].some(k => parseAttachments(f[k]).length > 0)) && (() => {
+                const allFiles = [
+                  ...parseAttachments(f['Invoice PDF']),
+                  ...parseAttachments(f['Attachments']),
+                ]
+                if (!allFiles.length) return null
+                return (
+                  <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-3">
+                      Files <span className="font-normal normal-case">· {allFiles.length} file{allFiles.length !== 1 ? 's' : ''} · click to preview</span>
+                    </p>
+                    <AttachmentList
+                      attachments={allFiles}
+                      onPreview={index => {
+                        setPreviewDocs({ docs: allFiles, index })
+                      }}
+                    />
+                  </div>
+                )
+              })()}
+              <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
             </>
           )}
 
@@ -1079,44 +1176,44 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5 text-gray-700">Headline</label>
-                  <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
+                  <input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.short_status || ''} onChange={e => setForm(v => ({ ...v, short_status: e.target.value }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5 text-gray-700">Detail</label>
-                  <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
+                  <textarea rows={5} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e2e8f0' }} value={form.current_status_detailed || ''} onChange={e => setForm(v => ({ ...v, current_status_detailed: e.target.value }))} />
                 </div>
               </>
             )}
             {resourceType === 'projects' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Client</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.client || ''} onChange={e => setForm(v => ({ ...v, client: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Name</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.project_name || ''} onChange={e => setForm(v => ({ ...v, project_name: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
                 </div>
               </>
             )}
             {resourceType === 'invoices' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Invoice Number</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.invoice_number || ''} onChange={e => setForm(v => ({ ...v, invoice_number: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
                 </div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e5e7eb' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
-                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e5e7eb' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
+                <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Remark</label><textarea rows={4} className="w-full rounded-xl border px-3 py-2 text-sm resize-none" style={{ borderColor: '#e2e8f0' }} value={form.remark || ''} onChange={e => setForm(v => ({ ...v, remark: e.target.value }))} /></div>
               </>
             )}
           </div>
           {/* sticky footer */}
           <div className="flex items-center justify-end gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid #e5e7eb' }}>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e5e7eb', color: '#475569' }}>Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e2e8f0', color: '#475569' }}>Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white font-semibold flex items-center gap-2">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
               Save
@@ -1158,6 +1255,7 @@ export default function SharedView() {
   const [savingRecordId, setSavingRecordId] = useState('')
   const [pendingStatusById, setPendingStatusById] = useState({})
   const [allExpanded, setAllExpanded] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const trackSharedEvent = useCallback((eventType, record, meta = {}) => {
     if (!token || !eventType || !record?.id) return
@@ -1406,10 +1504,10 @@ export default function SharedView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f8fafc' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f1f5f9' }}>
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin text-blue-500" />
-          <p className="text-sm text-gray-500">Loading shared view…</p>
+          <Loader2 size={28} className="animate-spin" style={{ color: '#3b82f6' }} />
+          <p className="text-sm font-medium" style={{ color: '#64748b' }}>Loading shared view…</p>
         </div>
       </div>
     )
@@ -1451,25 +1549,36 @@ export default function SharedView() {
   const expired = isExpired(expiresAt)
 
   return (
-    <div className="min-h-screen" style={{ background: '#f8fafc', ...accentStyle }}>
-      <header style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
-                <Activity size={18} style={{ color: theme.accent }} />
+    <div className="min-h-screen" style={{ background: '#f1f5f9', ...accentStyle }}>
+      <header className="sticky top-0 z-30" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(15,23,42,0.06)' }}>
+        <div className="px-4 sm:px-6 py-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: theme.accentDim, border: `1px solid ${theme.accentSoft}` }}>
+                <Activity size={16} style={{ color: theme.accent }} />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {filtered.length} shown of {records.length} {meta.plural} · {primaryOptions.length} clients
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-gray-900 leading-tight truncate">{title}</h1>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {filtered.length} of {records.length} {meta.plural}
                   {createdAt && ` · ${fmtDate(createdAt)}`}
                 </p>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
-              <Shield size={11} />
-              FinTrack
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => load({ silent: true })}
+                className="w-8 h-8 rounded-lg border flex items-center justify-center"
+                style={{ borderColor: '#e2e8f0', color: '#64748b', background: '#f8fafc' }}>
+                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+              </button>
+              <button onClick={() => setFiltersOpen(v => !v)}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold sm:hidden"
+                style={{ borderColor: filtersOpen ? theme.accentSoft : '#e2e8f0', color: filtersOpen ? theme.accent : '#475569', background: filtersOpen ? theme.accentDim : '#f8fafc' }}>
+                <Search size={12} /> Filters
+              </button>
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
+                <Shield size={11} /> FinTrack
+              </span>
             </div>
           </div>
 
@@ -1496,37 +1605,37 @@ export default function SharedView() {
             )
           )}
 
-          <div className="flex flex-col lg:flex-row gap-2">
-            <div className="relative flex-1">
+          <div className={`${filtersOpen || window.innerWidth >= 640 ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row flex-wrap gap-2`}>
+            <div className="relative flex-1 min-w-[180px]">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
               <input type="text" className="w-full rounded-xl border bg-white pl-8 pr-3 py-2 text-sm outline-none"
-                style={{ borderColor: '#e5e7eb' }}
+                style={{ borderColor: '#e2e8f0' }}
                 placeholder={`Search ${meta.plural}…`}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterPrimary} onChange={e => setFilterPrimary(e.target.value)}>
+            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterPrimary} onChange={e => setFilterPrimary(e.target.value)}>
               <option value="">{meta.primaryLabel}</option>
               {primaryOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
-            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All statuses</option>
               {statusOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
             {isInvoiceLike && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                 <option value="">All categories</option>
                 {categoryOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
             {isInvoiceLike && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
                 <option value="">All owners</option>
                 {raisedByOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
-            <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e5e7eb' }}>
+            <div className="flex items-center rounded-xl overflow-hidden border bg-slate-50" style={{ borderColor: '#e2e8f0' }}>
               {[
                 { id: 'card', Icon: LayoutGrid, label: 'Card' },
                 { id: 'list', Icon: List, label: 'List' },
@@ -1540,7 +1649,7 @@ export default function SharedView() {
               ))}
             </div>
             {viewType === 'board' && (
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={activeBoardGroupBy} onChange={e => setBoardGroupBy(e.target.value)}>
                 {boardGroupOptions.map(v => <option key={v} value={v}>Group by {v}</option>)}
               </select>
             )}
@@ -1548,13 +1657,13 @@ export default function SharedView() {
               <button
                 onClick={() => setAllExpanded(v => !v)}
                 className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2"
-                style={{ borderColor: '#e5e7eb', color: '#475569' }}
+                style={{ borderColor: '#e2e8f0', color: '#475569' }}
               >
                 {allExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                 {allExpanded ? 'Collapse all' : 'Expand all'}
               </button>
             )}
-            <button onClick={() => load({ silent: true })} className="rounded-xl border bg-white px-3 py-2 text-sm font-medium flex items-center gap-2" style={{ borderColor: '#e5e7eb', color: '#475569' }}>
+            <button onClick={() => load({ silent: true })} className="hidden sm:flex rounded-xl border bg-white px-3 py-2 text-sm font-medium items-center gap-2" style={{ borderColor: '#e2e8f0', color: '#475569' }}>
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
@@ -1562,29 +1671,29 @@ export default function SharedView() {
           {isInvoiceLike && (
             <div className="mt-3 flex flex-wrap gap-2">
               {resourceType === 'tax-ledger' && (
-                <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={invoiceScope} onChange={e => setInvoiceScope(e.target.value)}>
+                <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={invoiceScope} onChange={e => setInvoiceScope(e.target.value)}>
                   <option value="all">All valid invoices</option>
                   <option value="tax">Paid tax register</option>
                   <option value="open">Open invoices only</option>
                 </select>
               )}
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={billingFilter} onChange={e => setBillingFilter(e.target.value)}>
                 <option value="all">All billing</option>
                 <option value="project">Projects only</option>
                 <option value="retainer">Retainers only</option>
               </select>
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
                 <option value="">All raised months</option>
                 {monthOptions.map(v => <option key={v} value={v}>{new Date(`${v}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>)}
               </select>
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
                 <option value="Raised Date">Raised Date</option>
                 <option value="Cleared Date">Cleared Date</option>
                 <option value="Next followup">Next Follow-up</option>
               </select>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} />
-              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e5e7eb' }} value={agingBandFilter} onChange={e => setAgingBandFilter(e.target.value)}>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
+              <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={agingBandFilter} onChange={e => setAgingBandFilter(e.target.value)}>
                 <option value="">All aging</option>
                 {['0-14d', '15-30d', '31-60d', '60d+'].map(v => <option key={v} value={v}>{v}</option>)}
               </select>
@@ -1609,7 +1718,7 @@ export default function SharedView() {
         </div>
       )}
 
-      <main className={`mx-auto px-4 sm:px-6 py-8 ${viewType === 'board' ? 'max-w-full' : 'max-w-6xl'}`}>
+      <main className="mx-auto px-4 sm:px-6 py-6 max-w-full">
         {saveError && <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#dc2626' }}>{saveError}</div>}
         {filtered.length === 0 ? (
           <div className="text-center py-16">

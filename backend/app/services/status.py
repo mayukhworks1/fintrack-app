@@ -499,6 +499,11 @@ class StatusService:
             else:
                 # Teable rejects Attachments:[] — omit the field entirely when empty
                 fields = {k: v for k, v in fields.items() if k != "Attachments"}
+        # Teable long-text fields have a 10 000 char limit — truncate silently
+        _TEABLE_TEXT_MAX = 10_000
+        for _tf in ("Current Status (Detailed)", "Short Status"):
+            if _tf in fields and isinstance(fields[_tf], str) and len(fields[_tf]) > _TEABLE_TEXT_MAX:
+                fields = {**fields, _tf: fields[_tf][:_TEABLE_TEXT_MAX]}
         if request and role:
             try:
                 from ..db.attribution import record_user_attribution

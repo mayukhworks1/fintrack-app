@@ -161,7 +161,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
         </FormField>
       </div>
 
-      <div className="flex gap-3 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="flex gap-3 pt-2 pb-24 sm:pb-0" style={{ borderTop: '1px solid var(--border)' }}>
         <button type="submit" disabled={loading} className="btn-primary flex items-center gap-2">
           {loading && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
           {loading ? 'Saving…' : 'Save Project'}
