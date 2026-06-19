@@ -42,7 +42,7 @@ const RESOURCE_META = {
     defaultView: 'card',
     showDashboardByDefault: true,
     columns: ['Client', 'Project', 'Status', 'Short Status', 'Current Status (Detailed)', 'Attachments', 'Last Modified'],
-    defaultColumns: ['Client', 'Project', 'Status', 'Short Status'],
+    defaultColumns: ['Client', 'Project', 'Status', 'Short Status', 'Current Status (Detailed)', 'Last Modified'],
   },
   projects: {
     noun: 'project',
