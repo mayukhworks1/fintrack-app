@@ -2975,7 +2975,7 @@ async def admin_impersonate(
         # Audit event
         await conn.execute(
             """
-            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
             VALUES ($1::uuid, 'impersonation_started', $2::uuid, $3::jsonb)
             """,
             user_id, actor_user_id, _json.dumps({"token_hint": token_hint}),
@@ -3036,7 +3036,7 @@ async def admin_impersonate_exit(
         )
         await conn.execute(
             """
-            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
             VALUES ($1::uuid, 'impersonation_ended', $2::uuid, $3::jsonb)
             """,
             row["user_id"], impersonated_by,
@@ -3086,7 +3086,7 @@ async def admin_set_password(
         )
         await conn.execute(
             """
-            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
             VALUES ($1::uuid, 'admin_set_password', $2::uuid, $3::jsonb)
             """,
             user_id, actor_user_id,
