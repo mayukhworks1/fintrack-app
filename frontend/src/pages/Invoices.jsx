@@ -3287,7 +3287,10 @@ export default function Invoices() {
       </div>
 
       {/* ── Desktop table (md+) ── */}
-      <div className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' && 'is-compact')}>
+      <div
+        className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' && 'is-compact')}
+        style={{ '--tbl-cell-pad': tableDensity === 'compact' ? '0.62rem 0.75rem' : '0.875rem 1rem', '--tbl-head-pad': tableDensity === 'compact' ? '0.55rem 0.75rem' : '0.875rem 1rem' }}
+      >
         <div className="invoice-table-toolbar">
           <div>
             <p>{records.length} invoices in view</p>
