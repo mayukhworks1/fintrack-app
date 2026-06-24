@@ -14,15 +14,10 @@ const BANNER_H = 37
 function ImpersonationBanner() {
   const { isImpersonating, impersonation, exitImpersonation } = useAuth()
   const navigate = useNavigate()
-  const [exiting, setExiting] = useState(false)
-  const handleExit = useCallback(async () => {
-    setExiting(true)
-    try {
-      await exitImpersonation()
-      navigate('/')
-    } catch {
-      setExiting(false)
-    }
+  const handleExit = useCallback(() => {
+    // exitImpersonation clears state synchronously before any awaits,
+    // so the banner disappears instantly. Verify + navigate happen right after.
+    exitImpersonation().then(() => navigate('/')).catch(() => navigate('/'))
   }, [exitImpersonation, navigate])
   if (!isImpersonating) return null
   return (
@@ -41,9 +36,9 @@ function ImpersonationBanner() {
             <span style={{ opacity: 0.75, fontWeight: 400 }}> · {impersonation.targetUser.email}</span>}
         </span>
       </div>
-      <button onClick={handleExit} disabled={exiting}
-        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: exiting ? 'not-allowed' : 'pointer' }}>
-        {exiting ? 'Exiting…' : '✕ Exit impersonation'}
+      <button onClick={handleExit}
+        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+        ✕ Exit impersonation
       </button>
     </div>
   )

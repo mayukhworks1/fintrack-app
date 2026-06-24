@@ -2463,7 +2463,7 @@ export default function WebInvoices() {
   }
 
   return (
-    <div className="app-shell web-invoices-shell flex overflow-hidden" style={{ background: 'var(--bg-base)', paddingTop: 'var(--impersonation-banner-h, 0px)' }}>
+    <div className="app-shell web-invoices-shell flex overflow-hidden" style={{ background: 'var(--bg-base)', marginTop: 'var(--impersonation-banner-h, 0px)', height: 'calc(100vh - var(--impersonation-banner-h, 0px))' }}>
       {/* ── Sidebar — desktop only ── */}
       <AppSidebar
         workspace={workspace}

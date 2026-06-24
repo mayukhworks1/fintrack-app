@@ -160,16 +160,25 @@ export function AuthProvider({ children }) {
     setStatus('authed')
   }, [])
 
-  // Exit impersonation — revoke the impersonation session, restore admin's original token
+  // Exit impersonation — restore admin token immediately (optimistic), revoke server-side in bg
   const exitImpersonation = useCallback(async () => {
     const imp = getStoredJson(IMPERSONATION_KEY, null)
     if (!imp?.originalToken) return
-    try { await api.admin.exitImpersonation() } catch { /* best-effort revoke */ }
+    // 1. Update UI immediately — no waiting for network
     setStoredJson(IMPERSONATION_KEY, null)
     setImpersonation(null)
     setAuthToken(imp.originalToken)
-    const res = await api.auth.verify()
-    _applyVerifyResponse(res)
+    // 2. Revoke server session in background (fire-and-forget)
+    api.admin.exitImpersonation().catch(() => {})
+    // 3. Re-verify to get the correct admin role/permissions
+    try {
+      const res = await api.auth.verify()
+      _applyVerifyResponse(res)
+    } catch {
+      clearAuthToken()
+      setStatus('unauthed')
+      return
+    }
     setStatus('authed')
   }, [])
 
