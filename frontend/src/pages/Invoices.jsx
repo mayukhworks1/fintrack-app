@@ -2617,31 +2617,92 @@ export default function Invoices() {
       )}
 
       {/* ── Overdue alert ── */}
-      {overdue.length > 0 && (
-        <section className="rounded-2xl p-4 animate-slide-down"
-          style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.16)' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <AlertOctagon size={14} style={{ color: '#f87171' }} />
-            <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
-              {overdue.length} Pending Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            {overdue.map((inv, i) => (
-              <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
-                style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.10)' }}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
-                  <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(inv.amount)}</span>
-                  <AgingBadge days={inv.aging} status="Pending" />
-                </div>
+      {overdue.length > 0 && (() => {
+        const totalOutstanding = overdue.reduce((s, inv) => s + (inv.amount || 0), 0)
+        const critical = overdue.filter(inv => inv.aging >= 60).length
+        const urgent   = overdue.filter(inv => inv.aging >= 30 && inv.aging < 60).length
+        return (
+        <section className="rounded-2xl animate-slide-down overflow-hidden"
+          style={{ border: '1px solid rgba(248,113,113,0.22)', background: 'rgba(248,113,113,0.04)' }}>
+
+          {/* Header bar */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3"
+            style={{ borderBottom: '1px solid rgba(248,113,113,0.14)', background: 'rgba(248,113,113,0.07)' }}>
+            <div className="flex items-center gap-2">
+              <AlertOctagon size={14} style={{ color: '#f87171', flexShrink: 0 }} />
+              <span className="text-sm font-bold" style={{ color: '#f87171' }}>
+                {overdue.length} Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
+              </span>
+              {critical > 0 && (
+                <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                  {critical} critical 60d+
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="text-right">
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>Total outstanding</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: '#f87171' }}>{fmt(totalOutstanding)}</p>
               </div>
-            ))}
+              <button
+                onClick={() => setOverdueOnly(true)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}
+              >
+                View all →
+              </button>
+            </div>
+          </div>
+
+          {/* Invoice rows */}
+          <div className="divide-y" style={{ '--tw-divide-opacity': 1, borderColor: 'rgba(248,113,113,0.08)' }}>
+            {overdue.map((inv, i) => {
+              const isHot = inv.aging >= 60
+              const rowAccent = isHot ? '#ef4444' : inv.aging >= 30 ? '#f97316' : '#f59e0b'
+              return (
+                <div key={i}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer transition-colors"
+                  style={{ borderBottom: i < overdue.length - 1 ? '1px solid rgba(248,113,113,0.08)' : 'none' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.07)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                  onClick={() => {
+                    const rec = allRecords.find(r => r['Invoice Number'] === inv.invoice_no)
+                    if (rec) openView(rec)
+                  }}
+                >
+                  {/* Left: urgency stripe + invoice info */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-0.5 h-8 rounded-full flex-shrink-0" style={{ background: rowAccent, opacity: 0.7 }} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
+                        <span className="text-xs font-medium truncate" style={{ color: 'var(--text-2)' }}>{inv.project}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {inv.raised_date && (
+                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>Raised {fmtDate(inv.raised_date)}</span>
+                        )}
+                        {inv.followup ? (
+                          <span className="text-xs font-medium" style={{ color: '#34d399' }}>· Follow-up {fmtDate(inv.followup)}</span>
+                        ) : (
+                          <span className="text-xs" style={{ color: '#f59e0b' }}>· No follow-up set</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: amount + aging */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm tabular-nums font-bold" style={{ color: rowAccent }}>{fmt(inv.amount)}</span>
+                    <AgingBadge days={inv.aging} status="Pending" />
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </section>
+        )
+      })()}
       )}
 
       {/* ── Retainer Workspace ── */}
