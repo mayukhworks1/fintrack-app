@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2, ShieldCheck } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
@@ -9,20 +9,29 @@ import Login from './pages/Login'          // eager — auth gate
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
 
+const BANNER_H = 37
+
 function ImpersonationBanner() {
   const { isImpersonating, impersonation, exitImpersonation } = useAuth()
+  const navigate = useNavigate()
   const [exiting, setExiting] = useState(false)
   const handleExit = useCallback(async () => {
     setExiting(true)
-    try { await exitImpersonation() } finally { setExiting(false) }
-  }, [exitImpersonation])
+    try {
+      await exitImpersonation()
+      navigate('/')
+    } catch {
+      setExiting(false)
+    }
+  }, [exitImpersonation, navigate])
   if (!isImpersonating) return null
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      height: BANNER_H,
       background: '#b45309', color: '#fff',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '8px 16px', fontSize: 13, fontWeight: 600,
+      padding: '0 16px', fontSize: 13, fontWeight: 600,
       boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -33,7 +42,7 @@ function ImpersonationBanner() {
         </span>
       </div>
       <button onClick={handleExit} disabled={exiting}
-        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: exiting ? 'not-allowed' : 'pointer' }}>
         {exiting ? 'Exiting…' : '✕ Exit impersonation'}
       </button>
     </div>
@@ -172,7 +181,8 @@ export default function App() {
     return (
       <ErrorBoundary>
         <ImpersonationBanner />
-        <div style={isImpersonating ? { paddingTop: 37 } : undefined}>
+        {/* Banner is fixed-position; shift only the scrollable content area, not the shell */}
+        <div style={isImpersonating ? { '--impersonation-banner-h': `${BANNER_H}px` } : undefined}>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/profile" element={<Profile />} />
@@ -188,7 +198,7 @@ export default function App() {
   return (
     <>
       <ImpersonationBanner />
-      <Layout style={isImpersonating ? { paddingTop: 37 } : undefined}>
+      <Layout style={isImpersonating ? { paddingTop: BANNER_H } : undefined}>
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
