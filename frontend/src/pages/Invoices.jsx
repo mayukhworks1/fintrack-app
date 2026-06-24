@@ -607,7 +607,7 @@ function SuggestInput({ value, onChange, options = [], placeholder = 'Type or se
 }
 
 /* ── Invoice detail drawer ───────────────────────────────────────────────── */
-function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, onPreview, avatarMap = {} }) {
+function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment, isEditor, canPayment = false, onPreview, avatarMap = {} }) {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [sendingReminder, setSendingReminder] = useState(false)
@@ -3791,6 +3791,7 @@ export default function Invoices() {
         onEdit={canEdit ? () => setDrawer({ mode: 'edit', invoice: drawer?.invoice }) : null}
         onRecordPayment={canPayment ? () => openRecordPayment(drawer?.invoice) : null}
         isEditor={isEditor}
+        canPayment={canPayment}
         onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
         avatarMap={avatarMap}
       />
