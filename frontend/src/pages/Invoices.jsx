@@ -3289,7 +3289,7 @@ export default function Invoices() {
       {/* ── Desktop table (md+) ── */}
       <div
         className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' && 'is-compact')}
-        style={{ '--tbl-cell-pad': tableDensity === 'compact' ? '0.62rem 0.75rem' : '0.875rem 1rem', '--tbl-head-pad': tableDensity === 'compact' ? '0.55rem 0.75rem' : '0.875rem 1rem' }}
+        style={{ '--tbl-cell-pad': tableDensity === 'compact' ? '0.28rem 0.75rem' : '0.875rem 1rem', '--tbl-head-pad': tableDensity === 'compact' ? '0.3rem 0.75rem' : '0.75rem 1rem' }}
       >
         <div className="invoice-table-toolbar">
           <div>
@@ -3298,15 +3298,23 @@ export default function Invoices() {
           </div>
           <div className="invoice-table-controls">
             <div className="invoice-density-toggle" role="group" aria-label="Table density">
-              {['comfortable', 'compact'].map(mode => (
+              {[
+                { mode: 'comfortable', label: 'Comfort', icon: (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="3" rx="1" fill="currentColor" opacity="0.4"/><rect x="1" y="6" width="12" height="3" rx="1" fill="currentColor" opacity="0.7"/><rect x="1" y="10" width="12" height="3" rx="1" fill="currentColor"/></svg>
+                )},
+                { mode: 'compact', label: 'Compact', icon: (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1.5" width="12" height="2" rx="0.8" fill="currentColor" opacity="0.4"/><rect x="1" y="4.5" width="12" height="2" rx="0.8" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="12" height="2" rx="0.8" fill="currentColor" opacity="0.8"/><rect x="1" y="10.5" width="12" height="2" rx="0.8" fill="currentColor"/></svg>
+                )},
+              ].map(({ mode, label, icon }) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setTableDensity(mode)}
                   aria-pressed={tableDensity === mode}
                   className={tableDensity === mode ? 'active' : ''}
+                  title={label}
                 >
-                  {mode === 'comfortable' ? 'Comfort' : 'Compact'}
+                  {icon}{label}
                 </button>
               ))}
             </div>

@@ -1451,8 +1451,11 @@ html.dark .main-app-theme {
     border-radius: 999px;
     color: var(--text-3);
     font-size: 0.72rem;
-    font-weight: 800;
-    padding: 0.34rem 0.65rem;
+    font-weight: 700;
+    padding: 0.3rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
     transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
   }
 
@@ -1463,12 +1466,14 @@ html.dark .main-app-theme {
   }
 
   .data-table-shell.is-compact .tbl-head {
-    padding: 0.55rem 0.75rem !important;
-    font-size: 0.64rem !important;
+    padding: 0.3rem 0.75rem !important;
+    font-size: 0.6rem !important;
   }
 
   .data-table-shell.is-compact .tbl-cell {
-    padding: 0.62rem 0.75rem !important;
+    padding: 0.28rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.3 !important;
   }
 
   .data-table-shell thead th {
