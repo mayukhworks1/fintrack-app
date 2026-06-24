@@ -2884,6 +2884,15 @@ async def set_user_permission(
 class SetPasswordBody(BaseModel):
     password: str = Field(..., min_length=10, max_length=256)
 
+@router.post("/impersonate/exit")
+async def admin_impersonate_exit_alias(
+    request: Request,
+    _role: str = Depends(require_auth),
+):
+    """Alias registered first so FastAPI doesn't swallow /exit as a {user_id}."""
+    return await admin_impersonate_exit(request, _role)
+
+
 @router.post("/impersonate/{user_id}")
 async def admin_impersonate(
     user_id: str,
