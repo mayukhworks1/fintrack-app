@@ -1463,12 +1463,12 @@ html.dark .main-app-theme {
   }
 
   .data-table-shell.is-compact .tbl-head {
-    padding: 0.55rem 0.75rem;
-    font-size: 0.64rem;
+    padding: 0.55rem 0.75rem !important;
+    font-size: 0.64rem !important;
   }
 
   .data-table-shell.is-compact .tbl-cell {
-    padding: 0.62rem 0.75rem;
+    padding: 0.62rem 0.75rem !important;
   }
 
   .data-table-shell thead th {
