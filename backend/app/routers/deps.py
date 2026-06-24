@@ -220,6 +220,16 @@ async def require_admin(request: Request, role: str = Depends(require_auth)) -> 
     raise HTTPException(status_code=403, detail="Admin access required")
 
 
+async def require_superadmin(request: Request, role: str = Depends(require_auth)) -> str:
+    """Strictly superadmin-only gate — used for impersonation and password overrides."""
+    if not getattr(request.state, "is_email_auth", False):
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+    auth_role = getattr(request.state, "auth_role", "") or ""
+    if auth_role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+    return role
+
+
 # ── Granular permission matrix enforcement ─────────────────────────────────────
 #
 # auth_permissions / auth_role_permissions / auth_user_permission_grants back the

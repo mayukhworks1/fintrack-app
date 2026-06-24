@@ -43,7 +43,7 @@ from pydantic import BaseModel, Field
 from ..config import settings
 from ..db.postgres import get_pool
 from ..services.shared_views import SharedViewService
-from .deps import require_admin, require_permission
+from .deps import require_admin, require_auth, require_permission, require_superadmin
 
 logger = logging.getLogger("fintrack.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -2877,3 +2877,216 @@ async def set_user_permission(
             user_id, perm["id"], body.granted,
         )
         return {"status": "granted" if body.granted else "denied", "user_id": user_id, "permission_key": permission_key}
+
+
+# ── Superadmin: Impersonation ─────────────────────────────────────────────────
+
+class SetPasswordBody(BaseModel):
+    password: str = Field(..., min_length=10, max_length=256)
+
+@router.post("/impersonate/{user_id}")
+async def admin_impersonate(
+    user_id: str,
+    request: Request,
+    _role: str = Depends(require_superadmin),
+):
+    """
+    Superadmin impersonates another user.
+    Returns a short-lived token (2h) scoped to the target user.
+    The session is flagged with impersonated_by in metadata.
+    """
+    import json as _json
+    import secrets as _secrets
+    from datetime import timezone, timedelta
+    from ..routers.auth import make_token
+    from ..db.audit import parse_ua, parse_client_hint, build_device_label
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    actor_user_id = getattr(request.state, "auth_user_id", None)
+    if not actor_user_id:
+        raise HTTPException(status_code=403, detail="Cannot resolve acting user")
+    if str(actor_user_id) == str(user_id):
+        raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
+
+    async with pool.acquire() as conn:
+        target = await conn.fetchrow(
+            """
+            SELECT u.id::text AS id, u.email, u.full_name, u.status,
+                   r.role_key AS auth_role
+            FROM auth_users u
+            LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+            LEFT JOIN auth_roles r ON r.id = ur.role_id
+            WHERE u.id = $1::uuid
+            """,
+            user_id,
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        if target["status"] != "active":
+            raise HTTPException(status_code=409, detail="Can only impersonate active users")
+
+        auth_role = target["auth_role"] or "user"
+        # Map to legacy role for token
+        legacy_role_map = {
+            "superadmin": "editor", "admin": "editor", "manager": "editor",
+            "finance": "editor", "web_admin": "editor", "editor": "editor",
+            "viewer": "viewer", "web": "web", "all": "all",
+        }
+        legacy_role = legacy_role_map.get(auth_role, "viewer")
+        token = make_token(role=legacy_role)
+        token_hint = token[:16]
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=2)
+
+        ua = request.headers.get("user-agent", "")
+        os_str, browser, device = parse_ua(ua)
+        hint = parse_client_hint(request.headers.get("x-client-hint", ""))
+        device_label = build_device_label(os_str, browser, device, hint)
+
+        metadata = _json.dumps({
+            "auth_role": auth_role,
+            "login_method": "impersonation",
+            "impersonated_by": str(actor_user_id),
+        })
+
+        await conn.execute(
+            """
+            INSERT INTO auth_sessions (
+                user_id, token_hint, expires_at, ip, user_agent,
+                os, browser, device, device_label, metadata
+            ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+            """,
+            user_id, token_hint, expires_at,
+            request.client.host if request.client else "unknown",
+            ua[:500], os_str, browser, device, device_label, metadata,
+        )
+
+        # Audit event
+        await conn.execute(
+            """
+            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            VALUES ($1::uuid, 'impersonation_started', $2::uuid, $3::jsonb)
+            """,
+            user_id, actor_user_id, _json.dumps({"token_hint": token_hint}),
+        )
+
+    return {
+        "token": token,
+        "expires_in": 7200,
+        "user": {
+            "id": target["id"],
+            "email": target["email"],
+            "full_name": target["full_name"],
+            "auth_role": auth_role,
+        },
+    }
+
+
+@router.post("/impersonate/exit")
+async def admin_impersonate_exit(
+    request: Request,
+    _role: str = Depends(require_auth),
+):
+    """
+    Exit impersonation — revoke the current impersonation session.
+    The client should swap back to the original admin token after calling this.
+    """
+    import json as _json
+    token_hint = getattr(request.state, "token_hint", None)
+    if not token_hint:
+        raise HTTPException(status_code=400, detail="No active session to exit")
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT s.id, s.user_id::text, s.metadata,
+                   u.email, u.full_name
+            FROM auth_sessions s
+            JOIN auth_users u ON u.id = s.user_id
+            WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+            """,
+            token_hint,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found or already expired")
+
+        meta = row["metadata"] or {}
+        impersonated_by = meta.get("impersonated_by")
+        if not impersonated_by:
+            raise HTTPException(status_code=400, detail="This session is not an impersonation session")
+
+        await conn.execute(
+            "UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1",
+            row["id"],
+        )
+        await conn.execute(
+            """
+            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            VALUES ($1::uuid, 'impersonation_ended', $2::uuid, $3::jsonb)
+            """,
+            row["user_id"], impersonated_by,
+            _json.dumps({"token_hint": token_hint}),
+        )
+
+    return {"ok": True}
+
+
+@router.post("/auth/users/{user_id}/set-password")
+async def admin_set_password(
+    user_id: str,
+    body: SetPasswordBody,
+    request: Request,
+    _role: str = Depends(require_superadmin),
+):
+    """
+    Superadmin directly sets a user's password (no email needed).
+    Revokes all active sessions so the new password takes effect immediately.
+    """
+    import json as _json
+    from ..services.auth_master import hash_password, validate_password
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    actor_user_id = getattr(request.state, "auth_user_id", None)
+    validate_password(body.password)
+    new_hash = hash_password(body.password)
+
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
+            user_id,
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        await conn.execute(
+            "UPDATE auth_users SET password_hash = $1, updated_at = NOW() WHERE id = $2::uuid",
+            new_hash, user_id,
+        )
+        revoked = await conn.fetchval(
+            "UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL RETURNING COUNT(*)",
+            user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO auth_events (user_id, event_type, actor_user_id, metadata)
+            VALUES ($1::uuid, 'admin_set_password', $2::uuid, $3::jsonb)
+            """,
+            user_id, actor_user_id,
+            _json.dumps({"sessions_revoked": revoked or 0}),
+        )
+
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "email": user["email"],
+        "sessions_revoked": revoked or 0,
+    }

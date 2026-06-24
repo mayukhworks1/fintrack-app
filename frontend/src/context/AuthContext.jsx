@@ -7,6 +7,7 @@ const ROLE_KEY = 'fintrack-auth-role'
 const USER_KEY = 'fintrack-auth-user'
 const AUTH_ROLE_KEY = 'fintrack-auth-master-role'
 const PERMS_KEY = 'fintrack-auth-permissions'
+const IMPERSONATION_KEY = 'fintrack-impersonation'  // stores { originalToken, user }
 
 function getStoredRole() {
   try { return localStorage.getItem(ROLE_KEY) || 'editor' } catch { return 'editor' }
@@ -44,6 +45,8 @@ export function AuthProvider({ children }) {
     const stored = getStoredJson(PERMS_KEY, null)
     return Array.isArray(stored) ? new Set(stored) : null
   })
+  // Impersonation state — persisted in localStorage so refresh survives
+  const [impersonation, setImpersonation] = useState(() => getStoredJson(IMPERSONATION_KEY, null))
 
   function _applyVerifyResponse(res) {
     const r = res?.role || 'editor'
@@ -139,6 +142,31 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Start impersonating a user — swap to their token, save admin's original token
+  const startImpersonation = useCallback(async (impersonationToken, targetUser) => {
+    const originalToken = getAuthToken()
+    const imp = { originalToken, targetUser }
+    setStoredJson(IMPERSONATION_KEY, imp)
+    setImpersonation(imp)
+    setAuthToken(impersonationToken)
+    const res = await api.auth.verify()
+    _applyVerifyResponse(res)
+    setStatus('authed')
+  }, [])
+
+  // Exit impersonation — revoke the impersonation session, restore admin's original token
+  const exitImpersonation = useCallback(async () => {
+    const imp = getStoredJson(IMPERSONATION_KEY, null)
+    if (!imp?.originalToken) return
+    try { await api.admin.exitImpersonation() } catch { /* best-effort revoke */ }
+    setStoredJson(IMPERSONATION_KEY, null)
+    setImpersonation(null)
+    setAuthToken(imp.originalToken)
+    const res = await api.auth.verify()
+    _applyVerifyResponse(res)
+    setStatus('authed')
+  }, [])
+
   const updateUser = useCallback((patch) => {
     setUser(u => {
       const next = u ? { ...u, ...patch } : patch
@@ -153,11 +181,13 @@ export function AuthProvider({ children }) {
     setStoredRole(null)
     setStoredJson(USER_KEY, null)
     setStoredJson(PERMS_KEY, null)
+    setStoredJson(IMPERSONATION_KEY, null)
     try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
     setRole('editor')
     setAuthRole('')
     setUser(null)
     setPermissions(null)
+    setImpersonation(null)
     setStatus('unauthed')
   }, [])
 
@@ -186,10 +216,14 @@ export function AuthProvider({ children }) {
       isWeb:    role === 'web',
       isAll:    role === 'all',
       isAdmin:  role === 'admin',
+      impersonation,
+      isImpersonating: Boolean(impersonation),
       login,
       acceptToken,
       logout,
       updateUser,
+      startImpersonation,
+      exitImpersonation,
     }}>
       {children}
     </AuthContext.Provider>

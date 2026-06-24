@@ -671,6 +671,9 @@ export const api = {
     userTimelineExportUrl:(id, fmt='csv') => `${typeof window !== 'undefined' ? '' : ''}/api/admin/auth/users/${encodeURIComponent(id)}/timeline/export?fmt=${fmt}`,
     resendInvite:         (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/resend-invite`, { method: 'POST' }),
     forcePasswordReset:   (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/force-password-reset`, { method: 'POST' }),
+    setUserPassword:      (id, password) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/set-password`, { method: 'POST', body: JSON.stringify({ password }) }),
+    impersonate:          (id)           => request(`/api/admin/impersonate/${encodeURIComponent(id)}`, { method: 'POST' }),
+    exitImpersonation:    ()             => request('/api/admin/impersonate/exit', { method: 'POST' }),
     deploymentHealth:     (opts = {})   => request('/api/admin/deployment-health', opts),
     testEmail: (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }),
     testSmtp:  (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }), // alias

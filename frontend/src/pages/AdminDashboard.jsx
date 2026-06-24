@@ -28,7 +28,7 @@ import {
   ShieldAlert, ShieldCheck, Zap, BarChart2, Link2, Play, MinusCircle,
   Trash2, Filter, X, MapPin, Wifi, ChevronDown, ChevronUp,
   SlidersHorizontal, Calendar, Terminal, Download, UserPlus, Mail, Save,
-  SendHorizontal, KeyRound, ServerCrash, CheckSquare
+  SendHorizontal, KeyRound, ServerCrash, CheckSquare, UserCog, Eye, Lock
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -1818,9 +1818,91 @@ function AuthStatusBadge({ status }) {
   return <Badge color={color}>{label}</Badge>
 }
 
+function SetPasswordModal({ userId, userEmail, onClose, toast }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [showPw, setShowPw] = useState(false)
+
+  const canSubmit = password.length >= 10 && password === confirm
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    if (!window.confirm(`Set a new password for ${userEmail}? Their active sessions will be revoked immediately.`)) return
+    setBusy(true)
+    try {
+      const res = await api.admin.setUserPassword(userId, password)
+      toast(`Password set for ${userEmail}. ${res.sessions_revoked} session(s) revoked.`, 'success')
+      onClose()
+    } catch (err) {
+      toast(err.message || 'Failed to set password', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-2xl p-6 w-full max-w-sm space-y-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Set password</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{userEmail}</p>
+          </div>
+          <button onClick={onClose} style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--text-2)' }}>New password</label>
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Min 10 characters"
+                className="input w-full pr-10"
+                autoComplete="new-password"
+              />
+              <button type="button" onClick={() => setShowPw(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+                style={{ color: 'var(--text-3)' }}>
+                {showPw ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--text-2)' }}>Confirm password</label>
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              placeholder="Repeat password"
+              className="input w-full"
+              autoComplete="new-password"
+            />
+            {confirm && password !== confirm && (
+              <p className="text-[11px] mt-1" style={{ color: 'var(--error)' }}>Passwords do not match</p>
+            )}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-ghost flex-1 text-xs">Cancel</button>
+            <button type="submit" disabled={!canSubmit || busy} className="btn-primary flex-1 text-xs">
+              {busy ? 'Setting…' : 'Set password'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function AuthUsersTab() {
   const toast = useToast()
+  const { authRole, startImpersonation } = useAuth()
+  const isSuperAdmin = authRole === 'superadmin'
   const [searchParams, setSearchParams] = useSearchParams()
+  const [setPasswordUserId, setSetPasswordUserId] = useState(null)
   const [data, setData] = useState(null)
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2011,6 +2093,17 @@ function AuthUsersTab() {
     finally { setActingId('') }
   }, [])
 
+  const impersonate = useCallback(async (row) => {
+    if (!window.confirm(`Impersonate ${row.email}? You will be logged in as this user for up to 2 hours. A banner will appear so you can exit at any time.`)) return
+    setActingId(`${row.id}:impersonate`)
+    try {
+      const res = await api.admin.impersonate(row.id)
+      await startImpersonation(res.token, res.user)
+      window.location.href = '/'
+    } catch (e) { toast(e.message || 'Impersonation failed', 'error') }
+    finally { setActingId('') }
+  }, [startImpersonation])
+
   const updateName = useCallback(async (row, name) => {
     setActingId(`${row.id}:name`)
     try {
@@ -2098,6 +2191,20 @@ function AuthUsersTab() {
             {busy('revoke') ? 'Revoking…' : 'Revoke sessions'}
           </button>
         )}
+        {isSuperAdmin && row.status === 'active' && (
+          <button onClick={() => impersonate(row)} disabled={rowBusy}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#7c3aed', borderColor: 'rgba(124,58,237,0.28)', background: 'rgba(124,58,237,0.08)' }}>
+            <Eye size={11} /> {busy('impersonate') ? 'Starting…' : 'Impersonate'}
+          </button>
+        )}
+        {isSuperAdmin && row.status === 'active' && (
+          <button onClick={() => setSetPasswordUserId(row.id)} disabled={rowBusy}
+            className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
+            style={{ color: '#0369a1', borderColor: 'rgba(3,105,161,0.28)', background: 'rgba(3,105,161,0.08)' }}>
+            <Lock size={11} /> Set password
+          </button>
+        )}
       </div>
     )
   }
@@ -2106,6 +2213,14 @@ function AuthUsersTab() {
     <div className="space-y-3">
       {timelineUserId && (
         <UserTimelineDrawer userId={timelineUserId} onClose={() => setTimelineUserId(null)} />
+      )}
+      {setPasswordUserId && (
+        <SetPasswordModal
+          userId={setPasswordUserId}
+          userEmail={data?.rows?.find(r => r.id === setPasswordUserId)?.email || ''}
+          onClose={() => setSetPasswordUserId(null)}
+          toast={toast}
+        />
       )}
       <div className="rounded-xl border p-3 text-[11px]"
         style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
