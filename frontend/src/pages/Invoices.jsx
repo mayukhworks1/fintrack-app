@@ -3287,9 +3287,11 @@ export default function Invoices() {
       </div>
 
       {/* ── Desktop table (md+) ── */}
+      {tableDensity === 'compact' && (
+        <style>{`.invoice-density-compact .tbl-cell{padding:0.28rem 0.75rem!important;font-size:0.75rem!important;line-height:1.3!important}.invoice-density-compact .tbl-head{padding:0.3rem 0.75rem!important;font-size:0.6rem!important}`}</style>
+      )}
       <div
-        className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' && 'is-compact')}
-        style={{ '--tbl-cell-pad': tableDensity === 'compact' ? '0.28rem 0.75rem' : '0.875rem 1rem', '--tbl-head-pad': tableDensity === 'compact' ? '0.3rem 0.75rem' : '0.75rem 1rem' }}
+        className={clsx('data-table-shell hidden md:block', tableDensity === 'compact' ? 'is-compact invoice-density-compact' : '')}
       >
         <div className="invoice-table-toolbar">
           <div>
