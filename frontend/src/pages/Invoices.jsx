@@ -397,6 +397,97 @@ function AgingBadge({ days, status }) {
   )
 }
 
+/* ── Overdue collection alert panel ─────────────────────────────────────── */
+function OverdueAlert({ overdue, onViewAll, onOpenInvoice }) {
+  const totalOutstanding = overdue.reduce((s, inv) => s + (inv.amount || 0), 0)
+  const critical = overdue.filter(inv => inv.aging >= 60).length
+  return (
+    <section className="rounded-2xl animate-slide-down overflow-hidden"
+      style={{ border: '1px solid rgba(248,113,113,0.22)', background: 'rgba(248,113,113,0.04)' }}>
+
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap gap-y-2"
+        style={{ borderBottom: '1px solid rgba(248,113,113,0.14)', background: 'rgba(248,113,113,0.07)' }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <AlertOctagon size={14} style={{ color: '#f87171', flexShrink: 0 }} />
+          <span className="text-sm font-bold" style={{ color: '#f87171' }}>
+            {overdue.length} Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
+          </span>
+          {critical > 0 && (
+            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(239,68,68,0.18)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+              {critical} critical 60d+
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right">
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Total outstanding</p>
+            <p className="text-sm font-bold tabular-nums" style={{ color: '#f87171' }}>{formatInr(totalOutstanding)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+            style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer', transition: 'background 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.28)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(248,113,113,0.15)'}
+          >
+            View all →
+          </button>
+        </div>
+      </div>
+
+      {/* Rows */}
+      {overdue.map((inv, i) => {
+        const accent = inv.aging >= 60 ? '#ef4444' : inv.aging >= 30 ? '#f97316' : '#f59e0b'
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onOpenInvoice(inv.invoice_no)}
+            className="w-full text-left flex items-center justify-between gap-3 px-4 py-3"
+            style={{
+              background: 'transparent',
+              borderBottom: i < overdue.length - 1 ? '1px solid rgba(248,113,113,0.08)' : 'none',
+              cursor: 'pointer',
+              transition: 'background 0.12s',
+              border: 'none',
+              display: 'flex',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.08)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            {/* Urgency stripe + info */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex-shrink-0 rounded-full" style={{ width: 3, height: 32, background: accent }} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{inv.project}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  {inv.raised_date
+                    ? <span className="text-xs" style={{ color: 'var(--text-3)' }}>Raised {inv.raised_date.slice(0,10)}</span>
+                    : null}
+                  {inv.followup
+                    ? <span className="text-xs font-semibold" style={{ color: '#34d399' }}>{inv.raised_date ? '·' : ''} Follow-up {inv.followup.slice(0,10)}</span>
+                    : <span className="text-xs" style={{ color: '#f59e0b' }}>{inv.raised_date ? '·' : ''} No follow-up set</span>}
+                </div>
+              </div>
+            </div>
+            {/* Amount + badge */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="text-sm tabular-nums font-bold" style={{ color: accent }}>{formatInr(inv.amount)}</span>
+              <AgingBadge days={inv.aging} status="Pending" />
+            </div>
+          </button>
+        )
+      })}
+    </section>
+  )
+}
+
 /* ── Attachment thumbnail ────────────────────────────────────────────────── */
 function AttachThumb({ a, size = 28, onPreview }) {
   const [err, setErr] = useState(false)
@@ -2617,93 +2708,7 @@ export default function Invoices() {
       )}
 
       {/* ── Overdue alert ── */}
-      {overdue.length > 0 && (() => {
-        const totalOutstanding = overdue.reduce((s, inv) => s + (inv.amount || 0), 0)
-        const critical = overdue.filter(inv => inv.aging >= 60).length
-        const urgent   = overdue.filter(inv => inv.aging >= 30 && inv.aging < 60).length
-        return (
-        <section className="rounded-2xl animate-slide-down overflow-hidden"
-          style={{ border: '1px solid rgba(248,113,113,0.22)', background: 'rgba(248,113,113,0.04)' }}>
-
-          {/* Header bar */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3"
-            style={{ borderBottom: '1px solid rgba(248,113,113,0.14)', background: 'rgba(248,113,113,0.07)' }}>
-            <div className="flex items-center gap-2">
-              <AlertOctagon size={14} style={{ color: '#f87171', flexShrink: 0 }} />
-              <span className="text-sm font-bold" style={{ color: '#f87171' }}>
-                {overdue.length} Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
-              </span>
-              {critical > 0 && (
-                <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
-                  {critical} critical 60d+
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="text-right">
-                <p className="text-xs" style={{ color: 'var(--text-3)' }}>Total outstanding</p>
-                <p className="text-sm font-bold tabular-nums" style={{ color: '#f87171' }}>{fmt(totalOutstanding)}</p>
-              </div>
-              <button
-                onClick={() => setOverdueOnly(true)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}
-              >
-                View all →
-              </button>
-            </div>
-          </div>
-
-          {/* Invoice rows */}
-          <div className="divide-y" style={{ '--tw-divide-opacity': 1, borderColor: 'rgba(248,113,113,0.08)' }}>
-            {overdue.map((inv, i) => {
-              const isHot = inv.aging >= 60
-              const rowAccent = isHot ? '#ef4444' : inv.aging >= 30 ? '#f97316' : '#f59e0b'
-              return (
-                <div key={i}
-                  className="flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer transition-colors"
-                  style={{ borderBottom: i < overdue.length - 1 ? '1px solid rgba(248,113,113,0.08)' : 'none' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.07)'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}
-                  onClick={() => {
-                    const rec = allRecords.find(r => r['Invoice Number'] === inv.invoice_no)
-                    if (rec) openView(rec)
-                  }}
-                >
-                  {/* Left: urgency stripe + invoice info */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-0.5 h-8 rounded-full flex-shrink-0" style={{ background: rowAccent, opacity: 0.7 }} />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
-                        <span className="text-xs font-medium truncate" style={{ color: 'var(--text-2)' }}>{inv.project}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {inv.raised_date && (
-                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>Raised {fmtDate(inv.raised_date)}</span>
-                        )}
-                        {inv.followup ? (
-                          <span className="text-xs font-medium" style={{ color: '#34d399' }}>· Follow-up {fmtDate(inv.followup)}</span>
-                        ) : (
-                          <span className="text-xs" style={{ color: '#f59e0b' }}>· No follow-up set</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: amount + aging */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-sm tabular-nums font-bold" style={{ color: rowAccent }}>{fmt(inv.amount)}</span>
-                    <AgingBadge days={inv.aging} status="Pending" />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-        )
-      })()}
-      )}
+      {overdue.length > 0 && <OverdueAlert overdue={overdue} onViewAll={() => setOverdueOnly(true)} onOpenInvoice={(invNo) => { const rec = allRecords.find(r => r['Invoice Number'] === invNo); if (rec) openView(rec) }} />}
 
       {/* ── Retainer Workspace ── */}
       {workspace === 'retainers' && (
