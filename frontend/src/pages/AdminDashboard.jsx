@@ -1900,6 +1900,7 @@ function SetPasswordModal({ userId, userEmail, onClose, toast }) {
 function AuthUsersTab() {
   const toast = useToast()
   const { authRole, startImpersonation } = useAuth()
+  const navigate = useNavigate()
   const isSuperAdmin = authRole === 'superadmin'
   const [searchParams, setSearchParams] = useSearchParams()
   const [setPasswordUserId, setSetPasswordUserId] = useState(null)
@@ -2099,7 +2100,7 @@ function AuthUsersTab() {
     try {
       const res = await api.admin.impersonate(row.id)
       await startImpersonation(res.token, res.user)
-      window.location.href = '/'
+      navigate('/')
     } catch (e) { toast(e.message || 'Impersonation failed', 'error') }
     finally { setActingId('') }
   }, [startImpersonation])

@@ -146,11 +146,17 @@ export function AuthProvider({ children }) {
   const startImpersonation = useCallback(async (impersonationToken, targetUser) => {
     const originalToken = getAuthToken()
     const imp = { originalToken, targetUser }
+    // Persist FIRST before any async work so a reload never loses the state
     setStoredJson(IMPERSONATION_KEY, imp)
     setImpersonation(imp)
     setAuthToken(impersonationToken)
-    const res = await api.auth.verify()
-    _applyVerifyResponse(res)
+    try {
+      const res = await api.auth.verify()
+      _applyVerifyResponse(res)
+    } catch {
+      // Verify failure is non-fatal — impersonation state is already saved.
+      // The banner will still show; the next page render will re-verify.
+    }
     setStatus('authed')
   }, [])
 
