@@ -305,17 +305,11 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   )
 }
 
-export default function Layout({ children }) {
+export default function Layout({ children, style }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [collapsed,  setCollapsed]  = useState(() => {
     try { return localStorage.getItem('ft-sidebar-collapsed') === '1' } catch { return false }
   })
-  const { isImpersonating, impersonation, exitImpersonation } = useAuth()
-  const [exitingImpersonation, setExitingImpersonation] = useState(false)
-  const handleExitImpersonation = useCallback(async () => {
-    setExitingImpersonation(true)
-    try { await exitImpersonation() } finally { setExitingImpersonation(false) }
-  }, [exitImpersonation])
   const location = useLocation()
   const mainRef  = useRef(null)
   const scrollKey = `ft-scroll:${location.pathname}`
@@ -369,28 +363,7 @@ export default function Layout({ children }) {
   const sidebarW = collapsed ? 76 : 200
 
   return (
-    <div className="main-app-theme app-layout-shell flex flex-col h-screen overflow-hidden">
-
-      {/* ── Impersonation banner ── */}
-      {isImpersonating && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2 text-sm font-semibold z-50 flex-shrink-0"
-          style={{ background: '#b45309', color: '#fff' }}>
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={15} />
-            <span>Impersonating <strong>{impersonation?.targetUser?.email || impersonation?.targetUser?.full_name || 'user'}</strong></span>
-            {impersonation?.targetUser?.full_name && impersonation?.targetUser?.email && (
-              <span style={{ opacity: 0.75 }}>({impersonation.targetUser.full_name})</span>
-            )}
-          </div>
-          <button
-            onClick={handleExitImpersonation}
-            disabled={exitingImpersonation}
-            className="px-3 py-1 rounded-lg text-xs font-bold"
-            style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
-            {exitingImpersonation ? 'Exiting…' : 'Exit impersonation'}
-          </button>
-        </div>
-      )}
+    <div className="main-app-theme app-layout-shell flex h-screen overflow-hidden" style={style}>
 
       {/* ── Skip to content ── */}
       <a

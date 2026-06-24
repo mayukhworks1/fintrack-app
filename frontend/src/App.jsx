@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldCheck } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -8,6 +8,37 @@ import Dashboard from './pages/Dashboard'  // eager — landing route
 import Login from './pages/Login'          // eager — auth gate
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
+
+function ImpersonationBanner() {
+  const { isImpersonating, impersonation, exitImpersonation } = useAuth()
+  const [exiting, setExiting] = useState(false)
+  const handleExit = useCallback(async () => {
+    setExiting(true)
+    try { await exitImpersonation() } finally { setExiting(false) }
+  }, [exitImpersonation])
+  if (!isImpersonating) return null
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      background: '#b45309', color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '8px 16px', fontSize: 13, fontWeight: 600,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <ShieldCheck size={15} />
+        <span>Impersonating <strong>{impersonation?.targetUser?.full_name || impersonation?.targetUser?.email || 'user'}</strong>
+          {impersonation?.targetUser?.full_name && impersonation?.targetUser?.email &&
+            <span style={{ opacity: 0.75, fontWeight: 400 }}> · {impersonation.targetUser.email}</span>}
+        </span>
+      </div>
+      <button onClick={handleExit} disabled={exiting}
+        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+        {exiting ? 'Exiting…' : '✕ Exit impersonation'}
+      </button>
+    </div>
+  )
+}
 
 /* Lazy-loaded routes — split into separate chunks for snappier initial paint */
 const CHUNK_RELOAD_KEY = 'fintrack:chunk-reload'
@@ -83,7 +114,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { status, isWeb, isAll, isAdmin, isViewer } = useAuth()
+  const { status, isWeb, isAll, isAdmin, isViewer, isImpersonating } = useAuth()
   const location = useLocation()
 
   useEffect(() => {
@@ -140,12 +171,15 @@ export default function App() {
   if (isWeb || isAll) {
     return (
       <ErrorBoundary>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/profile" element={<Profile />} />
-            <Route path="*" element={<WebInvoices />} />
-          </Routes>
-        </Suspense>
+        <ImpersonationBanner />
+        <div style={isImpersonating ? { paddingTop: 37 } : undefined}>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/profile" element={<Profile />} />
+              <Route path="*" element={<WebInvoices />} />
+            </Routes>
+          </Suspense>
+        </div>
         <VercelAnalytics />
       </ErrorBoundary>
     )
@@ -153,7 +187,8 @@ export default function App() {
 
   return (
     <>
-      <Layout>
+      <ImpersonationBanner />
+      <Layout style={isImpersonating ? { paddingTop: 37 } : undefined}>
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
