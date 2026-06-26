@@ -438,6 +438,42 @@ async def delete_page(
     return {"ok": True}
 
 
+@router.delete("/api/pages/{page_id}/views/{view_id}")
+async def delete_page_view(
+    page_id: str,
+    view_id: str,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    user_id = getattr(request.state, "auth_user_id", None)
+    auth_role = getattr(request.state, "auth_role", role) or role
+
+    async with pool.acquire() as conn:
+        page = await conn.fetchrow(
+            "SELECT id, created_by FROM published_pages WHERE id = $1", page_id
+        )
+        if not page:
+            raise HTTPException(404, "Page not found")
+        if not _is_privileged(auth_role) and str(page["created_by"]) != str(user_id):
+            raise HTTPException(403, "Access denied")
+
+        result = await conn.execute(
+            "DELETE FROM page_views WHERE id = $1 AND page_id = $2",
+            int(view_id), page_id,
+        )
+        # Decrement view_count to stay in sync
+        if result != "DELETE 0":
+            await conn.execute(
+                "UPDATE published_pages SET view_count = GREATEST(view_count - 1, 0) WHERE id = $1",
+                page_id,
+            )
+    return {"ok": True}
+
+
 @router.post("/api/pages/{page_id}/publish")
 async def publish_page(
     page_id: str,

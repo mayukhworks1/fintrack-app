@@ -170,8 +170,11 @@ function DetailGrid({ geo, cli, v }) {
       {geo.lat && geo.lon && (
         <div>
           <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map</div>
+          <div style={{ fontSize:12, color:'var(--text-2)', marginBottom:6, wordBreak:'break-all', fontFamily:'monospace' }}>
+            {`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=14`}
+          </div>
           <a
-            href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=10`}
+            href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=14`}
             target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-block', fontSize:12, color:'var(--accent)', textDecoration:'none', border:'1px solid var(--border)', borderRadius:6, padding:'5px 10px' }}>
             📍 {geo.lat.toFixed(4)}, {geo.lon.toFixed(4)} — Open in map ↗
@@ -190,6 +193,23 @@ function AnalyticsDrawer({ page, onClose }) {
   const [loading, setLoading] = useState(true)
   const [limit, setLimit] = useState(50)
   const [expandedRow, setExpandedRow] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const handleDeleteView = async (e, viewId) => {
+    e.stopPropagation()
+    if (!window.confirm('Delete this view record?')) return
+    setDeletingId(viewId)
+    try {
+      await api.pages.deleteView(page.id, viewId)
+      setData(prev => ({
+        ...prev,
+        total: prev.total - 1,
+        items: prev.items.filter(v => v.id !== viewId),
+      }))
+      if (expandedRow === viewId) setExpandedRow(null)
+    } catch { /* ignore */ }
+    finally { setDeletingId(null) }
+  }
 
   useEffect(() => {
     if (!page) return
@@ -259,7 +279,7 @@ function AnalyticsDrawer({ page, onClose }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                   <thead>
                     <tr style={{ borderBottom:'2px solid var(--border)', background:'var(--bg-card)', position:'sticky', top:0 }}>
-                      {['Time', 'IP Address', 'Location', 'ISP / Network', 'Device', 'Browser', 'Screen', 'Timezone', 'Language', 'Referer'].map(h => (
+                      {['Time', 'IP Address', 'Location', 'ISP / Network', 'Device', 'Browser', 'Screen', 'Timezone', 'Language', 'Referer', ''].map(h => (
                         <th key={h} style={{ padding:'9px 12px', textAlign:'left', color:'var(--text-2)', fontWeight:700, whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>{h}</th>
                       ))}
                     </tr>
@@ -299,10 +319,19 @@ function AnalyticsDrawer({ page, onClose }) {
                           </td>
                           <td style={{ padding:'9px 12px', whiteSpace:'nowrap', fontSize:11 }}>{cli.language || '—'}</td>
                           <td style={{ padding:'9px 12px', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.referer}>{fmtReferer(v.referer)}</td>
+                          <td style={{ padding:'9px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={e => handleDeleteView(e, v.id)}
+                              disabled={deletingId === v.id}
+                              title="Delete this view record"
+                              style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer', opacity: deletingId === v.id ? 0.5 : 1 }}>
+                              {deletingId === v.id ? '…' : 'Delete'}
+                            </button>
+                          </td>
                         </tr>,
                         expanded && (
                           <tr key={`${v.id}-exp`} style={{ background:'var(--bg-card)', borderBottom:'2px solid var(--accent)', borderLeft:'3px solid var(--accent)' }}>
-                            <td colSpan={10} style={{ padding:'20px 24px' }}>
+                            <td colSpan={11} style={{ padding:'20px 24px' }}>
                               <DetailGrid geo={geo} cli={cli} v={v} />
                             </td>
                           </tr>

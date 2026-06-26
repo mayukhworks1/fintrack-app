@@ -742,6 +742,7 @@ export const api = {
     delete:        (id)        => request(`/api/pages/${id}`, { method: 'DELETE' }),
     publish:       (id, published) => request(`/api/pages/${id}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
     analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
+    deleteView:    (pageId, viewId) => request(`/api/pages/${pageId}/views/${viewId}`, { method: 'DELETE' }),
     allViews:      (params)    => request(`/api/pages/admin/all-views?${new URLSearchParams(params || {})}`),
     publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(r => r.json()),
     publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
