@@ -59,18 +59,25 @@ async def _geo_lookup(ip: str) -> dict:
     if not ip or ip in ("127.0.0.1", "::1", "localhost"):
         return {}
     try:
-        async with httpx.AsyncClient(timeout=3) as c:
-            r = await c.get(
-                f"http://ip-api.com/json/{ip}?fields=country,city,regionName,isp"
-            )
+        fields = "status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query"
+        async with httpx.AsyncClient(timeout=4) as c:
+            r = await c.get(f"http://ip-api.com/json/{ip}?fields={fields}")
             if r.status_code == 200:
                 d = r.json()
-                return {
-                    "country": d.get("country", ""),
-                    "city": d.get("city", ""),
-                    "region": d.get("regionName", ""),
-                    "isp": d.get("isp", ""),
-                }
+                if d.get("status") == "success":
+                    return {
+                        "country":      d.get("country", ""),
+                        "country_code": d.get("countryCode", ""),
+                        "city":         d.get("city", ""),
+                        "region":       d.get("regionName", ""),
+                        "zip":          d.get("zip", ""),
+                        "lat":          d.get("lat"),
+                        "lon":          d.get("lon"),
+                        "timezone":     d.get("timezone", ""),
+                        "isp":          d.get("isp", ""),
+                        "org":          d.get("org", ""),
+                        "as":           d.get("as", ""),
+                    }
     except Exception:
         pass
     return {}
@@ -82,19 +89,26 @@ async def _log_view_bg(
     user_agent: str,
     referer: str,
     viewer_user_id: str | None,
+    client_meta: dict | None = None,
 ) -> None:
     """Fire-and-forget: geo lookup + insert page_view + increment view_count."""
     pool = get_pool()
     if not pool:
         return
     geo = await _geo_lookup(ip)
+    meta = {
+        # Full geo
+        "geo": geo,
+        # Client-side metadata sent by browser
+        "client": client_meta or {},
+    }
     try:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO page_views
-                    (page_id, viewer_ip, user_agent, referer, country, city, region, isp, viewer_user_id)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                    (page_id, viewer_ip, user_agent, referer, country, city, region, isp, viewer_user_id, metadata)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                 """,
                 page_id,
                 ip,
@@ -105,6 +119,7 @@ async def _log_view_bg(
                 geo.get("region"),
                 geo.get("isp"),
                 viewer_user_id,
+                json.dumps(meta),
             )
             await conn.execute(
                 "UPDATE published_pages SET view_count = view_count + 1 WHERE id = $1",
@@ -154,6 +169,26 @@ class VerifyPasswordBody(BaseModel):
 
 class LogViewBody(BaseModel):
     referer: str = ""
+    # Client-side metadata (sent by browser JS)
+    screen_width:   int | None = None
+    screen_height:  int | None = None
+    viewport_width: int | None = None
+    viewport_height:int | None = None
+    color_depth:    int | None = None
+    pixel_ratio:    float | None = None
+    language:       str | None = None
+    languages:      list[str] | None = None
+    timezone:       str | None = None
+    platform:       str | None = None
+    touch_support:  bool | None = None
+    cookie_enabled: bool | None = None
+    do_not_track:   str | None = None
+    connection_type:str | None = None
+    connection_downlink: float | None = None
+    page_url:       str | None = None
+    utm_source:     str | None = None
+    utm_medium:     str | None = None
+    utm_campaign:   str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -568,8 +603,30 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
     ua = request.headers.get("user-agent", "")
     page_id = str(row["id"])
 
+    client_meta = {k: v for k, v in {
+        "screen_width":        body.screen_width,
+        "screen_height":       body.screen_height,
+        "viewport_width":      body.viewport_width,
+        "viewport_height":     body.viewport_height,
+        "color_depth":         body.color_depth,
+        "pixel_ratio":         body.pixel_ratio,
+        "language":            body.language,
+        "languages":           body.languages,
+        "timezone":            body.timezone,
+        "platform":            body.platform,
+        "touch_support":       body.touch_support,
+        "cookie_enabled":      body.cookie_enabled,
+        "do_not_track":        body.do_not_track,
+        "connection_type":     body.connection_type,
+        "connection_downlink": body.connection_downlink,
+        "page_url":            body.page_url,
+        "utm_source":          body.utm_source,
+        "utm_medium":          body.utm_medium,
+        "utm_campaign":        body.utm_campaign,
+    }.items() if v is not None}
+
     # Fire-and-forget
-    asyncio.create_task(_log_view_bg(page_id, ip, ua, body.referer, None))
+    asyncio.create_task(_log_view_bg(page_id, ip, ua, body.referer, None, client_meta))
     return {"ok": True}
 
 

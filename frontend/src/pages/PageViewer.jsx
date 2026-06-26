@@ -247,7 +247,32 @@ export default function PageViewer() {
   useEffect(() => {
     if (state !== 'loaded' || viewLogged.current) return
     viewLogged.current = true
-    api.pages.publicLogView(slug, { referer: document.referrer }).catch(() => {})
+    const nav = navigator
+    const conn = nav.connection || nav.mozConnection || nav.webkitConnection
+    const params = new URLSearchParams(window.location.search)
+    const payload = {
+      referer:            document.referrer || '',
+      screen_width:       window.screen.width,
+      screen_height:      window.screen.height,
+      viewport_width:     window.innerWidth,
+      viewport_height:    window.innerHeight,
+      color_depth:        window.screen.colorDepth,
+      pixel_ratio:        window.devicePixelRatio,
+      language:           nav.language,
+      languages:          Array.from(nav.languages || []),
+      timezone:           Intl.DateTimeFormat().resolvedOptions().timeZone,
+      platform:           nav.platform || nav.userAgentData?.platform || '',
+      touch_support:      navigator.maxTouchPoints > 0,
+      cookie_enabled:     nav.cookieEnabled,
+      do_not_track:       nav.doNotTrack || '',
+      connection_type:    conn?.effectiveType || conn?.type || '',
+      connection_downlink:conn?.downlink || null,
+      page_url:           window.location.href,
+      utm_source:         params.get('utm_source') || '',
+      utm_medium:         params.get('utm_medium') || '',
+      utm_campaign:       params.get('utm_campaign') || '',
+    }
+    api.pages.publicLogView(slug, payload).catch(() => {})
   }, [state, slug])
 
   const handlePasswordSubmit = (password) => {

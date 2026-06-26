@@ -110,12 +110,86 @@ function Badge({ label, color }) {
 }
 
 // ---------------------------------------------------------------------------
+// Detail panel — shown when a row is expanded
+// ---------------------------------------------------------------------------
+function DetailGrid({ geo, cli, v }) {
+  const rows = [
+    // IP & Network
+    { section:'Network', label:'IP Address',         value: v.viewer_ip },
+    { section:'Network', label:'ISP',                value: v.isp },
+    { section:'Network', label:'Organisation',       value: geo.org },
+    { section:'Network', label:'AS Number',          value: geo.as },
+    { section:'Network', label:'Connection Type',    value: cli.connection_type },
+    { section:'Network', label:'Downlink',           value: cli.connection_downlink != null ? `${cli.connection_downlink} Mbps` : null },
+    // Geo
+    { section:'Location (IP-based)', label:'Country',      value: geo.country ? `${flagEmoji(geo.country_code || geo.country)} ${geo.country}` : null },
+    { section:'Location (IP-based)', label:'Country Code',  value: geo.country_code },
+    { section:'Location (IP-based)', label:'Region',        value: geo.region },
+    { section:'Location (IP-based)', label:'City',          value: geo.city },
+    { section:'Location (IP-based)', label:'ZIP / Postcode',value: geo.zip },
+    { section:'Location (IP-based)', label:'Latitude',      value: geo.lat != null ? String(geo.lat) : null },
+    { section:'Location (IP-based)', label:'Longitude',     value: geo.lon != null ? String(geo.lon) : null },
+    { section:'Location (IP-based)', label:'Timezone (IP)', value: geo.timezone },
+    // Device
+    { section:'Device & Browser', label:'Platform / OS',  value: cli.platform },
+    { section:'Device & Browser', label:'Touch Screen',   value: cli.touch_support != null ? (cli.touch_support ? 'Yes' : 'No') : null },
+    { section:'Device & Browser', label:'Screen',         value: cli.screen_width ? `${cli.screen_width} × ${cli.screen_height}` : null },
+    { section:'Device & Browser', label:'Viewport',       value: cli.viewport_width ? `${cli.viewport_width} × ${cli.viewport_height}` : null },
+    { section:'Device & Browser', label:'Pixel Ratio',    value: cli.pixel_ratio != null ? `${cli.pixel_ratio}x` : null },
+    { section:'Device & Browser', label:'Color Depth',    value: cli.color_depth != null ? `${cli.color_depth}-bit` : null },
+    { section:'Device & Browser', label:'Language',       value: cli.language },
+    { section:'Device & Browser', label:'All Languages',  value: cli.languages?.join(', ') },
+    { section:'Device & Browser', label:'Timezone (Browser)', value: cli.timezone },
+    { section:'Device & Browser', label:'Cookies Enabled',value: cli.cookie_enabled != null ? (cli.cookie_enabled ? 'Yes' : 'No') : null },
+    { section:'Device & Browser', label:'Do Not Track',   value: cli.do_not_track },
+    { section:'Device & Browser', label:'User Agent',     value: v.user_agent },
+    // Visit
+    { section:'Visit', label:'Viewed At',    value: v.viewed_at ? new Date(v.viewed_at).toLocaleString() : null },
+    { section:'Visit', label:'Page URL',     value: cli.page_url },
+    { section:'Visit', label:'Referer',      value: v.referer },
+    { section:'Visit', label:'UTM Source',   value: cli.utm_source },
+    { section:'Visit', label:'UTM Medium',   value: cli.utm_medium },
+    { section:'Visit', label:'UTM Campaign', value: cli.utm_campaign },
+  ].filter(r => r.value)
+
+  const sections = [...new Set(rows.map(r => r.section))]
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:20 }}>
+      {sections.map(sec => (
+        <div key={sec}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>{sec}</div>
+          {rows.filter(r => r.section === sec).map(r => (
+            <div key={r.label} style={{ display:'flex', justifyContent:'space-between', gap:8, padding:'3px 0', borderBottom:'1px solid var(--border)', fontSize:12 }}>
+              <span style={{ color:'var(--text-2)', whiteSpace:'nowrap', flexShrink:0 }}>{r.label}</span>
+              <span style={{ color:'var(--text-1)', fontFamily: r.label==='User Agent'||r.label==='IP Address'?'monospace':'inherit', fontSize: r.label==='User Agent'?10:12, textAlign:'right', wordBreak:'break-all' }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+      {geo.lat && geo.lon && (
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map</div>
+          <a
+            href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=10`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ display:'inline-block', fontSize:12, color:'var(--accent)', textDecoration:'none', border:'1px solid var(--border)', borderRadius:6, padding:'5px 10px' }}>
+            📍 {geo.lat.toFixed(4)}, {geo.lon.toFixed(4)} — Open in map ↗
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Analytics Drawer — full audit log with geo + device info
 // ---------------------------------------------------------------------------
 function AnalyticsDrawer({ page, onClose }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [limit, setLimit] = useState(50)
+  const [expandedRow, setExpandedRow] = useState(null)
 
   useEffect(() => {
     if (!page) return
@@ -128,30 +202,26 @@ function AnalyticsDrawer({ page, onClose }) {
 
   if (!page) return null
 
-  const fmtUA = (ua) => {
+  const fmtBrowser = (ua) => {
     if (!ua) return '—'
-    if (/iPhone|iPad|iOS/i.test(ua)) return '📱 iOS'
-    if (/Android/i.test(ua)) return '📱 Android'
-    if (/Chrome/i.test(ua)) return '🌐 Chrome'
-    if (/Firefox/i.test(ua)) return '🦊 Firefox'
-    if (/Safari/i.test(ua)) return '🧭 Safari'
-    if (/curl|python|go-http/i.test(ua)) return '🤖 Bot/Script'
-    return ua.slice(0, 32)
+    const mobile = /iPhone|iPad/i.test(ua) ? 'iPhone/iPad' : /Android/i.test(ua) ? 'Android' : ''
+    const browser = /EdgA?\/|Edg\//i.test(ua) ? 'Edge' : /OPR\/|Opera/i.test(ua) ? 'Opera' : /SamsungBrowser/i.test(ua) ? 'Samsung' : /Chrome/i.test(ua) ? 'Chrome' : /Firefox/i.test(ua) ? 'Firefox' : /Safari/i.test(ua) ? 'Safari' : /curl|python|go-http/i.test(ua) ? 'Bot' : ''
+    return [mobile, browser].filter(Boolean).join(' · ') || ua.slice(0, 28)
   }
 
   const fmtReferer = (ref) => {
     if (!ref) return '—'
-    try { return new URL(ref).hostname } catch { return ref.slice(0,40) }
+    try { return new URL(ref).hostname } catch { return ref.slice(0,30) }
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', justifyContent:'flex-end' }} onClick={onClose}>
-      <div style={{ width:'92vw', maxWidth:900, height:'100%', background:'var(--bg-base)', overflowY:'auto', boxShadow:'-4px 0 32px rgba(0,0,0,0.2)', display:'flex', flexDirection:'column' }} onClick={e=>e.stopPropagation()}>
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.5)', display:'flex', justifyContent:'flex-end' }} onClick={onClose}>
+      <div style={{ width:'96vw', maxWidth:1200, height:'100%', background:'var(--bg-base)', overflowY:'auto', boxShadow:'-4px 0 40px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexShrink:0 }}>
           <div>
-            <div style={{ fontSize:17, fontWeight:700 }}>Page Analytics</div>
+            <div style={{ fontSize:17, fontWeight:700 }}>Page Analytics & Viewer Audit</div>
             <div style={{ fontSize:13, color:'var(--text-2)', marginTop:3 }}>{page.title}</div>
             <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug}</a>
           </div>
@@ -160,16 +230,19 @@ function AnalyticsDrawer({ page, onClose }) {
 
         {/* Stats bar */}
         {data && (
-          <div style={{ padding:'14px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:32, flexWrap:'wrap' }}>
-            <Stat label="Total Views" value={data.total} />
-            <Stat label="Unique IPs" value={new Set(data.items?.map(v=>v.viewer_ip).filter(Boolean)).size} />
-            <Stat label="Countries" value={new Set(data.items?.map(v=>v.country).filter(Boolean)).size} />
+          <div style={{ padding:'14px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:28, flexWrap:'wrap', flexShrink:0, background:'var(--bg-card)' }}>
+            <Stat label="Total Views"       value={data.total} />
+            <Stat label="Unique IPs"        value={new Set(data.items?.map(v=>v.viewer_ip).filter(Boolean)).size} />
+            <Stat label="Countries"         value={new Set(data.items?.map(v=>v.country).filter(Boolean)).size} />
+            <Stat label="Unique Timezones"  value={new Set(data.items?.map(v=>v.metadata?.client?.timezone).filter(Boolean)).size} />
+            <Stat label="Mobile Views"      value={data.items?.filter(v=> v.metadata?.client?.touch_support === true).length ?? 0} />
+            <Stat label="Desktop Views"     value={data.items?.filter(v=> v.metadata?.client?.touch_support === false).length ?? 0} />
             {data.items?.length > 0 && <Stat label="Last View" value={new Date(data.items[0].viewed_at).toLocaleDateString()} />}
           </div>
         )}
 
         {/* Table */}
-        <div style={{ flex:1, padding:'16px 24px', overflowY:'auto' }}>
+        <div style={{ flex:1, padding:'16px 24px', overflow:'auto' }}>
           {loading ? (
             <div style={{ color:'var(--text-2)', fontSize:14, padding:40, textAlign:'center' }}>Loading…</div>
           ) : !data?.items?.length ? (
@@ -180,31 +253,62 @@ function AnalyticsDrawer({ page, onClose }) {
           ) : (
             <>
               <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:12 }}>
-                Showing {data.items.length} of {data.total} view{data.total !== 1 ? 's' : ''}
+                Showing {data.items.length} of {data.total} view{data.total !== 1 ? 's' : ''} — <span style={{ color:'var(--accent)' }}>click any row for full details</span>
               </div>
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                   <thead>
-                    <tr style={{ borderBottom:'2px solid var(--border)' }}>
-                      {['Time', 'IP Address', 'Country', 'City', 'ISP', 'Device / Browser', 'Referer'].map(h => (
-                        <th key={h} style={{ padding:'8px 12px', textAlign:'left', color:'var(--text-2)', fontWeight:700, whiteSpace:'nowrap', fontSize:11, textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
+                    <tr style={{ borderBottom:'2px solid var(--border)', background:'var(--bg-card)', position:'sticky', top:0 }}>
+                      {['Time', 'IP Address', 'Location', 'ISP / Network', 'Device', 'Browser', 'Screen', 'Timezone', 'Language', 'Referer'].map(h => (
+                        <th key={h} style={{ padding:'9px 12px', textAlign:'left', color:'var(--text-2)', fontWeight:700, whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.items.map((v, i) => (
-                      <tr key={v.id} style={{ borderBottom:'1px solid var(--border)', background: i%2 ? 'var(--bg-card)' : 'var(--bg-base)' }}>
-                        <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12 }}>
-                          {new Date(v.viewed_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
-                        </td>
-                        <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-1)' }}>{v.viewer_ip || '—'}</td>
-                        <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{v.country ? `${flagEmoji(v.country)} ${v.country}` : '—'}</td>
-                        <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)' }}>{v.city || '—'}</td>
-                        <td style={{ padding:'9px 12px', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)' }} title={v.isp}>{v.isp || '—'}</td>
-                        <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }} title={v.user_agent}>{fmtUA(v.user_agent)}</td>
-                        <td style={{ padding:'9px 12px', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)' }} title={v.referer}>{fmtReferer(v.referer)}</td>
-                      </tr>
-                    ))}
+                    {data.items.map((v, i) => {
+                      const geo = v.metadata?.geo || {}
+                      const cli = v.metadata?.client || {}
+                      const expanded = expandedRow === v.id
+                      return [
+                        <tr
+                          key={v.id}
+                          onClick={() => setExpandedRow(expanded ? null : v.id)}
+                          style={{ borderBottom: expanded ? 'none' : '1px solid var(--border)', background: expanded ? 'var(--bg-card)' : i%2 ? 'var(--bg-card)' : 'var(--bg-base)', cursor:'pointer', transition:'background 0.1s' }}
+                        >
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>
+                            {new Date(v.viewed_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          </td>
+                          <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-1)' }}>{v.viewer_ip || '—'}</td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', fontSize:12 }}>
+                            {v.country
+                              ? <>{flagEmoji(geo.country_code || v.country)} {v.city ? `${v.city}, ` : ''}{geo.country_code || v.country}</>
+                              : '—'}
+                          </td>
+                          <td style={{ padding:'9px 12px', maxWidth:130, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.isp}>{v.isp || '—'}</td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', fontSize:12 }}>
+                            {cli.touch_support === true ? '📱 ' : cli.touch_support === false ? '🖥️ ' : ''}
+                            {cli.platform || '—'}
+                          </td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', fontSize:12 }} title={v.user_agent}>{fmtBrowser(v.user_agent)}</td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>
+                            {cli.screen_width ? `${cli.screen_width}×${cli.screen_height}` : '—'}
+                            {cli.pixel_ratio > 1 ? <span style={{ color:'var(--accent)', marginLeft:3, fontSize:10 }}>@{cli.pixel_ratio}x</span> : ''}
+                          </td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11, maxWidth:120, overflow:'hidden', textOverflow:'ellipsis' }}>
+                            {cli.timezone || geo.timezone || '—'}
+                          </td>
+                          <td style={{ padding:'9px 12px', whiteSpace:'nowrap', fontSize:11 }}>{cli.language || '—'}</td>
+                          <td style={{ padding:'9px 12px', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.referer}>{fmtReferer(v.referer)}</td>
+                        </tr>,
+                        expanded && (
+                          <tr key={`${v.id}-exp`} style={{ background:'var(--bg-card)', borderBottom:'2px solid var(--accent)', borderLeft:'3px solid var(--accent)' }}>
+                            <td colSpan={10} style={{ padding:'20px 24px' }}>
+                              <DetailGrid geo={geo} cli={cli} v={v} />
+                            </td>
+                          </tr>
+                        )
+                      ]
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -230,10 +334,10 @@ function Stat({ label, value }) {
   )
 }
 
-function flagEmoji(country) {
+function flagEmoji(code) {
+  if (!code || code.length < 2) return ''
   try {
-    const code = country.slice(0,2).toUpperCase()
-    return code.split('').map(c => String.fromCodePoint(0x1F1E0 - 65 + c.charCodeAt(0))).join('')
+    return code.slice(0,2).toUpperCase().split('').map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('')
   } catch { return '' }
 }
 
