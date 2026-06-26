@@ -403,15 +403,21 @@ function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) {
   const critical = overdue.filter(inv => inv.aging >= 60).length
   const urgent   = overdue.filter(inv => inv.aging >= 30 && inv.aging < 60).length
 
-  // Enrich summary entries with full record fields
+  // Enrich summary entries with full record fields (allRecords has r.fields nested)
   const enriched = overdue.map(inv => {
-    const rec = (allRecords || []).find(r => r['Invoice Number'] === inv.invoice_no) || {}
+    const recObj = (allRecords || []).find(r =>
+      (r.fields?.['Invoice Number'] || r['Invoice Number']) === inv.invoice_no
+    )
+    const f = recObj?.fields || recObj || {}
     return {
       ...inv,
-      client:      rec['Client Name']        || '',
-      category:    rec['Category']           || '',
-      outstanding: Number(rec['Outstanding Amount'] || inv.amount || 0),
-      milestone:   rec['Milestone']          || '',
+      client:      f['Client Name']        || '',
+      category:    f['Category']           || '',
+      outstanding: Number(f['Outstanding Amount'] || inv.amount || 0),
+      milestone:   f['Milestone']          || '',
+      // Prefer full record's followup — summary API may omit it
+      followup:    f['Next followup'] || f['Next Follow-up'] || inv.followup || null,
+      raised_date: f['Raised Date']   || inv.raised_date || null,
     }
   })
 
@@ -2757,7 +2763,7 @@ export default function Invoices() {
       )}
 
       {/* ── Overdue alert ── */}
-      {overdue.length > 0 && <OverdueAlert overdue={overdue} allRecords={allRecords} onViewAll={() => setOverdueOnly(true)} onOpenInvoice={(invNo) => { const rec = allRecords.find(r => r['Invoice Number'] === invNo); if (rec) openView(rec) }} />}
+      {overdue.length > 0 && <OverdueAlert overdue={overdue} allRecords={allRecords} onViewAll={() => setOverdueOnly(true)} onOpenInvoice={(invNo) => { const rec = allRecords.find(r => (r.fields?.['Invoice Number'] || r['Invoice Number']) === invNo); if (rec) openView(rec) }} />}
 
       {/* ── Retainer Workspace ── */}
       {workspace === 'retainers' && (

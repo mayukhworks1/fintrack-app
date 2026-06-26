@@ -2973,9 +2973,16 @@ function SyncLogTab() {
                       </div>
                       {Array.isArray(row.details?.updated_records) && row.details.updated_records.length > 0 && (
                         <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-2)' }}>
-                          Updated records: {row.details.updated_records.slice(0, 3).map(r => r.invoice_number || r.teable_id).join(', ')}
+                          Updated: {row.details.updated_records.slice(0, 3).map(r =>
+                            r.project_name
+                              ? `${r.project_name} (${r.old_duration}→${r.new_duration}mo)`
+                              : (r.invoice_number || r.teable_id)
+                          ).join(', ')}
                           {row.details.updated_records.length > 3 ? ` +${row.details.updated_records.length - 3}` : ''}
                         </p>
+                      )}
+                      {row.details?.errors > 0 && (
+                        <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
                       )}
                       {row.error && <p className="text-[11px] text-red-500 mt-1.5 line-clamp-2">{row.error}</p>}
                     </div>
@@ -3004,9 +3011,16 @@ function SyncLogTab() {
                             <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
                             {Array.isArray(row.details?.updated_records) && row.details.updated_records.length > 0 && (
                               <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                                {row.details.updated_records.slice(0, 2).map(r => r.invoice_number || r.teable_id).join(', ')}
+                                {row.details.updated_records.slice(0, 2).map(r =>
+                                  r.project_name
+                                    ? `${r.project_name} (${r.old_duration}→${r.new_duration}mo)`
+                                    : (r.invoice_number || r.teable_id)
+                                ).join(', ')}
                                 {row.details.updated_records.length > 2 ? ` +${row.details.updated_records.length - 2}` : ''}
                               </p>
+                            )}
+                            {row.details?.errors > 0 && (
+                              <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
                             )}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-right">{fmt(row.total)}</td>
