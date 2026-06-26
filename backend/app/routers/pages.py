@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 import secrets
 import string
@@ -204,7 +205,7 @@ async def create_page(
             body.title,
             body.content_type,
             body.content,
-            body.metadata or {},
+            json.dumps(body.metadata or {}),
             body.is_password_protected,
             pw_hash,
             user_id,
@@ -281,7 +282,12 @@ async def admin_all_views(
             offset,
         )
         total = await conn.fetchval("SELECT COUNT(*) FROM page_views")
-    return {"total": total, "items": [dict(r) for r in rows]}
+    def _view_dict(r):
+        d = dict(r)
+        d["viewed_at"] = _dt(d.get("viewed_at"))
+        d["page_id"] = str(d["page_id"]) if d.get("page_id") else None
+        return d
+    return {"total": total, "items": [_view_dict(r) for r in rows]}
 
 
 @router.get("/api/pages/{page_id}")
@@ -340,7 +346,7 @@ async def update_page(
         if body.content is not None:
             updates["content"] = body.content
         if body.metadata is not None:
-            updates["metadata"] = body.metadata
+            updates["metadata"] = json.dumps(body.metadata)
         if body.is_password_protected is not None:
             updates["is_password_protected"] = body.is_password_protected
         if body.password is not None:
@@ -477,7 +483,13 @@ async def page_analytics(
         total = await conn.fetchval(
             "SELECT COUNT(*) FROM page_views WHERE page_id = $1", page_id
         )
-    return {"total": total, "items": [dict(r) for r in rows]}
+    def _av(r):
+        d = dict(r)
+        d["viewed_at"] = _dt(d.get("viewed_at"))
+        if d.get("metadata"):
+            d["metadata"] = _meta(d["metadata"])
+        return d
+    return {"total": total, "items": [_av(r) for r in rows]}
 
 
 # ---------------------------------------------------------------------------
@@ -565,14 +577,35 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
 # Serialisation helpers
 # ---------------------------------------------------------------------------
 
+def _dt(v) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v)
+
+
+def _meta(v) -> dict:
+    if not v:
+        return {}
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            return {}
+    return dict(v)
+
+
 def _page_dict(row) -> dict:
     d = dict(row)
     d["id"] = str(d["id"])
-    if d.get("created_by"):
-        d["created_by"] = str(d["created_by"])
-    if d.get("updated_by"):
-        d["updated_by"] = str(d["updated_by"])
-    # Remove password_hash from response
+    d["created_by"] = str(d["created_by"]) if d.get("created_by") else None
+    d["updated_by"] = str(d["updated_by"]) if d.get("updated_by") else None
+    d["created_at"] = _dt(d.get("created_at"))
+    d["updated_at"] = _dt(d.get("updated_at"))
+    d["published_at"] = _dt(d.get("published_at"))
+    d["expires_at"] = _dt(d.get("expires_at"))
+    d["metadata"] = _meta(d.get("metadata"))
     d.pop("password_hash", None)
     return d
 
@@ -580,8 +613,12 @@ def _page_dict(row) -> dict:
 def _page_list_dict(row) -> dict:
     d = dict(row)
     d["id"] = str(d["id"])
-    if d.get("created_by"):
-        d["created_by"] = str(d["created_by"])
+    d["created_by"] = str(d["created_by"]) if d.get("created_by") else None
+    d["created_at"] = _dt(d.get("created_at"))
+    d["updated_at"] = _dt(d.get("updated_at"))
+    d["published_at"] = _dt(d.get("published_at"))
+    d["expires_at"] = _dt(d.get("expires_at"))
+    d["metadata"] = _meta(d.get("metadata"))
     return d
 
 
@@ -592,6 +629,6 @@ def _public_page_dict(row) -> dict:
         "title": row["title"],
         "content_type": row["content_type"],
         "content": row["content"],
-        "published_at": row["published_at"].isoformat() if row["published_at"] else None,
-        "metadata": row["metadata"] or {},
+        "published_at": _dt(row["published_at"]),
+        "metadata": _meta(row.get("metadata")),
     }
