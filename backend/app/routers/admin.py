@@ -1642,10 +1642,18 @@ async def admin_trigger_duration_refresh(
     """
     from ..services.project_duration import run_project_duration_refresh_cycle
 
-    asyncio.create_task(run_project_duration_refresh_cycle())
+    # Run synchronously so errors are visible in the response immediately
+    result = await run_project_duration_refresh_cycle()
     return {
-        "status": "duration_refresh_started",
-        "message": "Project duration refresh started — check Sync Log for projects-duration-refresh",
+        "status": "ok" if not result.get("error") else "error",
+        "total":    result.get("total", 0),
+        "updated":  result.get("updated", 0),
+        "skipped":  result.get("skipped", 0),
+        "errors":   result.get("errors", 0),
+        "duration_ms": result.get("duration_ms"),
+        "error":    result.get("error"),
+        "updated_records": result.get("updated_records", [])[:10],
+        "message": f"Updated {result.get('updated',0)} of {result.get('total',0)} projects — check Sync Log for full details",
     }
 
 

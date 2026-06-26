@@ -2800,9 +2800,13 @@ function SyncLogTab() {
   const triggerDurationRefresh = useCallback(async () => {
     setDurationRefreshing(true); setTrigMsg(null)
     try {
-      await api.admin.triggerDurationRefresh()
-      setTrigMsg({ ok: true, text: 'Project duration refresh started — Duration (Months) will update in Teable shortly' })
-      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+      const res = await api.admin.triggerDurationRefresh()
+      if (res.error) {
+        setTrigMsg({ ok: false, text: `Error: ${res.error} (updated ${res.updated}/${res.total}, ${res.duration_ms}ms)` })
+      } else {
+        setTrigMsg({ ok: true, text: `Done — updated ${res.updated}/${res.total} projects, skipped ${res.skipped}, errors ${res.errors} (${res.duration_ms}ms)` })
+      }
+      setTimeout(() => { load(); setTrigMsg(null) }, 6000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Duration refresh failed' })
     } finally {

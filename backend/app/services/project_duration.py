@@ -158,8 +158,10 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
     error_msg: str | None = None
 
     try:
+        logger.info("project_duration: fetching from table_id=%s", settings.teable_table_id)
         records = await _fetch_active_projects()
         total = len(records)
+        logger.info("project_duration: fetched %s records", total)
 
         for rec in records:
             fields = rec.get("fields") or {}
@@ -209,6 +211,9 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
                 errors += 1
                 logger.warning("project duration patch failed for %s: %s", record_id, exc)
 
+    except httpx.HTTPStatusError as exc:
+        error_msg = f"HTTP {exc.response.status_code}: {exc.response.text[:400]}"
+        logger.error("project_duration refresh cycle HTTP error: %s", error_msg)
     except Exception as exc:
         error_msg = str(exc)[:500]
         logger.error("project_duration refresh cycle failed: %s", exc)
