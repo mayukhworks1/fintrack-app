@@ -368,7 +368,7 @@ CREATE INDEX IF NOT EXISTS rh_source_idx ON record_history (change_source,  reco
 CREATE TABLE IF NOT EXISTS sync_log (
     id          BIGSERIAL    PRIMARY KEY,
     synced_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    source      VARCHAR(20)  NOT NULL,
+    source      VARCHAR(40)  NOT NULL,
     total       INTEGER      NOT NULL DEFAULT 0,
     created     INTEGER      NOT NULL DEFAULT 0,
     updated     INTEGER      NOT NULL DEFAULT 0,
@@ -378,6 +378,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
     details     JSONB        NOT NULL DEFAULT '{}'::jsonb
 );
 ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE sync_log ALTER COLUMN source TYPE VARCHAR(40);
 
 -- ── Web invoices mirror (separate Teable table + token) ───────────────────
 CREATE TABLE IF NOT EXISTS web_invoices_mirror (
