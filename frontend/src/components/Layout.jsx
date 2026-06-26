@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText, TrendingUp,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, FileSpreadsheet, Layers
+  Plus, Landmark, FileSpreadsheet, Layers, Globe
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -75,6 +75,7 @@ const NAV_ITEMS = [
   { to: '/ai',        label: 'AI Assistant', icon: MessageSquareText,           roles: ['editor'],          perm: 'module.ai.use' },
   { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'],          perm: 'module.reports.view' },
   { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'], perm: 'module.status.view' },
+  { to: '/pages',     label: 'Pages',        icon: Globe,                       roles: ['editor','viewer'], perm: null },
 ]
 
 function OfflineBanner({ collapsed }) {
