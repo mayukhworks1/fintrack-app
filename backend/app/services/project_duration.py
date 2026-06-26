@@ -138,7 +138,7 @@ async def _write_sync_log(
             json.dumps(details or {}),
         )
     except Exception as exc:
-        logger.debug("project_duration sync_log write failed: %s", exc)
+        logger.error("project_duration sync_log write failed: %s", exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +207,19 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
                     "old_duration": existing_f,
                     "new_duration": new_months,
                 })
+            except httpx.HTTPStatusError as exc:
+                errors += 1
+                err_body = exc.response.text[:300]
+                logger.error(
+                    "project duration patch HTTP %s for %s (%s): %s",
+                    exc.response.status_code, record_id,
+                    fields.get("Project Name") or record_id, err_body,
+                )
+                if not error_msg:
+                    error_msg = f"PATCH HTTP {exc.response.status_code}: {err_body}"
             except Exception as exc:
                 errors += 1
-                logger.warning("project duration patch failed for %s: %s", record_id, exc)
+                logger.error("project duration patch failed for %s: %s", record_id, exc)
 
     except httpx.HTTPStatusError as exc:
         error_msg = f"HTTP {exc.response.status_code}: {exc.response.text[:400]}"
