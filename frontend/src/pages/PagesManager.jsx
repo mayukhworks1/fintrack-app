@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import api from '../services/api'
+import { api } from '../services/api'
 
 // ---------------------------------------------------------------------------
 // Markdown renderer (no external dependency)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import api from '../services/api'
+import { api } from '../services/api'
 
 // ---------------------------------------------------------------------------
 // Markdown renderer
