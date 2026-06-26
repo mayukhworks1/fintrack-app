@@ -2751,7 +2751,8 @@ function SyncLogTab() {
   const [filterError,  setFErr]   = useState('')   // '' | 'errors_only' | 'success_only'
   const [limit, setSLimit]        = useState(50)
   const [triggering, setTrig]     = useState(false)
-  const [agingRefreshing, setAgingRefreshing] = useState(false)
+  const [agingRefreshing,     setAgingRefreshing]     = useState(false)
+  const [durationRefreshing,  setDurationRefreshing]  = useState(false)
   const [trigMsg, setTrigMsg]     = useState(null)
   const [diagnosing, setDiag]     = useState(false)
   const [diagResult, setDiagRes]  = useState(null)
@@ -2796,6 +2797,19 @@ function SyncLogTab() {
     }
   }, [load])
 
+  const triggerDurationRefresh = useCallback(async () => {
+    setDurationRefreshing(true); setTrigMsg(null)
+    try {
+      await api.admin.triggerDurationRefresh()
+      setTrigMsg({ ok: true, text: 'Project duration refresh started — Duration (Months) will update in Teable shortly' })
+      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+    } catch (e) {
+      setTrigMsg({ ok: false, text: e.message || 'Duration refresh failed' })
+    } finally {
+      setDurationRefreshing(false)
+    }
+  }, [load])
+
   const diagnoseSync = useCallback(async () => {
     setDiag(true); setDiagRes(null)
     try {
@@ -2808,7 +2822,7 @@ function SyncLogTab() {
     }
   }, [])
 
-  const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal' }
+  const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal', 'projects-duration-refresh': 'violet', 'invoices-aging-refresh': 'green', 'web-invoices-aging-refresh': 'emerald' }
 
   return (
     <div className="space-y-3">
@@ -2822,8 +2836,16 @@ function SyncLogTab() {
             <RefreshCw size={11} /> Refresh
           </button>
         </>}>
-        <FSel label="Source" value={filterSource} onChange={setFs} width={140}
-          opts={[['','All sources'],['projects','projects'],['invoices','invoices'],['web_invoices','web_invoices']]} />
+        <FSel label="Source" value={filterSource} onChange={setFs} width={220}
+          opts={[
+            ['','All sources'],
+            ['projects','projects'],
+            ['invoices','invoices'],
+            ['web_invoices','web_invoices'],
+            ['projects-duration-refresh','projects-duration-refresh'],
+            ['invoices-aging-refresh','invoices-aging-refresh'],
+            ['web-invoices-aging-refresh','web-invoices-aging-refresh'],
+          ]} />
         <FSel label="Result" value={filterError} onChange={setFErr} width={140}
           opts={[['','All results'],['errors_only','Errors only'],['success_only','Success only']]} />
       </FilterBar>
@@ -2849,6 +2871,16 @@ function SyncLogTab() {
             opacity: agingRefreshing ? 0.6 : 1,
           }}>
           <RefreshCw size={11} /> {agingRefreshing ? 'Refreshing…' : 'Refresh Aging'}
+        </button>
+        <button onClick={triggerDurationRefresh} disabled={durationRefreshing}
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: durationRefreshing ? 'var(--bg-input)' : 'rgba(124,58,237,0.08)',
+            border: '1px solid rgba(124,58,237,0.25)',
+            color: durationRefreshing ? 'var(--text-3)' : '#7c3aed',
+            opacity: durationRefreshing ? 0.6 : 1,
+          }}>
+          <RefreshCw size={11} /> {durationRefreshing ? 'Refreshing…' : 'Refresh Project Duration'}
         </button>
         <button onClick={diagnoseSync} disabled={diagnosing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"

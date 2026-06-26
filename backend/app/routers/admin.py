@@ -1629,6 +1629,26 @@ async def admin_trigger_aging_refresh(
     }
 
 
+@router.post("/sync/duration-refresh")
+async def admin_trigger_duration_refresh(
+    _: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("system.sync.trigger")),
+):
+    """
+    Run project Duration (Months) refresh immediately.
+    Computes decimal months elapsed since Project Start Date for all
+    non-completed projects and PATCHes the value back to Teable.
+    Logs to Sync Log under source = projects-duration-refresh.
+    """
+    from ..services.project_duration import run_project_duration_refresh_cycle
+
+    asyncio.create_task(run_project_duration_refresh_cycle())
+    return {
+        "status": "duration_refresh_started",
+        "message": "Project duration refresh started — check Sync Log for projects-duration-refresh",
+    }
+
+
 @router.get("/sync/diagnose")
 async def admin_sync_diagnose(_: str = Depends(require_admin)):
     """

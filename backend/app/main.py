@@ -25,6 +25,7 @@ from .db.postgres import get_init_error
 from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
 from .services.invoice_aging import invoice_aging_refresh_loop
+from .services.project_duration import project_duration_refresh_loop
 from .routers.deps import require_auth, require_admin
 
 logger = logging.getLogger("fintrack")
@@ -106,6 +107,8 @@ async def lifespan(app: FastAPI):
         logger.info("Background Teable sync task started")
         _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
         logger.info("Background invoice aging refresh task started")
+        _duration_refresh_task = asyncio.create_task(project_duration_refresh_loop(), name="project-duration-refresh")
+        logger.info("Background project duration refresh task started")
 
     # ── Background embedding task (pgvector RAG) ─────────────────────────────
     if postgres.get_pool() and settings.openrouter_api_key:
