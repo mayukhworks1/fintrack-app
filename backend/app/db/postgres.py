@@ -937,6 +937,44 @@ CREATE TABLE IF NOT EXISTS ai_traces (
 CREATE INDEX IF NOT EXISTS at_ts_idx ON ai_traces (ts DESC);
 CREATE INDEX IF NOT EXISTS at_session_idx ON ai_traces (session_id, ts DESC);
 
+CREATE TABLE IF NOT EXISTS published_pages (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug            VARCHAR(200) UNIQUE NOT NULL,
+    title           VARCHAR(500) NOT NULL DEFAULT '',
+    content_type    VARCHAR(20)  NOT NULL DEFAULT 'markdown',
+    content         TEXT         NOT NULL DEFAULT '',
+    is_published    BOOLEAN      NOT NULL DEFAULT FALSE,
+    is_password_protected BOOLEAN NOT NULL DEFAULT FALSE,
+    password_hash   TEXT,
+    created_by      UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    updated_by      UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    published_at    TIMESTAMPTZ,
+    expires_at      TIMESTAMPTZ,
+    view_count      INTEGER      NOT NULL DEFAULT 0,
+    metadata        JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_published_pages_slug ON published_pages(slug);
+CREATE INDEX IF NOT EXISTS idx_published_pages_created_by ON published_pages(created_by);
+
+CREATE TABLE IF NOT EXISTS page_views (
+    id          BIGSERIAL    PRIMARY KEY,
+    page_id     UUID         NOT NULL REFERENCES published_pages(id) ON DELETE CASCADE,
+    viewer_ip   TEXT,
+    user_agent  TEXT,
+    referer     TEXT,
+    country     VARCHAR(100),
+    city        VARCHAR(100),
+    region      VARCHAR(100),
+    isp         VARCHAR(200),
+    viewer_user_id UUID      REFERENCES auth_users(id) ON DELETE SET NULL,
+    viewed_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    metadata    JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_page_id ON page_views(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at ON page_views(viewed_at DESC);
+
 """
 # ---------------------------------------------------------------------------
 

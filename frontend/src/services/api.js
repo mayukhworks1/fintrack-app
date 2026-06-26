@@ -734,4 +734,17 @@ export const api = {
     },
     deleteAvatar: () => request('/api/auth/profile/avatar', { method: 'DELETE' }),
   },
+  pages: {
+    list:          ()          => request('/api/pages/'),
+    create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),
+    get:           (id)        => request(`/api/pages/${id}`),
+    update:        (id, data)  => request(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete:        (id)        => request(`/api/pages/${id}`, { method: 'DELETE' }),
+    publish:       (id, published) => request(`/api/pages/${id}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+    analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
+    allViews:      (params)    => request(`/api/pages/admin/all-views?${new URLSearchParams(params || {})}`),
+    publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(r => r.json()),
+    publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
+    publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
+  },
 }

@@ -89,6 +89,8 @@ const StatusBoard   = lazyWithReload(() => import('./pages/StatusBoard'))
 const WebInvoices   = lazyWithReload(() => import('./pages/WebInvoices'))
 const TaxLedger     = lazyWithReload(() => import('./pages/TaxLedger'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
+const PageViewer    = lazyWithReload(() => import('./pages/PageViewer'))  // public — no auth
+const PagesManager  = lazyWithReload(() => import('./pages/PagesManager'))
 const Profile       = lazyWithReload(() => import('./pages/Profile'))
 
 // Main-app pages to prefetch on idle for editor/viewer sessions only.
@@ -142,6 +144,19 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/view/:token" element={<SharedView />} />
+          </Routes>
+        </Suspense>
+        <VercelAnalytics />
+      </ErrorBoundary>
+    )
+  }
+
+  if (location.pathname.startsWith('/p/')) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/p/:slug" element={<PageViewer />} />
           </Routes>
         </Suspense>
         <VercelAnalytics />
@@ -207,6 +222,7 @@ export default function App() {
               <Route path="/report"       element={isViewer ? <ViewerGuard /> : <Report />} />
               <Route path="/status"       element={<StatusBoard />} />
               <Route path="/admin"        element={isViewer ? <ViewerGuard /> : <AdminDashboard embedded={true} />} />
+              <Route path="/pages"        element={<PagesManager />} />
               <Route path="/profile"      element={<Profile />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>
