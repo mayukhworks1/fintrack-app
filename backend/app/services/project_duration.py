@@ -66,15 +66,22 @@ def _compute_duration_months(start_raw: Any) -> float | None:
 # Teable helpers
 # ---------------------------------------------------------------------------
 
+def _token() -> str:
+    return (
+        settings.teable_web_api_token
+        or settings.teable_api_token
+        or ""
+    )
+
 def _headers() -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {settings.teable_api_token}",
+        "Authorization": f"Bearer {_token()}",
         "Content-Type": "application/json",
     }
 
 def _record_url() -> str:
     base = settings.teable_base_url.rstrip("/")
-    return f"{base}/api/table/{settings.teable_table_id}/record"
+    return f"{base}/api/table/{settings.teable_web_projects_table_id}/record"
 
 
 async def _fetch_active_projects() -> list[dict[str, Any]]:
