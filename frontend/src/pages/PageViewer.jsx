@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../services/api'
 
@@ -134,37 +134,18 @@ function CSVTable({ text }) {
 }
 
 // ---------------------------------------------------------------------------
-// HTML frame — auto-resizing
+// HTML — replace the entire document so the page renders full-screen with no wrapper
 // ---------------------------------------------------------------------------
-function HTMLFrame({ content }) {
-  const ref = useRef(null)
-  const [height, setHeight] = useState(500)
-
-  const wrap = (html) => {
-    if (/^\s*<!DOCTYPE/i.test(html) || /^\s*<html/i.test(html)) return html
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;color:#1e293b}</style></head><body>${html}</body></html>`
-  }
-
-  const handleLoad = () => {
-    try {
-      const doc = ref.current?.contentDocument
-      if (doc) {
-        const h = Math.max(300, doc.documentElement.scrollHeight || doc.body?.scrollHeight || 500)
-        setHeight(h + 32)
-      }
-    } catch {}
-  }
-
-  return (
-    <iframe
-      ref={ref}
-      srcDoc={wrap(content)}
-      onLoad={handleLoad}
-      style={{ width: '100%', height, border: 'none', display: 'block' }}
-      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-      title="Page content"
-    />
-  )
+function HTMLPage({ content }) {
+  useEffect(() => {
+    const html = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
+      ? content
+      : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${content}</body></html>`
+    document.open()
+    document.write(html)
+    document.close()
+  }, [content])
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +179,7 @@ function PasswordPrompt({ title, onSubmit, error, loading }) {
 function PageContent({ page }) {
   const { content_type, content } = page
   if (!content) return <div style={{ color: '#9ca3af', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
-  if (content_type === 'html') return <HTMLFrame content={content} />
+  if (content_type === 'html') return <HTMLPage content={content} />
   if (content_type === 'csv') return <CSVTable text={content} />
   if (content_type === 'text') {
     return <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.7, color: '#1e293b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '20px 24px', margin: 0, fontFamily: 'ui-monospace,monospace' }}>{content}</pre>
@@ -214,34 +195,28 @@ function PageContent({ page }) {
 // ---------------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------------
-function ViewerShell({ title, publishedAt, description, contentType, children }) {
+function ViewerShell({ title, publishedAt, description, children }) {
   useEffect(() => {
     document.title = title ? `${title} — FinTrack Pages` : 'FinTrack Pages'
     return () => { document.title = 'FinTrack' }
   }, [title])
 
-  const isFullWidth = contentType === 'html'
-
   return (
-    <div style={{ minHeight: '100vh', background: isFullWidth ? '#fff' : '#f8fafc', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: '#111827' }}>
-      {isFullWidth ? (
-        <>{children}</>
-      ) : (
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '52px 24px 80px' }}>
-          {title && (
-            <header style={{ marginBottom: 40 }}>
-              <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.02em' }}>{title}</h1>
-              {publishedAt && <div style={{ marginTop: 10, fontSize: 13, color: '#94a3b8' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>}
-              {description && <p style={{ marginTop: 10, fontSize: 15, color: '#64748b', lineHeight: 1.65 }}>{description}</p>}
-              <hr style={{ marginTop: 28, border: 'none', borderTop: '1px solid #e2e8f0' }} />
-            </header>
-          )}
-          <main>{children}</main>
-          <footer style={{ marginTop: 72, paddingTop: 20, borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
-            <span style={{ fontSize: 12, color: '#cbd5e1' }}>Powered by FinTrack</span>
-          </footer>
-        </div>
-      )}
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: '#111827' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '52px 24px 80px' }}>
+        {title && (
+          <header style={{ marginBottom: 40 }}>
+            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.02em' }}>{title}</h1>
+            {publishedAt && <div style={{ marginTop: 10, fontSize: 13, color: '#94a3b8' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>}
+            {description && <p style={{ marginTop: 10, fontSize: 15, color: '#64748b', lineHeight: 1.65 }}>{description}</p>}
+            <hr style={{ marginTop: 28, border: 'none', borderTop: '1px solid #e2e8f0' }} />
+          </header>
+        )}
+        <main>{children}</main>
+        <footer style={{ marginTop: 72, paddingTop: 20, borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <span style={{ fontSize: 12, color: '#cbd5e1' }}>Powered by FinTrack</span>
+        </footer>
+      </div>
     </div>
   )
 }
@@ -313,7 +288,7 @@ export default function PageViewer() {
   )
 
   return (
-    <ViewerShell title={page?.title} publishedAt={page?.published_at} description={page?.metadata?.description} contentType={page?.content_type}>
+    <ViewerShell title={page?.title} publishedAt={page?.published_at} description={page?.metadata?.description}>
       <PageContent page={page} />
     </ViewerShell>
   )
