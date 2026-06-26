@@ -157,6 +157,8 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
     total = updated = skipped = errors = 0
     error_msg: str | None = None
 
+    skip_reasons: list[dict] = []
+
     try:
         logger.info("project_duration: fetching from table_id=%s", settings.teable_table_id)
         records = await _fetch_active_projects()
@@ -166,22 +168,26 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
         for rec in records:
             fields = rec.get("fields") or {}
             record_id = rec.get("id")
+            name = fields.get("Project Name") or record_id
             if not record_id:
                 continue
 
             status = str(fields.get("Project Status") or "").strip()
             if status in _FROZEN_STATUSES:
                 skipped += 1
+                skip_reasons.append({"project": name, "reason": f"frozen status: {status!r}"})
                 continue
 
             start_raw = fields.get(START_DATE_FIELD)
             if not start_raw:
                 skipped += 1
+                skip_reasons.append({"project": name, "reason": "no Start Date"})
                 continue
 
             new_months = _compute_duration_months(start_raw)
             if new_months is None:
                 skipped += 1
+                skip_reasons.append({"project": name, "reason": f"unparseable start date: {start_raw!r}"})
                 continue
 
             # Only PATCH if value actually changed (avoid noisy writes)
@@ -193,6 +199,7 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
 
             if existing_f == new_months:
                 skipped += 1
+                skip_reasons.append({"project": name, "reason": f"unchanged ({new_months} mo)"})
                 continue
 
             try:
@@ -231,6 +238,7 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
     duration_ms = int((time.time() - started) * 1000)
     details = {
         "updated_records": updated_records[:25],
+        "skip_reasons":    skip_reasons[:25],
         "errors":          errors,
     }
     await _write_sync_log(

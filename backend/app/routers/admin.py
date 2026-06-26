@@ -1653,6 +1653,7 @@ async def admin_trigger_duration_refresh(
         "duration_ms": result.get("duration_ms"),
         "error":    result.get("error"),
         "updated_records": result.get("updated_records", [])[:10],
+        "skip_reasons":    result.get("skip_reasons", [])[:10],
         "message": f"Updated {result.get('updated',0)} of {result.get('total',0)} projects — check Sync Log for full details",
     }
 
