@@ -98,7 +98,7 @@ async def _patch_duration(record_id: str, months: float) -> bool:
     url = f"{_record_url()}/{record_id}"
     body = {
         "fieldKeyType": "name",
-        "record": {"fields": {DURATION_FIELD: months}},
+        "record": {"fields": {DURATION_FIELD: str(months)}},
     }
     async with httpx.AsyncClient(timeout=12) as client:
         res = await client.patch(url, json=body, headers=_headers())
