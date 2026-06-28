@@ -689,6 +689,7 @@ export const api = {
     sharedLinks:   (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/shared-links?${q}`) },
     sharedLinkAccesses: (token, limit = 200) => request(`/api/admin/shared-links/${token}/accesses?limit=${limit}`),
     sharedLinkStats: (token) => request(`/api/admin/shared-links/${token}/stats`),
+    watchdog:      ()           => request('/api/admin/watchdog',      { method: 'POST' }),
     triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
     triggerAgingRefresh:    ()   => request('/api/admin/sync/aging-refresh',    { method: 'POST' }),
     triggerDurationRefresh: ()   => request('/api/admin/sync/duration-refresh', { method: 'POST' }),

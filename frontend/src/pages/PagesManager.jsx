@@ -1088,7 +1088,11 @@ export default function PagesManager() {
   }
 
   const openEdit = async (page) => {
-    try { setDrawerPage(await api.pages.get(page.id)) } catch { setDrawerPage(page) }
+    setDrawerPage(page)  // instant open with list data
+    try {
+      const full = await api.pages.get(page.id)
+      setDrawerPage(full)  // silently upgrade with full content
+    } catch { /* keep list data, drawer already open */ }
   }
 
   const filtered = pages.filter(p=>{

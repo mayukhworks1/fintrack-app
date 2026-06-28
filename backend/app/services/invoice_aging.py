@@ -68,8 +68,22 @@ async def run_invoice_aging_refresh_cycle() -> None:
 
 
 async def invoice_aging_refresh_loop() -> None:
+    """Background loop — runs aging refresh every hour forever.
+
+    Wrapped in a top-level try/except so a transient Teable error or DB
+    hiccup cannot kill the loop permanently. On unexpected failure the loop
+    sleeps for 5 minutes then retries.
+    """
     await asyncio.sleep(15)
-    await run_invoice_aging_refresh_cycle()
     while True:
-        await asyncio.sleep(_REFRESH_INTERVAL)
-        await run_invoice_aging_refresh_cycle()
+        try:
+            await run_invoice_aging_refresh_cycle()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("invoice_aging_refresh_loop: unexpected top-level error: %s", exc, exc_info=True)
+            await asyncio.sleep(300)  # back-off 5 min before retry
+            continue
+        try:
+            await asyncio.sleep(_REFRESH_INTERVAL)
+        except asyncio.CancelledError:
+            logger.info("invoice_aging_refresh_loop: cancelled, exiting")
+            return

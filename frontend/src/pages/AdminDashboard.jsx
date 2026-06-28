@@ -37,6 +37,20 @@ import { FilterSelect, FilterMulti } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 
+// ── Module-level tab cache (TTL = 45s, stale-while-revalidate) ───────────────
+const _tabCache = new Map() // key → { data, ts }
+const TAB_CACHE_TTL = 45_000
+
+function cacheGet(key) {
+  const entry = _tabCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.ts > TAB_CACHE_TTL) return null
+  return entry.data
+}
+function cacheSet(key, data) { _tabCache.set(key, { data, ts: Date.now() }) }
+function cacheInvalidate(key) { _tabCache.delete(key) }
+function cacheInvalidateAll() { _tabCache.clear() }
+
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
 function fmt(n) {
@@ -425,13 +439,18 @@ function OverviewTab({ onOpenHistoryDrilldown }) {
   const [error, setError]     = useState(null)
 
   const load = useCallback(async (opts = {}) => {
-    setLoading(true); setError(null)
-    try { setData(await api.admin.stats({ timeout: 12000, ...opts })) }
-    catch (e) {
+    const cached = cacheGet('overview')
+    if (cached && !opts.fresh) { setData(cached); setLoading(false) }
+    else setLoading(true)
+    setError(null)
+    try {
+      const fresh = await api.admin.stats({ timeout: 12000, ...opts })
+      cacheSet('overview', fresh)
+      setData(fresh)
+    } catch (e) {
       if (e?.name === 'AbortError') return
       setError(e.message)
-    }
-    finally { if (!opts.signal?.aborted) setLoading(false) }
+    } finally { if (!opts.signal?.aborted) setLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -2756,15 +2775,23 @@ function SyncLogTab() {
   const [trigMsg, setTrigMsg]     = useState(null)
   const [diagnosing, setDiag]     = useState(false)
   const [diagResult, setDiagRes]  = useState(null)
+  const [watchdogging, setWatchdog] = useState(false)
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null)
-    try { setData(await api.admin.syncLog({
-      limit, offset,
-      source:    filterSource || undefined,
-      has_error: filterError === 'errors_only' ? true : filterError === 'success_only' ? false : undefined,
-    })) }
-    catch (e) { setError(e.message) }
+    const cacheKey = `synclog:${limit}:${offset}:${filterSource}:${filterError}`
+    const cached = cacheGet(cacheKey)
+    if (cached) { setData(cached); setLoading(false) }
+    else setLoading(true)
+    setError(null)
+    try {
+      const fresh = await api.admin.syncLog({
+        limit, offset,
+        source:    filterSource || undefined,
+        has_error: filterError === 'errors_only' ? true : filterError === 'success_only' ? false : undefined,
+      })
+      cacheSet(cacheKey, fresh)
+      setData(fresh)
+    } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [offset, limit, filterSource, filterError])
 
@@ -2828,6 +2855,20 @@ function SyncLogTab() {
       setDiag(false)
     }
   }, [])
+
+  const triggerWatchdog = useCallback(async () => {
+    setWatchdog(true); setTrigMsg(null)
+    try {
+      const res = await api.admin.watchdog()
+      const restarted = res.restarted?.join(', ') || 'none'
+      setTrigMsg({ ok: true, text: `Watchdog OK — restarted: ${restarted} | sync=${res.sync_running ? '✓' : '✗'} aging=${res.aging_running ? '✓' : '✗'}` })
+      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+    } catch (e) {
+      setTrigMsg({ ok: false, text: e.message || 'Watchdog failed' })
+    } finally {
+      setWatchdog(false)
+    }
+  }, [load])
 
   const sourceColor = { projects: 'blue', invoices: 'purple', web_invoices: 'teal', 'projects-duration-refresh': 'violet', 'invoices-aging-refresh': 'green', 'web-invoices-aging-refresh': 'emerald' }
 
@@ -2898,6 +2939,17 @@ function SyncLogTab() {
             opacity: diagnosing ? 0.6 : 1,
           }}>
           🔍 {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
+        </button>
+        <button onClick={triggerWatchdog} disabled={watchdogging}
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          title="Check if background workers are alive and restart any dead ones"
+          style={{
+            background: watchdogging ? 'var(--bg-input)' : 'rgba(220,38,38,0.08)',
+            border: '1px solid rgba(220,38,38,0.25)',
+            color: watchdogging ? 'var(--text-3)' : '#dc2626',
+            opacity: watchdogging ? 0.6 : 1,
+          }}>
+          🐕 {watchdogging ? 'Checking…' : 'Watchdog'}
         </button>
       </div>
 
@@ -4649,9 +4701,12 @@ function PermissionsTab({ searchParams, setSearchParams }) {
   useEffect(() => { load() }, [])
 
   // Is `permId` granted by role default for this user (ignoring any override)?
-  function roleDefaultGranted(targetUser, permId) {
+  // Pass the current matrix snapshot `m` to avoid stale closure inside setMatrix updater.
+  function roleDefaultGranted(targetUser, permId, m_) {
+    const src = m_ || matrix
+    if (!src) return false
     const roleIds = (targetUser?.roles || []).map(r => r.role_id).filter(Boolean)
-    return roleIds.some(rid => (matrix.role_permissions[rid] || []).includes(permId))
+    return roleIds.some(rid => (src.role_permissions[rid] || []).includes(permId))
   }
 
   // Apply an override locally — used for instant optimistic UI updates.
@@ -4666,7 +4721,7 @@ function PermissionsTab({ searchParams, setSearchParams }) {
           const nextOverrides = { ...u.overrides }
           if (granted === null) delete nextOverrides[permId]
           else nextOverrides[permId] = granted
-          const isGranted = granted === null ? roleDefaultGranted(u, permId) : granted
+          const isGranted = granted === null ? roleDefaultGranted(u, permId, m) : granted
           const nextEffective = new Set(u.effective_permission_ids)
           if (isGranted) nextEffective.add(permId)
           else nextEffective.delete(permId)

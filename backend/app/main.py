@@ -350,6 +350,7 @@ async def health():
         "valkey":            "connected" if vk_ok else "unavailable",
         "pgvector":          "available" if _pgv else ("unavailable" if _pgv is False else "unchecked"),
         "sync_running":      _sync_task is not None and not _sync_task.done(),
+        "aging_running":     _aging_refresh_task is not None and not _aging_refresh_task.done(),
         "embed_running":     _embed_task is not None and not _embed_task.done(),
         "langsmith_tracing": settings.langchain_tracing_v2 and bool(settings.langchain_api_key),
         "last_sync":         sync_meta,
@@ -378,6 +379,29 @@ async def smtp_test(pw: str = "", to: str = ""):
 
 
 
+@app.post("/api/admin/watchdog", tags=["health"])
+async def watchdog_restart(_: str = Depends(require_admin)):
+    """Restart any dead background tasks (sync, aging). Safe to call anytime."""
+    global _sync_task, _aging_refresh_task
+    restarted = []
+    if (_sync_task is None or _sync_task.done()) and (settings.teable_api_token or settings.teable_web_api_token):
+        from .db.sync import sync_loop
+        _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
+        restarted.append("sync")
+        logger.info("watchdog: sync task restarted")
+    if _aging_refresh_task is None or _aging_refresh_task.done():
+        from .services.invoice_aging import invoice_aging_refresh_loop
+        _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
+        restarted.append("aging")
+        logger.info("watchdog: aging task restarted")
+    return {
+        "status": "ok",
+        "restarted": restarted,
+        "sync_running": _sync_task is not None and not _sync_task.done(),
+        "aging_running": _aging_refresh_task is not None and not _aging_refresh_task.done(),
+    }
+
+
 @app.post("/api/admin/pg-reconnect", tags=["health"])
 async def pg_reconnect(_: str = Depends(require_admin)):
     """Force a PostgreSQL reconnection attempt (useful after transient failures)."""
@@ -387,11 +411,15 @@ async def pg_reconnect(_: str = Depends(require_admin)):
     pool = postgres.get_pool()
     if pool:
         # Start sync task if it isn't running
-        global _sync_task
+        global _sync_task, _aging_refresh_task
         if (_sync_task is None or _sync_task.done()) and (settings.teable_api_token or settings.teable_web_api_token):
             from .db.sync import sync_loop
             _sync_task = asyncio.create_task(sync_loop(), name="teable-sync")
             logger.info("Background sync task restarted after PG reconnect")
+        if _aging_refresh_task is None or _aging_refresh_task.done():
+            from .services.invoice_aging import invoice_aging_refresh_loop
+            _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
+            logger.info("Background aging refresh task restarted after PG reconnect")
         return {"status": "connected"}
     return JSONResponse(
         status_code=503,

@@ -465,10 +465,13 @@ export default function PageViewer() {
     setPwError(''); setPwLoading(true)
     api.pages.publicVerify(slug, password)
       .then(data => {
-        if (data?.detail) { setPwError('Incorrect password.'); return }
+        if (!data || data.detail || data.error || !data.id) {
+          setPwError(data?.detail || data?.error || 'Incorrect password.')
+          return
+        }
         setPage(data); setState('loaded')
       })
-      .catch(() => setPwError('Something went wrong.'))
+      .catch(() => setPwError('Something went wrong. Please try again.'))
       .finally(() => setPwLoading(false))
   }
 
