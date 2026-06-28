@@ -31,8 +31,8 @@ function ImpersonationBanner() {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <ShieldCheck size={15} />
-        <span>Impersonating <strong>{impersonation?.targetUser?.full_name || impersonation?.targetUser?.email || 'user'}</strong>
-          {impersonation?.targetUser?.full_name && impersonation?.targetUser?.email &&
+        <span>Impersonating <strong>{[impersonation?.targetUser?.first_name, impersonation?.targetUser?.last_name].filter(Boolean).join(' ') || impersonation?.targetUser?.full_name || impersonation?.targetUser?.email || 'user'}</strong>
+          {(impersonation?.targetUser?.first_name || impersonation?.targetUser?.full_name) && impersonation?.targetUser?.email &&
             <span style={{ opacity: 0.75, fontWeight: 400 }}> · {impersonation.targetUser.email}</span>}
         </span>
       </div>

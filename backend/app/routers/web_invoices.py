@@ -196,12 +196,12 @@ async def get_avatar_map(_role: str = Depends(require_auth)):
     try:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT email, teable_email, avatar_url, full_name FROM auth_users "
+                "SELECT email, teable_email, avatar_url, first_name, last_name, full_name FROM auth_users "
                 "WHERE status = 'active'"
             )
         result = {}
         for r in rows:
-            entry = {"avatar_url": r["avatar_url"], "name": r["full_name"] or r["email"]}
+            entry = {"avatar_url": r["avatar_url"], "name": " ".join(filter(None, [r["first_name"], r["last_name"]])) or r["full_name"] or r["email"]}
             result[r["email"].lower()] = entry
             if r["teable_email"]:
                 result[r["teable_email"].lower()] = entry

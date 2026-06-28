@@ -1608,7 +1608,7 @@ function AppSidebar({ workspace, setWorkspace, isAll, canViewProjects, canViewTa
   const { logout, user } = useAuth()
   const { dark, toggle } = useTheme()
   const avatarSrc = useAvatarSrc(user?.avatar_url)
-  const displayName = user?.full_name || user?.email?.split('@')[0] || 'User'
+  const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.full_name || user?.email?.split('@')[0] || 'User'
   const displaySub = user?.email || 'Web billing'
   const initials = (displayName || '?')
     .split(' ')

@@ -59,6 +59,8 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
             s.revoked_at,
             s.metadata,
             u.email,
+            u.first_name,
+            u.last_name,
             u.full_name,
             u.status,
             u.teable_email,
@@ -89,7 +91,7 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     request.state.auth_session_id  = str(row["session_id"])
     request.state.auth_user_id     = str(row["user_id"])
     request.state.auth_user_email  = row["email"]
-    request.state.auth_user_name   = row["full_name"]
+    request.state.auth_user_name   = " ".join(filter(None, [row["first_name"], row["last_name"]])) or row["full_name"]
     # teable_email: admin-configured override for "Raised By" matching in Teable.
     # Falls back to the login email if not set.
     request.state.auth_teable_email = row["teable_email"] or row["email"]
@@ -111,6 +113,8 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
         "session_id": str(row["session_id"]),
         "user_id": str(row["user_id"]),
         "email": row["email"],
+        "first_name": row["first_name"],
+        "last_name": row["last_name"],
         "full_name": row["full_name"],
         "auth_role": auth_role,
     }

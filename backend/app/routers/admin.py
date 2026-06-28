@@ -52,7 +52,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 class AuthUserDecision(BaseModel):
     role_key: Optional[str] = Field(default=None, max_length=60)
     reason: Optional[str] = Field(default=None, max_length=500)
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
+    full_name: Optional[str] = Field(default=None, max_length=255)  # legacy fallback
 
 
 class AuthUserCreate(BaseModel):
@@ -410,7 +412,7 @@ async def admin_auth_users(
         params.append(role_key)
         idx += 1
     if search:
-        where.append(f"(u.email ILIKE ${idx} OR COALESCE(u.full_name, '') ILIKE ${idx} OR COALESCE(u.teable_email, '') ILIKE ${idx})")
+        where.append(f"(u.email ILIKE ${idx} OR COALESCE(u.first_name,'') ILIKE ${idx} OR COALESCE(u.last_name,'') ILIKE ${idx} OR COALESCE(u.full_name,'') ILIKE ${idx} OR COALESCE(u.teable_email,'') ILIKE ${idx})")
         params.append(f"%{search.strip()}%")
         idx += 1
     where_sql = " AND ".join(where)
@@ -549,12 +551,16 @@ async def admin_approve_auth_user(
                 SET status = 'active',
                     approved_at = COALESCE(approved_at, NOW()),
                     disabled_at = NULL,
-                    full_name = COALESCE(NULLIF($2, ''), full_name),
+                    first_name = COALESCE(NULLIF($2, ''), first_name),
+                    last_name  = COALESCE(NULLIF($3, ''), last_name),
+                    full_name  = COALESCE(NULLIF($4, ''), full_name),
                     updated_at = NOW()
                 WHERE id = $1::uuid
                 RETURNING id::text AS id, email, status
                 """,
                 user_id,
+                (body.first_name or "").strip(),
+                (body.last_name or "").strip(),
                 (body.full_name or "").strip(),
             )
             if not user:
@@ -689,12 +695,16 @@ async def admin_reactivate_auth_user(
                 SET status = 'active',
                     approved_at = COALESCE(approved_at, NOW()),
                     disabled_at = NULL,
-                    full_name = COALESCE(NULLIF($2, ''), full_name),
+                    first_name = COALESCE(NULLIF($2, ''), first_name),
+                    last_name  = COALESCE(NULLIF($3, ''), last_name),
+                    full_name  = COALESCE(NULLIF($4, ''), full_name),
                     updated_at = NOW()
                 WHERE id = $1::uuid
                 RETURNING id::text AS id, email, status
                 """,
                 user_id,
+                (body.first_name or "").strip(),
+                (body.last_name or "").strip(),
                 (body.full_name or "").strip(),
             )
             if not user:
@@ -998,6 +1008,8 @@ async def admin_user_timeline(
             SELECT
                 u.id::text,
                 u.email,
+                u.first_name,
+                u.last_name,
                 u.full_name,
                 u.status,
                 u.teable_email,
@@ -1083,7 +1095,7 @@ async def admin_user_timeline_export(
         return _no_db()
 
     user = await pool.fetchrow(
-        "SELECT id::text, email, full_name FROM auth_users WHERE id = $1::uuid",
+        "SELECT id::text, email, first_name, last_name, full_name FROM auth_users WHERE id = $1::uuid",
         user_id,
     )
     if not user:
@@ -1165,7 +1177,7 @@ async def admin_resend_invite(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id::text AS id, email, full_name, status FROM auth_users WHERE id = $1::uuid",
+            "SELECT id::text AS id, email, first_name, last_name, full_name, status FROM auth_users WHERE id = $1::uuid",
             user_id,
         )
         if not user:
@@ -1201,7 +1213,8 @@ async def admin_resend_invite(
     invite_params = urlencode({"reset_token": token, "invite": "1", "email": user["email"]})
     invite_url = f"{origin}/login?{invite_params}" if origin else f"/login?{invite_params}"
 
-    hi_name = f"Hi {(user['full_name'] or '').strip()}" if user["full_name"] else "Hi"
+    _display = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or (user["full_name"] or "").strip()
+    hi_name = f"Hi {_display}" if _display else "Hi"
     delivery = await send_email(
         user["email"],
         "Your updated FinTrack invite link",
@@ -1247,7 +1260,7 @@ async def admin_force_password_reset(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id::text AS id, email, full_name, status FROM auth_users WHERE id = $1::uuid",
+            "SELECT id::text AS id, email, first_name, last_name, full_name, status FROM auth_users WHERE id = $1::uuid",
             user_id,
         )
         if not user:
@@ -2801,7 +2814,7 @@ async def permission_matrix(_role: str = Depends(require_admin)):
         # Active users with their roles
         users = await conn.fetch(
             """
-            SELECT u.id, u.email, u.full_name, u.avatar_url, u.teable_email,
+            SELECT u.id, u.email, u.first_name, u.last_name, u.full_name, u.avatar_url, u.teable_email,
                    COALESCE(
                      json_agg(json_build_object('role_key', r.role_key, 'role_id', r.id::text))
                      FILTER (WHERE r.id IS NOT NULL), '[]'::json
@@ -2850,7 +2863,7 @@ async def permission_matrix(_role: str = Depends(require_admin)):
             "id": uid,
             "email": u["email"],
             "teable_email": u["teable_email"],
-            "name": u["full_name"] or u["email"],
+            "name": " ".join(filter(None, [u["first_name"], u["last_name"]])) or u["full_name"] or u["email"],
             "avatar_url": u["avatar_url"],
             "roles": user_roles,
             "effective_permission_ids": [pid for pid, g in effective.items() if g],
@@ -2874,7 +2887,7 @@ async def user_avatar_map(_role: str = Depends(require_admin)):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT email, teable_email, avatar_url, full_name
+            SELECT email, teable_email, avatar_url, first_name, last_name, full_name
             FROM auth_users
             WHERE status = 'active' AND avatar_url IS NOT NULL
             """
@@ -2882,7 +2895,7 @@ async def user_avatar_map(_role: str = Depends(require_admin)):
     result = {}
     for r in rows:
         url = r["avatar_url"]
-        entry = {"avatar_url": url, "name": r["full_name"] or r["email"]}
+        entry = {"avatar_url": url, "name": " ".join(filter(None, [r["first_name"], r["last_name"]])) or r["full_name"] or r["email"]}
         result[r["email"].lower()] = entry
         if r["teable_email"]:
             result[r["teable_email"].lower()] = entry
@@ -2971,7 +2984,7 @@ async def admin_impersonate(
     async with pool.acquire() as conn:
         target = await conn.fetchrow(
             """
-            SELECT u.id::text AS id, u.email, u.full_name, u.status,
+            SELECT u.id::text AS id, u.email, u.first_name, u.last_name, u.full_name, u.status,
                    r.role_key AS auth_role
             FROM auth_users u
             LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
@@ -3035,6 +3048,8 @@ async def admin_impersonate(
         "user": {
             "id": target["id"],
             "email": target["email"],
+            "first_name": target["first_name"],
+            "last_name": target["last_name"],
             "full_name": target["full_name"],
             "auth_role": auth_role,
         },
@@ -3063,7 +3078,7 @@ async def admin_impersonate_exit(
         row = await conn.fetchrow(
             """
             SELECT s.id, s.user_id::text, s.metadata,
-                   u.email, u.full_name
+                   u.email, u.first_name, u.last_name, u.full_name
             FROM auth_sessions s
             JOIN auth_users u ON u.id = s.user_id
             WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()

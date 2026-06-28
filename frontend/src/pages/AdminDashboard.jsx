@@ -154,13 +154,14 @@ function roleBadge(role) {
 }
 
 function UserAvatar({ row, size = 40 }) {
-  const initials = (row.full_name || row.email || '?').slice(0, 2).toUpperCase()
+  const displayName = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || ''
+  const initials = displayName ? displayName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : (row.email || '?').slice(0, 2).toUpperCase()
   const avatarSrc = useAvatarSrc(row.avatar_url)
   if (avatarSrc) {
     return (
       <img
         src={avatarSrc}
-        alt={row.full_name || row.email || 'User avatar'}
+        alt={displayName || row.email || 'User avatar'}
         className="rounded-2xl object-cover shrink-0"
         style={{ width: size, height: size }}
       />
@@ -4576,8 +4577,8 @@ function UserTimelineDrawer({ userId, onClose }) {
               <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>
                 {data?.user?.email || 'User Timeline'}
               </p>
-              {data?.user?.full_name && (
-                <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{data.user.full_name}</p>
+              {([data?.user?.first_name, data?.user?.last_name].filter(Boolean).join(' ') || data?.user?.full_name) && (
+                <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{[data?.user?.first_name, data?.user?.last_name].filter(Boolean).join(' ') || data.user.full_name}</p>
               )}
             </div>
           </div>

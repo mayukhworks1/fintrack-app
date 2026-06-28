@@ -305,6 +305,8 @@ async def _create_session_for_user(
         "user": {
             "id": str(user["id"]),
             "email": user["email"],
+            "first_name": user.get("first_name"),
+            "last_name": user.get("last_name"),
             "full_name": user["full_name"],
             "status": user["status"],
         },
@@ -630,7 +632,7 @@ async def login_with_email(email: str, password: str, request: Request) -> dict[
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
             """
-            SELECT id, email, full_name, status, password_hash
+            SELECT id, email, first_name, last_name, full_name, status, password_hash
             FROM auth_users
             WHERE email_normalized = $1
             """,
@@ -689,7 +691,7 @@ async def _login_with_oidc_profile(
         async with conn.transaction():
             user = await conn.fetchrow(
                 """
-                SELECT u.id, u.email, u.full_name, u.status, u.avatar_is_custom
+                SELECT u.id, u.email, u.first_name, u.last_name, u.full_name, u.status, u.avatar_is_custom
                 FROM auth_identities i
                 JOIN auth_users u ON u.id = i.user_id
                 WHERE i.provider = $1 AND i.provider_user_id = $2
@@ -699,7 +701,7 @@ async def _login_with_oidc_profile(
             )
             if not user:
                 user = await conn.fetchrow(
-                    "SELECT id, email, full_name, status, avatar_is_custom FROM auth_users WHERE email_normalized = $1",
+                    "SELECT id, email, first_name, last_name, full_name, status, avatar_is_custom FROM auth_users WHERE email_normalized = $1",
                     email_norm,
                 )
                 if not user:
