@@ -4,10 +4,13 @@ Routes accept 'web' OR 'all' role (require_web_access).
 'web'  — invoice tracker only (Theworks@2026)
 'all'  — invoice tracker + project tracker (All@2026)
 """
+import csv as _csv
+import io as _io
 import httpx
 import re
 from datetime import date as _date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
+from fastapi.responses import StreamingResponse as _StreamingResponse
 from typing import Optional, List, Any
 from pydantic import BaseModel, field_validator
 from ..services.web_invoice import WebInvoiceService
@@ -299,6 +302,119 @@ async def list_web_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── CSV Export ────────────────────────────────────────────────────────────────
+
+@router.get("/export")
+async def export_web_invoices(
+    request:   Request,
+    status:    Optional[str] = Query(None),
+    project:   Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, alias="from"),
+    date_to:   Optional[str] = Query(None, alias="to"),
+    _role:     str           = Depends(require_web_access),
+    _perm:     str           = Depends(require_permission("module.invoices.view")),
+):
+    """Download all matching web invoices as CSV."""
+    svc = WebInvoiceService()
+    scoped_email = owner_scope_email(request)
+    result = await svc.list_invoices(
+        status=status, project=project, raised_by=scoped_email,
+        limit=2000, skip=0, order_by="Raised Date", order="desc",
+    )
+    records = (result or {}).get("records", [])
+
+    if date_from or date_to:
+        def _d(s):
+            try: return _date.fromisoformat(s)
+            except Exception: return None
+        df, dt = _d(date_from), _d(date_to)
+        def in_range(r):
+            rd_str = r.get("fields", {}).get("Raised Date", "")
+            if not rd_str: return True
+            try: rd = _date.fromisoformat(rd_str[:10])
+            except Exception: return True
+            if df and rd < df: return False
+            if dt and rd > dt: return False
+            return True
+        records = [r for r in records if in_range(r)]
+
+    COLS = [
+        ("Invoice Number",  "Invoice Number"),
+        ("Raised Date",     "Raised Date"),
+        ("Project",         "Project"),
+        ("Category",        "Category"),
+        ("Milestone",       "Milestone"),
+        ("Raised By",       "Raised By"),
+        ("Currency",        "Currency"),
+        ("Payment Status",  "Payment Status"),
+        ("Amount Raised",   "Amount Raised"),
+        ("Amount with Tax", "Amount with Tax"),
+        ("Amount Received", "Amount Received"),
+        ("Outstanding Amount", "Outstanding Amount"),
+        ("Cleared Date",    "Cleared Date"),
+        ("Agening (Days)",  "Aging Days"),
+        ("Next followup",   "Next Follow-up"),
+        ("Remark",          "Remark"),
+    ]
+
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow([label for _, label in COLS])
+    for r in records:
+        f = r.get("fields", {})
+        writer.writerow([f.get(key, "") for key, _ in COLS])
+
+    filename = f"web_invoices_{_date.today().isoformat()}.csv"
+    return _StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Aging Buckets ─────────────────────────────────────────────────────────────
+
+@router.get("/aging-buckets")
+async def web_aging_buckets(
+    request: Request,
+    _role:   str = Depends(require_web_access),
+    _perm:   str = Depends(require_permission("module.invoices.view")),
+):
+    """Return pending invoice counts/amounts in 0-30, 30-60, 60-90, 90+ day buckets."""
+    svc = WebInvoiceService()
+    scoped_email = owner_scope_email(request)
+    result = await svc.list_invoices(
+        status="Pending", raised_by=scoped_email, limit=2000, skip=0,
+    )
+    records = (result or {}).get("records", [])
+
+    buckets: dict[str, dict] = {
+        "0_30":  {"label": "0–30 days",  "days_min": 0,  "days_max": 30,  "count": 0, "amount": 0},
+        "30_60": {"label": "30–60 days", "days_min": 30, "days_max": 60,  "count": 0, "amount": 0},
+        "60_90": {"label": "60–90 days", "days_min": 60, "days_max": 90,  "count": 0, "amount": 0},
+        "90+":   {"label": "90+ days",   "days_min": 90, "days_max": None,"count": 0, "amount": 0},
+    }
+    total_outstanding = 0.0
+
+    for r in records:
+        f = r.get("fields", {})
+        aging = int(f.get("Agening (Days)") or 0)
+        amt = float(f.get("Outstanding Amount") or f.get("Amount Raised") or 0)
+        total_outstanding += amt
+        if aging <= 30:   b = "0_30"
+        elif aging <= 60: b = "30_60"
+        elif aging <= 90: b = "60_90"
+        else:             b = "90+"
+        buckets[b]["count"] += 1
+        buckets[b]["amount"] += amt
+
+    return {
+        "buckets": list(buckets.values()),
+        "total_outstanding": total_outstanding,
+        "total_pending": len(records),
+    }
+
+
 @router.get("/{record_id}")
 async def get_web_invoice(
     record_id: str, request: Request,
@@ -445,125 +561,6 @@ async def parse_web_invoice(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parse failed: {str(e)}")
-
-
-# ── CSV Export ────────────────────────────────────────────────────────────────
-
-import csv as _csv
-import io as _io
-from datetime import date as _date
-from fastapi.responses import StreamingResponse as _StreamingResponse
-
-
-@router.get("/export")
-async def export_web_invoices(
-    request:   Request,
-    status:    Optional[str] = Query(None),
-    project:   Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None, alias="from"),
-    date_to:   Optional[str] = Query(None, alias="to"),
-    _role:     str           = Depends(require_web_access),
-    _perm:     str           = Depends(require_permission("module.invoices.view")),
-):
-    """Download all matching web invoices as CSV."""
-    svc = WebInvoiceService()
-    scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        status=status, project=project, raised_by=scoped_email,
-        limit=2000, skip=0, order_by="Raised Date", order="desc",
-    )
-    records = (result or {}).get("records", [])
-
-    if date_from or date_to:
-        def _d(s):
-            try: return _date.fromisoformat(s)
-            except Exception: return None
-        df, dt = _d(date_from), _d(date_to)
-        def in_range(r):
-            rd_str = r.get("fields", {}).get("Raised Date", "")
-            if not rd_str: return True
-            try: rd = _date.fromisoformat(rd_str[:10])
-            except Exception: return True
-            if df and rd < df: return False
-            if dt and rd > dt: return False
-            return True
-        records = [r for r in records if in_range(r)]
-
-    COLS = [
-        ("Invoice Number",  "Invoice Number"),
-        ("Raised Date",     "Raised Date"),
-        ("Project",         "Project"),
-        ("Category",        "Category"),
-        ("Milestone",       "Milestone"),
-        ("Raised By",       "Raised By"),
-        ("Currency",        "Currency"),
-        ("Payment Status",  "Payment Status"),
-        ("Amount Raised",   "Amount Raised"),
-        ("Amount with Tax", "Amount with Tax"),
-        ("Amount Received", "Amount Received"),
-        ("Outstanding Amount", "Outstanding Amount"),
-        ("Cleared Date",    "Cleared Date"),
-        ("Agening (Days)",  "Aging Days"),
-        ("Next followup",   "Next Follow-up"),
-        ("Remark",          "Remark"),
-    ]
-
-    buf = _io.StringIO()
-    writer = _csv.writer(buf)
-    writer.writerow([label for _, label in COLS])
-    for r in records:
-        f = r.get("fields", {})
-        writer.writerow([f.get(key, "") for key, _ in COLS])
-
-    filename = f"web_invoices_{_date.today().isoformat()}.csv"
-    return _StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-# ── Aging Buckets ─────────────────────────────────────────────────────────────
-
-@router.get("/aging-buckets")
-async def web_aging_buckets(
-    request: Request,
-    _role:   str = Depends(require_web_access),
-    _perm:   str = Depends(require_permission("module.invoices.view")),
-):
-    """Return pending invoice counts/amounts in 0-30, 30-60, 60-90, 90+ day buckets."""
-    svc = WebInvoiceService()
-    scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        status="Pending", raised_by=scoped_email, limit=2000, skip=0,
-    )
-    records = (result or {}).get("records", [])
-
-    buckets: dict[str, dict] = {
-        "0_30":  {"label": "0–30 days",  "days_min": 0,  "days_max": 30,  "count": 0, "amount": 0},
-        "30_60": {"label": "30–60 days", "days_min": 30, "days_max": 60,  "count": 0, "amount": 0},
-        "60_90": {"label": "60–90 days", "days_min": 60, "days_max": 90,  "count": 0, "amount": 0},
-        "90+":   {"label": "90+ days",   "days_min": 90, "days_max": None,"count": 0, "amount": 0},
-    }
-    total_outstanding = 0.0
-
-    for r in records:
-        f = r.get("fields", {})
-        aging = int(f.get("Agening (Days)") or 0)
-        amt = float(f.get("Outstanding Amount") or f.get("Amount Raised") or 0)
-        total_outstanding += amt
-        if aging <= 30:   b = "0_30"
-        elif aging <= 60: b = "30_60"
-        elif aging <= 90: b = "60_90"
-        else:             b = "90+"
-        buckets[b]["count"] += 1
-        buckets[b]["amount"] += amt
-
-    return {
-        "buckets": list(buckets.values()),
-        "total_outstanding": total_outstanding,
-        "total_pending": len(records),
-    }
 
 
 def _assert_record_owner(record: dict | None, request: Request) -> None:
