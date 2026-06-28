@@ -1074,7 +1074,14 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     if (snapshot !== savedSnapRef.current && form.title.trim()) {
       const payload = { title:form.title, content_type:form.content_type, content:form.content, slug:form.slug || undefined, metadata:{ description:form.description } }
       try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...payload, ts:Date.now() })) } catch {}
-      ;(currentId ? api.pages.update(currentId, payload) : api.pages.create(payload)).catch(()=>{})
+      // Guard against creating a duplicate when an auto-save create is already
+      // in flight (createdRef) but currentId hasn't been set yet.
+      if (currentId) {
+        api.pages.update(currentId, payload).catch(()=>{})
+      } else if (!createdRef.current) {
+        createdRef.current = true
+        api.pages.create(payload).catch(()=>{})
+      }
     }
     onClose()
   }
@@ -1386,12 +1393,20 @@ export default function PagesManager() {
     finally { setCloning(null) }
   }
 
+  const [openingId, setOpeningId] = useState(null)
   const openEdit = async (page) => {
-    setDrawerPage(page)  // instant open with list data
+    // Fetch the FULL record (list rows have no `content`) BEFORE opening, so the
+    // drawer is populated from the start — no empty-then-fill race that could
+    // clobber edits or show a blank editor.
+    setOpeningId(page.id)
     try {
       const full = await api.pages.get(page.id)
-      setDrawerPage(full)  // silently upgrade with full content
-    } catch { /* keep list data, drawer already open */ }
+      setDrawerPage(full && full.id ? full : page)
+    } catch {
+      setDrawerPage(page)
+    } finally {
+      setOpeningId(null)
+    }
   }
 
   const filtered = pages.filter(p=>{
@@ -1494,7 +1509,7 @@ export default function PagesManager() {
                   </td>
                   <td style={{ padding:'12px 14px', whiteSpace:'nowrap' }}>
                     <div style={{ display:'flex', gap:5 }}>
-                      <button style={btnTiny} onClick={()=>openEdit(page)}>Edit</button>
+                      <button style={btnTiny} onClick={()=>openEdit(page)} disabled={openingId===page.id}>{openingId===page.id?'…':'Edit'}</button>
                       <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#d1fae5', color:page.is_published?'#92400e':'#065f46', border:'none' }} onClick={()=>handlePublishToggle(page)}>{page.is_published?'Unpublish':'Publish'}</button>
                       <button style={btnTiny} onClick={()=>handleClone(page)} disabled={cloning===page.id}>{cloning===page.id?'…':'Clone'}</button>
                       {page.is_published&&<button style={{ ...btnTiny, background:'#eff6ff', color:'#1d4ed8', border:'none' }} onClick={()=>setSharePage(page)}>Share ↗</button>}
