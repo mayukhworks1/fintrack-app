@@ -67,11 +67,20 @@ def _compute_duration_months(start_raw: Any) -> float | None:
 # ---------------------------------------------------------------------------
 
 def _token() -> str:
+    # Prefer the MAIN token — the projects table lives in the main Teable space,
+    # same as the dashboard/sync. (The web token often can't read it → 403.)
     return (
-        settings.teable_web_api_token
-        or settings.teable_api_token
+        settings.teable_api_token
+        or settings.teable_web_api_token
+        or settings.teable_all_api_token
         or ""
     )
+
+def _projects_table_id() -> str:
+    # The projects-duration automation must target the SAME projects table the
+    # rest of the app uses (teable_table_id), not the separate "Web Projects"
+    # table. Overridable via TEABLE_PROJECTS_TABLE_ID if they ever diverge.
+    return settings.teable_projects_table_id or settings.teable_table_id
 
 def _headers() -> dict[str, str]:
     return {
@@ -81,7 +90,7 @@ def _headers() -> dict[str, str]:
 
 def _record_url() -> str:
     base = settings.teable_base_url.rstrip("/")
-    return f"{base}/api/table/{settings.teable_web_projects_table_id}/record"
+    return f"{base}/api/table/{_projects_table_id()}/record"
 
 
 async def _fetch_active_projects() -> list[dict[str, Any]]:
@@ -167,7 +176,7 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
     skip_reasons: list[dict] = []
 
     try:
-        logger.info("project_duration: fetching from table_id=%s", settings.teable_table_id)
+        logger.info("project_duration: fetching from table_id=%s", _projects_table_id())
         records = await _fetch_active_projects()
         total = len(records)
         logger.info("project_duration: fetched %s records", total)

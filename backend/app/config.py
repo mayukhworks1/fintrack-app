@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     teable_api_token: Optional[str] = None
     teable_base_url: str = "https://app.teable.ai"
     teable_table_id: str = "tbl4fi155DuWlh40By3"
+    # Projects table used for the duration-refresh automation. Defaults to the
+    # main projects table (teable_table_id) — the one the dashboard/sync uses.
+    # Only override if project duration lives in a separate Teable table.
+    teable_projects_table_id: Optional[str] = None
     teable_invoice_table_id: str = "tblyWvNkprE1HnaVZIH"
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "meta-llama/llama-4-scout:free"
