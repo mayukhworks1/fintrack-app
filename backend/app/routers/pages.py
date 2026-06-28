@@ -370,6 +370,60 @@ async def upload_page_asset(
     }
 
 
+@router.delete("/api/pages/asset")
+async def delete_page_asset(path: str, role: str = Depends(require_auth)):
+    """Delete a previously-uploaded page attachment from HF storage.
+
+    Accepts either the stored repo path (`pages/...`) or the full asset URL.
+    Scoped strictly to the `pages/` prefix.
+    """
+    from ..services import storage
+
+    p = path.strip()
+    if "/api/public/pages/asset/" in p:
+        p = p.split("/api/public/pages/asset/", 1)[1]
+    p = p.split("?")[0].split("#")[0]
+    if ".." in p or p.startswith("/") or not p.startswith("pages/"):
+        raise HTTPException(400, "Invalid asset path")
+
+    await storage.delete_path(p)
+    return {"ok": True, "deleted": p}
+
+
+@router.get("/api/pages/slug-check")
+async def slug_check(slug: str, exclude_id: str | None = None, role: str = Depends(require_auth)):
+    """Check whether a slug is free; if taken, return alternative suggestions."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    base = _slugify(slug)
+    suggestions: list[str] = []
+
+    async with pool.acquire() as conn:
+        async def _taken(s: str) -> bool:
+            if exclude_id:
+                try:
+                    return await conn.fetchval(
+                        "SELECT 1 FROM published_pages WHERE slug=$1 AND id<>$2::uuid", s, exclude_id
+                    ) is not None
+                except Exception:
+                    pass
+            return await conn.fetchval("SELECT 1 FROM published_pages WHERE slug=$1", s) is not None
+
+        available = not await _taken(base)
+        if not available:
+            candidates = [f"{base}-{i}" for i in range(2, 8)]
+            candidates += [f"{base}-{_random_suffix(4)}", f"{base}-{_random_suffix(5)}"]
+            for cand in candidates:
+                if not await _taken(cand):
+                    suggestions.append(cand)
+                if len(suggestions) >= 4:
+                    break
+
+    return {"slug": base, "available": available, "suggestions": suggestions}
+
+
 @router.get("/api/pages/")
 async def list_pages(
     request: Request,

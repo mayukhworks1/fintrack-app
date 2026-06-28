@@ -1,7 +1,24 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
-import { api } from '../services/api'
+import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
+
+// Page asset/storage URLs are backend-relative (/api/...). The published page
+// is served from a DIFFERENT origin than the backend, so a relative src 404s.
+// Rewrite any backend-relative /api/ URL to the absolute backend URL. Works for
+// both old (relative) and new (already-absolute) content.
+function absAsset(url) {
+  if (!url) return url
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url
+  if (url.startsWith('/api/')) return `${API_BASE_URL}${url}`
+  return url
+}
+function rewriteAssetUrls(html) {
+  if (!API_BASE_URL || !html) return html
+  // src="/api/..." or href="/api/..." (single or double quoted)
+  return html.replace(/(\s(?:src|href)=)(["'])(\/api\/[^"']+)\2/gi,
+    (_, attr, q, path) => `${attr}${q}${API_BASE_URL}${path}${q}`)
+}
 
 // ---------------------------------------------------------------------------
 // Markdown renderer — full featured
@@ -61,8 +78,8 @@ function renderMarkdown(raw) {
 function inline(s) {
   return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img src="${absAsset(url)}" alt="${alt}" loading="lazy">`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, txt, url) => `<a href="${absAsset(url)}" target="_blank" rel="noopener noreferrer">${txt}</a>`)
     .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -172,9 +189,10 @@ function CSVTable({ text }) {
 // ---------------------------------------------------------------------------
 function HTMLPage({ content }) {
   useEffect(() => {
-    const html = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
+    const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
       ? content
       : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${content}</body></html>`
+    const html = rewriteAssetUrls(raw)
     document.open()
     document.write(html)
     document.close()

@@ -749,5 +749,7 @@ export const api = {
     publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
     publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
+    deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+    slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),
   },
 }

@@ -75,7 +75,7 @@ function renderMarkdown(raw) {
 function inl(s) {
   return s
     .replace(/`([^`]+)`/g,'<code style="background:#f1f5f9;padding:.1em .35em;border-radius:3px;font-size:.875em;color:#be185d">$1</code>')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img src="$2" alt="$1" style="max-width:100%;border-radius:6px">')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>`<img src="${absUrl(url)}" alt="${alt}" style="max-width:100%;border-radius:6px">`)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">$1</a>')
     .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
@@ -546,6 +546,38 @@ function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attac
   )
 }
 
+// Lists uploaded attachments referenced in the content with a delete action.
+function AttachmentsBar({ content, onChange }) {
+  const [deleting, setDeleting] = useState(null)
+  const assets = useMemo(() => extractAssets(content), [content])
+  if (!assets.length) return null
+  const remove = async (a) => {
+    if (!window.confirm(`Remove "${a.name}"? This deletes the file from storage and its reference from the page.`)) return
+    setDeleting(a.path)
+    onChange(removeAssetRef(content, a.path))      // remove reference immediately
+    try { await api.pages.deleteAsset(a.path) } catch { /* best-effort; reference already gone */ }
+    setDeleting(null)
+  }
+  return (
+    <div style={{ display:'flex', gap:8, flexWrap:'wrap', padding:'8px 12px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+      <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', marginRight:4 }}>📎 {assets.length} attachment{assets.length!==1?'s':''}</span>
+      {assets.map(a=>(
+        <div key={a.path} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 6px 3px 4px', border:'1px solid var(--border)', borderRadius:6, background:'var(--bg-base)' }}>
+          {a.isImg
+            ? <img src={a.url} alt="" style={{ width:24, height:24, objectFit:'cover', borderRadius:4 }} />
+            : <span style={{ fontSize:14 }}>📄</span>}
+          <span style={{ fontSize:11, color:'var(--text-1)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.name}>{a.name}</span>
+          <button type="button" title="Delete attachment" disabled={deleting===a.path}
+            onClick={()=>remove(a)}
+            style={{ border:'none', background:'transparent', color:'#ef4444', cursor:'pointer', fontSize:13, lineHeight:1, padding:'0 2px' }}>
+            {deleting===a.path ? '…' : '✕'}
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Format an uploaded asset into markdown or HTML markup
 function formatAssetMd(res) {
   const url = absUrl(res.url)
@@ -556,6 +588,37 @@ function formatAssetHtml(res) {
   return res.is_image
     ? `<img src="${url}" alt="${res.filename||''}" style="max-width:100%;height:auto" />`
     : `<a href="${url}" target="_blank" rel="noopener">📎 ${res.filename||'Download file'}</a>`
+}
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+
+// Find every uploaded page asset referenced in the content (relative or absolute)
+function extractAssets(content) {
+  if (!content) return []
+  const re = /\/api\/public\/pages\/asset\/([^\s)"'<>]+)/g
+  const seen = new Set(); const out = []
+  let m
+  while ((m = re.exec(content))) {
+    const path = m[1].split('?')[0].split('#')[0]
+    if (seen.has(path)) continue
+    seen.add(path)
+    const name = decodeURIComponent(path.split('/').pop() || path)
+    const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(path)
+    out.push({ path, name, isImg, url: absUrl(`/api/public/pages/asset/${path}`) })
+  }
+  return out
+}
+
+// Remove every reference to an asset path from content (md image/link, html img/a, bare url)
+function removeAssetRef(content, path) {
+  const enc = escapeRegex(path)
+  const urlPat = `[^\\s)"'<>]*\\/api\\/public\\/pages\\/asset\\/${enc}`
+  let c = content
+  c = c.replace(new RegExp(`!?\\[[^\\]]*\\]\\(\\s*${urlPat}\\s*\\)`, 'g'), '')        // markdown image/link
+  c = c.replace(new RegExp(`<img[^>]*src=["']${urlPat}["'][^>]*>`, 'gi'), '')          // html <img>
+  c = c.replace(new RegExp(`<a[^>]*href=["']${urlPat}["'][^>]*>[\\s\\S]*?<\\/a>`, 'gi'), '') // html <a>…</a>
+  c = c.replace(new RegExp(urlPat, 'g'), '')                                            // any bare url
+  return c
 }
 
 function MarkdownToolbar({ textareaRef, value, onChange }) {
@@ -864,6 +927,7 @@ function PageDrawer({ page, onClose, onSaved }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved', 'error', 'offline'
   const [showTemplates, setShowTemplates] = useState(!page?.content)
+  const [slugStatus, setSlugStatus] = useState(null) // null | { available, suggestions }
   const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
   const createdRef = useRef(false)   // guards against double-create races
@@ -897,6 +961,18 @@ function PageDrawer({ page, onClose, onSaved }) {
 
   // Auto-slug
   useEffect(() => { if (!slugManual && form.title) set('slug', slugify(form.title)) }, [form.title, slugManual])
+
+  // ── Duplicate-slug detection ──────────────────────────────────────────────
+  // Check availability as the slug changes; warn + suggest alternatives if taken.
+  const debouncedSlug = useDebounce(form.slug, 500)
+  useEffect(() => {
+    if (!debouncedSlug) { setSlugStatus(null); return }
+    let cancelled = false
+    api.pages.slugCheck(debouncedSlug, currentId || undefined)
+      .then(r => { if (!cancelled) setSlugStatus(r) })
+      .catch(() => { if (!cancelled) setSlugStatus(null) })
+    return () => { cancelled = true }
+  }, [debouncedSlug, currentId])
 
   // ── DB-backed auto-save ───────────────────────────────────────────────────
   // Debounce the whole savable payload (~1.2s). First change on a new page
@@ -1068,6 +1144,22 @@ function PageDrawer({ page, onClose, onSaved }) {
               <span style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', fontSize:11, color:'var(--text-2)', pointerEvents:'none' }}>/p/</span>
             </div>
             {shareUrl&&<div style={{ fontSize:10, color:'var(--accent)', marginTop:2, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{shareUrl}</div>}
+            {slugStatus && !slugStatus.available && (
+              <div style={{ marginTop:4, fontSize:11, color:'#b45309' }}>
+                ⚠ This URL is already taken{slugStatus.suggestions?.length ? ' — try:' : '.'}
+                {slugStatus.suggestions?.length > 0 && (
+                  <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:3 }}>
+                    {slugStatus.suggestions.map(s=>(
+                      <button key={s} type="button" onClick={()=>{ setSlugManual(true); set('slug', s) }}
+                        style={{ fontSize:11, fontFamily:'monospace', border:'1px solid var(--border)', borderRadius:5, padding:'2px 6px', background:'var(--bg-base)', color:'var(--accent)', cursor:'pointer' }}>{s}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {slugStatus && slugStatus.available && form.slug && (
+              <div style={{ marginTop:4, fontSize:11, color:'#16a34a' }}>✓ URL is available</div>
+            )}
           </div>
           <div style={{ flex:'2 1 150px' }}>
             <label style={labelStyle}>Description (for SEO)</label>
@@ -1098,6 +1190,9 @@ function PageDrawer({ page, onClose, onSaved }) {
             <AssetButton textareaRef={textareaRef} value={form.content} onChange={v=>set('content',v)} format={formatAssetHtml} label="📎 Insert image / file" />
             <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>
           </div>
+        )}
+        {(isMarkdown || isHtml) && tab === 'edit' && (
+          <AttachmentsBar content={form.content} onChange={v=>set('content',v)} />
         )}
 
         {/* Edit / Preview tabs (not for spreadsheet) */}
