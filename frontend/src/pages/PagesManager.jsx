@@ -1222,6 +1222,19 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
           </div>
         )}
 
+        {/* Editor-type banner — makes Document / Spreadsheet / Web Page distinct */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          <span style={{ fontWeight:700, color:'var(--text-1)' }}>
+            {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
+          </span>
+          <span>
+            {isSpreadsheet ? 'Excel-like grid — type =SUM(A1:A5) for formulas, add rows/columns'
+              : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
+              : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
+              : 'Plain text / code'}
+          </span>
+        </div>
+
         {/* Content area */}
         <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
           {isSpreadsheet ? (
@@ -1495,7 +1508,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} />}
+      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
