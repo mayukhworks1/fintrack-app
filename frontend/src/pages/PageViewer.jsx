@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../services/api'
+import { csvToGrid, cellDisplay } from '../utils/sheet'
 
 // ---------------------------------------------------------------------------
 // Markdown renderer — full featured
@@ -103,24 +104,23 @@ const MD_CSS = `
 // ---------------------------------------------------------------------------
 // CSV table
 // ---------------------------------------------------------------------------
-function parseLine(line) {
-  const r=[]; let c=''; let q=false
-  for(let i=0;i<line.length;i++){
-    if(line[i]==='"'){if(q&&line[i+1]==='"'){c+='"';i++}else q=!q}
-    else if(line[i]===','&&!q){r.push(c.trim());c=''}
-    else c+=line[i]
-  }
-  r.push(c.trim()); return r
-}
 function CSVTable({ text }) {
   const [sortCol, setSortCol] = useState(null)
   const [sortAsc, setSortAsc] = useState(true)
   const [filter, setFilter] = useState('')
 
+  // Build the grid once, then compute display values (evaluating any =formulas
+  // against absolute cell positions). Sorting/filtering operates on results.
+  const disp = useMemo(() => {
+    if (!text) return []
+    const grid = csvToGrid(text)
+    return grid.map((row, r) => row.map((_, c) => { const v = cellDisplay(grid, r, c); return v == null ? '' : String(v) }))
+  }, [text])
+
   if (!text) return <p style={{ color: '#9ca3af' }}>Empty.</p>
-  const lines = text.trim().split('\n').filter(Boolean)
-  const headers = parseLine(lines[0])
-  let rows = lines.slice(1).map(parseLine)
+  const totalRows = Math.max(disp.length - 1, 0)
+  const headers = disp[0] || []
+  let rows = disp.slice(1)
 
   if (filter) rows = rows.filter(r => r.some(c => c.toLowerCase().includes(filter.toLowerCase())))
   if (sortCol !== null) {
@@ -137,7 +137,7 @@ function CSVTable({ text }) {
       <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
         <input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter rows…"
           style={{ padding:'6px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, outline:'none', minWidth:160 }} />
-        <span style={{ fontSize:12, color:'#94a3b8' }}>{rows.length} of {lines.length-1} rows</span>
+        <span style={{ fontSize:12, color:'#94a3b8' }}>{rows.length} of {totalRows} rows</span>
         {sortCol!==null&&<button onClick={()=>setSortCol(null)} style={{ fontSize:12, color:'#94a3b8', background:'none', border:'1px solid #e2e8f0', borderRadius:6, padding:'3px 8px', cursor:'pointer' }}>Clear sort</button>}
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -458,7 +458,30 @@ export default function PageViewer() {
       utm_medium:         params.get('utm_medium') || '',
       utm_campaign:       params.get('utm_campaign') || '',
     }
-    api.pages.publicLogView(slug, payload).catch(() => {})
+
+    // GPS — only if the tab ALREADY has location permission granted. We never
+    // prompt the visitor: we check the Permissions API first and only read the
+    // position when state === 'granted'. Falls back to IP geo otherwise.
+    const send = (extra) => api.pages.publicLogView(slug, { ...payload, ...extra }).catch(() => {})
+    const tryGps = () => {
+      if (!navigator.geolocation) return send({})
+      navigator.geolocation.getCurrentPosition(
+        pos => send({
+          gps_lat:      pos.coords.latitude,
+          gps_lon:      pos.coords.longitude,
+          gps_accuracy: pos.coords.accuracy,
+        }),
+        () => send({}),                              // denied / error → IP only
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 },
+      )
+    }
+    if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'geolocation' })
+        .then(p => { if (p.state === 'granted') tryGps(); else send({}) })
+        .catch(() => send({}))
+    } else {
+      send({})
+    }
   }, [state, slug])
 
   const handlePasswordSubmit = (password) => {

@@ -39,14 +39,38 @@ def _ensure_repo_sync() -> None:
     _repo_ensured = True
 MAX_AVATAR_BYTES = 4 * 1024 * 1024  # 4 MB
 
+MAX_PAGE_FILE_BYTES = 25 * 1024 * 1024  # 25 MB per page attachment
+
 EXT_FOR_MIME = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/gif": "gif",
     "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "text/csv": "csv",
+    "text/markdown": "md",
+    "application/json": "json",
+    "application/zip": "zip",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "video/mp4": "mp4",
+    "audio/mpeg": "mp3",
 }
 MIME_FOR_EXT = {v: k for k, v in EXT_FOR_MIME.items()}
 MIME_FOR_EXT["jpeg"] = "image/jpeg"
+
+# File types that are safe to render inline in the browser (others download).
+INLINE_MIME = {
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf", "text/plain", "text/csv", "text/markdown",
+    "video/mp4", "audio/mpeg",
+}
 
 
 def _hf_api():

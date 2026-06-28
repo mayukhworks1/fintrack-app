@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '../services/api'
+import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 
 // ---------------------------------------------------------------------------
 // Mobile hook
@@ -74,31 +75,7 @@ function inl(s) {
     .replace(/==(.+?)==/g,'<mark style="background:#fef08a;padding:.05em .2em;border-radius:2px">$1</mark>')
 }
 
-// ---------------------------------------------------------------------------
-// CSV parse helpers
-// ---------------------------------------------------------------------------
-function parseLine(line) {
-  const r=[]; let c=''; let q=false
-  for(let i=0;i<line.length;i++){
-    if(line[i]==='"'){if(q&&line[i+1]==='"'){c+='"';i++}else q=!q}
-    else if(line[i]===','&&!q){r.push(c.trim());c=''}
-    else c+=line[i]
-  }
-  r.push(c.trim()); return r
-}
-function csvToGrid(text) {
-  if (!text?.trim()) return [['','',''],['','',''],['','','']]
-  const lines = text.trim().split('\n').filter(Boolean)
-  const rows = lines.map(parseLine)
-  const cols = Math.max(...rows.map(r=>r.length), 1)
-  return rows.map(r => { while(r.length<cols) r.push(''); return r })
-}
-function gridToCSV(grid) {
-  return grid.map(row => row.map(cell => {
-    const s = String(cell ?? '')
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s
-  }).join(',')).join('\n')
-}
+// CSV parse helpers + formula engine live in ../utils/sheet (shared with PageViewer)
 
 // ---------------------------------------------------------------------------
 // Content preview components
@@ -106,13 +83,15 @@ function gridToCSV(grid) {
 function CSVPreview({ text }) {
   if (!text) return <div style={{ color:'var(--text-2)',padding:12,fontSize:13 }}>Empty.</div>
   const lines = text.trim().split('\n').filter(Boolean)
+  const grid = csvToGrid(text)
   const headers = parseLine(lines[0])
   const rows = lines.slice(1,11).map(parseLine)
+  const show = (v,r,c) => (typeof v==='string'&&v.trim().startsWith('=')) ? cellDisplay(grid,r,c) : v
   return (
     <div style={{ overflowX:'auto', padding:12 }}>
       <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
         <thead><tr>{headers.map((h,i)=><th key={i} style={{ border:'1px solid var(--border)', padding:'6px 10px', background:'var(--bg-card)', textAlign:'left', fontWeight:600 }}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((row,ri)=><tr key={ri} style={{ background:ri%2?'var(--bg-card)':'var(--bg-base)' }}>{row.map((cell,ci)=><td key={ci} style={{ border:'1px solid var(--border)', padding:'5px 10px' }}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((row,ri)=><tr key={ri} style={{ background:ri%2?'var(--bg-card)':'var(--bg-base)' }}>{row.map((cell,ci)=><td key={ci} style={{ border:'1px solid var(--border)', padding:'5px 10px' }}>{show(cell,ri+1,ci)}</td>)}</tr>)}</tbody>
       </table>
       {lines.length > 11 && <div style={{ fontSize:11, color:'var(--text-2)', marginTop:6 }}>Showing 10 of {lines.length-1} rows</div>}
     </div>
@@ -170,7 +149,7 @@ function flagEmoji(code) {
 // Export analytics CSV
 // ---------------------------------------------------------------------------
 function exportAnalyticsCSV(items, pageTitle) {
-  const headers = ['Time','IP','Country','CountryCode','Region','City','ZIP','Lat','Lon','ISP','Org','AS','Platform','TouchScreen','Screen','Viewport','PixelRatio','ColorDepth','Language','Timezone','Browser','ConnectionType','Downlink','Referer','PageURL','UTM_Source','UTM_Medium','UTM_Campaign']
+  const headers = ['Time','IP','LocationSource','GPS_Lat','GPS_Lon','GPS_Accuracy_m','GPS_City','GPS_Country','Country','CountryCode','Region','City','ZIP','Lat','Lon','ISP','Org','AS','Platform','TouchScreen','Screen','Viewport','PixelRatio','ColorDepth','Language','Timezone','Browser','ConnectionType','Downlink','Referer','PageURL','UTM_Source','UTM_Medium','UTM_Campaign']
   const fmtB = (ua) => {
     if (!ua) return ''
     const m = /iPhone|iPad/i.test(ua)?'iPhone/iPad':/Android/i.test(ua)?'Android':''
@@ -179,8 +158,8 @@ function exportAnalyticsCSV(items, pageTitle) {
   }
   const esc = v => v==null?'':`"${String(v).replace(/"/g,'""')}"`
   const rows = items.map(v => {
-    const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}
-    return [v.viewed_at?new Date(v.viewed_at).toISOString():'',v.viewer_ip,v.country,geo.country_code,geo.region||v.region,v.city,geo.zip,geo.lat,geo.lon,v.isp,geo.org,geo.as,cli.platform,cli.touch_support!=null?(cli.touch_support?'Yes':'No'):'',cli.screen_width?`${cli.screen_width}x${cli.screen_height}`:'',cli.viewport_width?`${cli.viewport_width}x${cli.viewport_height}`:'',cli.pixel_ratio,cli.color_depth,cli.language,cli.timezone||geo.timezone,fmtB(v.user_agent),cli.connection_type,cli.connection_downlink,v.referer,cli.page_url,cli.utm_source,cli.utm_medium,cli.utm_campaign].map(esc).join(',')
+    const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const gps=v.metadata?.gps||{}; const loc=v.metadata?.location||{}
+    return [v.viewed_at?new Date(v.viewed_at).toISOString():'',v.viewer_ip,loc.source||(gps.lat?'gps':'ip'),gps.lat,gps.lon,gps.accuracy,gps.city,gps.country,v.country,geo.country_code,geo.region||v.region,v.city,geo.zip,geo.lat,geo.lon,v.isp,geo.org,geo.as,cli.platform,cli.touch_support!=null?(cli.touch_support?'Yes':'No'):'',cli.screen_width?`${cli.screen_width}x${cli.screen_height}`:'',cli.viewport_width?`${cli.viewport_width}x${cli.viewport_height}`:'',cli.pixel_ratio,cli.color_depth,cli.language,cli.timezone||geo.timezone,fmtB(v.user_agent),cli.connection_type,cli.connection_downlink,v.referer,cli.page_url,cli.utm_source,cli.utm_medium,cli.utm_campaign].map(esc).join(',')
   })
   const csv=[headers.join(','),...rows].join('\n')
   const blob=new Blob([csv],{type:'text/csv'})
@@ -216,8 +195,24 @@ function ViewSparkline({ items }) {
 // Detail grid
 // ---------------------------------------------------------------------------
 function DetailGrid({ geo, cli, v, isMobile }) {
+  const gps = v.metadata?.gps || null
+  const loc = v.metadata?.location || null
+  const mapLat = gps?.lat ?? geo.lat
+  const mapLon = gps?.lon ?? geo.lon
   const rows = [
     {section:'Network',label:'IP Address',value:v.viewer_ip},{section:'Network',label:'ISP',value:v.isp},{section:'Network',label:'Organisation',value:geo.org},{section:'Network',label:'AS Number',value:geo.as},{section:'Network',label:'Connection Type',value:cli.connection_type},{section:'Network',label:'Downlink',value:cli.connection_downlink!=null?`${cli.connection_downlink} Mbps`:null},
+    // Resolved location — tells you whether this came from precise GPS or IP
+    {section:'Location',label:'Source',value:loc?.source?(loc.source==='gps'?'🛰️ GPS (precise)':loc.source==='ip'?'🌐 IP (approximate)':loc.source):(gps?'🛰️ GPS (precise)':'🌐 IP (approximate)')},
+    ...(gps?[
+      {section:'Location',label:'GPS Latitude',value:gps.lat!=null?String(gps.lat):null},
+      {section:'Location',label:'GPS Longitude',value:gps.lon!=null?String(gps.lon):null},
+      {section:'Location',label:'GPS Accuracy',value:gps.accuracy!=null?`±${Math.round(gps.accuracy)} m`:null},
+      {section:'Location',label:'City',value:gps.city||loc?.city},
+      {section:'Location',label:'Region',value:gps.region||loc?.region},
+      {section:'Location',label:'Country',value:gps.country?`${flagEmoji(gps.country_code||gps.country)} ${gps.country}`:null},
+      {section:'Location',label:'ZIP',value:gps.zip},
+      {section:'Location',label:'Address',value:gps.display_name},
+    ]:[]),
     {section:'Location (IP)',label:'Country',value:geo.country?`${flagEmoji(geo.country_code||geo.country)} ${geo.country}`:null},{section:'Location (IP)',label:'Country Code',value:geo.country_code},{section:'Location (IP)',label:'Region',value:geo.region},{section:'Location (IP)',label:'City',value:geo.city},{section:'Location (IP)',label:'ZIP',value:geo.zip},{section:'Location (IP)',label:'Latitude',value:geo.lat!=null?String(geo.lat):null},{section:'Location (IP)',label:'Longitude',value:geo.lon!=null?String(geo.lon):null},{section:'Location (IP)',label:'Timezone',value:geo.timezone},
     {section:'Device',label:'Platform',value:cli.platform},{section:'Device',label:'Touch Screen',value:cli.touch_support!=null?(cli.touch_support?'Yes':'No'):null},{section:'Device',label:'Screen',value:cli.screen_width?`${cli.screen_width}×${cli.screen_height}`:null},{section:'Device',label:'Viewport',value:cli.viewport_width?`${cli.viewport_width}×${cli.viewport_height}`:null},{section:'Device',label:'Pixel Ratio',value:cli.pixel_ratio!=null?`${cli.pixel_ratio}x`:null},{section:'Device',label:'Color Depth',value:cli.color_depth!=null?`${cli.color_depth}-bit`:null},{section:'Device',label:'Language',value:cli.language},{section:'Device',label:'All Languages',value:cli.languages?.join(', ')},{section:'Device',label:'Browser TZ',value:cli.timezone},{section:'Device',label:'Cookies',value:cli.cookie_enabled!=null?(cli.cookie_enabled?'Yes':'No'):null},{section:'Device',label:'User Agent',value:v.user_agent},
     {section:'Visit',label:'Time',value:v.viewed_at?new Date(v.viewed_at).toLocaleString():null},{section:'Visit',label:'Page URL',value:cli.page_url},{section:'Visit',label:'Referer',value:v.referer},{section:'Visit',label:'UTM Source',value:cli.utm_source},{section:'Visit',label:'UTM Medium',value:cli.utm_medium},{section:'Visit',label:'UTM Campaign',value:cli.utm_campaign},
@@ -236,13 +231,13 @@ function DetailGrid({ geo, cli, v, isMobile }) {
           ))}
         </div>
       ))}
-      {geo.lat&&geo.lon&&(
+      {mapLat&&mapLon&&(
         <div>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map</div>
-          <div style={{ fontSize:11, color:'var(--text-2)', marginBottom:6, wordBreak:'break-all', fontFamily:'monospace' }}>{`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=14`}</div>
-          <a href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lon}&zoom=14`} target="_blank" rel="noopener noreferrer"
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map {gps?'(GPS — precise)':'(IP — approximate)'}</div>
+          <div style={{ fontSize:11, color:'var(--text-2)', marginBottom:6, wordBreak:'break-all', fontFamily:'monospace' }}>{`https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}&zoom=${gps?16:14}`}</div>
+          <a href={`https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}&zoom=${gps?16:14}`} target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-block', fontSize:12, color:'var(--accent)', textDecoration:'none', border:'1px solid var(--border)', borderRadius:6, padding:'5px 10px' }}>
-            📍 {geo.lat.toFixed(4)}, {geo.lon.toFixed(4)} — Open in map ↗
+            📍 {Number(mapLat).toFixed(4)}, {Number(mapLon).toFixed(4)} — Open in map ↗
           </a>
         </div>
       )}
@@ -505,6 +500,53 @@ const TEMPLATES = {
 // ---------------------------------------------------------------------------
 // Markdown Toolbar (Word-like)
 // ---------------------------------------------------------------------------
+// Upload an image/file to HF storage and insert a reference at the cursor.
+// `format(res)` turns the upload result into the snippet for the content type.
+function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attach' }) {
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef(null)
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const res = await api.pages.uploadAsset(file)
+      if (res?.error || res?.detail) throw new Error(res.error || res.detail)
+      const snippet = format(res)
+      const ta = textareaRef.current
+      const start = ta ? ta.selectionStart : value.length
+      const nv = value.slice(0, start) + snippet + value.slice(start)
+      onChange(nv)
+      setTimeout(() => { if (ta) { ta.focus(); ta.setSelectionRange(start + snippet.length, start + snippet.length) } }, 0)
+    } catch (err) {
+      alert('Upload failed: ' + (err?.message || err))
+    } finally { setBusy(false) }
+  }
+  return (
+    <>
+      <input ref={inputRef} type="file" onChange={onFile} style={{ display:'none' }}
+        accept="image/*,application/pdf,.csv,.txt,.md,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,video/mp4,audio/mpeg" />
+      <button type="button" title="Upload & insert an image or file" disabled={busy}
+        onMouseDown={e=>{ e.preventDefault(); if(!busy) inputRef.current?.click() }}
+        style={{ background:'transparent', border:'none', borderRadius:5, padding:'4px 7px', fontSize:12, cursor:busy?'wait':'pointer', color:'var(--text-1)', userSelect:'none', whiteSpace:'nowrap' }}
+        onMouseEnter={e=>e.target.style.background='var(--border)'}
+        onMouseLeave={e=>e.target.style.background='transparent'}>
+        {busy ? '⏳ Uploading…' : label}
+      </button>
+    </>
+  )
+}
+
+// Format an uploaded asset into markdown or HTML markup
+function formatAssetMd(res) {
+  return res.is_image ? `![${res.filename||'image'}](${res.url})` : `[📎 ${res.filename||'file'}](${res.url})`
+}
+function formatAssetHtml(res) {
+  return res.is_image
+    ? `<img src="${res.url}" alt="${res.filename||''}" style="max-width:100%;height:auto" />`
+    : `<a href="${res.url}" target="_blank" rel="noopener">📎 ${res.filename||'Download file'}</a>`
+}
+
 function MarkdownToolbar({ textareaRef, value, onChange }) {
   const wrap = (before, after, placeholder = 'text') => {
     const ta = textareaRef.current
@@ -578,6 +620,8 @@ function MarkdownToolbar({ textareaRef, value, onChange }) {
           {gi < tools.length-1 && <div style={{ width:1, background:'var(--border)', margin:'2px 4px' }} />}
         </div>
       ))}
+      <div style={{ width:1, background:'var(--border)', margin:'2px 4px' }} />
+      <AssetButton textareaRef={textareaRef} value={value} onChange={onChange} format={formatAssetMd} label="📎 Image / File" />
     </div>
   )
 }
@@ -590,7 +634,25 @@ function SpreadsheetEditor({ value, onChange }) {
   const [selectedCell, setSelectedCell] = useState(null)
   const [editingCell, setEditingCell] = useState(null)
   const [formulaBar, setFormulaBar] = useState('')
+  const [suggest, setSuggest] = useState([])   // formula autosuggest list
   const inputRefs = useRef({})
+
+  // Autosuggest: when the value being typed starts with '=', suggest functions
+  const computeSuggest = (text) => {
+    if (typeof text !== 'string' || !text.trim().startsWith('=')) return setSuggest([])
+    const m = /([A-Za-z]+)$/.exec(text)
+    const frag = (m ? m[1] : '').toUpperCase()
+    if (!frag) return setSuggest(FORMULA_FUNCTIONS.slice(0, 6))
+    setSuggest(FORMULA_FUNCTIONS.filter(f => f.startsWith(frag)).slice(0, 6))
+  }
+  const applySuggest = (fn) => {
+    if (!selectedCell) return
+    const cur = formulaBar || '='
+    const next = cur.replace(/([A-Za-z]+)$/, '') + fn + '('
+    setFormulaBar(next); setSuggest([])
+    updateCell(selectedCell[0], selectedCell[1], next)
+    inputRefs.current['fx']?.focus()
+  }
 
   // Keep value in sync (external resets like template load)
   const lastExternal = useRef(value)
@@ -643,10 +705,25 @@ function SpreadsheetEditor({ value, onChange }) {
           {selectedCell?`${colLetter(selectedCell[1])}${selectedCell[0]+1}`:'—'}
         </div>
         <div style={{ color:'var(--text-2)', fontSize:16, fontWeight:300 }}>fx</div>
-        <input value={formulaBar} onChange={e=>{
-          setFormulaBar(e.target.value)
-          if(selectedCell) updateCell(selectedCell[0],selectedCell[1],e.target.value)
-        }} placeholder="Cell value…" style={{ flex:1, border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontSize:13, fontFamily:'monospace', background:'var(--bg-base)', color:'var(--text-1)', outline:'none' }} />
+        <div style={{ flex:1, position:'relative' }}>
+          <input ref={el=>inputRefs.current['fx']=el} value={formulaBar} onChange={e=>{
+            setFormulaBar(e.target.value); computeSuggest(e.target.value)
+            if(selectedCell) updateCell(selectedCell[0],selectedCell[1],e.target.value)
+          }} onBlur={()=>setTimeout(()=>setSuggest([]),150)}
+            placeholder="Value or =SUM(A1:A5) …" style={{ width:'100%', boxSizing:'border-box', border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontSize:13, fontFamily:'monospace', background:'var(--bg-base)', color:'var(--text-1)', outline:'none' }} />
+          {suggest.length>0 && (
+            <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', minWidth:180, overflow:'hidden' }}>
+              {suggest.map(fn=>(
+                <div key={fn} onMouseDown={e=>{e.preventDefault();applySuggest(fn)}}
+                  style={{ padding:'6px 10px', fontSize:12, fontFamily:'monospace', cursor:'pointer', color:'var(--text-1)', borderBottom:'1px solid var(--border)' }}
+                  onMouseEnter={e=>e.currentTarget.style.background='var(--bg-base)'}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  <span style={{ fontWeight:700, color:'var(--accent)' }}>{fn}</span>()
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <button title="Add row" onClick={addRow} style={{ ...btnTiny, fontSize:11, padding:'3px 8px' }}>+ Row</button>
         <button title="Add column" onClick={addCol} style={{ ...btnTiny, fontSize:11, padding:'3px 8px' }}>+ Col</button>
       </div>
@@ -679,15 +756,20 @@ function SpreadsheetEditor({ value, onChange }) {
                 {row.map((cell,c)=>{
                   const isSel=selectedCell?.[0]===r&&selectedCell?.[1]===c
                   const isHdr=r===0
+                  const isFormula = typeof cell==='string' && cell.trim().startsWith('=')
+                  // Show computed result when not focused; raw formula when editing
+                  const display = isSel ? cell : (isFormula ? cellDisplay(grid,r,c) : cell)
+                  const isErr = isFormula && typeof display==='string' && display.startsWith('#')
                   return (
-                    <td key={c} style={{ border:`1px solid ${isSel?'#2563eb':'#d1d5db'}`, padding:0, background:isSel?'#eff6ff':isHdr?'#f8fafc':'#fff', outline:isSel?'2px solid #2563eb':' none', outlineOffset:-1 }}>
+                    <td key={c} style={{ border:`1px solid ${isSel?'#2563eb':'#d1d5db'}`, padding:0, background:isSel?'#eff6ff':isHdr?'#f8fafc':isFormula&&!isSel?'#f0fdf4':'#fff', outline:isSel?'2px solid #2563eb':' none', outlineOffset:-1 }}
+                      title={isFormula&&!isSel?cell:undefined}>
                       <input
                         ref={el=>inputRefs.current[`${r}-${c}`]=el}
-                        value={cell}
-                        onChange={e=>{ updateCell(r,c,e.target.value); setFormulaBar(e.target.value) }}
+                        value={display}
+                        onChange={e=>{ updateCell(r,c,e.target.value); setFormulaBar(e.target.value); computeSuggest(e.target.value) }}
                         onFocus={()=>{ setSelectedCell([r,c]); setFormulaBar(cell) }}
                         onKeyDown={e=>handleKeyDown(e,r,c)}
-                        style={{ width:'100%', height:32, padding:'0 8px', border:'none', outline:'none', background:'transparent', fontSize:13, fontFamily:isHdr?'inherit':'monospace', fontWeight:isHdr?700:400, color:'var(--text-1)', boxSizing:'border-box' }}
+                        style={{ width:'100%', height:32, padding:'0 8px', border:'none', outline:'none', background:'transparent', fontSize:13, fontFamily:isHdr?'inherit':'monospace', fontWeight:isHdr?700:400, color:isErr?'#dc2626':(isFormula&&!isSel?'#15803d':'var(--text-1)'), boxSizing:'border-box' }}
                       />
                     </td>
                   )
@@ -698,7 +780,7 @@ function SpreadsheetEditor({ value, onChange }) {
         </table>
       </div>
       <div style={{ padding:'4px 12px', background:'var(--bg-card)', borderTop:'1px solid var(--border)', fontSize:11, color:'var(--text-2)', flexShrink:0 }}>
-        {rows.length} rows × {cols} columns · Tab to move right · Enter to move down
+        {rows.length} rows × {cols} columns · Tab/Enter to move · Type <code style={{ fontFamily:'monospace' }}>=SUM(A1:A5)</code>, <code style={{ fontFamily:'monospace' }}>=A1*B1</code> for formulas
       </div>
     </div>
   )
@@ -749,8 +831,12 @@ const CONTENT_TYPES = [
 
 function PageDrawer({ page, onClose, onSaved }) {
   const isMobile = useIsMobile()
-  const isEdit = !!page?.id
   const textareaRef = useRef(null)
+  // currentId tracks the DB row: starts from the passed page, but auto-save can
+  // create a draft on the server for a brand-new page, after which this holds
+  // the new id so every later save PATCHes instead of creating duplicates.
+  const [currentId, setCurrentId] = useState(page?.id || null)
+  const isEdit = !!currentId
   const [form, setForm] = useState({
     title:                page?.title || '',
     content_type:         page?.content_type || 'markdown',
@@ -765,29 +851,67 @@ function PageDrawer({ page, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
-  const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved'
+  const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved', 'error', 'offline'
   const [showTemplates, setShowTemplates] = useState(!page?.content)
-  const [charLimit] = useState(10000)
+  const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
+  const createdRef = useRef(false)   // guards against double-create races
+  const savedSnapRef = useRef(JSON.stringify({ title:page?.title||'', content_type:page?.content_type||'markdown', content:page?.content||'', slug:page?.slug||'', description:page?.metadata?.description||'' }))
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   // Auto-slug
   useEffect(() => { if (!slugManual && form.title) set('slug', slugify(form.title)) }, [form.title, slugManual])
 
-  // Auto-save to localStorage
-  const debouncedContent = useDebounce(form.content, 2000)
-  useEffect(() => {
-    if (!debouncedContent || debouncedContent === page?.content) return
-    setAutoSaveStatus('saving')
-    try {
-      localStorage.setItem(autoSaveKey, JSON.stringify({ title:form.title, content:debouncedContent, content_type:form.content_type, ts:Date.now() }))
-      setTimeout(() => setAutoSaveStatus('saved'), 300)
-      setTimeout(() => setAutoSaveStatus(''), 3000)
-    } catch { setAutoSaveStatus('') }
-  }, [debouncedContent])
+  // ── DB-backed auto-save ───────────────────────────────────────────────────
+  // Debounce the whole savable payload (~1.2s). First change on a new page
+  // creates an unpublished draft; thereafter we PATCH. localStorage is kept as
+  // an offline backup so nothing is lost if the network drops.
+  const savePayload = useMemo(() => ({
+    title:        form.title,
+    content_type: form.content_type,
+    content:      form.content,
+    slug:         form.slug || undefined,
+    metadata:     { description: form.description },
+  }), [form.title, form.content_type, form.content, form.slug, form.description])
+  const snapshot = useMemo(() => JSON.stringify({
+    title:form.title, content_type:form.content_type, content:form.content, slug:form.slug||'', description:form.description||'',
+  }), [form.title, form.content_type, form.content, form.slug, form.description])
+  const debouncedSnap = useDebounce(snapshot, 1200)
 
-  // Load auto-save on open (if newer than saved)
+  useEffect(() => {
+    if (debouncedSnap === savedSnapRef.current) return   // nothing changed
+    if (!form.title.trim()) return                        // need a title to persist
+    let cancelled = false
+    ;(async () => {
+      setAutoSaveStatus('saving')
+      // Always write a local backup first (instant, survives crashes)
+      try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...savePayload, ts:Date.now() })) } catch {}
+      try {
+        let saved
+        if (currentId) {
+          saved = await api.pages.update(currentId, savePayload)
+        } else if (!createdRef.current) {
+          createdRef.current = true
+          saved = await api.pages.create(savePayload)   // creates unpublished draft
+          if (saved?.id && !cancelled) setCurrentId(saved.id)
+        } else {
+          return  // a create is already in flight; wait for next tick
+        }
+        if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
+        if (cancelled) return
+        savedSnapRef.current = debouncedSnap
+        setAutoSaveStatus('saved')
+        setTimeout(() => setAutoSaveStatus(s => s === 'saved' ? '' : s), 2500)
+      } catch (e) {
+        createdRef.current = false   // allow retry
+        if (!cancelled) setAutoSaveStatus('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [debouncedSnap]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore a local backup on open if the server copy is empty/older
   useEffect(() => {
     if (page?.content) return
     try {
@@ -817,10 +941,11 @@ function PageDrawer({ page, onClose, onSaved }) {
         password:             form.is_password_protected && form.password ? form.password : undefined,
         metadata:             { description: form.description },
       }
-      let saved = isEdit
-        ? await api.pages.update(page.id, payload)
+      let saved = currentId
+        ? await api.pages.update(currentId, payload)
         : await api.pages.create(payload)
       if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
+      if (saved?.id) setCurrentId(saved.id)
       if (publish && !saved.is_published) saved = await api.pages.publish(saved.id, true)
       localStorage.removeItem(autoSaveKey)
       onSaved(saved)
@@ -874,8 +999,9 @@ function PageDrawer({ page, onClose, onSaved }) {
                   {form.content.length.toLocaleString()} / {charLimit.toLocaleString()} chars
                 </span>
               )}
-              {autoSaveStatus === 'saved' && <span style={{ color:'#10b981' }}>✓ Draft saved</span>}
-              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>Saving…</span>}
+              {autoSaveStatus === 'saved' && <span style={{ color:'#10b981' }}>✓ Saved to cloud</span>}
+              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error' && <span style={{ color:'#ef4444' }}>⚠ Save failed — kept local backup</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
@@ -931,6 +1057,12 @@ function PageDrawer({ page, onClose, onSaved }) {
         {/* Toolbar for markdown */}
         {isMarkdown && tab === 'edit' && (
           <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={v=>set('content',v)} />
+        )}
+        {isHtml && tab === 'edit' && (
+          <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+            <AssetButton textareaRef={textareaRef} value={form.content} onChange={v=>set('content',v)} format={formatAssetHtml} label="📎 Insert image / file" />
+            <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>
+          </div>
         )}
 
         {/* Edit / Preview tabs (not for spreadsheet) */}

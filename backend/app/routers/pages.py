@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ..db.postgres import get_pool
@@ -83,6 +84,37 @@ async def _geo_lookup(ip: str) -> dict:
     return {}
 
 
+async def _reverse_geocode(lat: float, lon: float) -> dict:
+    """Resolve precise GPS coords to a place name via OpenStreetMap Nominatim.
+
+    Best-effort — returns {} on any failure. Nominatim requires a descriptive
+    User-Agent and is rate-limited to ~1 req/s, which is fine for page views.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 16, "addressdetails": 1},
+                headers={"User-Agent": "FinTrack-Pages/1.0 (analytics)"},
+            )
+            if r.status_code == 200:
+                d = r.json()
+                a = d.get("address", {}) or {}
+                return {
+                    "country":      a.get("country", ""),
+                    "country_code": (a.get("country_code", "") or "").upper(),
+                    "city":         a.get("city") or a.get("town") or a.get("village") or a.get("municipality", ""),
+                    "region":       a.get("state") or a.get("region", ""),
+                    "zip":          a.get("postcode", ""),
+                    "suburb":       a.get("suburb") or a.get("neighbourhood", ""),
+                    "road":         a.get("road", ""),
+                    "display_name": d.get("display_name", ""),
+                }
+    except Exception:
+        pass
+    return {}
+
+
 async def _log_view_bg(
     page_id: str,
     ip: str,
@@ -96,11 +128,47 @@ async def _log_view_bg(
     if not pool:
         return
     geo = await _geo_lookup(ip)
+    cm = client_meta or {}
+
+    # GPS — present only when the visitor's browser already had location
+    # permission granted (the frontend never prompts). When available it is far
+    # more precise than IP geo, so we reverse-geocode it and treat it as the
+    # authoritative location.
+    gps = None
+    g_lat, g_lon = cm.get("gps_lat"), cm.get("gps_lon")
+    if g_lat is not None and g_lon is not None:
+        rev = await _reverse_geocode(float(g_lat), float(g_lon))
+        gps = {
+            "lat":      g_lat,
+            "lon":      g_lon,
+            "accuracy": cm.get("gps_accuracy"),
+            **rev,
+        }
+
+    # Unified location block: GPS wins over IP when present.
+    location_source = "gps" if gps else ("ip" if geo else "unknown")
+    location = {
+        "source":       location_source,
+        "lat":          (gps or {}).get("lat", geo.get("lat")),
+        "lon":          (gps or {}).get("lon", geo.get("lon")),
+        "accuracy_m":   (gps or {}).get("accuracy"),
+        "country":      (gps or {}).get("country") or geo.get("country", ""),
+        "country_code": (gps or {}).get("country_code") or geo.get("country_code", ""),
+        "city":         (gps or {}).get("city") or geo.get("city", ""),
+        "region":       (gps or {}).get("region") or geo.get("region", ""),
+        "zip":          (gps or {}).get("zip") or geo.get("zip", ""),
+        "display_name": (gps or {}).get("display_name", ""),
+    }
+
     meta = {
-        # Full geo
+        # Full IP geo (always attempted)
         "geo": geo,
+        # GPS (only when permission already granted)
+        "gps": gps,
+        # Resolved best-available location
+        "location": location,
         # Client-side metadata sent by browser
-        "client": client_meta or {},
+        "client": cm,
     }
     try:
         async with pool.acquire() as conn:
@@ -114,9 +182,9 @@ async def _log_view_bg(
                 ip,
                 user_agent,
                 referer,
-                geo.get("country"),
-                geo.get("city"),
-                geo.get("region"),
+                location.get("country") or geo.get("country"),
+                location.get("city") or geo.get("city"),
+                location.get("region") or geo.get("region"),
                 geo.get("isp"),
                 viewer_user_id,
                 json.dumps(meta),
@@ -189,6 +257,10 @@ class LogViewBody(BaseModel):
     utm_source:     str | None = None
     utm_medium:     str | None = None
     utm_campaign:   str | None = None
+    # GPS — only sent when the browser already had location permission granted
+    gps_lat:        float | None = None
+    gps_lon:        float | None = None
+    gps_accuracy:   float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +319,55 @@ async def create_page(
             expires_at,
         )
         return _page_dict(row)
+
+
+@router.post("/api/pages/upload")
+async def upload_page_asset(
+    request: Request,
+    file: UploadFile = File(...),
+    role: str = Depends(require_auth),
+):
+    """Upload an image/file attachment for use inside a page.
+
+    Stored in the private HF dataset under `pages/`, but served back through the
+    PUBLIC asset endpoint (`/api/public/pages/asset/...`) so that images embedded
+    in a published page render for anonymous visitors. Only the `pages/` prefix
+    is ever exposed publicly — the rest of the dataset stays auth-only.
+    """
+    from ..services import storage
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > storage.MAX_PAGE_FILE_BYTES:
+        raise HTTPException(413, f"File exceeds {storage.MAX_PAGE_FILE_BYTES // (1024 * 1024)} MB limit")
+
+    content_type = (file.content_type or "application/octet-stream").split(";")[0].strip()
+    ext = storage.EXT_FOR_MIME.get(content_type)
+    if not ext:
+        # Fall back to the uploaded filename's extension
+        if file.filename and "." in file.filename:
+            ext = file.filename.rsplit(".", 1)[-1].lower()[:8]
+        else:
+            ext = "bin"
+
+    safe_name = _slugify((file.filename or "file").rsplit(".", 1)[0])[:40] or "file"
+    path_in_repo = f"pages/{datetime.now(timezone.utc):%Y/%m}/{secrets.token_hex(8)}-{safe_name}.{ext}"
+
+    try:
+        await storage.upload_bytes(data, path_in_repo, content_type=content_type)
+    except Exception as exc:
+        raise HTTPException(502, f"Storage upload failed: {exc}")
+
+    return {
+        "url":          f"/api/public/pages/asset/{path_in_repo}",
+        "path":         path_in_repo,
+        "filename":     file.filename,
+        "content_type": content_type,
+        "size":         len(data),
+        "is_image":     content_type.startswith("image/"),
+        "inline":       content_type in storage.INLINE_MIME,
+    }
 
 
 @router.get("/api/pages/")
@@ -659,11 +780,46 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
         "utm_source":          body.utm_source,
         "utm_medium":          body.utm_medium,
         "utm_campaign":        body.utm_campaign,
+        "gps_lat":             body.gps_lat,
+        "gps_lon":             body.gps_lon,
+        "gps_accuracy":        body.gps_accuracy,
     }.items() if v is not None}
 
     # Fire-and-forget
     asyncio.create_task(_log_view_bg(page_id, ip, ua, body.referer, None, client_meta))
     return {"ok": True}
+
+
+@router.get("/api/public/pages/asset/{path:path}")
+async def public_page_asset(path: str):
+    """Serve a page attachment publicly — ONLY files under the `pages/` prefix.
+
+    This is the public counterpart to /api/storage/file (which requires auth).
+    Scoped strictly to `pages/` so the rest of the private dataset is never
+    exposed. Paths are unguessable (random token in the name).
+    """
+    from ..services import storage
+
+    if ".." in path or path.startswith("/") or not path.startswith("pages/"):
+        raise HTTPException(400, "Invalid asset path")
+
+    data = await storage.read_bytes(path)
+    if data is None:
+        raise HTTPException(404, "Asset not found")
+
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    content_type = storage.MIME_FOR_EXT.get(ext, "application/octet-stream")
+    disposition = "inline" if content_type in storage.INLINE_MIME else "attachment"
+
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=604800, immutable",
+            "Content-Length": str(len(data)),
+            "Content-Disposition": disposition,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
