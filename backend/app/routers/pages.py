@@ -222,6 +222,51 @@ def _extract_asset_paths(content: str | None) -> list[str]:
     return out
 
 
+def _word_count(text: str | None) -> int:
+    if not text:
+        return 0
+    return len(text.split())
+
+
+async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None) -> None:
+    """Insert a version snapshot, throttled to at most once per 5 minutes per page.
+
+    Called from update_page before applying changes so the snapshot captures
+    what the page looked like BEFORE this edit.
+    """
+    try:
+        last = await conn.fetchrow(
+            "SELECT saved_at FROM page_versions WHERE page_id = $1 ORDER BY saved_at DESC LIMIT 1",
+            page_id,
+        )
+        if last:
+            age = (datetime.now(timezone.utc) - last["saved_at"]).total_seconds()
+            if age < 300:  # 5-minute throttle: don't spam versions on every auto-save
+                return
+
+        last_num = await conn.fetchval(
+            "SELECT COALESCE(MAX(version_num), 0) FROM page_versions WHERE page_id = $1",
+            page_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO page_versions
+                (page_id, version_num, title, content, content_type, metadata, saved_by, word_count)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            page_id,
+            last_num + 1,
+            row["title"],
+            row["content"],
+            row["content_type"],
+            row["metadata"] if isinstance(row["metadata"], str) else json.dumps(row["metadata"] or {}),
+            user_id,
+            _word_count(row["content"]),
+        )
+    except Exception:
+        pass  # best-effort; never block the actual save
+
+
 async def _delete_page_assets(content: str | None) -> None:
     """Best-effort: remove a page's uploaded attachments from HF storage."""
     paths = _extract_asset_paths(content)
@@ -263,6 +308,10 @@ class UpdatePageBody(BaseModel):
 
 class PublishBody(BaseModel):
     published: bool
+
+
+class RestoreVersionBody(BaseModel):
+    note: str | None = None
 
 
 class VerifyPasswordBody(BaseModel):
@@ -581,6 +630,9 @@ async def update_page(
         if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
+        # Snapshot the current state as a version BEFORE applying this update
+        await _snapshot_version(conn, page_id, row, user_id)
+
         # Build update fields
         updates: dict[str, Any] = {"updated_at": datetime.now(timezone.utc), "updated_by": user_id}
         if body.title is not None:
@@ -772,6 +824,179 @@ async def page_analytics(
             d["metadata"] = _meta(d["metadata"])
         return d
     return {"total": total, "items": [_av(r) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# Version history endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/pages/{page_id}/versions")
+async def list_page_versions(
+    page_id: str,
+    request: Request,
+    limit: int = 50,
+    role: str = Depends(require_auth),
+):
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    user_id = getattr(request.state, "auth_user_id", None)
+    auth_role = getattr(request.state, "auth_role", role) or role
+
+    async with pool.acquire() as conn:
+        page = await conn.fetchrow(
+            "SELECT id, created_by FROM published_pages WHERE id = $1", page_id
+        )
+        if not page:
+            raise HTTPException(404, "Page not found")
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+            raise HTTPException(403, "Access denied")
+
+        rows = await conn.fetch(
+            """
+            SELECT pv.id, pv.version_num, pv.title, pv.content_type,
+                   pv.word_count, pv.note, pv.saved_at,
+                   au.full_name AS saved_by_name, au.email AS saved_by_email
+            FROM page_versions pv
+            LEFT JOIN auth_users au ON au.id = pv.saved_by
+            WHERE pv.page_id = $1
+            ORDER BY pv.saved_at DESC
+            LIMIT $2
+            """,
+            page_id,
+            limit,
+        )
+
+    def _ver_list(r):
+        d = dict(r)
+        d["saved_at"] = _dt(d.get("saved_at"))
+        return d
+
+    return {"total": len(rows), "items": [_ver_list(r) for r in rows]}
+
+
+@router.get("/api/pages/{page_id}/versions/{version_id}")
+async def get_page_version(
+    page_id: str,
+    version_id: int,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    user_id = getattr(request.state, "auth_user_id", None)
+    auth_role = getattr(request.state, "auth_role", role) or role
+
+    async with pool.acquire() as conn:
+        page = await conn.fetchrow(
+            "SELECT id, created_by FROM published_pages WHERE id = $1", page_id
+        )
+        if not page:
+            raise HTTPException(404, "Page not found")
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+            raise HTTPException(403, "Access denied")
+
+        row = await conn.fetchrow(
+            """
+            SELECT pv.*, au.full_name AS saved_by_name, au.email AS saved_by_email
+            FROM page_versions pv
+            LEFT JOIN auth_users au ON au.id = pv.saved_by
+            WHERE pv.id = $1 AND pv.page_id = $2
+            """,
+            version_id,
+            page_id,
+        )
+        if not row:
+            raise HTTPException(404, "Version not found")
+
+    d = dict(row)
+    d["saved_at"] = _dt(d.get("saved_at"))
+    if d.get("metadata"):
+        d["metadata"] = _meta(d["metadata"])
+    d["page_id"] = str(d["page_id"]) if d.get("page_id") else None
+    return d
+
+
+@router.post("/api/pages/{page_id}/versions/{version_id}/restore")
+async def restore_page_version(
+    page_id: str,
+    version_id: int,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """Restore a page to a previous version.
+
+    Snapshots the CURRENT state first (so the restore itself is undoable),
+    then overwrites title/content/content_type with the historical version.
+    """
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    user_id = getattr(request.state, "auth_user_id", None)
+    auth_role = getattr(request.state, "auth_role", role) or role
+
+    async with pool.acquire() as conn:
+        page = await conn.fetchrow(
+            "SELECT * FROM published_pages WHERE id = $1", page_id
+        )
+        if not page:
+            raise HTTPException(404, "Page not found")
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+            raise HTTPException(403, "Access denied")
+
+        ver = await conn.fetchrow(
+            "SELECT * FROM page_versions WHERE id = $1 AND page_id = $2",
+            version_id, page_id,
+        )
+        if not ver:
+            raise HTTPException(404, "Version not found")
+
+        # Snapshot the current state BEFORE overwriting
+        last_num = await conn.fetchval(
+            "SELECT COALESCE(MAX(version_num), 0) FROM page_versions WHERE page_id = $1",
+            page_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO page_versions
+                (page_id, version_num, title, content, content_type, metadata, saved_by, word_count, note)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            """,
+            page_id,
+            last_num + 1,
+            page["title"],
+            page["content"],
+            page["content_type"],
+            page["metadata"] if isinstance(page["metadata"], str) else json.dumps(dict(page["metadata"]) if page["metadata"] else {}),
+            user_id,
+            _word_count(page["content"]),
+            f"Auto-saved before restoring v{ver['version_num']}",
+        )
+
+        # Now overwrite with the historical version
+        updated = await conn.fetchrow(
+            """
+            UPDATE published_pages
+            SET title        = $1,
+                content      = $2,
+                content_type = $3,
+                updated_at   = NOW(),
+                updated_by   = $4
+            WHERE id = $5
+            RETURNING *
+            """,
+            ver["title"],
+            ver["content"],
+            ver["content_type"],
+            user_id,
+            page_id,
+        )
+
+    return {"ok": True, "page": _page_dict(updated)}
 
 
 # ---------------------------------------------------------------------------

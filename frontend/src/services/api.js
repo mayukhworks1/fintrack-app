@@ -751,5 +751,8 @@ export const api = {
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
     deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),
+    versions:      (id)            => request(`/api/pages/${id}/versions`),
+    getVersion:    (id, verId)     => request(`/api/pages/${id}/versions/${verId}`),
+    restoreVersion:(id, verId)     => request(`/api/pages/${id}/versions/${verId}/restore`, { method: 'POST' }),
   },
 }

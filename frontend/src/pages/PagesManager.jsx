@@ -898,6 +898,154 @@ function TemplatePicker({ contentType, onSelect }) {
 }
 
 // ---------------------------------------------------------------------------
+// Version History Panel
+// ---------------------------------------------------------------------------
+function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRestore }) {
+  const [versions, setVersions] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [previewVer, setPreviewVer] = useState(null) // { id, title, content, content_type, version_num, saved_at }
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [restoring, setRestoring] = useState(null)
+  const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    if (!pageId) { setLoading(false); setVersions([]); return }
+    setLoading(true)
+    api.pages.versions(pageId)
+      .then(r => { setVersions(r.items || []); setLoading(false) })
+      .catch(() => { setVersions([]); setLoading(false) })
+  }, [pageId])
+
+  const loadPreview = async (ver) => {
+    if (previewVer?.id === ver.id) { setPreviewVer(null); return }
+    setPreviewLoading(ver.id)
+    try {
+      const full = await api.pages.getVersion(pageId, ver.id)
+      setPreviewVer(full)
+    } catch { setPreviewVer(null) }
+    setPreviewLoading(null)
+  }
+
+  const handleRestore = async (ver) => {
+    if (!window.confirm(`Restore to version ${ver.version_num} from ${new Date(ver.saved_at).toLocaleString()}?\n\nYour current content will be saved as a new version first.`)) return
+    setRestoring(ver.id)
+    try {
+      const r = await api.pages.restoreVersion(pageId, ver.id)
+      if (r.ok && r.page) {
+        setToast('✓ Restored! Reloading editor…')
+        setTimeout(() => { onRestore(r.page); setToast('') }, 1500)
+        // Refresh version list
+        const fresh = await api.pages.versions(pageId)
+        setVersions(fresh.items || [])
+      }
+    } catch { setToast('⚠ Restore failed') }
+    setRestoring(null)
+  }
+
+  const fmtTime = (ts) => {
+    if (!ts) return '—'
+    const d = new Date(ts)
+    const now = new Date()
+    const diff = Math.floor((now - d) / 1000)
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`
+    return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+  }
+
+  if (!pageId) return (
+    <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:'var(--text-2)', fontSize:13 }}>
+      <div style={{ fontSize:32 }}>🕐</div>
+      <div style={{ fontWeight:600 }}>Save the page first to enable version history</div>
+      <div style={{ fontSize:12 }}>Every edit auto-saves to the cloud — versions are captured every 5 minutes</div>
+    </div>
+  )
+
+  return (
+    <div style={{ flex:1, overflow:'hidden', display:'flex', gap:0 }}>
+      {/* Version list (left) */}
+      <div style={{ width:previewVer ? 260 : '100%', minWidth:220, borderRight:'1px solid var(--border)', overflowY:'auto', flexShrink:0 }}>
+        {toast && (
+          <div style={{ padding:'10px 16px', background:'#d1fae5', color:'#065f46', fontSize:12, fontWeight:600, borderBottom:'1px solid var(--border)' }}>{toast}</div>
+        )}
+        <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Version History</span>
+          <button onClick={()=>{ setLoading(true); api.pages.versions(pageId).then(r=>{setVersions(r.items||[]);setLoading(false)}).catch(()=>setLoading(false)) }}
+            style={{ fontSize:12, color:'var(--accent)', border:'none', background:'none', cursor:'pointer', padding:'2px 4px' }}>↻</button>
+        </div>
+        {loading ? (
+          <div style={{ padding:20, fontSize:13, color:'var(--text-2)', textAlign:'center' }}>Loading…</div>
+        ) : !versions?.length ? (
+          <div style={{ padding:'24px 16px', fontSize:13, color:'var(--text-2)', textAlign:'center' }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
+            No versions yet. Versions are captured automatically every 5 minutes while editing.
+          </div>
+        ) : (
+          <div>
+            {/* Current state indicator */}
+            <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'#f0fdf4' }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#15803d' }}>● Current version</div>
+              <div style={{ fontSize:11, color:'#16a34a', marginTop:2 }}>
+                {currentContent ? `${currentContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words` : '—'}
+              </div>
+            </div>
+            {versions.map(ver => {
+              const isSelected = previewVer?.id === ver.id
+              const isRestoring = restoring === ver.id
+              return (
+                <div key={ver.id} style={{ borderBottom:'1px solid var(--border)', padding:'10px 14px', background:isSelected?'var(--bg-card)':'transparent', cursor:'pointer' }}
+                  onClick={() => loadPreview(ver)}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--accent)', background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, padding:'1px 6px', flexShrink:0 }}>
+                      v{ver.version_num}
+                    </div>
+                    <div style={{ fontSize:12, color:'var(--text-1)', fontWeight:isSelected?700:400, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {ver.title || 'Untitled'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text-2)' }}>
+                    {fmtTime(ver.saved_at)}
+                    {ver.word_count > 0 && ` · ${ver.word_count.toLocaleString()} words`}
+                    {ver.note && <span style={{ color:'#7c3aed' }}> · {ver.note}</span>}
+                  </div>
+                  {ver.saved_by_name && <div style={{ fontSize:10, color:'var(--text-2)', marginTop:2 }}>by {ver.saved_by_name}</div>}
+                  {isSelected && (
+                    <button
+                      onClick={e=>{ e.stopPropagation(); handleRestore(ver) }}
+                      disabled={isRestoring}
+                      style={{ marginTop:8, width:'100%', padding:'5px 10px', fontSize:12, fontWeight:600, border:'1px solid var(--accent)', borderRadius:6, background:'var(--accent)', color:'#fff', cursor:'pointer', opacity:isRestoring?0.6:1 }}>
+                      {isRestoring ? 'Restoring…' : '↩ Restore this version'}
+                    </button>
+                  )}
+                  {previewLoading === ver.id && (
+                    <div style={{ fontSize:11, color:'var(--text-2)', marginTop:4 }}>Loading preview…</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Preview pane (right) */}
+      {previewVer && (
+        <div style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column' }}>
+          <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10, background:'var(--bg-card)', flexShrink:0 }}>
+            <span style={{ fontSize:12, fontWeight:700 }}>Preview: v{previewVer.version_num}</span>
+            <span style={{ fontSize:11, color:'var(--text-2)' }}>{previewVer.title}</span>
+            <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{new Date(previewVer.saved_at).toLocaleString()}</span>
+            <button onClick={()=>setPreviewVer(null)} style={{ fontSize:18, border:'none', background:'none', cursor:'pointer', color:'var(--text-2)', lineHeight:1 }}>×</button>
+          </div>
+          <div style={{ flex:1, overflow:'auto', background:'#fff', padding:'20px 24px' }}>
+            <ContentPreview contentType={previewVer.content_type} content={previewVer.content} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page Drawer — Advanced editor
 // ---------------------------------------------------------------------------
 const CONTENT_TYPES = [
@@ -1199,7 +1347,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         </div>
 
         {/* Templates bar */}
-        {showTemplates && (
+        {showTemplates && tab !== 'history' && (
           <TemplatePicker contentType={form.content_type} onSelect={c=>{ set('content',c); setShowTemplates(false) }} />
         )}
 
@@ -1217,34 +1365,55 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
           <AttachmentsBar content={form.content} onChange={v=>set('content',v)} />
         )}
 
-        {/* Edit / Preview tabs (not for spreadsheet) */}
-        {!isSpreadsheet && (
-          <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
-            {['edit','preview'].map(t=>(
-              <button key={t} onClick={()=>setTab(t)} style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>{t}</button>
-            ))}
-            {!showTemplates && (
-              <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
-            )}
+
+        {/* Edit / Preview / History tabs */}
+        <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
+          {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
+            <button key={t} onClick={()=>setTab(t)}
+              style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
+              {t === 'history' ? '🕐 History' : t}
+            </button>
+          ))}
+          {!showTemplates && tab !== 'history' && (
+            <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
+          )}
+        </div>
+
+        {/* Editor-type banner — only when editing/previewing */}
+        {tab !== 'history' && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+            <span style={{ fontWeight:700, color:'var(--text-1)' }}>
+              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
+            </span>
+            <span>
+              {isSpreadsheet ? 'Excel-like grid — type =SUM(A1:A5) for formulas, add rows/columns'
+                : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
+                : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
+                : 'Plain text / code'}
+            </span>
           </div>
         )}
 
-        {/* Editor-type banner — makes Document / Spreadsheet / Web Page distinct */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-          <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-            {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
-          </span>
-          <span>
-            {isSpreadsheet ? 'Excel-like grid — type =SUM(A1:A5) for formulas, add rows/columns'
-              : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
-              : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
-              : 'Plain text / code'}
-          </span>
-        </div>
-
         {/* Content area */}
         <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-          {isSpreadsheet ? (
+          {tab === 'history' ? (
+            <VersionHistoryPanel
+              pageId={currentId}
+              currentContent={form.content}
+              currentContentType={form.content_type}
+              onRestore={(restoredPage) => {
+                setForm(f => ({
+                  ...f,
+                  title:        restoredPage.title || f.title,
+                  content:      restoredPage.content ?? f.content,
+                  content_type: restoredPage.content_type || f.content_type,
+                }))
+                savedSnapRef.current = JSON.stringify({ title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', description:form.description||'' })
+                setTab('edit')
+                onSaved(restoredPage)
+              }}
+            />
+          ) : isSpreadsheet ? (
             <SpreadsheetEditor value={form.content} onChange={v=>set('content',v)} />
           ) : tab === 'edit' ? (
             <textarea

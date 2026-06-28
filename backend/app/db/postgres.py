@@ -975,6 +975,22 @@ CREATE TABLE IF NOT EXISTS page_views (
 CREATE INDEX IF NOT EXISTS idx_page_views_page_id ON page_views(page_id);
 CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at ON page_views(viewed_at DESC);
 
+CREATE TABLE IF NOT EXISTS page_versions (
+    id           BIGSERIAL    PRIMARY KEY,
+    page_id      UUID         NOT NULL REFERENCES published_pages(id) ON DELETE CASCADE,
+    version_num  INTEGER      NOT NULL DEFAULT 1,
+    title        VARCHAR(500) NOT NULL DEFAULT '',
+    content      TEXT         NOT NULL DEFAULT '',
+    content_type VARCHAR(20)  NOT NULL DEFAULT 'markdown',
+    metadata     JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    saved_by     UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    saved_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    word_count   INTEGER      NOT NULL DEFAULT 0,
+    note         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_page_versions_page_id ON page_versions(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_versions_saved_at ON page_versions(page_id, saved_at DESC);
+
 """
 # ---------------------------------------------------------------------------
 
