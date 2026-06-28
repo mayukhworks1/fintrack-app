@@ -193,20 +193,65 @@ function PageContent({ page }) {
 }
 
 // ---------------------------------------------------------------------------
+// Floating Share button
+// ---------------------------------------------------------------------------
+function FloatingShare({ title, description }) {
+  const [toast, setToast] = useState('')
+  const copy = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setToast('Link copied!')
+      setTimeout(() => setToast(''), 2500)
+    })
+  }
+  return (
+    <>
+      <button onClick={copy} title="Share this page"
+        style={{ position:'fixed', bottom:24, right:24, zIndex:999, background:'#2563eb', color:'#fff', border:'none', borderRadius:50, padding:'12px 18px', fontSize:14, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 16px rgba(37,99,235,0.4)', display:'flex', alignItems:'center', gap:6 }}>
+        ↗ Share
+      </button>
+      {toast && (
+        <div style={{ position:'fixed', bottom:80, right:24, zIndex:1000, background:'#1e293b', color:'#f8fafc', padding:'9px 16px', borderRadius:8, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,0.3)' }}>
+          {toast}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------------
-function ViewerShell({ title, publishedAt, description, children }) {
+function ViewerShell({ title, publishedAt, description, isHtml, children }) {
   useEffect(() => {
     document.title = title ? `${title} — FinTrack Pages` : 'FinTrack Pages'
     return () => { document.title = 'FinTrack' }
   }, [title])
+
+  // Inject OG / Twitter meta tags for non-HTML pages
+  useEffect(() => {
+    if (!title || isHtml) return
+    const set = (prop, val, attr='property') => {
+      const sel = attr === 'name' ? `meta[name="${prop}"]` : `meta[property="${prop}"]`
+      let el = document.head.querySelector(sel)
+      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, prop); document.head.appendChild(el) }
+      el.setAttribute('content', val)
+    }
+    const url = window.location.href
+    const desc = description || `${title} — shared via FinTrack Pages`
+    set('og:title', title); set('og:description', desc); set('og:url', url); set('og:type', 'article')
+    set('twitter:card', 'summary', 'name'); set('twitter:title', title, 'name'); set('twitter:description', desc, 'name')
+    return () => {
+      ['og:title','og:description','og:url','og:type'].forEach(p => document.head.querySelector(`meta[property="${p}"]`)?.remove())
+      ;['twitter:card','twitter:title','twitter:description'].forEach(p => document.head.querySelector(`meta[name="${p}"]`)?.remove())
+    }
+  }, [title, description, isHtml])
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: '#111827' }}>
       <div style={{ maxWidth: 820, margin: '0 auto', padding: '52px 24px 80px' }}>
         {title && (
           <header style={{ marginBottom: 40 }}>
-            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.02em' }}>{title}</h1>
+            <h1 style={{ margin: 0, fontSize: 'clamp(22px, 5vw, 32px)', fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.02em' }}>{title}</h1>
             {publishedAt && <div style={{ marginTop: 10, fontSize: 13, color: '#94a3b8' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>}
             {description && <p style={{ marginTop: 10, fontSize: 15, color: '#64748b', lineHeight: 1.65 }}>{description}</p>}
             <hr style={{ marginTop: 28, border: 'none', borderTop: '1px solid #e2e8f0' }} />
@@ -217,6 +262,7 @@ function ViewerShell({ title, publishedAt, description, children }) {
           <span style={{ fontSize: 12, color: '#cbd5e1' }}>Powered by FinTrack</span>
         </footer>
       </div>
+      {!isHtml && title && <FloatingShare title={title} description={description} />}
     </div>
   )
 }
@@ -313,7 +359,7 @@ export default function PageViewer() {
   )
 
   return (
-    <ViewerShell title={page?.title} publishedAt={page?.published_at} description={page?.metadata?.description}>
+    <ViewerShell title={page?.title} publishedAt={page?.published_at} description={page?.metadata?.description} isHtml={page?.content_type === 'html'}>
       <PageContent page={page} />
     </ViewerShell>
   )
