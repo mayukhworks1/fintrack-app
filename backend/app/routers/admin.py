@@ -57,7 +57,9 @@ class AuthUserDecision(BaseModel):
 
 class AuthUserCreate(BaseModel):
     email: str = Field(..., max_length=320)
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
+    full_name: Optional[str] = Field(default=None, max_length=255)  # legacy fallback
     role_key: str = Field(default="user", max_length=60)
     status: str = Field(default="active", max_length=30)
     send_invite: bool = True
@@ -446,7 +448,8 @@ async def admin_auth_users(
             WHERE extra ? 'auth_user_id'
             GROUP BY (extra->>'auth_user_id')::uuid
         )
-        SELECT u.id::text AS id, u.email, u.full_name, u.status, u.created_at, u.updated_at,
+        SELECT u.id::text AS id, u.email, u.first_name, u.last_name, u.full_name,
+               u.status, u.created_at, u.updated_at,
                u.approved_at, u.disabled_at, u.email_verified_at, u.teable_email,
                u.phone, u.job_title, u.department, u.company, u.location, u.timezone,
                (
@@ -504,6 +507,8 @@ async def admin_create_auth_user(
     result = await create_admin_invited_user(
         email=body.email,
         full_name=body.full_name,
+        first_name=body.first_name,
+        last_name=body.last_name,
         role_key=body.role_key,
         status=body.status,
         send_invite=body.send_invite,
@@ -830,7 +835,9 @@ async def admin_revoke_auth_user_sessions(
 
 
 class AuthUserNameUpdate(BaseModel):
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None  # legacy fallback
 
 
 @router.patch("/auth/users/{user_id}/name")
@@ -845,11 +852,23 @@ async def admin_update_auth_user_name(
     pool = get_pool()
     if not pool:
         return _no_db()
+    fn = (body.first_name or "").strip() or None
+    ln = (body.last_name or "").strip() or None
+    if fn is None and ln is None and body.full_name:
+        parts = body.full_name.strip().split(" ", 1)
+        fn = parts[0] or None
+        ln = parts[1].strip() if len(parts) > 1 else None
+    computed_full = " ".join(filter(None, [fn, ln])) or None
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "UPDATE auth_users SET full_name = $1, updated_at = NOW() WHERE id = $2::uuid RETURNING id::text AS id, email, full_name, status",
-            (body.full_name or "").strip() or None,
-            user_id,
+            """UPDATE auth_users
+                  SET first_name = COALESCE($1, first_name),
+                      last_name  = COALESCE($2, last_name),
+                      full_name  = COALESCE($3, full_name),
+                      updated_at = NOW()
+                WHERE id = $4::uuid
+            RETURNING id::text AS id, email, first_name, last_name, full_name, status""",
+            fn, ln, computed_full, user_id,
         )
         if not user:
             raise HTTPException(status_code=404, detail="Auth user not found")
@@ -860,9 +879,9 @@ async def admin_update_auth_user_name(
             target_user_id=user_id,
             email=user["email"],
             status=user["status"],
-            metadata={"full_name": user["full_name"]},
+            metadata={"first_name": user["first_name"], "last_name": user["last_name"]},
         )
-    return {"ok": True, "full_name": user["full_name"]}
+    return {"ok": True, "first_name": user["first_name"], "last_name": user["last_name"], "full_name": user["full_name"]}
 
 
 class AuthUserTeableEmail(BaseModel):

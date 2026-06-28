@@ -71,13 +71,17 @@ class EmailLoginRequest(BaseModel):
 class EmailRegisterRequest(BaseModel):
     email: str
     password: str
-    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None  # legacy fallback
 
 
 class EmailBootstrapRequest(BaseModel):
     email: str
     password: str
-    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None  # legacy fallback
     bootstrap_password: str
 
 
@@ -91,7 +95,9 @@ class ResetPasswordRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None  # legacy fallback — prefer first_name/last_name
     phone: str | None = None
     job_title: str | None = None
     department: str | None = None
@@ -310,7 +316,7 @@ async def email_register(body: EmailRegisterRequest, request: Request, _rl: None
     Create a pending user. Superadmin approval is required before login works.
     """
     from ..services.auth_master import create_pending_user
-    result = await create_pending_user(body.email, body.password, body.full_name, request)
+    result = await create_pending_user(body.email, body.password, body.full_name, request, first_name=body.first_name, last_name=body.last_name)
     return {
         **result,
         "approval_required": True,
@@ -552,6 +558,8 @@ async def verify(authorization: str | None = Header(default=None)):
                     s.expires_at,
                     s.metadata,
                     u.email,
+                    u.first_name,
+                    u.last_name,
                     u.full_name,
                     u.status,
                     COALESCE(
@@ -614,6 +622,8 @@ async def verify(authorization: str | None = Header(default=None)):
                     "user": {
                         "id": user_id_str,
                         "email": row["email"],
+                        "first_name": row["first_name"],
+                        "last_name": row["last_name"],
                         "full_name": row["full_name"],
                         "status": row["status"],
                         "avatar_url": row["avatar_url"],
@@ -694,6 +704,8 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
             SELECT
                 u.id::text,
                 u.email,
+                u.first_name,
+                u.last_name,
                 u.full_name,
                 u.phone,
                 u.job_title,
@@ -730,9 +742,10 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
             LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
             LEFT JOIN auth_roles r ON r.id = ur.role_id
             WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-            GROUP BY u.id, u.email, u.full_name, u.phone, u.job_title, u.department,
-                     u.company, u.location, u.timezone, u.teable_email, u.avatar_url,
-                     u.status, u.created_at, u.approved_at, u.password_changed_at
+            GROUP BY u.id, u.email, u.first_name, u.last_name, u.full_name, u.phone,
+                     u.job_title, u.department, u.company, u.location, u.timezone,
+                     u.teable_email, u.avatar_url, u.status, u.created_at, u.approved_at,
+                     u.password_changed_at
             """,
             token_hint,
         )
@@ -757,6 +770,8 @@ async def get_profile(request: Request, _role: str = Depends(_require_email_auth
         return {
             "id":                   user_id_str,
             "email":                row["email"],
+            "first_name":           row["first_name"],
+            "last_name":            row["last_name"],
             "full_name":            row["full_name"],
             "phone":                row["phone"],
             "job_title":            row["job_title"],
@@ -798,21 +813,34 @@ async def update_profile(body: UpdateProfileRequest, request: Request, _role: st
             value = (value or "").strip()
             return value[:limit] if value else None
 
+        # Resolve first_name / last_name — also accept legacy full_name split
+        new_first = clean(body.first_name, 128)
+        new_last  = clean(body.last_name,  128)
+        if new_first is None and new_last is None and body.full_name:
+            parts = (body.full_name or "").strip().split(" ", 1)
+            new_first = parts[0] or None
+            new_last  = parts[1].strip() if len(parts) > 1 else None
+        computed_full = " ".join(filter(None, [new_first, new_last])) or None
+
         row = await pool.fetchrow(
             """
             UPDATE auth_users
-               SET full_name = $1,
-                   phone = $2,
-                   job_title = $3,
-                   department = $4,
-                   company = $5,
-                   location = $6,
-                   timezone = $7,
+               SET first_name = COALESCE($1, first_name),
+                   last_name  = COALESCE($2, last_name),
+                   full_name  = COALESCE($3, full_name),
+                   phone      = $4,
+                   job_title  = $5,
+                   department = $6,
+                   company    = $7,
+                   location   = $8,
+                   timezone   = $9,
                    updated_at = NOW()
-             WHERE id = $8::uuid
-             RETURNING full_name, email, phone, job_title, department, company, location, timezone
+             WHERE id = $10::uuid
+             RETURNING first_name, last_name, full_name, email, phone, job_title, department, company, location, timezone
             """,
-            clean(body.full_name, 255),
+            new_first,
+            new_last,
+            computed_full,
             clean(body.phone, 40),
             clean(body.job_title, 120),
             clean(body.department, 120),
@@ -825,7 +853,9 @@ async def update_profile(body: UpdateProfileRequest, request: Request, _role: st
             raise HTTPException(status_code=404, detail="User not found")
         return {
             "ok": True,
-            "full_name": row["full_name"],
+            "first_name": row["first_name"],
+            "last_name":  row["last_name"],
+            "full_name":  row["full_name"],
             "email": row["email"],
             "phone": row["phone"],
             "job_title": row["job_title"],

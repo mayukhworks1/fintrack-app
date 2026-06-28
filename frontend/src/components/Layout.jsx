@@ -109,9 +109,10 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const visibleNav = roleNav.filter(item => !item.perm || hasPerm(item.perm))
   const restrictedNav = roleNav.filter(item => item.perm && !hasPerm(item.perm))
 
-  const displayName = user?.full_name || user?.email?.split('@')[0] || 'My Account'
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const fullDisplayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.full_name || ''
+  const displayName = fullDisplayName || user?.email?.split('@')[0] || 'My Account'
+  const initials = fullDisplayName
+    ? fullDisplayName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : (user?.email || 'U')[0].toUpperCase()
   const avatarSrc = useAvatarSrc(user?.avatar_url)
   const location = useLocation()

@@ -121,7 +121,7 @@ export default function Profile() {
 
   // Profile editing
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ full_name: '', phone: '', job_title: '', department: '', company: '', location: '', timezone: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', job_title: '', department: '', company: '', location: '', timezone: '' })
   const [saving, setSaving] = useState(false)
 
   // Password
@@ -176,7 +176,8 @@ export default function Profile() {
       const data = await api.auth.getProfile()
       setProfile(data)
       setForm({
-        full_name: data.full_name || '',
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
         phone: data.phone || '',
         job_title: data.job_title || '',
         department: data.department || '',
@@ -194,7 +195,7 @@ export default function Profile() {
   useEffect(() => { load() }, [load])
 
   const resetForm = () => setForm({
-    full_name: profile?.full_name || '', phone: profile?.phone || '',
+    first_name: profile?.first_name || '', last_name: profile?.last_name || '', phone: profile?.phone || '',
     job_title: profile?.job_title || '', department: profile?.department || '',
     company: profile?.company || '', location: profile?.location || '',
     timezone: profile?.timezone || '',
@@ -264,7 +265,7 @@ export default function Profile() {
     )
   }
 
-  const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'User'
+  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.full_name || profile?.email?.split('@')[0] || 'User'
   const googleIdentity = (profile?.identities || []).find(i => i.provider === 'google')
   const zohoIdentity   = (profile?.identities || []).find(i => i.provider === 'zoho')
   const hasPassword = Boolean(profile?.password_changed_at || profile?.email)
@@ -287,7 +288,7 @@ export default function Profile() {
                 strokeDasharray="48 140" />
             </svg>
           )}
-          <Avatar name={profile?.full_name} email={profile?.email} avatarUrl={profile?.avatar_url} size={64} />
+          <Avatar name={[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.full_name} email={profile?.email} avatarUrl={profile?.avatar_url} size={64} />
           {/* Hover/upload overlay */}
           <button
             onClick={() => !avatarUploading && avatarInputRef.current?.click()}
@@ -483,7 +484,8 @@ export default function Profile() {
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                ['full_name',   'Full name',    'Mayukh Jain',       User],
+                ['first_name',  'First name',   'Mayukh',            User],
+                ['last_name',   'Last name',    'Jain',              User],
                 ['phone',       'Phone',        '+91 98765 43210',   Phone],
                 ['job_title',   'Role / title', 'Finance Executive', Briefcase],
                 ['department',  'Department',   'Accounts',          Building2],
@@ -519,7 +521,8 @@ export default function Profile() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-            <InfoRow icon={User}      label="Full name"   value={profile?.full_name} />
+            <InfoRow icon={User}      label="First name"  value={profile?.first_name} />
+            <InfoRow icon={User}      label="Last name"   value={profile?.last_name} />
             <InfoRow icon={Phone}     label="Phone"       value={profile?.phone} />
             <InfoRow icon={Briefcase} label="Title"       value={profile?.job_title} />
             <InfoRow icon={Building2} label="Department"  value={profile?.department} />

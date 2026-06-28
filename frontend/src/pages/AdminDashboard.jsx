@@ -1941,7 +1941,8 @@ function AuthUsersTab() {
   const [refreshing, setRefreshing] = useState(false)
   const [newUser, setNewUser] = useState({
     email: '',
-    full_name: '',
+    first_name: '',
+    last_name: '',
     role_key: 'user',
     status: 'active',
     send_invite: true,
@@ -2036,10 +2037,11 @@ function AuthUsersTab() {
       const res = await api.admin.createAuthUser({
         ...newUser,
         email: newUser.email.trim(),
-        full_name: newUser.full_name.trim() || undefined,
+        first_name: newUser.first_name.trim() || undefined,
+        last_name: newUser.last_name.trim() || undefined,
       })
       toast(res.message || 'User created successfully', 'success')
-      setNewUser({ email: '', full_name: '', role_key: 'user', status: 'active', send_invite: true })
+      setNewUser({ email: '', first_name: '', last_name: '', role_key: 'user', status: 'active', send_invite: true })
       setShowCreate(false)
       await load({ silent: true })
     } catch (e) {
@@ -2127,7 +2129,8 @@ function AuthUsersTab() {
   const updateName = useCallback(async (row, name) => {
     setActingId(`${row.id}:name`)
     try {
-      await api.admin.updateAuthUserName(row.id, { full_name: name })
+      const parts = (name || '').trim().split(' ')
+      await api.admin.updateAuthUserName(row.id, { first_name: parts[0] || '', last_name: parts.slice(1).join(' ') || '' })
       await load({ silent: true })
     } catch (e) {
       toast(e.message || 'Name update failed', 'error')
@@ -2275,10 +2278,16 @@ function AuthUsersTab() {
             Email
             <input value={newUser.email} onChange={e => setNewUser(v => ({ ...v, email: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="name@company.com" type="email" required />
           </label>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
-            Full name
-            <input value={newUser.full_name} onChange={e => setNewUser(v => ({ ...v, full_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="User profile name" />
-          </label>
+          <div style={{ display:'flex', gap:6 }}>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.14em] flex-1" style={{ color: 'var(--text-3)' }}>
+              First name
+              <input value={newUser.first_name} onChange={e => setNewUser(v => ({ ...v, first_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="First" />
+            </label>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.14em] flex-1" style={{ color: 'var(--text-3)' }}>
+              Last name
+              <input value={newUser.last_name} onChange={e => setNewUser(v => ({ ...v, last_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="Last" />
+            </label>
+          </div>
           <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
             Role
             <select value={newUser.role_key} onChange={e => setNewUser(v => ({ ...v, role_key: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
@@ -2362,7 +2371,7 @@ function AuthUsersTab() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
-                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{row.full_name || 'No name'} · joined {relTime(row.created_at)}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{[row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || 'No name'} · joined {relTime(row.created_at)}</p>
                       </div>
                       <AuthStatusBadge status={row.status} />
                     </div>
@@ -2397,7 +2406,7 @@ function AuthUsersTab() {
                           <div className="min-w-0">
                             <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
                             <EditableName
-                              value={row.full_name || ''}
+                              value={[row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || ''}
                               saving={actingId === `${row.id}:name`}
                               onSave={name => updateName(row, name)}
                             />

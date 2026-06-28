@@ -313,7 +313,8 @@ async def _create_session_for_user(
     }
 
 
-async def create_pending_user(email: str, password: str, full_name: str | None, request: Request) -> dict[str, Any]:
+async def create_pending_user(email: str, password: str, full_name: str | None, request: Request,
+                              first_name: str | None = None, last_name: str | None = None) -> dict[str, Any]:
     pool = get_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL is required for email login")
@@ -332,15 +333,24 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
                 target_user_id=str(existing["id"]), email=email_norm, status=existing["status"],
             )
             return {"created": False, "status": "pending_approval"}
+        fn = (first_name or "").strip() or None
+        ln = (last_name or "").strip() or None
+        if fn is None and ln is None and full_name:
+            parts = full_name.strip().split(" ", 1)
+            fn = parts[0] or None
+            ln = parts[1].strip() if len(parts) > 1 else None
+        computed_full = " ".join(filter(None, [fn, ln])) or (full_name or "").strip() or None
         row = await conn.fetchrow(
             """
-            INSERT INTO auth_users (email, email_normalized, full_name, status, password_hash, password_changed_at)
-            VALUES ($1, $2, $3, 'pending_approval', $4, NOW())
+            INSERT INTO auth_users (email, email_normalized, first_name, last_name, full_name, status, password_hash, password_changed_at)
+            VALUES ($1, $2, $3, $4, $5, 'pending_approval', $6, NOW())
             RETURNING id, status
             """,
             email_orig,
             email_norm,
-            (full_name or "").strip() or None,
+            fn,
+            ln,
+            computed_full,
             password_hash,
         )
         await conn.execute(
@@ -414,6 +424,8 @@ async def create_admin_invited_user(
     *,
     email: str,
     full_name: str | None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     role_key: str,
     status: str,
     send_invite: bool,
@@ -443,20 +455,29 @@ async def create_admin_invited_user(
             role_id = await conn.fetchval("SELECT id FROM auth_roles WHERE role_key = $1", role_key)
             if not role_id:
                 raise HTTPException(status_code=422, detail=f"Unknown auth role: {role_key}")
+            _fn = (first_name or "").strip() or None
+            _ln = (last_name or "").strip() or None
+            if _fn is None and _ln is None and full_name:
+                _parts = full_name.strip().split(" ", 1)
+                _fn = _parts[0] or None
+                _ln = _parts[1].strip() if len(_parts) > 1 else None
+            _full = " ".join(filter(None, [_fn, _ln])) or (full_name or "").strip() or None
             row = await conn.fetchrow(
                 """
                 INSERT INTO auth_users (
-                    email, email_normalized, full_name, status, approved_at,
+                    email, email_normalized, first_name, last_name, full_name, status, approved_at,
                     email_verified_at, metadata, updated_at
                 )
-                VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'active' THEN NOW() ELSE NULL END,
-                        CASE WHEN $4::text = 'active' THEN NOW() ELSE NULL END,
-                        $5::jsonb, NOW())
+                VALUES ($1, $2, $3, $4, $5, $6::text, CASE WHEN $6::text = 'active' THEN NOW() ELSE NULL END,
+                        CASE WHEN $6::text = 'active' THEN NOW() ELSE NULL END,
+                        $7::jsonb, NOW())
                 RETURNING id::text AS id, email, status
                 """,
                 email_orig,
                 email_norm,
-                (full_name or "").strip() or None,
+                _fn,
+                _ln,
+                _full,
                 status,
                 json.dumps({"created_by": actor_role, "created_from": "admin_panel"}),
             )
@@ -564,17 +585,22 @@ async def bootstrap_superadmin(email: str, password: str, full_name: str | None,
         role_id = await conn.fetchval("SELECT id FROM auth_roles WHERE role_key = 'superadmin'")
         if not role_id:
             raise HTTPException(status_code=503, detail="Auth roles are not initialised")
+        _bs_parts = (full_name or "").strip().split(" ", 1)
+        _bs_fn = _bs_parts[0] or None
+        _bs_ln = _bs_parts[1].strip() if len(_bs_parts) > 1 else None
         row = await conn.fetchrow(
             """
             INSERT INTO auth_users (
-                email, email_normalized, full_name, status, approved_at,
+                email, email_normalized, first_name, last_name, full_name, status, approved_at,
                 email_verified_at, password_hash, password_changed_at
             )
-            VALUES ($1, $2, $3, 'active', NOW(), NOW(), $4, NOW())
+            VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), $6, NOW())
             RETURNING id, status
             """,
             email_norm,
             email_norm,
+            _bs_fn,
+            _bs_ln,
             (full_name or "").strip() or None,
             password_hash,
         )
@@ -677,28 +703,38 @@ async def _login_with_oidc_profile(
                     email_norm,
                 )
                 if not user:
+                    _fn_parts = (full_name or "").strip().split(" ", 1)
+                    _fn = _fn_parts[0] or None
+                    _ln = _fn_parts[1].strip() if len(_fn_parts) > 1 else None
                     user = await conn.fetchrow(
                         """
                         INSERT INTO auth_users (
-                            email, email_normalized, full_name, status,
+                            email, email_normalized, first_name, last_name, full_name, status,
                             email_verified_at, teable_email, metadata, avatar_url, updated_at
                         )
-                        VALUES ($1, $2, $3, 'pending_approval', NOW(), $1, $4::jsonb, $5, NOW())
+                        VALUES ($1, $2, $3, $4, $5, 'pending_approval', NOW(), $1, $6::jsonb, $7, NOW())
                         RETURNING id, email, full_name, status, avatar_is_custom
                         """,
                         email_orig,
                         email_norm,
+                        _fn,
+                        _ln,
                         full_name,
                         json.dumps({"signup_provider": provider, "picture": picture}),
                         picture,
                     )
                     created_pending = True
                 else:
+                    _fn_parts2 = (full_name or "").strip().split(" ", 1)
+                    _fn2 = _fn_parts2[0] or None
+                    _ln2 = _fn_parts2[1].strip() if len(_fn_parts2) > 1 else None
                     await conn.execute(
                         """
                         UPDATE auth_users
                            SET email_verified_at = COALESCE(email_verified_at, NOW()),
-                               full_name = COALESCE(full_name, $2),
+                               first_name = COALESCE(first_name, $6),
+                               last_name  = COALESCE(last_name, $7),
+                               full_name  = COALESCE(full_name, $2),
                                teable_email = COALESCE(teable_email, $4),
                                avatar_url = COALESCE(avatar_url, $5),
                                metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
@@ -710,6 +746,8 @@ async def _login_with_oidc_profile(
                         json.dumps({f"{provider}_picture": picture}),
                         email_orig,
                         picture,
+                        _fn2,
+                        _ln2,
                     )
 
                 await conn.execute(

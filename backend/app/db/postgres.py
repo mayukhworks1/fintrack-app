@@ -567,6 +567,14 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- TRUE once the user has manually uploaded a profile picture — SSO login must
 -- never overwrite it again after that point.
 ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS avatar_is_custom BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS first_name VARCHAR(128);
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_name  VARCHAR(128);
+-- Backfill first_name / last_name from legacy full_name on existing rows
+UPDATE auth_users
+   SET first_name = SPLIT_PART(TRIM(full_name), ' ', 1),
+       last_name  = NULLIF(TRIM(SUBSTRING(TRIM(full_name) FROM POSITION(' ' IN TRIM(full_name)) + 1)), '')
+ WHERE full_name IS NOT NULL
+   AND first_name IS NULL;
 CREATE INDEX IF NOT EXISTS au_status_idx ON auth_users (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS au_email_norm_idx ON auth_users (email_normalized);
 CREATE INDEX IF NOT EXISTS au_teable_email_idx ON auth_users (teable_email);

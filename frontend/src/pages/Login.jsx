@@ -25,7 +25,8 @@ export default function Login() {
     return new URLSearchParams(hash).get('oauth_token') || ''
   })
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
-  const [fullName, setFullName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
@@ -199,7 +200,8 @@ export default function Login() {
         const res = await api.auth.emailRegister({
           email,
           password,
-          full_name: fullName.trim() || undefined,
+          first_name: firstName.trim() || undefined,
+          last_name: lastName.trim() || undefined,
         })
         setNotice(res?.message || 'Account created. It is pending superadmin approval.')
         setPassword('')
@@ -436,19 +438,35 @@ export default function Login() {
             )}
 
             {registerMode && !resetToken && (
-              <div>
-                <label className="label" htmlFor="ft-full-name">Full name</label>
-                <input
-                  id="ft-full-name"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => { setFullName(e.target.value); setError('') }}
-                  placeholder="Your name"
-                  className="input px-3 py-2.5 text-sm rounded-xl"
-                  autoComplete="name"
-                  disabled={loading}
-                  maxLength={255}
-                />
+              <div style={{ display:'flex', gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <label className="label" htmlFor="ft-first-name">First name</label>
+                  <input
+                    id="ft-first-name"
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => { setFirstName(e.target.value); setError('') }}
+                    placeholder="First"
+                    className="input px-3 py-2.5 text-sm rounded-xl"
+                    autoComplete="given-name"
+                    disabled={loading}
+                    maxLength={128}
+                  />
+                </div>
+                <div style={{ flex:1 }}>
+                  <label className="label" htmlFor="ft-last-name">Last name</label>
+                  <input
+                    id="ft-last-name"
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => { setLastName(e.target.value); setError('') }}
+                    placeholder="Last"
+                    className="input px-3 py-2.5 text-sm rounded-xl"
+                    autoComplete="family-name"
+                    disabled={loading}
+                    maxLength={128}
+                  />
+                </div>
               </div>
             )}
 
