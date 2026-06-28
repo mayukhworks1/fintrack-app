@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { api } from '../services/api'
+import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
+
+// Asset URLs from the upload endpoint are backend-relative (/api/...). The
+// published viewer lives on a different origin, so embed the ABSOLUTE backend
+// URL or images 404 against the frontend domain.
+function absUrl(u) {
+  if (!u) return u
+  if (/^https?:\/\//.test(u)) return u
+  return `${API_BASE_URL}${u}`
+}
 
 // ---------------------------------------------------------------------------
 // Mobile hook
@@ -539,12 +548,14 @@ function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attac
 
 // Format an uploaded asset into markdown or HTML markup
 function formatAssetMd(res) {
-  return res.is_image ? `![${res.filename||'image'}](${res.url})` : `[📎 ${res.filename||'file'}](${res.url})`
+  const url = absUrl(res.url)
+  return res.is_image ? `![${res.filename||'image'}](${url})` : `[📎 ${res.filename||'file'}](${url})`
 }
 function formatAssetHtml(res) {
+  const url = absUrl(res.url)
   return res.is_image
-    ? `<img src="${res.url}" alt="${res.filename||''}" style="max-width:100%;height:auto" />`
-    : `<a href="${res.url}" target="_blank" rel="noopener">📎 ${res.filename||'Download file'}</a>`
+    ? `<img src="${url}" alt="${res.filename||''}" style="max-width:100%;height:auto" />`
+    : `<a href="${url}" target="_blank" rel="noopener">📎 ${res.filename||'Download file'}</a>`
 }
 
 function MarkdownToolbar({ textareaRef, value, onChange }) {
@@ -859,6 +870,30 @@ function PageDrawer({ page, onClose, onSaved }) {
   const savedSnapRef = useRef(JSON.stringify({ title:page?.title||'', content_type:page?.content_type||'markdown', content:page?.content||'', slug:page?.slug||'', description:page?.metadata?.description||'' }))
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // ── Hydrate from the full record on edit ──────────────────────────────────
+  // openEdit opens the drawer instantly with the lightweight list row (which has
+  // NO `content`), then fetches the full page. Re-seed the form once the full
+  // record (with content) arrives, so editing an existing page shows its data.
+  const hydratedIdRef = useRef(null)
+  useEffect(() => {
+    if (!page?.id) return
+    if (hydratedIdRef.current === page.id) return
+    if (page.content == null) return   // wait for the full record
+    hydratedIdRef.current = page.id
+    const next = {
+      title:                page.title || '',
+      content_type:         page.content_type || 'markdown',
+      content:              page.content || '',
+      slug:                 page.slug || '',
+      is_password_protected:page.is_password_protected || false,
+      password:             '',
+      description:          page?.metadata?.description || '',
+    }
+    setForm(next)
+    setShowTemplates(false)
+    savedSnapRef.current = JSON.stringify({ title:next.title, content_type:next.content_type, content:next.content, slug:next.slug||'', description:next.description||'' })
+  }, [page?.id, page?.content])
 
   // Auto-slug
   useEffect(() => { if (!slugManual && form.title) set('slug', slugify(form.title)) }, [form.title, slugManual])
