@@ -201,6 +201,40 @@ def _is_privileged(role: str) -> bool:
     return role in ("superadmin", "admin", "manager")
 
 
+def _can_see_all(role: str) -> bool:
+    """Only the superadmin sees/manages every user's pages. Everyone else is
+    scoped to the pages they created (row-level isolation)."""
+    return role == "superadmin"
+
+
+_ASSET_PATH_RE = re.compile(r"/api/public/pages/asset/([^\s)\"'<>]+)")
+
+
+def _extract_asset_paths(content: str | None) -> list[str]:
+    """Pull stored HF asset paths (pages/...) referenced in a page's content."""
+    if not content:
+        return []
+    out: list[str] = []
+    for m in _ASSET_PATH_RE.finditer(content):
+        p = m.group(1).split("?")[0].split("#")[0]
+        if p.startswith("pages/") and ".." not in p and p not in out:
+            out.append(p)
+    return out
+
+
+async def _delete_page_assets(content: str | None) -> None:
+    """Best-effort: remove a page's uploaded attachments from HF storage."""
+    paths = _extract_asset_paths(content)
+    if not paths:
+        return
+    from ..services import storage
+    for p in paths:
+        try:
+            await storage.delete_path(p)
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -437,7 +471,7 @@ async def list_pages(
     auth_role = getattr(request.state, "auth_role", role) or role
 
     async with pool.acquire() as conn:
-        if _is_privileged(auth_role):
+        if _can_see_all(auth_role):
             rows = await conn.fetch(
                 """
                 SELECT id, slug, title, content_type, is_published, view_count,
@@ -470,7 +504,7 @@ async def admin_all_views(
     role: str = Depends(require_auth),
 ):
     auth_role = getattr(request.state, "auth_role", role) or role
-    if not _is_privileged(auth_role):
+    if not _can_see_all(auth_role):
         raise HTTPException(403, "Admin access required")
 
     pool = get_pool()
@@ -519,7 +553,7 @@ async def get_page(
         )
     if not row:
         raise HTTPException(404, "Page not found")
-    if not _is_privileged(auth_role) and str(row["created_by"]) != str(user_id):
+    if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
         raise HTTPException(403, "Access denied")
     return _page_dict(row)
 
@@ -544,7 +578,7 @@ async def update_page(
         )
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _is_privileged(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
         # Build update fields
@@ -603,13 +637,15 @@ async def delete_page(
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, created_by FROM published_pages WHERE id = $1", page_id
+            "SELECT id, created_by, content FROM published_pages WHERE id = $1", page_id
         )
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _is_privileged(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
         await conn.execute("DELETE FROM published_pages WHERE id = $1", page_id)
+    # Best-effort: remove the page's uploaded attachments from HF storage
+    await _delete_page_assets(row["content"])
     return {"ok": True}
 
 
@@ -633,7 +669,7 @@ async def delete_page_view(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _is_privileged(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
         result = await conn.execute(
@@ -669,7 +705,7 @@ async def publish_page(
         )
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _is_privileged(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
         published_at = datetime.now(timezone.utc) if body.published else None
@@ -710,7 +746,7 @@ async def page_analytics(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _is_privileged(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
         rows = await conn.fetch(

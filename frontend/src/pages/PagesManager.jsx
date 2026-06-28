@@ -903,7 +903,7 @@ const CONTENT_TYPES = [
   { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
 ]
 
-function PageDrawer({ page, onClose, onSaved }) {
+function PageDrawer({ page, onClose, onSaved, initialType }) {
   const isMobile = useIsMobile()
   const textareaRef = useRef(null)
   // currentId tracks the DB row: starts from the passed page, but auto-save can
@@ -913,7 +913,7 @@ function PageDrawer({ page, onClose, onSaved }) {
   const isEdit = !!currentId
   const [form, setForm] = useState({
     title:                page?.title || '',
-    content_type:         page?.content_type || 'markdown',
+    content_type:         page?.content_type || initialType || 'markdown',
     content:              page?.content || '',
     slug:                 page?.slug || '',
     is_password_protected:page?.is_password_protected || false,
@@ -1373,7 +1373,7 @@ export default function PagesManager() {
           <h1 style={{ margin:0, fontSize:isMobile?18:22, fontWeight:700 }}>Pages</h1>
           {!isMobile&&<p style={{ margin:'4px 0 0', fontSize:13, color:'var(--text-2)' }}>Create docs, spreadsheets, web pages & text — share with a public link. Full analytics on every view.</p>}
         </div>
-        <button style={btnPrimary} onClick={()=>setDrawerPage({})}>+ New Page</button>
+        <button style={btnPrimary} onClick={()=>setDrawerPage({content_type:'markdown'})}>+ New Page</button>
       </div>
 
       {/* Stats */}
@@ -1411,8 +1411,8 @@ export default function PagesManager() {
           <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>No pages yet</div>
           <div style={{ fontSize:13, marginBottom:6 }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center', marginTop:16, flexWrap:'wrap' }}>
-            {[{icon:'📝',label:'New Document'},{icon:'📊',label:'New Spreadsheet'},{icon:'🌐',label:'New Web Page'}].map(b=>(
-              <button key={b.label} onClick={()=>setDrawerPage({})} style={{ ...btnSecondary, fontSize:13 }}>{b.icon} {b.label}</button>
+            {[{icon:'📝',label:'New Document',type:'markdown'},{icon:'📊',label:'New Spreadsheet',type:'csv'},{icon:'🌐',label:'New Web Page',type:'html'}].map(b=>(
+              <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:13 }}>{b.icon} {b.label}</button>
             ))}
           </div>
         </div>
@@ -1471,7 +1471,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer page={drawerPage?.id?drawerPage:null} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} />}
+      {drawerPage!==null&&<PageDrawer page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
