@@ -30,6 +30,11 @@ function renderMarkdown(raw) {
     const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     return `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${escaped.trimEnd()}\x03\n`
   })
+  // Isolate headings and horizontal rules onto their own blocks so a heading
+  // line that is followed (without a blank line) by an image/paragraph still
+  // renders correctly instead of falling through as raw text.
+  s = s.replace(/^(#{1,6} .+)$/gm, '\n\n$1\n\n')
+  s = s.replace(/^[ \t]*([-*_]){3,}[ \t]*$/gm, '\n\n$1$1$1\n\n')
   const blocks = s.split(/\n{2,}/)
   const out = blocks.map(block => {
     const t = block.trim()
@@ -436,13 +441,30 @@ export default function PageViewer() {
   const [pwLoading, setPwLoading] = useState(false)
   const viewLogged = useRef(false)
 
+  const pwKey = `fp_pw_${slug}`
+  const getSavedPw = () => { try { return sessionStorage.getItem(pwKey) } catch { return null } }
+
   useEffect(() => {
     if (!slug) { setState('notfound'); return }
     setState('loading'); setPage(null)
     api.pages.publicGet(slug)
       .then(data => {
         if (!data || data.detail || data.error) { setState('notfound'); return }
-        if (data.requires_password) { setPage(data); setState('requires_password'); return }
+        if (data.requires_password) {
+          // If this tab already unlocked the page this session, re-verify
+          // silently so the visitor isn't asked again on every refresh.
+          const saved = getSavedPw()
+          if (saved) {
+            api.pages.publicVerify(slug, saved)
+              .then(v => {
+                if (v && v.id && !v.error && !v.detail) { setPage(v); setState('loaded') }
+                else { try { sessionStorage.removeItem(pwKey) } catch {} ; setPage(data); setState('requires_password') }
+              })
+              .catch(() => { setPage(data); setState('requires_password') })
+            return
+          }
+          setPage(data); setState('requires_password'); return
+        }
         setPage(data); setState('loaded')
       })
       .catch(() => setState('notfound'))
@@ -507,9 +529,15 @@ export default function PageViewer() {
     api.pages.publicVerify(slug, password)
       .then(data => {
         if (!data || data.detail || data.error || !data.id) {
-          setPwError(data?.detail || data?.error || 'Incorrect password.')
+          // data.error may be an object {code,type,message,...} — never render it raw
+          const msg = data?.detail
+            || data?.error?.message
+            || (typeof data?.error === 'string' ? data.error : '')
+            || 'Incorrect password. Please try again.'
+          setPwError(msg)
           return
         }
+        try { sessionStorage.setItem(pwKey, password) } catch {}
         setPage(data); setState('loaded')
       })
       .catch(() => setPwError('Something went wrong. Please try again.'))

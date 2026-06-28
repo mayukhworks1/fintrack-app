@@ -46,6 +46,10 @@ function renderMarkdown(raw) {
     const esc = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     return `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${esc.trimEnd()}\x03\n`
   })
+  // Isolate headings + horizontal rules so a heading line followed (without a
+  // blank line) by an image/paragraph still renders instead of staying raw.
+  s = s.replace(/^(#{1,6} .+)$/gm, '\n\n$1\n\n')
+  s = s.replace(/^[ \t]*([-*_]){3,}[ \t]*$/gm, '\n\n$1$1$1\n\n')
   return s.split(/\n{2,}/).map(block => {
     const t = block.trim(); if (!t) return ''
     if (t.startsWith('\x02PRE')) return t.replace(/\x02PRE([^>]*)>([\s\S]*?)\x03/, (_, a, c) =>
@@ -672,7 +676,7 @@ function MarkdownToolbar({ textareaRef, value, onChange }) {
     ]},
     { groups: [
       { tip:'Link', label:'🔗', action:()=>wrap('[','](https://)','link text') },
-      { tip:'Image', label:'🖼', action:()=>insertAt('![alt text](https://example.com/image.jpg)') },
+      { tip:'Image by URL (or use 📎 to upload)', label:'🖼', action:()=>insertAt('\n\n![description](https://paste-image-url-here)\n\n') },
       { tip:'Code Block', label:'```', action:()=>wrap('```\n','```','code here'), mono:true },
       { tip:'Table', label:'⊞', action:()=>insertAt('\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n') },
       { tip:'Divider', label:'—', action:()=>insertAt('\n---\n') },
@@ -1064,6 +1068,17 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     finally { setSaving(false) }
   }
 
+  // Closing the drawer should never lose work: if there are unsaved changes,
+  // fire a save (fire-and-forget, also backed by localStorage) before closing.
+  const flushAndClose = () => {
+    if (snapshot !== savedSnapRef.current && form.title.trim()) {
+      const payload = { title:form.title, content_type:form.content_type, content:form.content, slug:form.slug || undefined, metadata:{ description:form.description } }
+      try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...payload, ts:Date.now() })) } catch {}
+      ;(currentId ? api.pages.update(currentId, payload) : api.pages.create(payload)).catch(()=>{})
+    }
+    onClose()
+  }
+
   const stats = docStats(form.content, form.content_type)
   const shareUrl = form.slug ? `${window.location.origin}/p/${form.slug}` : ''
   const isSpreadsheet = form.content_type === 'csv'
@@ -1092,7 +1107,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   }
 
   return (
-    <div style={drawerStyle} onClick={onClose}>
+    <div style={drawerStyle} onClick={flushAndClose}>
       <div style={panelStyle} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
@@ -1118,7 +1133,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
             {error && <span style={{ color:'#ef4444', fontSize:12 }}>{error}</span>}
             <button onClick={()=>setFullscreen(f=>!f)} style={{ ...btnGhost, fontSize:14, padding:'5px 10px' }} title={fullscreen?'Exit fullscreen':'Fullscreen'}>{fullscreen?'⊡':'⊞'}</button>
-            <button onClick={onClose} style={btnGhost} disabled={saving}>Cancel</button>
+            <button onClick={flushAndClose} style={btnGhost} disabled={saving}>Close</button>
             <button onClick={()=>handleSave(false)} style={btnSecondary} disabled={saving}>{saving?'Saving…':'Save Draft'}</button>
             <button onClick={()=>handleSave(true)} style={btnPrimary} disabled={saving}>
               {saving?'Publishing…':isEdit&&page?.is_published?'Update':'Publish'}
@@ -1302,17 +1317,26 @@ export default function PagesManager() {
 
   const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast({msg:'',ok:true}),3500) }
 
-  const loadPages = useCallback(async () => {
-    setLoading(true); setError('')
+  const loadPages = useCallback(async (silent=false) => {
+    if (!silent) setLoading(true)
+    setError('')
     try {
-      const data = await api.pages.list()
+      const data = await api.pages.list({ fresh:true })
       if (data?.detail) throw new Error(data.detail)
       setPages(Array.isArray(data)?data:[])
-    } catch (e) { setError(e?.message||'Failed to load') }
-    finally { setLoading(false) }
+    } catch (e) { if (!silent) setError(e?.message||'Failed to load') }
+    finally { if (!silent) setLoading(false) }
   }, [])
 
-  useEffect(()=>{ loadPages() }, [loadPages])
+  // Initial load + keep the list live without manual refresh: silently refetch
+  // when the tab regains focus and on a 30s interval.
+  useEffect(()=>{
+    loadPages()
+    const onFocus = () => loadPages(true)
+    window.addEventListener('focus', onFocus)
+    const iv = setInterval(() => loadPages(true), 30000)
+    return () => { window.removeEventListener('focus', onFocus); clearInterval(iv) }
+  }, [loadPages])
 
   const handleSaved = (saved) => {
     setPages(prev=>{ const idx=prev.findIndex(p=>p.id===saved.id); if(idx>=0){const n=[...prev];n[idx]=saved;return n} return [saved,...prev] })

@@ -736,7 +736,7 @@ export const api = {
     deleteAvatar: () => request('/api/auth/profile/avatar', { method: 'DELETE' }),
   },
   pages: {
-    list:          ()          => request('/api/pages/'),
+    list:          (opts={})    => request('/api/pages/', opts),
     create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),
     get:           (id)        => request(`/api/pages/${id}`),
     update:        (id, data)  => request(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
