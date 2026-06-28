@@ -1083,6 +1083,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
   const createdRef = useRef(false)   // guards against double-create races
+  const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
   const savedSnapRef = useRef(JSON.stringify({ title:page?.title||'', content_type:page?.content_type||'markdown', content:page?.content||'', slug:page?.slug||'', description:page?.metadata?.description||'' }))
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
@@ -1161,7 +1162,9 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
           saved = await api.pages.update(currentId, savePayload)
         } else if (!createdRef.current) {
           createdRef.current = true
-          saved = await api.pages.create(savePayload)   // creates unpublished draft
+          createPromiseRef.current = api.pages.create(savePayload)
+          saved = await createPromiseRef.current
+          createPromiseRef.current = null
           if (saved?.id && !cancelled) setCurrentId(saved.id)
         } else {
           return  // a create is already in flight; wait for next tick
@@ -1173,6 +1176,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         setTimeout(() => setAutoSaveStatus(s => s === 'saved' ? '' : s), 2500)
       } catch (e) {
         createdRef.current = false   // allow retry
+        createPromiseRef.current = null
         if (!cancelled) setAutoSaveStatus('error')
       }
     })()
@@ -1209,8 +1213,13 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         password:             form.is_password_protected && form.password ? form.password : undefined,
         metadata:             { description: form.description },
       }
-      let saved = currentId
-        ? await api.pages.update(currentId, payload)
+      // If auto-save is mid-create, await that promise and use its ID instead of creating a duplicate
+      let resolvedId = currentId
+      if (!resolvedId && createPromiseRef.current) {
+        try { const r = await createPromiseRef.current; if (r?.id) { resolvedId = r.id; setCurrentId(r.id) } } catch {}
+      }
+      let saved = resolvedId
+        ? await api.pages.update(resolvedId, payload)
         : await api.pages.create(payload)
       if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
       if (saved?.id) setCurrentId(saved.id)
