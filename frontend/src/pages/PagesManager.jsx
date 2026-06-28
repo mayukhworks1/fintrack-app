@@ -1085,7 +1085,12 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   const createdRef = useRef(false)   // guards against double-create races
   const savedSnapRef = useRef(JSON.stringify({ title:page?.title||'', content_type:page?.content_type||'markdown', content:page?.content||'', slug:page?.slug||'', description:page?.metadata?.description||'' }))
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
+  const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
+
+  // Debounced content for expensive child components (AttachmentsBar runs regex on every
+  // render — pass a 400ms-debounced version so it only re-scans after typing pauses).
+  const debouncedContent = useDebounce(form.content, 400)
 
   // ── Hydrate from the full record on edit ──────────────────────────────────
   // openEdit opens the drawer instantly with the lightweight list row (which has
@@ -1353,16 +1358,16 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
 
         {/* Toolbar for markdown */}
         {isMarkdown && tab === 'edit' && (
-          <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={v=>set('content',v)} />
+          <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} />
         )}
         {isHtml && tab === 'edit' && (
           <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
-            <AssetButton textareaRef={textareaRef} value={form.content} onChange={v=>set('content',v)} format={formatAssetHtml} label="📎 Insert image / file" />
+            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label="📎 Insert image / file" />
             <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>
           </div>
         )}
         {(isMarkdown || isHtml) && tab === 'edit' && (
-          <AttachmentsBar content={form.content} onChange={v=>set('content',v)} />
+          <AttachmentsBar content={debouncedContent} onChange={setContent} />
         )}
 
 
@@ -1414,14 +1419,14 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
               }}
             />
           ) : isSpreadsheet ? (
-            <SpreadsheetEditor value={form.content} onChange={v=>set('content',v)} />
+            <SpreadsheetEditor value={form.content} onChange={setContent} />
           ) : tab === 'edit' ? (
             <textarea
               ref={textareaRef}
               style={{ flex:1, width:'100%', padding:isMobile?'14px':'20px 24px', fontFamily:isMarkdown?'-apple-system,sans-serif':'ui-monospace,monospace', fontSize:isMarkdown?15:13, lineHeight:isMarkdown?1.8:1.65, background:'var(--bg-base)', color:'var(--text-1)', border:'none', outline:'none', resize:'none', boxSizing:'border-box', overflowY:'auto' }}
               placeholder={placeholders[form.content_type]}
               value={form.content}
-              onChange={e=>set('content',e.target.value)}
+              onChange={e=>setContent(e.target.value)}
               spellCheck={isMarkdown}
             />
           ) : (
@@ -1506,13 +1511,18 @@ export default function PagesManager() {
 
   const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast({msg:'',ok:true}),3500) }
 
+  // Track IDs the user explicitly deleted so background refreshes can't restore them.
+  const deletedIdsRef = useRef(new Set())
+
   const loadPages = useCallback(async (silent=false) => {
     if (!silent) setLoading(true)
     setError('')
     try {
       const data = await api.pages.list({ fresh:true })
       if (data?.detail) throw new Error(data.detail)
-      setPages(Array.isArray(data)?data:[])
+      const list = Array.isArray(data) ? data : []
+      // Filter out pages the user already deleted (prevent respawn from background polls)
+      setPages(list.filter(p => !deletedIdsRef.current.has(p.id)))
     } catch (e) { if (!silent) setError(e?.message||'Failed to load') }
     finally { if (!silent) setLoading(false) }
   }, [])
@@ -1543,9 +1553,22 @@ export default function PagesManager() {
 
   const handleDelete = async () => {
     if (!confirmDelete) return
-    try { await api.pages.delete(confirmDelete.id); setPages(prev=>prev.filter(p=>p.id!==confirmDelete.id)); showToast('Deleted') }
-    catch { showToast('Delete failed',false) }
-    finally { setConfirmDelete(null) }
+    const id = confirmDelete.id
+    setConfirmDelete(null)  // close dialog immediately to prevent double-click
+    // Optimistically remove from UI and mark as deleted so background polls don't restore it
+    setPages(prev => prev.filter(p => p.id !== id))
+    deletedIdsRef.current.add(id)
+    try {
+      await api.pages.delete(id)
+      showToast('Deleted')
+      // Clean up tombstone after 60s — server is authoritative by then
+      setTimeout(() => deletedIdsRef.current.delete(id), 60_000)
+    } catch (e) {
+      // Restore the page if delete failed
+      deletedIdsRef.current.delete(id)
+      showToast(e?.message || 'Delete failed', false)
+      loadPages(true)  // re-sync from server
+    }
   }
 
   const handleClone = async (page) => {
