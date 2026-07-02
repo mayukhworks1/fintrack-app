@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
+import { escapeAttr, safeUrl } from '../utils/sanitize'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -42,10 +43,11 @@ function useDebounce(value, delay) {
 function renderMarkdown(raw) {
   if (!raw) return ''
   let s = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  s = s.replace(/```(\w*)\n([\s\S]*?)```/gm, (_, lang, code) => {
-    const esc = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${esc.trimEnd()}\x03\n`
-  })
+  // Escape "<" so no user markup becomes a live tag/<script>; markdown
+  // structural chars stay intact. URLs/alt are attribute-escaped in inl().
+  s = s.replace(/</g, '&lt;')
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/gm, (_, lang, code) =>
+    `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${code.trimEnd()}\x03\n`)
   // Isolate headings + horizontal rules so a heading line followed (without a
   // blank line) by an image/paragraph still renders instead of staying raw.
   s = s.replace(/^(#{1,6} .+)$/gm, '\n\n$1\n\n')
@@ -79,8 +81,8 @@ function renderMarkdown(raw) {
 function inl(s) {
   return s
     .replace(/`([^`]+)`/g,'<code style="background:#f1f5f9;padding:.1em .35em;border-radius:3px;font-size:.875em;color:#be185d">$1</code>')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>`<img src="${absUrl(url)}" alt="${alt}" style="max-width:100%;border-radius:6px">`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">$1</a>')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>`<img src="${escapeAttr(safeUrl(absUrl(url)))}" alt="${escapeAttr(alt)}" style="max-width:100%;border-radius:6px">`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,txt,url)=>`<a href="${escapeAttr(safeUrl(absUrl(url)))}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">${txt}</a>`)
     .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,'<em>$1</em>')
@@ -113,7 +115,10 @@ function CSVPreview({ text }) {
 function HTMLPreview({ content }) {
   const wrap = (html) => /^\s*<!DOCTYPE/i.test(html)||/^\s*<html/i.test(html) ? html
     : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:14px;font-family:-apple-system,sans-serif;font-size:14px;line-height:1.6;color:#1e293b}</style></head><body>${html}</body></html>`
-  return <iframe srcDoc={wrap(content)} style={{ width:'100%', height:300, border:'none' }} sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="preview" />
+  // No allow-same-origin: author HTML previews run in an opaque origin and
+  // cannot reach the parent's auth token / localStorage even if they contain
+  // <script>. (allow-scripts + allow-same-origin together would defeat the sandbox.)
+  return <iframe srcDoc={wrap(content)} style={{ width:'100%', height:300, border:'none' }} sandbox="allow-scripts allow-popups allow-forms" title="preview" />
 }
 function ContentPreview({ contentType, content }) {
   if (!content) return <div style={{ color:'var(--text-2)', fontSize:13, padding:'20px', textAlign:'center' }}>No content yet.</div>

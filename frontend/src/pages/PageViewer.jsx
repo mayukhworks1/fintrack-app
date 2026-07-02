@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
+import { escapeAttr, safeUrl } from '../utils/sanitize'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -26,10 +27,13 @@ function rewriteAssetUrls(html) {
 function renderMarkdown(raw) {
   if (!raw) return ''
   let s = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  s = s.replace(/```(\w*)\n([\s\S]*?)```/gm, (_, lang, code) => {
-    const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${escaped.trimEnd()}\x03\n`
-  })
+  // Neutralise raw HTML up front: escaping "<" means no user markup can become a
+  // live tag or <script>. Markdown structural chars (>, |, #, *, backtick) stay
+  // intact so parsing still works — every tag emitted below is our own. URLs and
+  // alt text are additionally attribute-escaped + scheme-checked in inline().
+  s = s.replace(/</g, '&lt;')
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/gm, (_, lang, code) =>
+    `\x02PRE${lang ? ` data-lang="${lang}"` : ''}>${code.trimEnd()}\x03\n`)
   // Isolate headings and horizontal rules onto their own blocks so a heading
   // line that is followed (without a blank line) by an image/paragraph still
   // renders correctly instead of falling through as raw text.
@@ -83,8 +87,8 @@ function renderMarkdown(raw) {
 function inline(s) {
   return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img src="${absAsset(url)}" alt="${alt}" loading="lazy">`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, txt, url) => `<a href="${absAsset(url)}" target="_blank" rel="noopener noreferrer">${txt}</a>`)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img src="${escapeAttr(safeUrl(absAsset(url)))}" alt="${escapeAttr(alt)}" loading="lazy">`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, txt, url) => `<a href="${escapeAttr(safeUrl(absAsset(url)))}" target="_blank" rel="noopener noreferrer">${txt}</a>`)
     .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -193,16 +197,23 @@ function CSVTable({ text }) {
 // HTML — replaces the entire browser document
 // ---------------------------------------------------------------------------
 function HTMLPage({ content }) {
-  useEffect(() => {
-    const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
-      ? content
-      : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${content}</body></html>`
-    const html = rewriteAssetUrls(raw)
-    document.open()
-    document.write(html)
-    document.close()
-  }, [content])
-  return null
+  // User-authored HTML is rendered inside a sandboxed iframe. The sandbox omits
+  // `allow-same-origin`, so even if the page contains <script> it runs in an
+  // opaque origin and cannot read the parent's cookies, localStorage, or auth
+  // token. Previously this used document.write() into the top document, which
+  // executed arbitrary author script against the real origin (full XSS).
+  const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
+    ? content
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${content}</body></html>`
+  const html = rewriteAssetUrls(raw)
+  return (
+    <iframe
+      title="Published page"
+      srcDoc={html}
+      sandbox="allow-scripts allow-popups allow-forms"
+      style={{ width: '100%', minHeight: '100vh', border: 'none', display: 'block' }}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------

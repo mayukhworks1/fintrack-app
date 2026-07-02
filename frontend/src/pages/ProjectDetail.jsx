@@ -48,6 +48,18 @@ const INV_STATUS = {
 
 // ── AI text renderer ───────────────────────────────────────────────────────────
 
+// Escape HTML first, then apply the tiny bold/markdown-strip pass. Without the
+// escape, any "<" in the AI output (which can echo Teable-sourced project text)
+// would be injected raw via dangerouslySetInnerHTML.
+function mdInline(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/[`#*_]/g, '')
+}
+
 function AiText({ text }) {
   if (!text) return null
   const lines = text.split('\n')
@@ -68,7 +80,7 @@ function AiText({ text }) {
             <li key={j} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
               <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
                 style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j + 1}</span>
-              <span dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+              <span dangerouslySetInnerHTML={{ __html: mdInline(item) }} />
             </li>
           ))}
         </ol>
@@ -83,13 +95,13 @@ function AiText({ text }) {
         <div key={i} className="mt-3 mb-1">
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
           {rest && <span className="text-sm ml-2 leading-relaxed" style={{ color: 'var(--text-2)' }}
-            dangerouslySetInnerHTML={{ __html: rest.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />}
+            dangerouslySetInnerHTML={{ __html: mdInline(rest) }} />}
         </div>
       )
     } else {
       elements.push(
         <p key={i} className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}
-          dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/[`#*_]/g,'') }} />
+          dangerouslySetInnerHTML={{ __html: mdInline(line) }} />
       )
     }
     i++
