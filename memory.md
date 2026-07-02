@@ -6,6 +6,40 @@
 - Source of truth for operational CRUD remains Teable-first; PostgreSQL is mirror/audit/analytics support.
 - Auth stack supports legacy password, email-password auth, Google SSO, Zoho SSO, approval workflow, and admin-managed users.
 
+## Hardening + Decomposition — branch `claude/code-review-gaps-f1x9af` (2026-07-02, part 2)
+Follow-up to the review fixes: closed the two remaining security gaps and did the
+component decomposition.
+- **CORS fail-closed:** unset/"*" `FRONTEND_URL` now defaults to a localhost dev
+  allowlist instead of "*". `CORS_ALLOW_ALL=true` is an explicit opt-in. Prod sets
+  `FRONTEND_URL`, so it's unaffected.
+- **CSP + security headers:** added on both hosts — `frontend/public/_headers`
+  (Cloudflare Pages) and `vercel.json` headers (Vercel). `script-src` has no
+  'unsafe-inline' (built index.html has only external scripts); `object-src 'none'`,
+  `base-uri 'self'`, `frame-ancestors 'self'`; plus X-Content-Type-Options,
+  Referrer-Policy, X-Frame-Options, Permissions-Policy. `style-src` keeps
+  'unsafe-inline' (React inline styles); `connect-src`/`img-src` stay https-permissive
+  so a custom API/analytics origin never breaks.
+- **Component decomposition (pure extraction, behaviour unchanged):**
+  - `AdminDashboard.jsx` 5,247 → 236 lines + 18 modules under `pages/admin/`.
+  - `WebInvoices.jsx` 4,473 → 2,780 + 6 modules under `pages/webinvoices/`.
+  - `Invoices.jsx` 3,969 → 2,524 + 5 modules under `pages/invoices/`.
+  - `StatusBoard.jsx` 3,627 → 1,125 + 4 modules under `pages/statusboard/`.
+  - The four stateful ROOT components stay in place; their inline
+    workspace/tab views were NOT extracted (too coupled to split safely without
+    runtime tests on a live app). Only top-level helpers, presentational atoms,
+    and self-contained prop-driven components were moved.
+  - Verified per file with ESLint (react/jsx-uses-vars) → 0 no-undef / 0 unused,
+    a JSX component/icon reference check, and the production build (every lazy
+    chunk size unchanged = no bundle regression). Backend still 19 tests green.
+  - The split was script-assisted (scratchpad only); eslint was used for
+    validation and NOT added as a project dependency.
+
+### Still open after this pass
+- Root component internal view-splitting (the ~1.1k–2.8k-line stateful bodies)
+  needs runtime/E2E tests before it can be done safely — deferred deliberately.
+- Primary AI model config still contradictory (config.py llama-4-scout vs
+  render.yaml nemotron-120b "last resort" vs frontend "Nemotron 120B") — product call.
+
 ## Code-Review Fixes — branch `claude/code-review-gaps-f1x9af` (2026-07-02)
 Security + correctness pass following a full read-only review. Commits:
 - **XSS (fix/security):** the hand-rolled markdown renderers (`PageViewer`,
