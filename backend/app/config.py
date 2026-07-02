@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "meta-llama/llama-4-scout:free"
     frontend_url: str = "*"
+    # CORS fail-closed policy: when FRONTEND_URL is unset/"*" the API restricts
+    # to localhost dev origins by default. Set CORS_ALLOW_ALL=true only if you
+    # explicitly need to accept every origin (not recommended in production).
+    cors_allow_all: bool = False
 
     # Passwords — set via env vars / HF Space secrets, never hard-coded.
     # APP_PASSWORD   → editor role (full access)

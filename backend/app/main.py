@@ -167,19 +167,37 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Localhost origins allowed when FRONTEND_URL is not configured (dev default).
+_DEV_CORS_ORIGINS = [
+    "http://localhost:5173", "http://127.0.0.1:5173",  # Vite dev server
+    "http://localhost:3000", "http://127.0.0.1:3000",  # common alt dev port
+    "http://localhost:4173", "http://127.0.0.1:4173",  # vite preview
+]
+
+
 def _cors_origins() -> list[str]:
     """
     Restrict CORS to the configured frontend origin(s). FRONTEND_URL may be a
-    comma-separated list. Falls back to "*" ONLY when nothing is configured (local dev).
-    If FRONTEND_URL is explicitly set, only those exact origins are allowed.
+    comma-separated list. If FRONTEND_URL is explicitly set, only those exact
+    origins are allowed.
+
+    Fail-closed default: when FRONTEND_URL is unset/"*" we restrict to localhost
+    dev origins rather than "*". Set CORS_ALLOW_ALL=true to opt back into "*"
+    (e.g. a throwaway environment). Production must set FRONTEND_URL.
     """
     raw = (settings.frontend_url or "").strip()
-    if not raw or raw == "*":
-        logger.warning("CORS: FRONTEND_URL not set — allowing all origins (*). Set FRONTEND_URL in production.")
+    if raw and raw != "*":
+        origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+        logger.info("CORS: restricting to %s", origins)
+        return origins
+    if settings.cors_allow_all:
+        logger.warning("CORS: CORS_ALLOW_ALL=true — allowing all origins (*). Do not use in production.")
         return ["*"]
-    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
-    logger.info("CORS: restricting to %s", origins)
-    return origins
+    logger.warning(
+        "CORS: FRONTEND_URL not set — defaulting to localhost dev origins only. "
+        "Set FRONTEND_URL to your frontend origin in production (or CORS_ALLOW_ALL=true to allow all)."
+    )
+    return list(_DEV_CORS_ORIGINS)
 
 
 app.add_middleware(
