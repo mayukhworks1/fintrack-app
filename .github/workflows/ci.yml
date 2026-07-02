@@ -59,3 +59,8 @@ jobs:
 
       - name: Compile critical backend modules
         run: python -m py_compile app/routers/*.py app/services/*.py app/db/*.py
+
+      - name: Run backend smoke tests
+        env:
+          APP_SECRET: ci-test-secret-not-for-production
+        run: python -m pytest tests/ -q
