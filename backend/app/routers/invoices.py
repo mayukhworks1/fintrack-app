@@ -209,17 +209,20 @@ async def invoice_summary(
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.invoices.view")),
 ):
+    svc = InvoiceService()
+    scoped_email = owner_scope_email(request)
     try:
-        svc = InvoiceService()
-        scoped_email = owner_scope_email(request)
         summary = await svc.get_summary(raised_by=scoped_email)
         if summary is not None:
             return summary
-        if scoped_email:
-            return summary
-        return await svc.get_summary_from_pg()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.warning("invoice summary via Teable failed, falling back to PG mirror: %s", exc)
+    # Teable unreachable (or empty) — serve from the PG mirror, scoped to the
+    # same owner so non-privileged users never see org-wide totals.
+    summary = await svc.get_summary_from_pg(raised_by=scoped_email)
+    if summary is None:
+        raise HTTPException(status_code=503, detail="Invoice summary is temporarily unavailable")
+    return summary
 
 
 @router.get("/picklists")

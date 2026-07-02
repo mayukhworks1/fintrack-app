@@ -408,16 +408,26 @@ class InvoiceService:
             "collection_rate":    round((total_received / total_with_tax * 100), 2) if total_with_tax > 0 else 0.0,
         }
 
-    async def get_summary_from_pg(self) -> dict | None:
+    async def get_summary_from_pg(self, raised_by: Optional[str] = None) -> dict | None:
+        """
+        Compute the invoice summary from the PG mirror (Teable fallback).
+
+        `raised_by` MUST be honoured for owner-scoped users — without it a
+        non-privileged user would see org-wide totals when Teable is down.
+        """
         pool = get_pool()
         if not pool:
             return None
         try:
             rows = await pool.fetch("SELECT fields FROM invoices_mirror WHERE deleted_at IS NULL")
             records = []
+            email_lc = raised_by.lower() if raised_by else None
             for row in rows:
                 fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
-                records.append(_apply_runtime_invoice_derivatives({"fields": fields or {}}))
+                fields = fields or {}
+                if email_lc and str(fields.get("Raised By", "")).lower() != email_lc:
+                    continue
+                records.append(_apply_runtime_invoice_derivatives({"fields": fields}))
             return self._compute_summary(records)
         except Exception as exc:
             logger.debug("invoices_mirror PG summary failed: %s", exc)
