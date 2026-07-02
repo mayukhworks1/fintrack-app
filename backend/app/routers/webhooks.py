@@ -62,12 +62,23 @@ def _verify_signature(raw_body: bytes, signature: Optional[str]) -> bool:
       • X-Webhook-Secret: <the plain secret>        (what the setup docs describe)
       • X-Webhook-Secret: sha256=<HMAC-SHA256 hex>  (signed body, stronger)
 
-    Both comparisons are constant-time. Returns True if verification passes, or
-    if no secret is configured (accept-all — see the startup warning).
+    Both comparisons are constant-time.
+
+    Fail-closed policy: when TEABLE_WEBHOOK_SECRET is not configured the
+    endpoint rejects every request (returns False) so no one can forge
+    unauthenticated writes into the PG mirrors. The only exception is when the
+    operator explicitly opts in via WEBHOOK_ALLOW_UNSIGNED=true (local dev).
     """
     secret = settings.teable_webhook_secret
     if not secret:
-        return True   # secret not configured — accept all (logged at startup)
+        if settings.webhook_allow_unsigned:
+            return True   # explicit dev opt-in — accept unsigned (logged at startup)
+        logger.warning(
+            "Webhook rejected: TEABLE_WEBHOOK_SECRET is not set (fail-closed). "
+            "Set it in secrets and add the same X-Webhook-Secret header in Teable, "
+            "or set WEBHOOK_ALLOW_UNSIGNED=true for local development."
+        )
+        return False
     if not signature:
         logger.warning("Webhook received without X-Webhook-Secret header")
         return False

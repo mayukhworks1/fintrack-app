@@ -83,8 +83,13 @@ class Settings(BaseSettings):
     # ── Real-time webhook secret ────────────────────────────────────────────
     # Set TEABLE_WEBHOOK_SECRET in HF Space secrets (any random string).
     # Add the same value as X-Webhook-Secret header in every Teable Automation.
-    # If not set, the endpoint accepts all incoming webhooks (still safe behind HTTPS).
+    # If not set, the webhook endpoint FAILS CLOSED (rejects all writes) so
+    # nobody can forge unauthenticated writes into the PG mirrors. The 30 s
+    # incremental + 5 min full sync still keep the mirror fresh in that state.
+    # Set WEBHOOK_ALLOW_UNSIGNED=true only for local development where you
+    # explicitly want to accept unsigned webhooks.
     teable_webhook_secret: Optional[str] = None
+    webhook_allow_unsigned: bool = False
 
     # ── Aiven PostgreSQL (1 GB) ─────────────────────────────────────────────
     # Set POSTGRES_URL in HF Space secrets.

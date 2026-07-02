@@ -62,11 +62,19 @@ async def lifespan(app: FastAPI):
     if not settings.app_admin_password:
         logger.warning("APP_ADMIN_PASSWORD is not set — legacy admin-password login is disabled (fail-closed).")
     if not settings.teable_webhook_secret:
-        logger.warning(
-            "SECURITY: TEABLE_WEBHOOK_SECRET is not set — /api/webhooks/teable accepts "
-            "unauthenticated writes into the PG mirrors. Set it and add the same value as "
-            "the X-Webhook-Secret header in every Teable Automation."
-        )
+        if settings.webhook_allow_unsigned:
+            logger.warning(
+                "SECURITY: TEABLE_WEBHOOK_SECRET is not set and WEBHOOK_ALLOW_UNSIGNED=true — "
+                "/api/webhooks/teable accepts UNAUTHENTICATED writes into the PG mirrors. "
+                "This is intended for local development only. Set the secret in production."
+            )
+        else:
+            logger.warning(
+                "TEABLE_WEBHOOK_SECRET is not set — /api/webhooks/teable is FAILING CLOSED "
+                "(instant webhook sync disabled). The 30 s incremental + 5 min full sync keep "
+                "the mirror fresh. Set the secret and add the same X-Webhook-Secret header in "
+                "every Teable Automation to re-enable instant sync."
+            )
 
     # ── Critical env-var validation ───────────────────────────────────────────
     missing_critical = []
