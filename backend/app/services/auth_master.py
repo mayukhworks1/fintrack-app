@@ -792,8 +792,8 @@ async def _login_with_oidc_profile(
     # Never run this once the user has manually uploaded their own avatar —
     # otherwise every SSO login would silently overwrite their custom photo.
     if picture and not picture.startswith("/api/") and not user["avatar_is_custom"]:
-        import asyncio as _asyncio
-        _asyncio.create_task(_mirror_sso_avatar_to_hf(str(user["id"]), picture))
+        from ..utils.tasks import spawn
+        spawn(_mirror_sso_avatar_to_hf(str(user["id"]), picture), name="mirror-sso-avatar")
 
     if user["status"] != "active":
         event_type = f"{provider}_register_pending" if created_pending else f"{provider}_login_blocked"

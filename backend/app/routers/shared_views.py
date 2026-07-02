@@ -333,7 +333,8 @@ async def record_public_event(token: str, body: PublicEventBody, request: Reques
     ua = request.headers.get("user-agent", "")
     referer = request.headers.get("referer") or request.headers.get("origin") or ""
     ch = request.headers.get("x-client-hint", "")
-    asyncio.create_task(
+    from ..utils.tasks import spawn
+    spawn(
         svc._log_access(
             token=token,
             ip=ip,
@@ -344,5 +345,6 @@ async def record_public_event(token: str, body: PublicEventBody, request: Reques
             event_type=body.event_type,
             record_id=body.record_id,
             meta=clean_meta,
-        )
+        ),
+        name="log-public-view-event",
     )

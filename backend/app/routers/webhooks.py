@@ -228,8 +228,6 @@ def _bust_source_caches(source: str) -> None:
     so the frontend reload reads fresh data, not a stale Valkey-cached response.
     Called after webhook updates so users see Teable-side changes immediately.
     """
-    import asyncio
-
     try:
         from ..utils.cache import cache as _mem_cache
         _mem_cache.bust(f"{source}:")
@@ -258,10 +256,7 @@ def _bust_source_caches(source: str) -> None:
                 except Exception:
                     pass
 
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_do_vk_bust_then_notify())
-        except RuntimeError:
-            pass
+        from ..utils.tasks import spawn
+        spawn(_do_vk_bust_then_notify(), name="webhook-cache-bust")
     except Exception:
         pass

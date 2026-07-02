@@ -85,9 +85,13 @@ def _coerce_str(v, maxlen: int) -> Optional[str]:
     if v is None or v == "":
         return None
     if isinstance(v, list):
-        # Linked records — join titles; fall back to first element str repr
+        # Linked records — join titles; fall back to first element str repr.
+        # Parenthesised explicitly: the old form parsed as
+        #   (", ".join(...) or str(v[0])) if v else ""
+        # which read the first element even when there were no titles.
         titles = [item.get("title", "") for item in v if isinstance(item, dict)]
-        v = ", ".join(t for t in titles if t) or str(v[0]) if v else ""
+        joined = ", ".join(t for t in titles if t)
+        v = joined or (str(v[0]) if v else "")
     return (str(v) or "")[:maxlen] or None
 
 

@@ -286,14 +286,15 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
     # ── Fire-and-forget session log ──────────────────────────────────────
     try:
         from ..db.audit import log_login
-        asyncio.create_task(log_login(
+        from ..utils.tasks import spawn
+        spawn(log_login(
             role=role,
             token_hint=token_hint,
             ip=_get_client_ip(request),
             user_agent=request.headers.get("user-agent", ""),
             ttl_secs=settings.app_session_ttl,
             client_hint=request.headers.get("x-client-hint", ""),
-        ))
+        ), name="log-login")
     except Exception:
         pass   # never let logging break login
 

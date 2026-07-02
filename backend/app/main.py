@@ -308,7 +308,8 @@ async def request_middleware(request: Request, call_next):
 
         # Keep login_sessions.last_seen_at fresh (rate-limited in touch_session)
         if token_hint:
-            asyncio.create_task(touch_session(token_hint))
+            from .utils.tasks import spawn
+            spawn(touch_session(token_hint), name="touch-session")
 
     return response
 

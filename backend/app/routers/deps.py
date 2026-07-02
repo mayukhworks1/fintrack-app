@@ -73,7 +73,10 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
         ORDER BY r.rank ASC NULLS LAST, ur.assigned_at ASC NULLS LAST
         LIMIT 1
         """,
-        token_hint[:20],
+        # Callers pass token[:16]; auth_sessions.token_hint is stored as token[:16]
+        # too. Match on the value as-is — the old token_hint[:20] slice was a no-op
+        # that implied a 20-char hint and masked the real, shared 16-char length.
+        token_hint,
     )
     if not row:
         return None
