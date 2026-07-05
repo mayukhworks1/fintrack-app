@@ -194,8 +194,9 @@ export default function WebInvoices() {
 
   const todayIso = new Date().toISOString().slice(0, 10)
 
-  // Compute effective aging — prefer Teable's computed field, fallback to days since Raised Date
+  // Compute effective aging — only meaningful for Pending invoices
   function effectiveAging(f) {
+    if (f['Payment Status'] && f['Payment Status'] !== 'Pending') return 0
     const teableVal = f['Agening (Days)']
     if (teableVal != null && teableVal !== '') return Number(teableVal)
     const raised = parseIsoDate(f['Raised Date'])

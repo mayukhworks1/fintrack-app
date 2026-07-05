@@ -161,7 +161,7 @@ export function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment,
               ['Cleared',     fmtDateFull(f['Cleared Date'])],
               ['Next Followup', fmtDateFull(f['Next followup'])],
               ['Days to Clear', f['Days To Clear']    != null ? `${f['Days To Clear']} days`    : '—'],
-              ['Aging',         f['Agening (Days)']   != null ? `${f['Agening (Days)']} days`   : '—'],
+              ['Aging',         f['Payment Status'] === 'Pending' && f['Agening (Days)'] != null ? `${f['Agening (Days)']} days` : '—'],
               ['Milestone',     f['Milestone']        || '—'],
             ].map(([lbl, val]) => (
               <div key={lbl}>
@@ -211,6 +211,7 @@ export function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment,
           <input
             autoFocus
             type="email"
+            autoComplete="off"
             value={reminderEmail}
             onChange={e => setReminderEmail(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && reminderEmail.trim()) handleSendReminder() }}

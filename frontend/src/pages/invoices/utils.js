@@ -295,6 +295,7 @@ export function endOfMonthIso(key) {
 }
 
 export function effectiveAging(f) {
+  if (f['Payment Status'] && f['Payment Status'] !== 'Pending') return 0
   const teableVal = f['Agening (Days)']
   if (teableVal != null && teableVal !== '' && Number(teableVal) > 0) return Number(teableVal)
   const raised = parseIsoDate(f['Raised Date'])
