@@ -238,9 +238,12 @@ function HTMLPage({ content }) {
   });
 })();
 </script>`
+  // <base target="_blank"> forces ALL links/forms to open new tabs at browser level —
+  // this fires before any JS and catches button onclick handlers too.
+  const baseTag = `<base target="_blank">`
   const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
-    ? content.replace(/<\/head>/i, anchorShim + '</head>')
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${anchorShim}</head><body>${content}</body></html>`
+    ? content.replace(/<head([^>]*)>/i, '<head$1>' + baseTag).replace(/<\/head>/i, anchorShim + '</head>')
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${baseTag}${anchorShim}</head><body>${content}</body></html>`
   const html = rewriteAssetUrls(raw)
   return (
     <iframe
