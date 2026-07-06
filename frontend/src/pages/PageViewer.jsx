@@ -204,7 +204,40 @@ function HTMLPage({ content }) {
   // executed arbitrary author script against the real origin (full XSS).
   // Inject anchor-navigation shim so #id links work inside the sandboxed iframe
   // without needing allow-same-origin (which would expose parent auth context).
-  const anchorShim = `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href')||'';if(h.startsWith('#')){var id=h.slice(1);if(!id)return;var el=document.getElementById(id)||document.querySelector('[name="'+id+'"]');if(el){e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});}}else if(h&&!h.startsWith('javascript')){a.setAttribute('target','_blank');a.setAttribute('rel','noopener noreferrer');}});</script>`
+  const anchorShim = `<script>
+(function(){
+  function patchLinks(){
+    document.querySelectorAll('a[href]').forEach(function(a){
+      var h=a.getAttribute('href')||'';
+      if(!h.startsWith('#')&&!h.startsWith('javascript')){
+        a.setAttribute('target','_blank');
+        a.setAttribute('rel','noopener noreferrer');
+      }
+    });
+    document.querySelectorAll('iframe[src]').forEach(function(fr){
+      var src=fr.getAttribute('src')||'';
+      if(!src||src.startsWith('#')||src.startsWith('about:')) return;
+      var btn=document.createElement('a');
+      btn.href=src; btn.target='_blank'; btn.rel='noopener noreferrer';
+      btn.textContent='Open in new tab ↗';
+      btn.style.cssText='display:inline-flex;align-items:center;padding:8px 18px;border-radius:8px;background:#1a56db;color:#fff;font-weight:600;font-size:14px;text-decoration:none;border:none;cursor:pointer;';
+      var wrap=document.createElement('div');
+      wrap.style.cssText='padding:12px;background:#f1f5f9;border-radius:10px;border:1px solid #e2e8f0;';
+      wrap.appendChild(btn);
+      fr.parentNode.replaceChild(wrap,fr);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',patchLinks);}else{patchLinks();}
+  document.addEventListener('click',function(e){
+    var a=e.target.closest('a[href^="#"]');
+    if(!a) return;
+    var id=a.getAttribute('href').slice(1);
+    if(!id) return;
+    var el=document.getElementById(id)||document.querySelector('[name="'+id+'"]');
+    if(el){e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});}
+  });
+})();
+</script>`
   const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
     ? content.replace(/<\/head>/i, anchorShim + '</head>')
     : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${anchorShim}</head><body>${content}</body></html>`
