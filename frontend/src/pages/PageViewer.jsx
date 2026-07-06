@@ -249,7 +249,7 @@ function HTMLPage({ content }) {
     <iframe
       title="Published page"
       srcDoc={html}
-      sandbox="allow-scripts allow-popups allow-forms allow-same-origin allow-top-navigation-by-user-activation"
+      sandbox="allow-scripts allow-popups allow-forms allow-top-navigation-by-user-activation"
       style={{ width: '100%', minHeight: '100vh', border: 'none', display: 'block' }}
     />
   )
