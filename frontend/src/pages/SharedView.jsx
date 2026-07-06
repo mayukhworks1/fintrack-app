@@ -177,6 +177,7 @@ function recordAttachmentSummary(resourceType, fields = {}) {
   return null
 }
 function effectiveAging(fields = {}) {
+  if (fields['Payment Status'] && fields['Payment Status'] !== 'Pending') return 0
   const raw = Number(fields['Agening (Days)'] ?? fields['Aging'] ?? 0)
   if (Number.isFinite(raw) && raw > 0) return raw
   const candidate = dateOnlyValue(fields['Raised Date'])
