@@ -22,12 +22,15 @@ function ImpersonationBanner() {
   if (!isImpersonating) return null
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 99999,
       height: BANNER_H,
-      background: '#b45309', color: '#fff',
+      background: 'rgba(180, 83, 9, 0.82)', color: '#fff',
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 16px', fontSize: 13, fontWeight: 600,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+      borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
+      minWidth: 320, maxWidth: '90vw', gap: 16,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <ShieldCheck size={15} />
@@ -192,7 +195,7 @@ export default function App() {
       <ErrorBoundary>
         <ImpersonationBanner />
         {/* Banner is fixed-position; shift only the scrollable content area, not the shell */}
-        <div style={isImpersonating ? { '--impersonation-banner-h': `${BANNER_H}px` } : undefined}>
+        <div>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/profile" element={<Profile />} />
@@ -208,7 +211,7 @@ export default function App() {
   return (
     <>
       <ImpersonationBanner />
-      <Layout style={isImpersonating ? { paddingTop: BANNER_H } : undefined}>
+      <Layout>
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>

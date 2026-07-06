@@ -201,7 +201,9 @@ async def get_avatar_map(_role: str = Depends(require_auth)):
             )
         result = {}
         for r in rows:
-            entry = {"avatar_url": r["avatar_url"], "name": " ".join(filter(None, [r["first_name"], r["last_name"]])) or r["full_name"] or r["email"]}
+            fn, ln = (r["first_name"] or "").strip(), (r["last_name"] or "").strip()
+            name = fn if fn and fn == ln else " ".join(filter(None, [fn, ln])) or r["full_name"] or r["email"]
+            entry = {"avatar_url": r["avatar_url"], "name": name}
             result[r["email"].lower()] = entry
             if r["teable_email"]:
                 result[r["teable_email"].lower()] = entry
