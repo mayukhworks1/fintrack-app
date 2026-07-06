@@ -214,9 +214,13 @@ function HTMLPage({ content }) {
         a.setAttribute('rel','noopener noreferrer');
       }
     });
+    // Only replace iframes from domains that block embedding (X-Frame-Options: sameorigin)
+    var BLOCKED_DOMAINS=['zoho.com','zohopublic.com','zohopeople.com'];
     document.querySelectorAll('iframe[src]').forEach(function(fr){
       var src=fr.getAttribute('src')||'';
       if(!src||src.startsWith('#')||src.startsWith('about:')) return;
+      var blocked=BLOCKED_DOMAINS.some(function(d){return src.indexOf(d)!==-1;});
+      if(!blocked) return;
       var btn=document.createElement('a');
       btn.href=src; btn.target='_blank'; btn.rel='noopener noreferrer';
       btn.textContent='Open in new tab ↗';
