@@ -202,9 +202,12 @@ function HTMLPage({ content }) {
   // opaque origin and cannot read the parent's cookies, localStorage, or auth
   // token. Previously this used document.write() into the top document, which
   // executed arbitrary author script against the real origin (full XSS).
+  // Inject anchor-navigation shim so #id links work inside the sandboxed iframe
+  // without needing allow-same-origin (which would expose parent auth context).
+  const anchorShim = `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="#"]');if(!a)return;var id=a.getAttribute('href').slice(1);if(!id)return;var el=document.getElementById(id)||document.querySelector('[name="'+id+'"]');if(el){e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});}});</script>`
   const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
-    ? content
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${content}</body></html>`
+    ? content.replace(/<\/head>/i, anchorShim + '</head>')
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${anchorShim}</head><body>${content}</body></html>`
   const html = rewriteAssetUrls(raw)
   return (
     <iframe
