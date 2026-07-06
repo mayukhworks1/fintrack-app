@@ -270,9 +270,17 @@ function AnalyticsDrawer({ page, onClose }) {
   const isMobile = useIsMobile()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [limit, setLimit] = useState(50)
+  const [limit, setLimit] = useState(100)
   const [expandedRow, setExpandedRow] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  // filters
+  const [filterCountry, setFilterCountry] = useState('')
+  const [filterDevice, setFilterDevice] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterSearch, setFilterSearch] = useState('')
 
   const fmtBrowser = (ua) => {
     if (!ua) return '—'
@@ -282,6 +290,13 @@ function AnalyticsDrawer({ page, onClose }) {
   }
   const fmtRef = (ref) => { if (!ref) return '—'; try { return new URL(ref).hostname } catch { return ref.slice(0,30) } }
 
+  const reload = () => {
+    if (!page) return
+    setLoading(true)
+    api.pages.analytics(page.id, {limit, offset:0})
+      .then(d=>{ setData(d); setSelected(new Set()) }).catch(()=>setData({items:[],total:0})).finally(()=>setLoading(false))
+  }
+
   const handleDeleteView = async (e, viewId) => {
     e.stopPropagation()
     if (!window.confirm('Delete this view record?')) return
@@ -289,23 +304,60 @@ function AnalyticsDrawer({ page, onClose }) {
     try {
       await api.pages.deleteView(page.id, viewId)
       setData(prev=>({...prev,total:prev.total-1,items:prev.items.filter(v=>v.id!==viewId)}))
+      setSelected(prev=>{ const n=new Set(prev); n.delete(viewId); return n })
       if (expandedRow===viewId) setExpandedRow(null)
     } catch {} finally { setDeletingId(null) }
   }
 
-  useEffect(() => {
-    if (!page) return
-    setLoading(true)
-    api.pages.analytics(page.id, {limit, offset:0})
-      .then(d=>setData(d)).catch(()=>setData({items:[],total:0})).finally(()=>setLoading(false))
-  }, [page?.id, limit])
+  const handleBulkDelete = async () => {
+    if (!selected.size) return
+    if (!window.confirm(`Delete ${selected.size} selected view record${selected.size>1?'s':''}? This cannot be undone.`)) return
+    setBulkDeleting(true)
+    const ids=[...selected]
+    try {
+      await Promise.all(ids.map(id=>api.pages.deleteView(page.id, id)))
+      setData(prev=>({...prev,total:prev.total-ids.length,items:prev.items.filter(v=>!ids.includes(v.id))}))
+      setSelected(new Set())
+    } catch {} finally { setBulkDeleting(false) }
+  }
+
+  useEffect(() => { reload() }, [page?.id, limit])
+
+  // client-side filtering
+  const filtered = (data?.items||[]).filter(v => {
+    const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}
+    if (filterCountry && (geo.country_code||v.country||'').toLowerCase() !== filterCountry.toLowerCase()) return false
+    if (filterDevice==='mobile' && cli.touch_support!==true) return false
+    if (filterDevice==='desktop' && cli.touch_support!==false) return false
+    if (filterDateFrom && new Date(v.viewed_at)<new Date(filterDateFrom)) return false
+    if (filterDateTo && new Date(v.viewed_at)>new Date(filterDateTo+'T23:59:59')) return false
+    if (filterSearch) {
+      const q=filterSearch.toLowerCase()
+      if (![v.viewer_ip,v.country,v.city,v.isp,v.referer,fmtBrowser(v.user_agent)].some(s=>s?.toLowerCase().includes(q))) return false
+    }
+    return true
+  })
+
+  const allCountries = [...new Set((data?.items||[]).map(v=>(v.metadata?.geo?.country_code||v.country)).filter(Boolean))].sort()
+  const allSelected = filtered.length>0 && filtered.every(v=>selected.has(v.id))
+  const toggleAll = () => {
+    if (allSelected) setSelected(prev=>{ const n=new Set(prev); filtered.forEach(v=>n.delete(v.id)); return n })
+    else setSelected(prev=>{ const n=new Set(prev); filtered.forEach(v=>n.add(v.id)); return n })
+  }
+
+  const hasFilters = filterCountry||filterDevice||filterDateFrom||filterDateTo||filterSearch
+  const clearFilters = () => { setFilterCountry(''); setFilterDevice(''); setFilterDateFrom(''); setFilterDateTo(''); setFilterSearch('') }
 
   if (!page) return null
-  const cols=['Time','IP Address','Location','ISP / Network','Device','Browser','Screen','Timezone','Language','Referer','']
+  const cols=['','Time','IP Address','Location','ISP / Network','Device','Browser','Screen','Timezone','Language','Referer','']
+
+  const inputStyle = { background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', fontSize:12, color:'var(--text-1)', outline:'none' }
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.5)', display:'flex', justifyContent:'flex-end' }} onClick={onClose}>
-      <div style={{ width:isMobile?'100vw':'96vw', maxWidth:1200, height:'100%', background:'var(--bg-base)', overflowY:'auto', boxShadow:'-4px 0 40px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ width:isMobile?'100vw':'96vw', maxWidth:1300, height:'100%', background:'var(--bg-base)', overflowY:'auto', boxShadow:'-4px 0 40px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
         <div style={{ padding:isMobile?'16px':'20px 24px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexShrink:0 }}>
           <div>
             <div style={{ fontSize:isMobile?15:17, fontWeight:700 }}>Viewer Analytics</div>
@@ -313,20 +365,52 @@ function AnalyticsDrawer({ page, onClose }) {
             <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug}</a>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-            {data?.items?.length>0 && <button onClick={()=>exportAnalyticsCSV(data.items,page.title)} style={{ ...btnSecondary, fontSize:11, padding:'5px 10px' }}>↓ Export CSV</button>}
+            <button onClick={reload} style={{ ...btnSecondary, fontSize:11, padding:'5px 10px' }}>↺ Refresh</button>
+            {data?.items?.length>0 && <button onClick={()=>exportAnalyticsCSV(filtered.length?filtered:data.items, page.title)} style={{ ...btnSecondary, fontSize:11, padding:'5px 10px' }}>↓ Export CSV</button>}
             <button onClick={onClose} style={{ ...btnGhost, fontSize:18, padding:'4px 10px' }}>✕</button>
           </div>
         </div>
+
+        {/* Stats bar */}
         {data && (
           <div style={{ padding:isMobile?'12px 16px':'14px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?16:28, flexWrap:'wrap', flexShrink:0, background:'var(--bg-card)', overflowX:'auto' }}>
             <Stat label="Total Views" value={data.total} />
-            <Stat label="Unique IPs" value={new Set(data.items?.map(v=>v.viewer_ip).filter(Boolean)).size} />
-            <Stat label="Countries" value={new Set(data.items?.map(v=>v.country).filter(Boolean)).size} />
-            {!isMobile&&<Stat label="Timezones" value={new Set(data.items?.map(v=>v.metadata?.client?.timezone).filter(Boolean)).size} />}
-            <Stat label="Mobile" value={data.items?.filter(v=>v.metadata?.client?.touch_support===true).length??0} />
-            <Stat label="Desktop" value={data.items?.filter(v=>v.metadata?.client?.touch_support===false).length??0} />
+            <Stat label="Filtered" value={filtered.length} />
+            <Stat label="Unique IPs" value={new Set(filtered.map(v=>v.viewer_ip).filter(Boolean)).size} />
+            <Stat label="Countries" value={new Set(filtered.map(v=>v.country).filter(Boolean)).size} />
+            {!isMobile&&<Stat label="Timezones" value={new Set(filtered.map(v=>v.metadata?.client?.timezone).filter(Boolean)).size} />}
+            <Stat label="Mobile" value={filtered.filter(v=>v.metadata?.client?.touch_support===true).length} />
+            <Stat label="Desktop" value={filtered.filter(v=>v.metadata?.client?.touch_support===false).length} />
           </div>
         )}
+
+        {/* Filters row */}
+        {data?.items?.length>0 && (
+          <div style={{ padding:'10px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', flexShrink:0, background:'var(--bg-base)' }}>
+            <input placeholder="Search IP, location, ISP…" value={filterSearch} onChange={e=>setFilterSearch(e.target.value)} style={{ ...inputStyle, width:200 }} />
+            <select value={filterCountry} onChange={e=>setFilterCountry(e.target.value)} style={inputStyle}>
+              <option value="">All countries</option>
+              {allCountries.map(c=><option key={c} value={c}>{flagEmoji(c)} {c}</option>)}
+            </select>
+            <select value={filterDevice} onChange={e=>setFilterDevice(e.target.value)} style={inputStyle}>
+              <option value="">All devices</option>
+              <option value="desktop">🖥 Desktop</option>
+              <option value="mobile">📱 Mobile</option>
+            </select>
+            <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={inputStyle} title="From date" />
+            <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} style={inputStyle} title="To date" />
+            {hasFilters && <button onClick={clearFilters} style={{ ...btnGhost, fontSize:11, padding:'5px 10px', color:'var(--text-2)' }}>✕ Clear filters</button>}
+            {selected.size>0 && (
+              <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
+                <span style={{ fontSize:12, color:'var(--text-2)', fontWeight:600 }}>{selected.size} selected</span>
+                <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                  {bulkDeleting?'Deleting…':'🗑 Delete selected'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ flex:1, padding:isMobile?'12px 16px':'16px 24px', overflow:'auto' }}>
           {loading ? (
             <div style={{ color:'var(--text-2)', fontSize:14, padding:40, textAlign:'center' }}>Loading…</div>
@@ -336,19 +420,28 @@ function AnalyticsDrawer({ page, onClose }) {
             </div>
           ) : (
             <>
-              <ViewSparkline items={data.items} />
-              <div style={{ fontSize:12, color:'var(--text-2)', marginBottom:12 }}>Showing {data.items.length} of {data.total} views — <span style={{ color:'var(--accent)' }}>click row for full detail</span></div>
-              {isMobile ? (
+              <ViewSparkline items={filtered} />
+              <div style={{ fontSize:12, color:'var(--text-2)', marginBottom:12 }}>
+                Showing <strong>{filtered.length}</strong> of <strong>{data.total}</strong> views
+                {hasFilters&&<span style={{ color:'var(--accent)' }}> (filtered)</span>}
+                {' '}&mdash; <span style={{ color:'var(--accent)' }}>click row for full detail</span>
+              </div>
+              {filtered.length===0 ? (
+                <div style={{ color:'var(--text-2)', fontSize:13, padding:'40px 0', textAlign:'center' }}>No results match your filters.</div>
+              ) : isMobile ? (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {data.items.map(v=>{
-                    const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id
+                  {filtered.map(v=>{
+                    const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id; const sel=selected.has(v.id)
                     return (
-                      <div key={v.id} style={{ background:'var(--bg-card)', border:`1px solid ${exp?'var(--accent)':'var(--border)'}`, borderRadius:10, overflow:'hidden' }}>
+                      <div key={v.id} style={{ background:'var(--bg-card)', border:`1px solid ${exp?'var(--accent)':sel?'var(--accent-soft)':'var(--border)'}`, borderRadius:10, overflow:'hidden' }}>
                         <div onClick={()=>setExpandedRow(exp?null:v.id)} style={{ padding:'12px 14px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize:12, fontWeight:600 }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city||v.country}</>:v.viewer_ip||'—'}</div>
-                            <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-                            <div style={{ fontSize:11, color:'var(--text-2)' }}>{cli.touch_support===true?'📱 ':cli.touch_support===false?'🖥️ ':''}{fmtBrowser(v.user_agent)}</div>
+                          <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
+                            <input type="checkbox" checked={sel} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} style={{ marginTop:2 }} />
+                            <div>
+                              <div style={{ fontSize:12, fontWeight:600 }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city||v.country}</>:v.viewer_ip||'—'}</div>
+                              <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+                              <div style={{ fontSize:11, color:'var(--text-2)' }}>{cli.touch_support===true?'📱 ':cli.touch_support===false?'🖥️ ':''}{fmtBrowser(v.user_agent)}</div>
+                            </div>
                           </div>
                           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                             <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Del'}</button>
@@ -365,14 +458,20 @@ function AnalyticsDrawer({ page, onClose }) {
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                     <thead>
                       <tr style={{ borderBottom:'2px solid var(--border)', background:'var(--bg-card)', position:'sticky', top:0, zIndex:2 }}>
-                        {cols.map(h=><th key={h} style={{ padding:'9px 12px', textAlign:'left', color:'var(--text-2)', fontWeight:700, whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>{h}</th>)}
+                        <th style={{ padding:'9px 12px' }}>
+                          <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all visible" />
+                        </th>
+                        {cols.slice(1).map(h=><th key={h} style={{ padding:'9px 12px', textAlign:'left', color:'var(--text-2)', fontWeight:700, whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>{h}</th>)}
                       </tr>
                     </thead>
                     <tbody>
-                      {data.items.map((v,i)=>{
-                        const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id
+                      {filtered.map((v,i)=>{
+                        const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id; const sel=selected.has(v.id)
                         return [
-                          <tr key={v.id} onClick={()=>setExpandedRow(exp?null:v.id)} style={{ borderBottom:exp?'none':'1px solid var(--border)', background:exp?'var(--bg-card)':i%2?'var(--bg-card)':'var(--bg-base)', cursor:'pointer' }}>
+                          <tr key={v.id} onClick={()=>setExpandedRow(exp?null:v.id)} style={{ borderBottom:exp?'none':'1px solid var(--border)', background:sel?'var(--accent-dim)':exp?'var(--bg-card)':i%2?'var(--bg-card)':'var(--bg-base)', cursor:'pointer' }}>
+                            <td style={{ padding:'9px 12px' }} onClick={e=>e.stopPropagation()}>
+                              <input type="checkbox" checked={sel} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} />
+                            </td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
                             <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11 }}>{v.viewer_ip||'—'}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city?`${v.city}, `:''}{geo.country_code||v.country}</>:'—'}</td>
@@ -388,7 +487,7 @@ function AnalyticsDrawer({ page, onClose }) {
                             </td>
                           </tr>,
                           exp&&<tr key={`${v.id}-exp`} style={{ background:'var(--bg-card)', borderBottom:'2px solid var(--accent)' }}>
-                            <td colSpan={11} style={{ padding:'20px 24px' }}><DetailGrid geo={geo} cli={cli} v={v} isMobile={false} /></td>
+                            <td colSpan={12} style={{ padding:'20px 24px' }}><DetailGrid geo={geo} cli={cli} v={v} isMobile={false} /></td>
                           </tr>
                         ]
                       })}
@@ -396,7 +495,7 @@ function AnalyticsDrawer({ page, onClose }) {
                   </table>
                 </div>
               )}
-              {data.total>limit&&<button onClick={()=>setLimit(l=>l+50)} style={{ ...btnSecondary, marginTop:16, fontSize:12 }}>Load more ({data.total-limit} remaining)</button>}
+              {data.total>limit&&<button onClick={()=>setLimit(l=>l+100)} style={{ ...btnSecondary, marginTop:16, fontSize:12 }}>Load more ({data.total-limit} remaining)</button>}
             </>
           )}
         </div>
