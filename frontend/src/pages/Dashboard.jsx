@@ -241,12 +241,18 @@ export default function Dashboard() {
   const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
   const [customSourceRows, setCustomSourceRows] = useState({})
 
-  const fetchAll = useCallback((opts = {}) =>
-    Promise.all([
-      api.projects.summary(opts),
-      api.projects.list({ limit: 6, order_by: 'Amount Billed So far', ...opts }),
+  const [kpiFrom, setKpiFrom] = useState('')
+  const [kpiTo,   setKpiTo]   = useState('')
+
+  const fetchAll = useCallback((opts = {}) => {
+    const dateOpts = {}
+    if (kpiFrom) dateOpts.date_from = kpiFrom
+    if (kpiTo)   dateOpts.date_to   = kpiTo
+    return Promise.all([
+      api.projects.summary({ ...dateOpts, ...opts }),
+      api.projects.list({ limit: 6, order_by: 'Amount Billed So far', ...dateOpts, ...opts }),
     ]).then(([summary, list]) => ({ summary, records: list.records || [] }))
-  , [])
+  }, [kpiFrom, kpiTo])
 
   const { data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchAll, 5_000)
   const updatedLabel = useRelativeTime(lastUpdated)
@@ -543,6 +549,29 @@ export default function Dashboard() {
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}
       {visibleWidgets.has('kpi_strip') && (
       <section aria-label="Key metrics">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <p className="text-[11px] uppercase tracking-[0.18em] font-semibold" style={{ color: 'var(--text-3)' }}>Filter by date</p>
+          <input
+            type="date" value={kpiFrom} onChange={e => setKpiFrom(e.target.value)}
+            className="input text-xs px-2 py-1 rounded-lg"
+            style={{ minWidth: 120, maxWidth: 140 }}
+          />
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>to</span>
+          <input
+            type="date" value={kpiTo} onChange={e => setKpiTo(e.target.value)}
+            className="input text-xs px-2 py-1 rounded-lg"
+            style={{ minWidth: 120, maxWidth: 140 }}
+          />
+          {(kpiFrom || kpiTo) && (
+            <button
+              onClick={() => { setKpiFrom(''); setKpiTo('') }}
+              className="text-xs px-2 py-1 rounded-lg"
+              style={{ color: 'var(--text-3)', background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {loading && !data
             ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
@@ -587,6 +616,60 @@ export default function Dashboard() {
         </div>
       </section>
       )}
+
+      {/* ── Retainer health ── */}
+      {invoiceRecords.length > 0 && (() => {
+        const now = new Date()
+        const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        const retainers = invoiceRecords.filter(r => /retainer/i.test(String(r.fields?.['Category'] || '')))
+        if (!retainers.length) return null
+        const overdue = retainers.filter(r => {
+          const outstanding = Number(r.fields?.['Outstanding Amount'] || 0)
+          const raised = (r.fields?.['Raised Date'] || '').slice(0, 7)
+          return outstanding > 0 && raised && raised <= thisMonth
+        })
+        const healthy = retainers.length - overdue.length
+        return (
+          <div className="rounded-[20px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Retainer health</p>
+                <p className="text-base font-semibold mt-1" style={{ color: 'var(--text-1)' }}>
+                  {overdue.length ? `${overdue.length} retainer${overdue.length > 1 ? 's' : ''} with outstanding balance` : 'All retainers cleared'}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <div className="rounded-xl px-3 py-2 text-center" style={{ background: 'var(--fin-pos-bg)' }}>
+                  <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Healthy</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{healthy}</p>
+                </div>
+                <div className="rounded-xl px-3 py-2 text-center" style={{ background: overdue.length ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)' }}>
+                  <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Overdue</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: overdue.length ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{overdue.length}</p>
+                </div>
+              </div>
+            </div>
+            {overdue.length > 0 && (
+              <div className="space-y-2 mt-2">
+                {overdue.slice(0, 6).map(r => {
+                  const f = r.fields || {}
+                  const outstanding = Number(f['Outstanding Amount'] || 0)
+                  return (
+                    <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
+                      style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.06)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{f['Client Name'] || f['Client'] || '—'}</p>
+                        <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{f['Project'] || f['Invoice Number'] || ''}{f['Raised Date'] ? ` · ${f['Raised Date'].slice(0, 7)}` : ''}</p>
+                      </div>
+                      <p className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--fin-warning)' }}>{inr(outstanding)}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Invoice activity timeline ── */}
       {invoiceRecords.length > 0 && (() => {

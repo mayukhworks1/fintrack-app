@@ -8,6 +8,13 @@ import { useToast } from '../../context/ToastContext'
 import { AuthStatusBadge, Badge, EditableName, Empty, Err, FMulti, FPill, FSel, FilterBar, Pager, Skeleton, UserAvatar } from './ui'
 import { relTime, ts } from './utils'
 
+function displayName(user) {
+  const fn = (user?.first_name || '').trim()
+  const ln = (user?.last_name  || '').trim()
+  if (fn && fn === ln) return fn
+  return [fn, ln].filter(Boolean).join(' ') || user?.full_name || ''
+}
+
 export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -542,7 +549,7 @@ export function AuthUsersTab() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
-                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{[row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || 'No name'} · joined {relTime(row.created_at)}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{displayName(row) || 'No name'} · joined {relTime(row.created_at)}</p>
                       </div>
                       <AuthStatusBadge status={row.status} />
                     </div>
@@ -577,7 +584,7 @@ export function AuthUsersTab() {
                           <div className="min-w-0">
                             <p className="font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.email}</p>
                             <EditableName
-                              value={[row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || ''}
+                              value={displayName(row)}
                               saving={actingId === `${row.id}:name`}
                               onSave={name => updateName(row, name)}
                             />
@@ -684,8 +691,8 @@ export function UserTimelineDrawer({ userId, onClose }) {
               <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>
                 {data?.user?.email || 'User Timeline'}
               </p>
-              {([data?.user?.first_name, data?.user?.last_name].filter(Boolean).join(' ') || data?.user?.full_name) && (
-                <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{[data?.user?.first_name, data?.user?.last_name].filter(Boolean).join(' ') || data.user.full_name}</p>
+              {displayName(data?.user) && (
+                <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{displayName(data?.user)}</p>
               )}
             </div>
           </div>
