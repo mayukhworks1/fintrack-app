@@ -143,16 +143,21 @@ function slugify(text) {
 // ---------------------------------------------------------------------------
 function Badge({ label, color }) {
   const map = {
-    published:    { bg:'#d1fae5', text:'#065f46' },
-    draft:        { bg:'#f3f4f6', text:'#6b7280' },
-    markdown:     { bg:'#ede9fe', text:'#5b21b6' },
-    html:         { bg:'#fef3c7', text:'#92400e' },
-    csv:          { bg:'#d1fae5', text:'#065f46' },
-    spreadsheet:  { bg:'#d1fae5', text:'#065f46' },
-    text:         { bg:'#e0f2fe', text:'#0369a1' },
+    published:    { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
+    draft:        { bg:'#f3f4f6', text:'#6b7280', dot:null },
+    markdown:     { bg:'#ede9fe', text:'#5b21b6', dot:null },
+    html:         { bg:'#fef3c7', text:'#92400e', dot:null },
+    csv:          { bg:'#d1fae5', text:'#065f46', dot:null },
+    spreadsheet:  { bg:'#d1fae5', text:'#065f46', dot:null },
+    text:         { bg:'#e0f2fe', text:'#0369a1', dot:null },
   }
-  const c = map[color] || { bg:'var(--bg-card)', text:'var(--text-2)' }
-  return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:12, fontSize:11, fontWeight:600, background:c.bg, color:c.text, textTransform:'capitalize' }}>{label}</span>
+  const c = map[color] || { bg:'var(--bg-card)', text:'var(--text-2)', dot:null }
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:12, fontSize:11, fontWeight:600, background:c.bg, color:c.text, textTransform:'capitalize' }}>
+      {c.dot && <span style={{ width:6, height:6, borderRadius:'50%', background:c.dot, display:'inline-block', flexShrink:0 }} />}
+      {label}
+    </span>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1574,32 +1579,113 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
 // ---------------------------------------------------------------------------
 // Page Card (mobile)
 // ---------------------------------------------------------------------------
-function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete }) {
+// ---------------------------------------------------------------------------
+// Desktop table row
+// ---------------------------------------------------------------------------
+function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, openingId, cloning }) {
+  const [hover, setHover] = useState(false)
+  const typeIcon = { markdown:'📝', html:'🌐', csv:'📊', text:'📄', spreadsheet:'📊' }[page.content_type] || '📄'
   return (
-    <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:12, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:700, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:3 }}>
-            {page.title||'Untitled'}{page.is_password_protected&&<span style={{ marginLeft:5 }}>🔒</span>}
+    <tr
+      onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      style={{ borderBottom:idx<total-1?'1px solid var(--border)':'none', background:hover?'var(--bg-card)':'transparent', transition:'background 0.12s' }}
+    >
+      {/* Title / URL */}
+      <td style={{ padding:'14px 16px', maxWidth:280 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+          <div style={{ width:34, height:34, borderRadius:9, background:'var(--bg-base)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>{typeIcon}</div>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-1)', fontSize:13 }}>
+              {page.title||<span style={{ color:'var(--text-2)', fontStyle:'italic' }}>Untitled</span>}
+              {page.is_password_protected&&<span style={{ marginLeft:5, fontSize:11 }}>🔒</span>}
+            </div>
+            {page.is_published
+              ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none', opacity:hover?1:0.8 }}>/p/{page.slug} ↗</a>
+              : <span style={{ fontSize:11, color:'var(--text-2)', fontFamily:'monospace', opacity:0.7 }}>/p/{page.slug}</span>
+            }
           </div>
-          {page.is_published
-            ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug} ↗</a>
-            : <span style={{ fontSize:11, color:'var(--text-2)', fontFamily:'monospace' }}>/p/{page.slug}</span>
-          }
         </div>
-        <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-          <Badge label={page.content_type} color={page.content_type} />
-          <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
+      </td>
+      {/* Type */}
+      <td style={{ padding:'14px 16px', whiteSpace:'nowrap' }}>
+        <Badge label={page.content_type} color={page.content_type} />
+      </td>
+      {/* Status */}
+      <td style={{ padding:'14px 16px', whiteSpace:'nowrap' }}>
+        <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
+      </td>
+      {/* Views */}
+      <td style={{ padding:'14px 16px', whiteSpace:'nowrap' }}>
+        <button onClick={()=>onAnalytics(page)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:hover?'var(--bg-base)':'transparent', border:`1px solid ${hover?'var(--border)':'transparent'}`, borderRadius:8, padding:'5px 10px', cursor:'pointer', fontSize:12, fontWeight:600, color:'var(--text-1)', transition:'all 0.12s' }}>
+          <span style={{ fontSize:13 }}>👁</span> {page.view_count??0} <span style={{ color:'var(--accent)', fontSize:10 }}>↗</span>
+        </button>
+      </td>
+      {/* Created */}
+      <td style={{ padding:'14px 16px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12 }}>
+        {page.created_at ? new Date(page.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'}
+      </td>
+      {/* Actions */}
+      <td style={{ padding:'14px 16px', whiteSpace:'nowrap' }}>
+        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+          <button style={{ ...btnTiny, background:'var(--accent)', color:'#fff', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:700 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
+            {openingId===page.id ? '…' : 'Edit'}
+          </button>
+          <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#dcfce7', color:page.is_published?'#92400e':'#15803d', border:'none', padding:'6px 12px', borderRadius:8 }} onClick={()=>onPublish(page)}>
+            {page.is_published ? 'Unpublish' : 'Publish'}
+          </button>
+          <button style={{ ...btnTiny, padding:'6px 10px', borderRadius:8 }} onClick={()=>onClone(page)} disabled={cloning===page.id} title="Clone">
+            {cloning===page.id ? '…' : '⧉'}
+          </button>
+          {page.is_published && (
+            <button style={{ ...btnTiny, background:'#eff6ff', color:'#1d4ed8', border:'none', padding:'6px 12px', borderRadius:8 }} onClick={()=>onShare(page)}>Share ↗</button>
+          )}
+          <button style={{ ...btnTiny, background:'#fef2f2', color:'#991b1b', border:'none', padding:'6px 10px', borderRadius:8 }} onClick={()=>onDelete(page)} title="Delete">🗑</button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Mobile card
+// ---------------------------------------------------------------------------
+function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete }) {
+  const typeIcon = { markdown:'📝', html:'🌐', csv:'📊', text:'📄', spreadsheet:'📊' }[page.content_type] || '📄'
+  return (
+    <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:16, padding:16, display:'flex', flexDirection:'column', gap:12, boxShadow:'0 1px 6px rgba(0,0,0,0.06)' }}>
+      {/* Top row: icon + title + badges */}
+      <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+        <div style={{ width:38, height:38, borderRadius:10, background:'var(--bg-base)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{typeIcon}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:2, color:'var(--text-1)' }}>
+            {page.title||'Untitled'}{page.is_password_protected&&<span style={{ marginLeft:5, fontSize:12 }}>🔒</span>}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+            <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
+            <Badge label={page.content_type} color={page.content_type} />
+          </div>
         </div>
       </div>
-      <button onClick={()=>onAnalytics(page)} style={{ display:'flex', alignItems:'center', gap:6, background:'var(--bg-base)', border:'1px solid var(--border)', borderRadius:8, padding:'7px 12px', cursor:'pointer', fontSize:12, fontWeight:600, color:'var(--text-1)', textAlign:'left' }}>
-        <span>👁</span><span>{page.view_count??0} views</span><span style={{ color:'var(--accent)', fontSize:11, marginLeft:'auto' }}>Analytics →</span>
+
+      {/* Slug */}
+      {page.is_published
+        ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none', background:'var(--bg-base)', padding:'5px 10px', borderRadius:7, border:'1px solid var(--border)', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>/p/{page.slug} ↗</a>
+        : <span style={{ fontSize:11, color:'var(--text-2)', fontFamily:'monospace', background:'var(--bg-base)', padding:'5px 10px', borderRadius:7, border:'1px solid var(--border)', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>/p/{page.slug}</span>
+      }
+
+      {/* Analytics button */}
+      <button onClick={()=>onAnalytics(page)} style={{ display:'flex', alignItems:'center', gap:8, background:'var(--bg-base)', border:'1px solid var(--border)', borderRadius:10, padding:'9px 14px', cursor:'pointer', fontSize:12, fontWeight:600, color:'var(--text-1)', textAlign:'left', width:'100%' }}>
+        <span style={{ fontSize:14 }}>👁</span>
+        <span>{page.view_count??0} view{(page.view_count??0)!==1?'s':''}</span>
+        <span style={{ color:'var(--accent)', fontSize:11, marginLeft:'auto' }}>Analytics →</span>
       </button>
-      <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-        <button style={btnTiny} onClick={()=>onEdit(page)}>Edit</button>
-        <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#d1fae5', color:page.is_published?'#92400e':'#065f46', border:'none' }} onClick={()=>onPublish(page)}>{page.is_published?'Unpublish':'Publish'}</button>
-        {page.is_published&&<button style={btnTiny} onClick={()=>onShare(page)}>Share ↗</button>}
-        <button style={{ ...btnTiny, background:'#fef2f2', color:'#991b1b', border:'none' }} onClick={()=>onDelete(page)}>Delete</button>
+
+      {/* Actions */}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', paddingTop:2 }}>
+        <button style={{ ...btnPrimary, flex:1, padding:'7px 12px', fontSize:12 }} onClick={()=>onEdit(page)}>Edit</button>
+        <button style={{ ...btnTiny, flex:1, background:page.is_published?'#fef3c7':'#dcfce7', color:page.is_published?'#92400e':'#15803d', border:'none', padding:'7px 10px', fontSize:12 }} onClick={()=>onPublish(page)}>{page.is_published?'Unpublish':'Publish'}</button>
+        {page.is_published&&<button style={{ ...btnTiny, padding:'7px 10px', fontSize:12, background:'#eff6ff', color:'#1d4ed8', border:'none' }} onClick={()=>onShare(page)}>Share</button>}
+        <button style={{ ...btnTiny, padding:'7px 10px', fontSize:12, background:'#fef2f2', color:'#991b1b', border:'none' }} onClick={()=>onDelete(page)}>🗑</button>
       </div>
     </div>
   )
@@ -1627,11 +1713,13 @@ export default function PagesManager() {
   // Track IDs the user explicitly deleted so background refreshes can't restore them.
   const deletedIdsRef = useRef(new Set())
 
-  const loadPages = useCallback(async (silent=false) => {
+  const loadPages = useCallback(async (silent=false, forceFresh=false) => {
     if (!silent) setLoading(true)
     setError('')
     try {
-      const data = await api.pages.list({ fresh:true })
+      // Only bypass cache on explicit user actions (initial load / manual refresh).
+      // Background polls skip fresh:true to avoid hammering the server.
+      const data = await api.pages.list(forceFresh ? { fresh:true } : {})
       if (data?.detail) throw new Error(data.detail)
       const list = Array.isArray(data) ? data : []
       // Filter out pages the user already deleted (prevent respawn from background polls)
@@ -1640,13 +1728,12 @@ export default function PagesManager() {
     finally { if (!silent) setLoading(false) }
   }, [])
 
-  // Initial load + keep the list live without manual refresh: silently refetch
-  // when the tab regains focus and on a 30s interval.
+  // Initial load + keep the list live without manual refresh.
   useEffect(()=>{
-    loadPages()
-    const onFocus = () => loadPages(true)
+    loadPages(false, true)  // initial: force fresh
+    const onFocus = () => loadPages(true, false)  // focus: silent, no fresh
     window.addEventListener('focus', onFocus)
-    const iv = setInterval(() => loadPages(true), 30000)
+    const iv = setInterval(() => loadPages(true, false), 60000)  // poll every 60s, no fresh
     return () => { window.removeEventListener('focus', onFocus); clearInterval(iv) }
   }, [loadPages])
 
@@ -1723,23 +1810,33 @@ export default function PagesManager() {
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
   return (
-    <div style={{ padding:isMobile?'16px':'24px 28px', maxWidth:1200, margin:'0 auto' }}>
+    <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1240, margin:'0 auto' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, gap:12, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
         <div>
-          <h1 style={{ margin:0, fontSize:isMobile?18:22, fontWeight:700 }}>Pages</h1>
-          {!isMobile&&<p style={{ margin:'4px 0 0', fontSize:13, color:'var(--text-2)' }}>Create docs, spreadsheets, web pages & text — share with a public link. Full analytics on every view.</p>}
+          <h1 style={{ margin:0, fontSize:isMobile?20:26, fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em' }}>Pages</h1>
+          {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages — share publicly with full analytics on every view.</p>}
         </div>
-        <button style={btnPrimary} onClick={()=>setDrawerPage({content_type:'markdown'})}>+ New Page</button>
+        <button style={{ ...btnPrimary, padding:'10px 20px', borderRadius:12, fontSize:13, display:'flex', alignItems:'center', gap:6, boxShadow:'0 4px 14px rgba(0,0,0,0.15)' }} onClick={()=>setDrawerPage({content_type:'markdown'})}>
+          <span style={{ fontSize:16, lineHeight:1 }}>+</span> New Page
+        </button>
       </div>
 
       {/* Stats */}
       {pages.length>0&&(
-        <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
-          {[{label:'Total Pages',value:pages.length},{label:'Live',value:pages.filter(p=>p.is_published).length},{label:'Drafts',value:pages.filter(p=>!p.is_published).length},{label:'Total Views',value:totalViews.toLocaleString()}].map(s=>(
-            <div key={s.label} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:isMobile?'10px 14px':'12px 18px', minWidth:80 }}>
-              <div style={{ fontSize:isMobile?18:20, fontWeight:800 }}>{s.value}</div>
-              <div style={{ fontSize:10, color:'var(--text-2)', marginTop:2, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{s.label}</div>
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10, marginBottom:24 }}>
+          {[
+            { label:'Total Pages', value:pages.length, icon:'📄', color:'#6366f1' },
+            { label:'Live', value:pages.filter(p=>p.is_published).length, icon:'🟢', color:'#10b981' },
+            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, icon:'✏️', color:'#f59e0b' },
+            { label:'Total Views', value:totalViews.toLocaleString(), icon:'👁', color:'#3b82f6' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:14, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12, boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:`${s.color}18`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{s.icon}</div>
+              <div>
+                <div style={{ fontSize:isMobile?18:22, fontWeight:800, color:'var(--text-1)', lineHeight:1 }}>{s.value}</div>
+                <div style={{ fontSize:10, color:'var(--text-2)', marginTop:3, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.07em' }}>{s.label}</div>
+              </div>
             </div>
           ))}
         </div>
@@ -1747,81 +1844,72 @@ export default function PagesManager() {
 
       {/* Search + filter */}
       {pages.length>0&&(
-        <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
-          <input style={{ ...inputStyle, maxWidth:isMobile?'100%':240, padding:'7px 12px' }} placeholder="Search pages…" value={search} onChange={e=>setSearch(e.target.value)} />
-          <div style={{ display:'flex', gap:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:8, padding:2 }}>
+        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+          <div style={{ position:'relative', flex:isMobile?1:'0 0 auto' }}>
+            <span style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', fontSize:14, pointerEvents:'none', color:'var(--text-2)' }}>🔍</span>
+            <input style={{ ...inputStyle, maxWidth:isMobile?'100%':260, padding:'8px 12px 8px 32px', borderRadius:10, fontSize:13 }} placeholder="Search pages…" value={search} onChange={e=>setSearch(e.target.value)} />
+          </div>
+          <div style={{ display:'flex', gap:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
             {[['all','All'],['published','Live'],['drafts','Drafts']].map(([val,label])=>(
-              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'5px 12px', borderRadius:6, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
+              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
             ))}
           </div>
-          {(search||filterTab!=='all')&&<button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnGhost, fontSize:12, padding:'5px 10px' }}>Clear</button>}
+          {(search||filterTab!=='all')&&<button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnGhost, fontSize:12, padding:'6px 12px', borderRadius:8 }}>✕ Clear</button>}
         </div>
       )}
 
-      {error&&<div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius)', padding:'10px 14px', fontSize:13, color:'#991b1b', marginBottom:16 }}>{error}</div>}
+      {error&&<div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#991b1b', marginBottom:16 }}>{error}</div>}
 
       {loading ? (
-        <div style={{ color:'var(--text-2)', fontSize:14, padding:60, textAlign:'center' }}>Loading…</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {Array.from({length:3}).map((_,i)=>(
+            <div key={i} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 20px', display:'flex', gap:14, alignItems:'center' }}>
+              <div style={{ width:42, height:42, borderRadius:10, background:'var(--border)', flexShrink:0 }} />
+              <div style={{ flex:1 }}>
+                <div style={{ height:14, background:'var(--border)', borderRadius:6, width:'45%', marginBottom:8 }} />
+                <div style={{ height:10, background:'var(--border)', borderRadius:6, width:'30%', opacity:0.6 }} />
+              </div>
+              <div style={{ height:28, width:120, background:'var(--border)', borderRadius:8 }} />
+            </div>
+          ))}
+        </div>
       ) : !pages.length ? (
-        <div style={{ textAlign:'center', padding:'60px 20px', border:'2px dashed var(--border)', borderRadius:'var(--radius)', color:'var(--text-2)' }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>📄</div>
-          <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>No pages yet</div>
-          <div style={{ fontSize:13, marginBottom:6 }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
-          <div style={{ display:'flex', gap:8, justifyContent:'center', marginTop:16, flexWrap:'wrap' }}>
+        <div style={{ textAlign:'center', padding:'60px 24px', border:'2px dashed var(--border)', borderRadius:20, color:'var(--text-2)' }}>
+          <div style={{ fontSize:48, marginBottom:14 }}>📄</div>
+          <div style={{ fontSize:16, fontWeight:700, marginBottom:8, color:'var(--text-1)' }}>No pages yet</div>
+          <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:380, margin:'0 auto 20px' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
+          <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
             {[{icon:'📝',label:'New Document',type:'markdown'},{icon:'📊',label:'New Spreadsheet',type:'csv'},{icon:'🌐',label:'New Web Page',type:'html'}].map(b=>(
-              <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:13 }}>{b.icon} {b.label}</button>
+              <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:13, borderRadius:10, padding:'9px 16px' }}>{b.icon} {b.label}</button>
             ))}
           </div>
         </div>
       ) : !filtered.length ? (
-        <div style={{ textAlign:'center', padding:'40px', color:'var(--text-2)' }}>No pages match.<button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnGhost, display:'block', margin:'12px auto 0' }}>Clear filters</button></div>
+        <div style={{ textAlign:'center', padding:'40px', color:'var(--text-2)' }}>
+          <div style={{ fontSize:32, marginBottom:10 }}>🔍</div>
+          <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>No pages match your filters</div>
+          <button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnSecondary, fontSize:12, borderRadius:8, marginTop:8 }}>Clear filters</button>
+        </div>
       ) : isMobile ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} />)}
         </div>
       ) : (
-        <div style={{ border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+        <div style={{ border:'1px solid var(--border)', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
               <tr style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)' }}>
                 {['Title / URL','Type','Status','Views','Created','Actions'].map(h=>(
-                  <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'var(--text-2)', whiteSpace:'nowrap', fontSize:11, textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
+                  <th key={h} style={{ padding:'12px 16px', textAlign:'left', fontWeight:700, color:'var(--text-2)', whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.08em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((page,idx)=>(
-                <tr key={page.id} style={{ borderBottom:idx<filtered.length-1?'1px solid var(--border)':'none' }}>
-                  <td style={{ padding:'12px 14px', maxWidth:260 }}>
-                    <div style={{ fontWeight:600, marginBottom:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {page.title||<span style={{ color:'var(--text-2)' }}>Untitled</span>}
-                      {page.is_password_protected&&<span style={{ marginLeft:5, fontSize:11 }}>🔒</span>}
-                    </div>
-                    {page.is_published
-                      ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug} ↗</a>
-                      : <span style={{ fontSize:11, color:'var(--text-2)', fontFamily:'monospace' }}>/p/{page.slug}</span>
-                    }
-                  </td>
-                  <td style={{ padding:'12px 14px', whiteSpace:'nowrap' }}><Badge label={page.content_type} color={page.content_type} /></td>
-                  <td style={{ padding:'12px 14px', whiteSpace:'nowrap' }}><Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} /></td>
-                  <td style={{ padding:'12px 14px', whiteSpace:'nowrap' }}>
-                    <button onClick={()=>setAnalyticsPage(page)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                      <span>👁</span>{page.view_count??0}<span style={{ color:'var(--accent)', fontSize:10 }}>→</span>
-                    </button>
-                  </td>
-                  <td style={{ padding:'12px 14px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12 }}>
-                    {page.created_at?new Date(page.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'}
-                  </td>
-                  <td style={{ padding:'12px 14px', whiteSpace:'nowrap' }}>
-                    <div style={{ display:'flex', gap:5 }}>
-                      <button style={btnTiny} onClick={()=>openEdit(page)} disabled={openingId===page.id}>{openingId===page.id?'…':'Edit'}</button>
-                      <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#d1fae5', color:page.is_published?'#92400e':'#065f46', border:'none' }} onClick={()=>handlePublishToggle(page)}>{page.is_published?'Unpublish':'Publish'}</button>
-                      <button style={btnTiny} onClick={()=>handleClone(page)} disabled={cloning===page.id}>{cloning===page.id?'…':'Clone'}</button>
-                      {page.is_published&&<button style={{ ...btnTiny, background:'#eff6ff', color:'#1d4ed8', border:'none' }} onClick={()=>setSharePage(page)}>Share ↗</button>}
-                      <button style={{ ...btnTiny, background:'#fef2f2', color:'#991b1b', border:'none' }} onClick={()=>setConfirmDelete(page)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
+                <PageRow key={page.id} page={page} idx={idx} total={filtered.length}
+                  onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage}
+                  onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete}
+                  onClone={handleClone} openingId={openingId} cloning={cloning} />
               ))}
             </tbody>
           </table>
