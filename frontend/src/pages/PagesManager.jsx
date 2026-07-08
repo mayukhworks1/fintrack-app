@@ -1213,6 +1213,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   const [error, setError] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved', 'error', 'offline'
+  const [autoSaveError, setAutoSaveError] = useState('')
   const [showTemplates, setShowTemplates] = useState(!page?.content)
   const [slugStatus, setSlugStatus] = useState(null) // null | { available, suggestions }
   const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
@@ -1307,12 +1308,13 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
         if (cancelled) return
         savedSnapRef.current = debouncedSnap
+        setAutoSaveError('')
         setAutoSaveStatus('saved')
         setTimeout(() => setAutoSaveStatus(s => s === 'saved' ? '' : s), 2500)
       } catch (e) {
         createdRef.current = false   // allow retry
         createPromiseRef.current = null
-        if (!cancelled) setAutoSaveStatus('error')
+        if (!cancelled) { setAutoSaveStatus('error'); setAutoSaveError(e?.message || 'Save failed') }
       }
     })()
     return () => { cancelled = true }
@@ -1431,7 +1433,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
               )}
               {autoSaveStatus === 'saved' && <span style={{ color:'#10b981' }}>✓ Saved to cloud</span>}
               {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error' && <span style={{ color:'#ef4444' }}>⚠ Save failed — kept local backup</span>}
+              {autoSaveStatus === 'error' && <span style={{ color:'#ef4444' }} title={autoSaveError}>⚠ Save failed — {autoSaveError || 'kept local backup'}</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>

@@ -671,6 +671,8 @@ async def update_page(
         values.append(page_id)
         query = f"UPDATE published_pages SET {', '.join(set_parts)} WHERE id = ${len(values)} RETURNING *"
         updated = await conn.fetchrow(query, *values)
+        if not updated:
+            raise HTTPException(404, "Page not found or was deleted")
     return _page_dict(updated)
 
 
