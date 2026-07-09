@@ -90,7 +90,6 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
     applyLocalOverride(userId, permId, nextGranted)   // instant feedback, no full reload
     try {
       await api.admin.setUserPermission(userId, permKey, nextGranted)
-      load({ silent: true }).catch(() => {})           // background reconcile, no flash
     } catch (e) {
       applyLocalOverride(userId, permId, currentlyGranted)  // revert on failure
       alert(e.message || 'Failed to update permission')
@@ -105,7 +104,6 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
     applyLocalOverride(userId, permId, null)
     try {
       await api.admin.setUserPermission(userId, permKey, null)
-      load({ silent: true }).catch(() => {})
     } catch (e) {
       applyLocalOverride(userId, permId, previousGranted)
       alert(e.message || 'Failed to clear override')

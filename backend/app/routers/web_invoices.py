@@ -247,8 +247,8 @@ async def upload_attachment(
     """Upload a file into a specific attachment field on an existing Teable record."""
     service = WebInvoiceService()
     try:
-        await _assert_web_invoice_owner(service, record_id, request)
         await _require_web_permission(request, "module.invoices.edit")
+        await _assert_web_invoice_owner(service, record_id, request)
         content = await file.read()
         return await service.upload_attachment_to_field(
             record_id=record_id,
@@ -447,6 +447,19 @@ async def _require_web_permission(request: Request, permission_key: str) -> None
         raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
 
 
+async def _check_web_permission(request: Request, *permission_keys: str) -> None:
+    """Like _require_web_permission but accepts multiple keys (OR logic) — any one is sufficient."""
+    if not getattr(request.state, "is_email_auth", False):
+        return
+    auth_role = getattr(request.state, "auth_role", "") or ""
+    if auth_role == "superadmin":
+        return
+    user_id = getattr(request.state, "auth_user_id", None)
+    effective = await get_effective_permissions(user_id)
+    if not any(k in effective for k in permission_keys):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission_keys[0]}")
+
+
 @router.post("", status_code=201)
 async def create_web_invoice(body: WebInvoiceFields, request: Request, role: str = Depends(require_web_access)):
     try:
@@ -489,8 +502,14 @@ async def update_web_invoice(
 ):
     try:
         svc = WebInvoiceService()
+        # Permission check first (DB-only, fast) — before any slow Teable fetch.
+        # When payment_status is Paid, accept EITHER edit OR payment permission:
+        # edit covers general users; payment covers payment-specialist-only roles.
+        if body.payment_status == "Paid":
+            await _check_web_permission(request, "module.invoices.edit", "module.invoices.payment")
+        else:
+            await _require_web_permission(request, "module.invoices.edit")
         await _assert_web_invoice_owner(svc, record_id, request)
-        await _require_web_permission(request, "module.invoices.payment" if body.payment_status == "Paid" else "module.invoices.edit")
         fields = body.to_teable_fields()
         scoped_email = owner_scope_email(request)
         if scoped_email:
@@ -522,8 +541,8 @@ async def update_web_invoice(
 async def delete_web_invoice(record_id: str, request: Request, role: str = Depends(require_web_access)):
     try:
         svc = WebInvoiceService()
-        await _assert_web_invoice_owner(svc, record_id, request)
         await _require_web_permission(request, "module.invoices.delete")
+        await _assert_web_invoice_owner(svc, record_id, request)
         try:
             await record_user_attribution(request, role, record_id)
         except Exception:
