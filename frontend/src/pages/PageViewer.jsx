@@ -214,21 +214,17 @@ function HTMLPage({ content }) {
         a.setAttribute('rel','noopener noreferrer');
       }
     });
-    // Only replace iframes from domains that block embedding (X-Frame-Options: sameorigin)
-    var BLOCKED_DOMAINS=['zoho.com','zohopublic.com','zohopeople.com'];
+    // For iframes that fail to load (X-Frame-Options), show an "Open in new tab" fallback button.
+    // We no longer pre-emptively replace iframes — let them try to load first.
     document.querySelectorAll('iframe[src]').forEach(function(fr){
       var src=fr.getAttribute('src')||'';
       if(!src||src.startsWith('#')||src.startsWith('about:')) return;
-      var blocked=BLOCKED_DOMAINS.some(function(d){return src.indexOf(d)!==-1;});
-      if(!blocked) return;
-      var btn=document.createElement('a');
-      btn.href=src; btn.target='_blank'; btn.rel='noopener noreferrer';
-      btn.textContent='Open in new tab ↗';
-      btn.style.cssText='display:inline-flex;align-items:center;padding:8px 18px;border-radius:8px;background:#1a56db;color:#fff;font-weight:600;font-size:14px;text-decoration:none;border:none;cursor:pointer;';
-      var wrap=document.createElement('div');
-      wrap.style.cssText='padding:12px;background:#f1f5f9;border-radius:10px;border:1px solid #e2e8f0;';
-      wrap.appendChild(btn);
-      fr.parentNode.replaceChild(wrap,fr);
+      // Add a small "open in new tab" helper link BELOW each iframe as a convenience.
+      var link=document.createElement('a');
+      link.href=src; link.target='_blank'; link.rel='noopener noreferrer';
+      link.textContent='Open in new tab ↗';
+      link.style.cssText='display:inline-block;margin-top:6px;font-size:12px;color:#1a56db;text-decoration:underline;';
+      if(fr.parentNode) fr.parentNode.insertBefore(link, fr.nextSibling);
     });
   }
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',patchLinks);}else{patchLinks();}
