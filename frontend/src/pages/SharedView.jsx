@@ -161,6 +161,14 @@ function monthKey(value) {
 function parseAttachments(value) {
   return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : []
 }
+// Guard against Teable linked-record fields returning an object/array instead of a plain string
+function safeStr(v) {
+  if (v == null) return ''
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v
+  if (Array.isArray(v)) return v.map(item => (item && typeof item === 'object' ? (item.title ?? item.name ?? item.label ?? JSON.stringify(item)) : String(item))).filter(Boolean).join(', ')
+  if (typeof v === 'object') return v.title ?? v.name ?? v.label ?? JSON.stringify(v)
+  return String(v)
+}
 function recordAttachmentSummary(resourceType, fields = {}) {
   if (resourceType === 'status') {
     const count = parseAttachments(fields['Attachments']).length
@@ -425,13 +433,13 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
               </div>
             )}
             {!hasDetail && f['Current Status (Detailed)'] && (
-              <p className="text-sm text-gray-500 leading-relaxed">{f['Current Status (Detailed)']}</p>
+              <p className="text-sm text-gray-500 leading-relaxed">{safeStr(f['Current Status (Detailed)'])}</p>
             )}
           </>
         )}
         {resourceType === 'projects' && (
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Health</p><p className="font-semibold text-gray-700">{f['Health'] || '—'}</p></div>
+            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Health</p><p className="font-semibold text-gray-700">{safeStr(f['Health']) || '—'}</p></div>
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Billed</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Billed So far'])}</p></div>
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Profit</p><p className="font-semibold text-gray-700">{fmtInr(f['Actual Profit'])}</p></div>
             <div><p className="text-gray-400 uppercase tracking-wide mb-1">Margin</p><p className="font-semibold text-gray-700">{f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'}</p></div>
@@ -459,15 +467,15 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
               </div>
               {/* Secondary info */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Project</p><p className="font-semibold text-gray-700 truncate">{f['Project'] || '—'}</p></div>
-                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Category</p><p className="font-semibold text-gray-700 truncate">{f['Category'] || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Project</p><p className="font-semibold text-gray-700 truncate">{safeStr(f['Project']) || '—'}</p></div>
+                <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Category</p><p className="font-semibold text-gray-700 truncate">{safeStr(f['Category']) || '—'}</p></div>
                 <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Raised</p><p className="font-semibold text-gray-700">{fmtDate(f['Raised Date'])}</p></div>
                 <div>
                   <p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Aging</p>
                   <p className="font-semibold" style={{ color: aging > 60 ? '#dc2626' : aging > 30 ? '#d97706' : '#374151' }}>{aging > 0 ? `${aging}d` : '—'}</p>
                 </div>
                 {f['Next followup'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Follow-up</p><p className="font-semibold text-gray-700">{fmtDate(f['Next followup'])}</p></div>}
-                {f['Milestone'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Milestone</p><p className="font-semibold text-gray-700 truncate">{f['Milestone']}</p></div>}
+                {f['Milestone'] && <div><p className="text-gray-400 uppercase tracking-wide mb-0.5" style={{ fontSize: 9 }}>Milestone</p><p className="font-semibold text-gray-700 truncate">{safeStr(f['Milestone'])}</p></div>}
               </div>
             </div>
           )
@@ -476,8 +484,8 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
           const tax = taxParts(f)
           return (
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Client</p><p className="font-semibold text-gray-700">{f['Client Name'] || f['Client'] || '—'}</p></div>
-              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Project</p><p className="font-semibold text-gray-700">{f['Project'] || '—'}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Client</p><p className="font-semibold text-gray-700">{safeStr(f['Client Name']) || safeStr(f['Client']) || '—'}</p></div>
+              <div><p className="text-gray-400 uppercase tracking-wide mb-1">Project</p><p className="font-semibold text-gray-700">{safeStr(f['Project']) || '—'}</p></div>
               <div><p className="text-gray-400 uppercase tracking-wide mb-1">Taxable</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Raised'])}</p></div>
               <div><p className="text-gray-400 uppercase tracking-wide mb-1">GST</p><p className="font-semibold text-gray-700">{fmtInr(tax.gst)}</p></div>
               <div><p className="text-gray-400 uppercase tracking-wide mb-1">TDS</p><p className="font-semibold text-gray-700">{tax.tds > 0 ? `${fmtInr(tax.tds)} · ${tax.tdsPct.toFixed(1)}%` : '—'}</p></div>
@@ -958,13 +966,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {f['Short Status'] && (
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Summary</p>
-                  <p className="text-[14px] font-semibold text-slate-800 leading-relaxed">{f['Short Status']}</p>
+                  <p className="text-[14px] font-semibold text-slate-800 leading-relaxed">{safeStr(f['Short Status'])}</p>
                 </div>
               )}
               {f['Current Status (Detailed)'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Detailed Status</p>
-                  <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{f['Current Status (Detailed)']}</p>
+                  <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{safeStr(f['Current Status (Detailed)'])}</p>
                 </div>
               )}
               {parseAttachments(f['Attachments']).length > 0 && (() => {
@@ -991,7 +999,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {f['Notes'] && (
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed">{f['Notes']}</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed">{safeStr(f['Notes'])}</p>
                 </div>
               )}
             </>
@@ -1002,7 +1010,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  ['Health', f['Health'] || '—'],
+                  ['Health', safeStr(f['Health']) || '—'],
                   ['Billed', fmtInr(f['Amount Billed So far'])],
                   ['Profit', fmtInr(f['Actual Profit'])],
                   ['Margin', f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'],
@@ -1016,7 +1024,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {f['Notes'] && (
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Notes']}</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Notes'])}</p>
                 </div>
               )}
             </>
@@ -1055,12 +1063,12 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {/* Details grid */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  ['Project', f['Project'] || '—'],
-                  ['Category', f['Category'] || '—'],
-                  ['Milestone', f['Milestone'] || '—'],
-                  ['Raised By', f['Raised By'] || '—'],
+                  ['Project', safeStr(f['Project']) || '—'],
+                  ['Category', safeStr(f['Category']) || '—'],
+                  ['Milestone', safeStr(f['Milestone']) || '—'],
+                  ['Raised By', safeStr(f['Raised By']) || '—'],
                   ['Next Follow-up', fmtDate(f['Next followup'])],
-                  ['Reference', f['Reference'] || '—'],
+                  ['Reference', safeStr(f['Reference']) || '—'],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
@@ -1072,14 +1080,14 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {f['Description'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Description</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Description']}</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Description'])}</p>
                 </div>
               )}
               {/* Remark */}
               {f['Remark'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{f['Remark']}</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Remark'])}</p>
                 </div>
               )}
               {/* Invoice PDF + Attachments */}
