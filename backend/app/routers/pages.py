@@ -1023,15 +1023,21 @@ async def public_get_page(slug: str, request: Request):
     if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
         raise HTTPException(410, "Page has expired")
 
-    if row["is_password_protected"]:
-        return {
-            "requires_password": True,
-            "title": row["title"],
-            "id": str(row["id"]),
-            "slug": row["slug"],
-        }
+    import json as _json
+    _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
 
-    return _public_page_dict(row)
+    if row["is_password_protected"]:
+        return Response(
+            content=_json.dumps({"requires_password": True, "title": row["title"], "id": str(row["id"]), "slug": row["slug"]}),
+            media_type="application/json",
+            headers=_no_cache,
+        )
+
+    return Response(
+        content=_json.dumps(_public_page_dict(row)),
+        media_type="application/json",
+        headers=_no_cache,
+    )
 
 
 @router.post("/api/public/pages/{slug}/verify")
