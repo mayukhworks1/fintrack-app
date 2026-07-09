@@ -1095,6 +1095,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
                 const allFiles = [
                   ...parseAttachments(f['Invoice PDF']),
                   ...parseAttachments(f['Attachments']),
+                  ...parseAttachments(f['Reference']),
                 ]
                 if (!allFiles.length) return null
                 return (
