@@ -700,8 +700,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
 
           {/* Top clients */}
           <SectionHead title="Top Clients by Tax Contribution" />
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-sm">
+          <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--border)' }}>
+            <table className="w-full text-sm" style={{ minWidth: 760 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
                   {['Client', 'Invoices', 'Taxable', 'GST Collected', 'TDS Deducted', 'Gross', '% of Total GST'].map(h => (
@@ -744,8 +744,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
       {activeTab === 'monthly' && (
         <div className="space-y-3">
           <SectionHead title="Month-by-Month GST Register" sub="GSTR-1 style — sorted chronologically" />
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-sm">
+          <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--border)' }}>
+            <table className="w-full text-sm" style={{ minWidth: 1040 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
                   {['Month', 'Invoices', 'Taxable Value', 'CGST (9%)', 'SGST (9%)', 'Total GST', 'TDS', 'Gross', 'Collected', ''].map(h => (
@@ -871,8 +871,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
 
                   {/* Invoice drilldown */}
                   {open && (
-                    <div style={{ borderTop: '1px solid var(--border)' }}>
-                      <table className="w-full text-xs">
+                    <div className="overflow-x-auto" style={{ borderTop: '1px solid var(--border)' }}>
+                      <table className="w-full text-xs" style={{ minWidth: 900 }}>
                         <thead>
                           <tr style={{ background: 'var(--bg-input)' }}>
                             {['Invoice No', 'Date', 'Project', 'Taxable', 'GST', 'GST %', 'TDS', 'Gross', 'Received', 'Status'].map(h => (
