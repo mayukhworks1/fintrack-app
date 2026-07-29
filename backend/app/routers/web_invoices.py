@@ -38,6 +38,34 @@ class AddOptionRequest(BaseModel):
     option: str
 
 
+# Teable field name -> model attribute, so to_teable_fields can tell which
+# attribute backed a given Teable column when checking model_fields_set.
+_TEABLE_FIELD_ATTRS = (
+    ("Invoice Number",  "invoice_number"),
+    ("Project",         "project"),
+    ("Category",        "category"),
+    ("Description",     "description"),
+    ("Milestone",       "milestone"),
+    ("Raised By",       "raised_by"),
+    ("Raised Date",     "raised_date"),
+    ("Cleared Date",    "cleared_date"),
+    ("Amount Raised",   "amount_raised"),
+    ("Amount with Tax", "amount_with_tax"),
+    ("Amount Received", "amount_received"),
+    ("Payment Status",  "payment_status"),
+    ("Remark",          "remark"),
+    ("Next followup",   "next_followup"),
+    ("Reference",       "reference"),
+    ("Invoice PDF",     "invoice_pdf"),
+    ("Currency",        "currency"),
+)
+
+# Fields an explicit null may clear. Must stay in step with the allow_null_fields
+# passed to _clean_fields in WebInvoiceService.update_invoice — a name here that
+# the service does not allow would be stripped again further down.
+_NULLABLE_TEABLE_FIELDS = frozenset({"Raised Date", "Cleared Date", "Next followup"})
+
+
 class WebInvoiceFields(BaseModel):
     invoice_number:  Optional[str]        = None
     project:         Optional[str]        = None
@@ -148,8 +176,25 @@ class WebInvoiceFields(BaseModel):
             "Invoice PDF":     self.invoice_pdf,
             "Currency":        self.currency,
         }
-        # Include lists even if empty (allows clearing attachments); exclude only None
-        return {k: v for k, v in m.items() if v is not None}
+        # Include lists even if empty (allows clearing attachments).
+        #
+        # None needs two different meanings: "the client didn't mention this
+        # field, leave it alone" and "the client explicitly cleared it". Dropping
+        # every None collapsed those, so clearing a date silently no-opped — the
+        # PATCH succeeded with the remaining fields and the UI reported success
+        # while Teable kept the old value. model_fields_set tells us which keys
+        # were actually present in the request body, so an explicit null on a
+        # clearable date is forwarded as None for the service layer to apply
+        # (see _clean_fields' allow_null_fields, which already expects these).
+        provided = self.model_fields_set
+        out = {}
+        for teable_name, attr in _TEABLE_FIELD_ATTRS:
+            value = m[teable_name]
+            if value is not None:
+                out[teable_name] = value
+            elif attr in provided and teable_name in _NULLABLE_TEABLE_FIELDS:
+                out[teable_name] = None
+        return out
 
 
 @router.get("/debug-config")
