@@ -106,7 +106,13 @@ export default function Drawer({
           transform: visible ? 'translateX(0)' : 'translateX(100%)',
           transition: `transform ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
           willChange: 'transform',
-          /* Mobile: add bottom safe area */
+          /* Safe areas, both ends. The top one matters most: this panel is
+             `fixed inset-0` and full height, so on a notched iPhone its header —
+             which holds the only close button — renders under the status bar /
+             Dynamic Island. And because the panel is 100vw on a phone it covers
+             the backdrop entirely, so tap-outside is unavailable and there is no
+             Escape key: an unreachable header means no way out of the form. */
+          paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >

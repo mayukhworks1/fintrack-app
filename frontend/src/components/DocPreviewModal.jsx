@@ -265,7 +265,7 @@ export function DocPreviewModal({ state, onClose }) {
   const url   = doc?.url || doc?.presignedUrl || ''
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-stretch" role="dialog" aria-modal="true" aria-label={`Preview: ${doc?.name}`}>
+    <div className="fixed inset-0 z-[100] flex items-stretch overlay-safe" role="dialog" aria-modal="true" aria-label={`Preview: ${doc?.name}`}>
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)' }} onClick={onClose} />
       <div className="relative flex flex-col w-full m-3 sm:m-6 rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', zIndex: 1 }}>

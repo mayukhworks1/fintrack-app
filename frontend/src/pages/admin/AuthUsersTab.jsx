@@ -677,7 +677,7 @@ export function UserTimelineDrawer({ userId, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end"
+    <div className="fixed inset-0 z-50 flex items-start justify-end overlay-safe"
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="h-full w-full max-w-xl flex flex-col overflow-hidden"
