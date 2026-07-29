@@ -800,14 +800,17 @@ export default function Invoices() {
     else { setSortCol(col); setSortDir('desc') }
   }
 
-  // Inline sort-label used inside <th className="tbl-head">
+  // Inline sort-label used inside <th className="tbl-head">.
+  // Labelled via aria-label rather than title: a native tooltip here renders on
+  // top of the first data rows and hides the very values being sorted. The sort
+  // direction is already conveyed visually by the arrow rotation and accent colour.
   function SortLabel({ col, children }) {
     const active = sortCol === col
     const asc    = sortDir === 'asc'
     return (
       <button onClick={() => handleSort(col)}
         className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
-        title={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
+        aria-label={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
         style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
         {children}
         <ArrowUpDown size={10} style={{
@@ -1964,7 +1967,14 @@ export default function Invoices() {
         <div className="invoice-table-toolbar">
           <div>
             <p>{records.length} invoices in view</p>
-            <span>{syncing ? 'Refreshing mirror data...' : `Showing full current scope from ${allRecords.length} loaded invoices`}</span>
+            {/* Only worth a second line when a filter is actually narrowing the
+                set — otherwise it just repeats the count above it. */}
+            <span>{
+              syncing               ? 'Refreshing mirror data...'
+              : records.length < allRecords.length
+                                    ? `Filtered from ${allRecords.length} loaded invoices`
+                                    : 'Showing full current scope'
+            }</span>
           </div>
           <div className="invoice-table-controls">
             <div className="invoice-density-toggle" role="group" aria-label="Table density">
@@ -2012,7 +2022,7 @@ export default function Invoices() {
                   <ResizableHead width={columnWidths.payment_status} onResizeStart={(e) => startColumnResize('payment_status', e)}><SortLabel col="Payment Status">Status</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
-                  <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)}><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
+                  <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)} align="right"><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.aging }}>
                   <ResizableHead width={columnWidths.aging} onResizeStart={(e) => startColumnResize('aging', e)}><SortLabel col="Agening (Days)">Aging</SortLabel></ResizableHead>
@@ -2027,13 +2037,13 @@ export default function Invoices() {
                   <ResizableHead width={columnWidths.raised_date} onResizeStart={(e) => startColumnResize('raised_date', e)}><SortLabel col="Raised Date">Raised</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
-                  <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)}><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
+                  <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)} align="right"><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
-                  <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)}><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
+                  <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)} align="right"><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
-                  <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)}><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
+                  <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)} align="right"><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
                 </th>
                 <th className="tbl-head" style={{ width: columnWidths.category }}>
                   <ResizableHead width={columnWidths.category} onResizeStart={(e) => startColumnResize('category', e)}><SortLabel col="Category">Category</SortLabel></ResizableHead>

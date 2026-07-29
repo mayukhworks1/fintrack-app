@@ -747,7 +747,7 @@ export default function WebInvoices() {
     return (
       <button onClick={() => handleSort(col)}
         className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
-        title={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
+        aria-label={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
         style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
         {children}
         <ArrowUpDown size={10} style={{

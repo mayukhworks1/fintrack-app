@@ -305,10 +305,13 @@ export function Field({ label, children }) {
   return <div><label className="label">{label}</label>{children}</div>
 }
 
-export function ResizableHead({ width, children, onResizeStart }) {
+export function ResizableHead({ width, children, onResizeStart, align = 'left' }) {
+  // The flex layout here overrides any text-align set on the parent <th>, so
+  // numeric columns have to opt in explicitly — otherwise their headers sit
+  // left while the figures below them are right-aligned.
   return (
     <div className="relative flex items-center pr-3" style={{ width }}>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className={`min-w-0 flex-1 flex ${align === 'right' ? 'justify-end' : ''}`}>{children}</div>
       <button
         type="button"
         aria-label="Resize column"
