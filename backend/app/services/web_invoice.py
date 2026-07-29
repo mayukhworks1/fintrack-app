@@ -12,6 +12,7 @@ from ..utils.http import shared_client
 from ..config import settings
 from ..db.attribution import empty_actor
 from ..db import valkey as vk
+from ..db.postgres import get_pool
 from ..utils.cache import cache
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
@@ -348,6 +349,22 @@ class WebInvoiceService:
         cache_key = f"webinv:list:{status}:{project}:{raised_by}:{limit}:{skip}:{order_by}:{order}"
 
         async def _load():
+            # Serve from the PG mirror when it is populated. The background sync
+            # and the Teable webhook both keep it current, and it lets the
+            # database do the filtering, sorting and paging — the Teable path
+            # below has to download every record in the table to return one page.
+            mirrored = await self._list_from_pg(
+                status=status,
+                project=project,
+                raised_by=raised_by,
+                limit=limit,
+                skip=skip,
+                order_by=order_by,
+                order=order,
+            )
+            if mirrored is not None:
+                return mirrored
+
             if raised_by:
                 records = await self._fetch_records(
                     status=status,
@@ -410,6 +427,102 @@ class WebInvoiceService:
         if raised_by:
             return await _load()
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
+
+    # Teable field name -> web_invoices_mirror column, for ORDER BY. Fields not
+    # listed here have no dedicated column and fall back to the JSONB payload.
+    _PG_SORT_COLUMNS = {
+        "Raised Date":     "raised_date",
+        "Cleared Date":    "cleared_date",
+        "Invoice Number":  "invoice_number",
+        "Project":         "project",
+        "Category":        "category",
+        "Milestone":       "milestone",
+        "Raised By":       "raised_by",
+        "Payment Status":  "payment_status",
+        "Amount Raised":   "amount_raised",
+        "Amount with Tax": "amount_with_tax",
+        "Amount Received": "amount_received",
+        "Currency":        "currency",
+    }
+
+    async def _list_from_pg(
+        self,
+        *,
+        status: Optional[str],
+        project: Optional[str],
+        raised_by: Optional[str],
+        limit: int,
+        skip: int,
+        order_by: str,
+        order: str,
+    ) -> dict | None:
+        """One page of invoices straight from the mirror, or None to fall back.
+
+        Returns None whenever the mirror cannot be trusted to answer — no pool,
+        an empty table (sync has not run yet on a fresh deploy), or any query
+        error — so the caller drops back to Teable rather than showing an
+        incomplete list as if it were complete.
+        """
+        pool = get_pool()
+        if not pool:
+            return None
+        try:
+            where = ["deleted_at IS NULL"]
+            params: list[Any] = []
+
+            if status:
+                params.append(status)
+                where.append(f"payment_status = ${len(params)}")
+            if project:
+                params.append(project)
+                where.append(f"project = ${len(params)}")
+            if raised_by:
+                # Ownership scoping is a security boundary — match the
+                # case-insensitive comparison the Teable path uses.
+                params.append(raised_by.lower())
+                where.append(f"LOWER(raised_by) = ${len(params)}")
+
+            where_sql = " AND ".join(where)
+            direction = "DESC" if str(order).lower() == "desc" else "ASC"
+            sort_col = self._PG_SORT_COLUMNS.get(order_by)
+            if sort_col:
+                order_sql = f"ORDER BY {sort_col} {direction} NULLS LAST, teable_id"
+            else:
+                params.append(order_by)
+                order_sql = f"ORDER BY fields->>${len(params)} {direction} NULLS LAST, teable_id"
+
+            params.extend([limit, skip])
+            rows = await pool.fetch(
+                f"""
+                SELECT teable_id, fields, COUNT(*) OVER() AS total_count
+                FROM web_invoices_mirror
+                WHERE {where_sql}
+                {order_sql}
+                LIMIT ${len(params) - 1} OFFSET ${len(params)}
+                """,
+                *params,
+            )
+
+            if not rows:
+                # Distinguish "genuinely no matches" from "mirror not populated".
+                # Only the former is a real empty result worth returning.
+                has_any = await pool.fetchval(
+                    "SELECT 1 FROM web_invoices_mirror WHERE deleted_at IS NULL LIMIT 1"
+                )
+                if not has_any:
+                    return None
+                return {"records": [], "total": 0}
+
+            records = []
+            for row in rows:
+                fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+                records.append(_apply_runtime_invoice_derivatives(
+                    {"id": row["teable_id"], "fields": fields or {}}
+                ))
+            return {"records": records, "total": rows[0]["total_count"]}
+        except Exception as exc:
+            logger.warning("web_invoices_mirror read failed, falling back to Teable: %s", exc)
+            return None
 
     async def get_all_invoices(self, raised_by: Optional[str] = None) -> list[dict]:
         cache_key = "webinv:all" if not raised_by else f"webinv:all:raised_by:{raised_by}"
