@@ -48,6 +48,39 @@ logger = logging.getLogger("fintrack.web_invoices")
 def _bust_web_cache() -> None:
     cache.bust(prefix="webinv:")
 
+
+async def _mirror_write_through(teable_id: str, fields: dict | None, *, deleted: bool = False) -> None:
+    """Apply a just-committed Teable write to the PG mirror immediately.
+
+    Reads are served from web_invoices_mirror, which otherwise only catches up
+    via the Teable webhook or the 30 s incremental sync. Without this, a user
+    who saves an invoice and lands back on the list can read their own write
+    back stale — the change looks lost. Writing through on the request path
+    makes a save immediately visible.
+
+    Best-effort: the mirror is a replica, Teable is the source of truth, so a
+    failure here is logged and swallowed rather than failing a successful write.
+    The next sync pass reconciles it.
+    """
+    pool = get_pool()
+    if not pool or not teable_id:
+        return
+    try:
+        if deleted:
+            await pool.execute(
+                "UPDATE web_invoices_mirror SET deleted_at = NOW() WHERE teable_id = $1",
+                teable_id,
+            )
+            return
+        if fields is None:
+            return
+        from ..db.sync import upsert_record, _extract_web_invoice
+        await upsert_record(
+            pool, "web_invoices", "web_invoices_mirror", teable_id, fields, _extract_web_invoice
+        )
+    except Exception as exc:
+        logger.warning("mirror write-through failed for %s (sync will reconcile): %s", teable_id, exc)
+
 def _teable_error(res: httpx.Response) -> str:
     try:
         payload = res.json()
@@ -593,6 +626,7 @@ class WebInvoiceService:
             _bust_web_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
+            await _mirror_write_through(created.get("id"), created.get("fields"))
             if created.get("id"):
                 await self.touch_aging_for_record(
                     created["id"],
@@ -617,6 +651,7 @@ class WebInvoiceService:
                 raise RuntimeError(f"{_teable_error(res)}; fields={safe_fields}") from exc
             _bust_web_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
+            await _mirror_write_through(record_id, updated.get("fields"))
             await self.touch_aging_for_record(
                 record_id,
                 record_fields=updated.get("fields") or {},
@@ -631,6 +666,7 @@ class WebInvoiceService:
             res = await client.delete(url, headers=self._headers)
             res.raise_for_status()
             _bust_web_cache()
+            await _mirror_write_through(record_id, None, deleted=True)
 
     async def _ensure_aging_refresh_field(self) -> bool:
         try:
