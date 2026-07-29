@@ -33,6 +33,7 @@ from typing import AsyncIterator
 from typing import Any, Optional
 
 import httpx
+from ..utils.http import shared_client
 
 from ..config import settings
 
@@ -296,7 +297,7 @@ _http_client: Optional[httpx.AsyncClient] = None
 def _client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(
+        _http_client = shared_client(
             timeout=httpx.Timeout(180.0, connect=10.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )

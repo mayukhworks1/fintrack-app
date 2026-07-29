@@ -7,6 +7,7 @@ Routes accept 'web' OR 'all' role (require_web_access).
 import csv as _csv
 import io as _io
 import httpx
+from ..utils.http import shared_client
 import re
 from datetime import date as _date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
@@ -159,7 +160,7 @@ async def debug_config(_role: str = Depends(require_web_access)):
     masked = (token[:6] + "…" + token[-4:]) if len(token) > 10 else ("(not set)" if not token else token)
     # Try a single lightweight read to see if Teable responds
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.get(
                 f"{svc.base_url}/api/table/{svc.table_id}/record?take=1&fieldKeyType=name",
                 headers=svc._headers,

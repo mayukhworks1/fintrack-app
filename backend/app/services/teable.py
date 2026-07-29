@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Any, Optional
 import httpx
+from ..utils.http import shared_client
 from ..config import settings
 from ..models import FIELD_IDS
 from ..utils.cache import cache
@@ -209,7 +210,7 @@ class TeableService:
         last_err: Exception | None = None
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient() as http:
+                async with shared_client() as http:
                     r = await http.get(url, headers=self._headers, params=params, timeout=30)
                     r.raise_for_status()
                     return r.json()
@@ -257,7 +258,7 @@ class TeableService:
                     return {"id": row["teable_id"], "fields": fields or {}}
             except Exception as exc:
                 logger.debug("projects_mirror PG get failed: %s", exc)
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.get(
                 f"{self._record_url}/{record_id}",
                 headers=self._headers,
@@ -268,7 +269,7 @@ class TeableService:
             return r.json()
 
     async def create_record(self, fields: dict) -> dict[str, Any]:
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.post(
                 self._record_url,
                 headers=self._headers,
@@ -281,7 +282,7 @@ class TeableService:
             return records[0] if records else r.json()
 
     async def update_record(self, record_id: str, fields: dict) -> dict[str, Any]:
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.patch(
                 f"{self._record_url}/{record_id}",
                 headers=self._headers,
@@ -293,14 +294,14 @@ class TeableService:
             return r.json()
 
     async def delete_record(self, record_id: str) -> bool:
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.delete(f"{self._record_url}/{record_id}", headers=self._headers, timeout=30)
             r.raise_for_status()
             _bust_project_cache()
             return True
 
     async def search_records(self, query: str, take: int = 20) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.get(
                 self._record_url,
                 headers=self._headers,

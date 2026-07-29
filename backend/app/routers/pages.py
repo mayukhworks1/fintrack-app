@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from ..utils.http import shared_client
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -61,7 +62,7 @@ async def _geo_lookup(ip: str) -> dict:
         return {}
     try:
         fields = "status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query"
-        async with httpx.AsyncClient(timeout=4) as c:
+        async with shared_client(timeout=4) as c:
             r = await c.get(f"http://ip-api.com/json/{ip}?fields={fields}")
             if r.status_code == 200:
                 d = r.json()
@@ -91,7 +92,7 @@ async def _reverse_geocode(lat: float, lon: float) -> dict:
     User-Agent and is rate-limited to ~1 req/s, which is fine for page views.
     """
     try:
-        async with httpx.AsyncClient(timeout=5) as c:
+        async with shared_client(timeout=5) as c:
             r = await c.get(
                 "https://nominatim.openstreetmap.org/reverse",
                 params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 16, "addressdetails": 1},

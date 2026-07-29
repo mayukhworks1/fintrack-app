@@ -11,6 +11,7 @@ import traceback
 from typing import Iterable
 
 import httpx
+from ..utils.http import shared_client
 
 from ..config import settings
 
@@ -109,7 +110,7 @@ async def send_email(to: str | Iterable[str], subject: str, text: str, html: str
         payload["htmlContent"] = html
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with shared_client(timeout=15) as client:
             resp = await client.post(
                 "https://api.brevo.com/v3/smtp/email",
                 json=payload,

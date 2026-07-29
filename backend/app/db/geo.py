@@ -11,6 +11,7 @@ per day.  Falls back to empty dict if the lookup fails or Valkey is down.
 
 import logging
 import httpx
+from ..utils.http import shared_client
 from .valkey import geo_get, geo_set
 
 logger = logging.getLogger("fintrack.db.geo")
@@ -49,7 +50,7 @@ async def lookup(ip: str) -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with shared_client(timeout=_TIMEOUT) as client:
             resp = await client.get(_API_URL.format(ip=ip))
         data = resp.json()
         if data.get("status") != "success":

@@ -8,6 +8,7 @@ import logging
 from typing import Any, Optional
 from datetime import datetime, timezone
 import httpx
+from ..utils.http import shared_client
 from ..config import settings
 from ..db.attribution import empty_actor
 from ..db import valkey as vk
@@ -130,7 +131,7 @@ class WebInvoiceService:
         if cached is not None:
             return cached
 
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.get(self._field_url, headers=self._headers)
             res.raise_for_status()
             fields = res.json()
@@ -224,7 +225,7 @@ class WebInvoiceService:
 
     async def _get_fields_meta(self) -> list[dict[str, Any]]:
         async def _load():
-            async with httpx.AsyncClient(timeout=12) as client:
+            async with shared_client(timeout=12) as client:
                 res = await client.get(self._field_url, headers=self._headers)
                 res.raise_for_status()
                 return res.json()
@@ -264,7 +265,7 @@ class WebInvoiceService:
         url = f"{self._field_url}/{field_id}/convert"
         body = self._field_convert_payload(field, updated_choices)
 
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.put(url, json=body, headers=self._headers)
             try:
                 res.raise_for_status()
@@ -295,7 +296,7 @@ class WebInvoiceService:
             raise ValueError(f"Unknown attachment field: {field_name}")
 
         url = f"{self._record_url}/{record_id}/{field_id}/uploadAttachment"
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with shared_client(timeout=60) as client:
             res = await client.post(
                 url,
                 headers={"Authorization": f"Bearer {self.token}"},
@@ -321,7 +322,7 @@ class WebInvoiceService:
                 "take": 1000,
                 "skip": 0,
             }
-            async with httpx.AsyncClient(timeout=20) as client_:
+            async with shared_client(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 records = res.json().get("records", [])
@@ -366,7 +367,7 @@ class WebInvoiceService:
             # Filter and sort in Python instead.
             PAGE = 1000
             all_records: list[dict] = []
-            async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+            async with shared_client(timeout=30, follow_redirects=False) as client:
                 page_skip = 0
                 while True:
                     params: dict[str, Any] = {
@@ -434,7 +435,7 @@ class WebInvoiceService:
     ) -> list[dict]:
         raw: list[dict[str, Any]] = []
         page_skip = 0
-        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        async with shared_client(timeout=30, follow_redirects=False) as client:
             while True:
                 params: dict[str, Any] = {
                     "fieldKeyType": "name",
@@ -463,14 +464,14 @@ class WebInvoiceService:
 
     async def get_invoice(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.get(url, headers=self._headers)
             res.raise_for_status()
             return _apply_runtime_invoice_derivatives(res.json())
 
     async def create_invoice(self, fields: dict) -> dict:
         body = {"fieldKeyType": "name", "records": [{"fields": _clean_fields(fields)}]}
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with shared_client(timeout=15) as client:
             res = await client.post(self._record_url, json=body, headers=self._headers)
             try:
                 res.raise_for_status()
@@ -494,7 +495,7 @@ class WebInvoiceService:
             "fieldKeyType": "name",
             "record": {"fields": _clean_fields(fields, allow_null_fields={"Raised Date", "Cleared Date", "Next followup"})},
         }
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with shared_client(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
             try:
                 res.raise_for_status()
@@ -513,7 +514,7 @@ class WebInvoiceService:
 
     async def delete_invoice(self, record_id: str) -> None:
         url = f"{self._record_url}/{record_id}"
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.delete(url, headers=self._headers)
             res.raise_for_status()
             _bust_web_cache()
@@ -523,7 +524,7 @@ class WebInvoiceService:
             fields = await self._get_fields_meta()
             if any((f.get("name") or "").strip() == AGING_REFRESH_HELPER_FIELD for f in fields):
                 return True
-            async with httpx.AsyncClient(timeout=12) as client:
+            async with shared_client(timeout=12) as client:
                 create = await client.post(
                     self._field_url,
                     json={"name": AGING_REFRESH_HELPER_FIELD, "type": "singleLineText"},
@@ -562,7 +563,7 @@ class WebInvoiceService:
             body = {"fieldKeyType": "name", "record": {"fields": fields}}
             if attribute_system:
                 await vk.attribution_set(record_id, self._system_actor("/automation/web-invoice-aging-refresh"), ttl=360)
-            async with httpx.AsyncClient(timeout=12) as client:
+            async with shared_client(timeout=12) as client:
                 res = await client.patch(url, json=body, headers=self._headers)
                 res.raise_for_status()
             _bust_web_cache()
@@ -589,7 +590,7 @@ class WebInvoiceService:
                 }],
             }),
         }
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with shared_client(timeout=30) as client:
             res = await client.get(self._record_url, params=params, headers=self._headers)
             res.raise_for_status()
             records = res.json().get("records", [])

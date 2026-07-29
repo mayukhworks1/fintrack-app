@@ -36,6 +36,7 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
+from ..utils.http import shared_client
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -1373,7 +1374,7 @@ async def deployment_health(_: str = Depends(require_admin)):
             table_checks[name] = _health_item(False, "No Teable token configured")
             return
         best_error = "No successful token"
-        async with httpx.AsyncClient(timeout=5) as client:
+        async with shared_client(timeout=5) as client:
             for token in tokens:
                 try:
                     r = await client.get(
@@ -2736,7 +2737,7 @@ async def get_hf_logs(
     collected: list[dict] = []
 
     try:
-        async with httpx.AsyncClient(
+        async with shared_client(
             timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
         ) as client:
             async with client.stream(

@@ -10,6 +10,7 @@ import asyncio
 import json
 from typing import Any, Optional
 import httpx
+from ..utils.http import shared_client
 from ..config import settings
 from ..utils.cache import cache
 
@@ -210,7 +211,7 @@ class WebProjectService:
             field_id = WEB_PROJECT_FIELD_IDS.get(order_by, WEB_PROJECT_FIELD_IDS["Project Name"])
             params["orderBy"] = json.dumps([{"fieldId": field_id, "order": order}])
 
-            async with httpx.AsyncClient(timeout=20) as client_:
+            async with shared_client(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 data = res.json()
@@ -228,7 +229,7 @@ class WebProjectService:
                 "take": 500,
                 "skip": 0,
             }
-            async with httpx.AsyncClient(timeout=15) as client_:
+            async with shared_client(timeout=15) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 records = res.json().get("records", [])
@@ -249,7 +250,7 @@ class WebProjectService:
 
     async def get_project(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
-        async with httpx.AsyncClient(timeout=10) as client_:
+        async with shared_client(timeout=10) as client_:
             res = await client_.get(url, headers=self._headers)
             res.raise_for_status()
             return res.json()
@@ -261,7 +262,7 @@ class WebProjectService:
             "fieldKeyType": "name",
             "records": [{"fields": _clean_project_fields(fields)}],
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.post(self._record_url, json=body, headers=self._headers)
             res.raise_for_status()
         _bust_project_cache()
@@ -276,7 +277,7 @@ class WebProjectService:
             "fieldKeyType": "name",
             "record": {"fields": _clean_project_fields(fields)},
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
         _bust_project_cache()
@@ -286,7 +287,7 @@ class WebProjectService:
 
     async def delete_project(self, record_id: str) -> None:
         url = f"{self._record_url}/{record_id}"
-        async with httpx.AsyncClient(timeout=10) as client_:
+        async with shared_client(timeout=10) as client_:
             res = await client_.delete(url, headers=self._headers)
             res.raise_for_status()
         _bust_project_cache()
@@ -302,7 +303,7 @@ class WebProjectService:
                 "take": 1000,
                 "skip": 0,
             }
-            async with httpx.AsyncClient(timeout=20) as client_:
+            async with shared_client(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 records = res.json().get("records", [])
@@ -408,7 +409,7 @@ class WebResourceService:
                 "take": 500,
                 "skip": 0,
             }
-            async with httpx.AsyncClient(timeout=20) as client_:
+            async with shared_client(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 data = res.json()
@@ -452,7 +453,7 @@ class WebResourceService:
                     "order": "asc",
                 }]),
             }
-            async with httpx.AsyncClient(timeout=20) as client_:
+            async with shared_client(timeout=20) as client_:
                 res = await client_.get(self._record_url, params=params, headers=self._headers)
                 res.raise_for_status()
                 data = res.json()
@@ -464,7 +465,7 @@ class WebResourceService:
 
     async def get_resource(self, record_id: str) -> dict:
         url = f"{self._record_url}/{record_id}?fieldKeyType=name"
-        async with httpx.AsyncClient(timeout=10) as client_:
+        async with shared_client(timeout=10) as client_:
             res = await client_.get(url, headers=self._headers)
             res.raise_for_status()
             return res.json()
@@ -485,7 +486,7 @@ class WebResourceService:
             "fieldKeyType": "name",
             "records": [{"fields": teable_fields}],
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.post(self._record_url, json=body, headers=self._headers)
             if not res.is_success:
                 raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
@@ -507,7 +508,7 @@ class WebResourceService:
             "fieldKeyType": "name",
             "record": {"fields": teable_fields},
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.patch(url, json=body, headers=self._headers)
             if not res.is_success:
                 raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
@@ -519,7 +520,7 @@ class WebResourceService:
 
     async def delete_resource(self, record_id: str) -> None:
         url = f"{self._record_url}/{record_id}"
-        async with httpx.AsyncClient(timeout=10) as client_:
+        async with shared_client(timeout=10) as client_:
             res = await client_.delete(url, headers=self._headers)
             res.raise_for_status()
         _bust_resource_cache()
@@ -541,7 +542,7 @@ class WebResourceService:
             "fieldKeyType": "name",
             "record": {"fields": {"Project": [{"id": pid} for pid in existing_ids]}},
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.patch(url, json=body, headers=self._headers)
             if not res.is_success:
                 raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")
@@ -562,7 +563,7 @@ class WebResourceService:
             "fieldKeyType": "name",
             "record": {"fields": {"Project": [{"id": pid} for pid in remaining_ids]}},
         }
-        async with httpx.AsyncClient(timeout=15) as client_:
+        async with shared_client(timeout=15) as client_:
             res = await client_.patch(url, json=body, headers=self._headers)
             if not res.is_success:
                 raise ValueError(f"Teable {res.status_code}: {_teable_error(res)}")

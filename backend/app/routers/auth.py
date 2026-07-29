@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 import httpx
+from ..utils.http import shared_client
 from pydantic import BaseModel
 from ..config import settings
 
@@ -370,7 +371,7 @@ async def google_callback(request: Request, code: str | None = None, state: str 
         redirect_to = await consume_oauth_state(state or "", "google", request)
         if not code:
             raise HTTPException(status_code=400, detail="Google authorization code is missing")
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with shared_client(timeout=15) as client:
             token_res = await client.post(
                 "https://oauth2.googleapis.com/token",
                 data={
@@ -462,7 +463,7 @@ async def zoho_callback(
         redirect_to = await consume_oauth_state(state or "", "zoho", request)
         if not code:
             raise HTTPException(status_code=400, detail="Zoho authorization code is missing")
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with shared_client(timeout=15) as client:
             token_res = await client.post(
                 "https://accounts.zoho.com/oauth/v2/token",
                 data={

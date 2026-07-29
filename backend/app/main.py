@@ -89,6 +89,11 @@ async def lifespan(app: FastAPI):
             ", ".join(missing_critical),
         )
 
+    # Shared pooled HTTP client — keeps Teable/upstream connections alive so
+    # requests stop paying a TCP + TLS handshake each.
+    from .utils.http import init_http, close_http
+    await init_http()
+
     await postgres.init_pool()
     # Retry once after 5 s — Aiven / cold-start connections occasionally
     # time out on the first attempt but succeed immediately on the second.
@@ -157,6 +162,7 @@ async def lifespan(app: FastAPI):
 
     await postgres.close_pool()
     await vk.close_client()
+    await close_http()
     logger.info("FinTrack API shutting down — cache stats: %s", cache.stats())
 
 

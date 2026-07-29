@@ -31,6 +31,7 @@ import time
 from typing import Any, Optional
 
 import httpx
+from ..utils.http import shared_client
 
 from .postgres import get_pool
 from ..config import settings
@@ -438,7 +439,7 @@ async def _fetch_all(table_id: str, token: str) -> list[dict]:
     records: list[dict] = []
     offset  = 0
     try:
-        async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
+        async with shared_client(timeout=_TEABLE_TIMEOUT) as http:
             while True:
                 page = await _fetch_page(http, url, headers, {"take": _PAGE_SIZE, "skip": offset})
                 records.extend(page)
@@ -503,7 +504,7 @@ async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE
     async def _attempt(tok: str) -> list[dict]:
         headers = {"Authorization": f"Bearer {tok}"}
         try:
-            async with httpx.AsyncClient(timeout=_TEABLE_TIMEOUT) as http:
+            async with shared_client(timeout=_TEABLE_TIMEOUT) as http:
                 return await _fetch_page(http, url, headers, {"take": take, "skip": 0})
         except RuntimeError:
             raise

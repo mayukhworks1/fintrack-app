@@ -16,6 +16,7 @@ import logging
 from typing import Any, Optional
 
 import httpx
+from ..utils.http import shared_client
 
 from ..config import settings
 from ..models import STATUS_TABLE_FIELD_IDS
@@ -187,7 +188,7 @@ class StatusService:
         last_err: Exception | None = None
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient() as http:
+                async with shared_client() as http:
                     r = await http.get(url, headers=self._headers, params=params, timeout=30)
                     r.raise_for_status()
                     return r.json()
@@ -262,7 +263,7 @@ class StatusService:
                     return {"id": row["teable_id"], "fields": fields or {}}
             except Exception as exc:
                 logger.debug("status_mirror PG get failed: %s", exc)
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.get(
                 f"{self._record_url}/{record_id}",
                 headers=self._headers,
@@ -280,7 +281,7 @@ class StatusService:
                 if not token:
                     continue
                 try:
-                    async with httpx.AsyncClient(timeout=10) as client:
+                    async with shared_client(timeout=10) as client:
                         res = await client.get(self._field_url, headers=self._headers_for(token))
                         res.raise_for_status()
                         fields = res.json()
@@ -344,7 +345,7 @@ class StatusService:
         url = f"{self._field_url}/{field_id}/convert"
         body = self._field_convert_payload(field, updated_choices)
 
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with shared_client(timeout=10) as client:
             res = await client.put(url, json=body, headers=self._headers_for(self.schema_token))
             try:
                 res.raise_for_status()
@@ -423,7 +424,7 @@ class StatusService:
             except Exception:
                 pass
 
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.post(
                 self._record_url,
                 headers=self._headers,
@@ -466,7 +467,7 @@ class StatusService:
             raise ValueError(f"Unknown attachment field: {field_name}")
 
         url = f"{self._record_url}/{record_id}/{field_id}/uploadAttachment"
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with shared_client(timeout=60) as client:
             res = await client.post(
                 url,
                 headers={"Authorization": f"Bearer {self.record_token}"},
@@ -511,7 +512,7 @@ class StatusService:
             except Exception:
                 pass
 
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.patch(
                 f"{self._record_url}/{record_id}",
                 headers=self._headers,
@@ -546,7 +547,7 @@ class StatusService:
             except Exception:
                 pass
 
-        async with httpx.AsyncClient() as http:
+        async with shared_client() as http:
             r = await http.delete(
                 f"{self._record_url}/{record_id}",
                 headers=self._headers,

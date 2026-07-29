@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from ..utils.http import shared_client
 
 from ..config import settings
 from ..db.postgres import get_pool
@@ -140,7 +141,7 @@ async def _fetch_active_projects() -> list[dict[str, Any]]:
         "take": 1000,
         "skip": 0,
     }
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with shared_client(timeout=30) as client:
         res = await client.get(url, params=params, headers=_headers())
         res.raise_for_status()
     return res.json().get("records", [])
@@ -150,7 +151,7 @@ async def _patch_fields(record_id: str, fields: dict[str, Any]) -> bool:
     """PATCH arbitrary field(s) for a single project record."""
     url = f"{_record_url()}/{record_id}"
     body = {"fieldKeyType": "name", "record": {"fields": fields}}
-    async with httpx.AsyncClient(timeout=12) as client:
+    async with shared_client(timeout=12) as client:
         res = await client.patch(url, json=body, headers=_headers())
         res.raise_for_status()
     return True

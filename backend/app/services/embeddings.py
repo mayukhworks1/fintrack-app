@@ -22,6 +22,7 @@ import logging
 from typing import Optional
 
 import httpx
+from ..utils.http import shared_client
 
 from ..config import settings
 from ..db.postgres import get_pool
@@ -59,7 +60,7 @@ async def get_embedding(text: str) -> Optional[list[float]]:
     if not settings.openrouter_api_key:
         return None
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with shared_client(timeout=20) as client:
             r = await client.post(
                 EMBED_API_URL,
                 headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
