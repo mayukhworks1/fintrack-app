@@ -930,6 +930,13 @@ html.dark .main-app-theme {
     white-space: nowrap;
     border-bottom: 1px solid var(--card-border);
     background: var(--bg-input);
+    /* Pinned while the page scrolls: with 24+ rows and enough columns to need
+       horizontal scrolling, losing the header means losing track of which
+       figure is Outstanding vs Received vs GST Total. Requires the opaque
+       background above, or rows would show through. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
   }
   .tbl-row {
     border-bottom: 1px solid var(--card-border);
@@ -1402,7 +1409,12 @@ html.dark .main-app-theme {
     border: 1px solid var(--card-border);
     background: linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 97%, var(--bg-input) 3%) 0%, var(--card-bg) 100%);
     box-shadow: var(--card-shadow);
-    overflow: hidden;
+    /* `clip`, not `hidden`. Both clip the table to the rounded corners, but
+       `hidden` makes this element a scroll container, and since it never
+       actually scrolls, any `position: sticky` inside it has nothing to stick to
+       — the sticky header below would silently do nothing. `clip` does not
+       establish a scroll container, so sticky still resolves against <main>. */
+    overflow: clip;
   }
 
   .invoice-table-toolbar {

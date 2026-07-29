@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 const DURATION = 260 // ms — must match CSS transition duration
 
@@ -42,6 +43,12 @@ export default function Drawer({
   const [mounted, setMounted]  = useState(false)
   const [visible, setVisible]  = useState(false)
   const timerRef               = useRef(null)
+  const panelRef               = useRef(null)
+
+  // Both flags: `mounted` makes the effect re-run once the panel exists (so
+  // initial focus lands), `open` going false restores focus immediately rather
+  // than after the exit animation. See Modal for the same reasoning.
+  useFocusTrap(panelRef, open && mounted)
 
   useEffect(() => {
     if (open) {
@@ -97,6 +104,8 @@ export default function Drawer({
 
       {/* Panel */}
       <aside
+        ref={panelRef}
+        tabIndex={-1}
         className="relative ml-auto flex flex-col overflow-hidden"
         style={{
           width: `min(100vw, ${width}px)`,

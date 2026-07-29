@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 const DURATION = 220
 
@@ -27,6 +28,14 @@ export default function Modal({
   const [mounted, setMounted]  = useState(false)
   const [visible, setVisible]  = useState(false)
   const timerRef               = useRef(null)
+  const panelRef               = useRef(null)
+
+  // Needs both flags. `mounted` alone would restore focus only after the exit
+  // animation, leaving it on a panel that is already fading out; `open` alone
+  // never re-runs when the panel mounts a render later, so initial focus is
+  // never set. Together: focus enters when the panel appears, and returns to the
+  // trigger the moment the dialog is dismissed.
+  useFocusTrap(panelRef, open && mounted)
 
   useEffect(() => {
     if (open) {
@@ -79,6 +88,8 @@ export default function Modal({
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className="relative flex flex-col overflow-hidden"
         style={{
           /* Full-width + rounded top on mobile, centred card on sm+ */

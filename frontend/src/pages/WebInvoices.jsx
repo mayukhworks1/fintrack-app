@@ -2384,7 +2384,9 @@ export default function WebInvoices() {
           </div>
 
           {/* Desktop table */}
-          <div className="hidden md:block card p-0 overflow-hidden" style={{ borderRadius: 14 }}>
+          {/* overflow-clip, not -hidden: `hidden` would make this a scroll
+              container and silently defeat the sticky table header. */}
+          <div className="hidden md:block card p-0 overflow-clip" style={{ borderRadius: 14 }}>
             <div className="overflow-x-auto">
               <table className="w-full" style={{ minWidth: 1200 }}>
                 <thead>

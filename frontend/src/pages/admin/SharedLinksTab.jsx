@@ -93,7 +93,9 @@ export function SharedLinksTab() {
         </div>
       </div>
 
-      <div className="card p-0 overflow-hidden">
+      {/* overflow-clip so the sticky .tbl-head is not defeated by a
+          non-scrolling scroll container. */}
+      <div className="card p-0 overflow-clip">
         {loading ? <Skeleton rows={6} /> : (
           <div className="overflow-x-auto">
             <table className="w-full">
