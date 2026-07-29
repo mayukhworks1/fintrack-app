@@ -189,6 +189,55 @@ export const DEFAULT_INVOICE_COLUMN_WIDTHS = {
   actions: 130,
 }
 
+/* ── Column visibility ──────────────────────────────────────────────────────
+   17 columns overflow any screen, so the table always scrolls sideways. These
+   describe which can be hidden and which are structural. `row` and `actions`
+   are always on: one is the position index, the other the row's controls.     */
+
+export const INVOICE_COLUMNS = [
+  { key: 'row',                label: '#',             locked: true },
+  { key: 'invoice_number',     label: 'Invoice #' },
+  { key: 'payment_status',     label: 'Status' },
+  { key: 'amount_raised',      label: 'Amount' },
+  { key: 'aging',              label: 'Aging' },
+  { key: 'client_name',        label: 'Client' },
+  { key: 'project',            label: 'Project' },
+  { key: 'raised_date',        label: 'Raised' },
+  { key: 'outstanding_amount', label: 'Outstanding' },
+  { key: 'amount_received',    label: 'Received' },
+  { key: 'amount_with_tax',    label: 'GST Total' },
+  { key: 'category',           label: 'Category' },
+  { key: 'milestone',          label: 'Milestone' },
+  { key: 'raised_by',          label: 'Raised By' },
+  { key: 'next_followup',      label: 'Next Followup' },
+  { key: 'docs',               label: 'Docs' },
+  { key: 'actions',            label: 'Actions',       locked: true },
+]
+
+// Columns hidden on first load. The defaults keep the collections-critical
+// view — who owes what, how old — and drop the secondary metadata that pushes
+// GST Total off the right edge.
+const INVOICE_COLUMNS_HIDDEN_BY_DEFAULT = ['category', 'milestone', 'raised_by', 'next_followup']
+
+export const DEFAULT_INVOICE_COLUMN_VISIBILITY = Object.fromEntries(
+  INVOICE_COLUMNS.map(c => [c.key, !INVOICE_COLUMNS_HIDDEN_BY_DEFAULT.includes(c.key)]),
+)
+
+export const INVOICE_COLUMN_VISIBILITY_STORAGE_KEY = 'fintrack.invoices.columnVisibility'
+
+/** Merge a persisted choice over the defaults, dropping keys that no longer
+ *  exist and forcing locked columns on. */
+export function normalizeColumnVisibility(stored) {
+  const out = { ...DEFAULT_INVOICE_COLUMN_VISIBILITY }
+  if (stored && typeof stored === 'object') {
+    for (const col of INVOICE_COLUMNS) {
+      if (col.locked) { out[col.key] = true; continue }
+      if (typeof stored[col.key] === 'boolean') out[col.key] = stored[col.key]
+    }
+  }
+  return out
+}
+
 /* ── Field definitions for advanced filter builder ────────────────────────── */
 
 export const INVOICE_FIELDS = [

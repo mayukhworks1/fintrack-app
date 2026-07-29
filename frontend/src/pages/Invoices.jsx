@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue, Fragment } from 'react'
 
 import { useSearchParams } from 'react-router-dom'
-import { Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Save, Filter, CalendarDays, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, RotateCcw, Paperclip, Download } from 'lucide-react'
+import { Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Save, Filter, CalendarDays, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, RotateCcw, Paperclip, Download, Columns3 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
@@ -21,7 +21,7 @@ import { InvoiceDetail } from './invoices/InvoiceDetail'
 import { InvoiceDrawer } from './invoices/InvoiceDrawer'
 import { OverdueAlert } from './invoices/OverdueAlert'
 import { AgingBadge, AttachThumb, MonthStatusPill, RaisedByBadge, ResizableHead, SkeletonRow, StatusPill } from './invoices/ui'
-import { DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, classifyAgingBand, currentMonthKey, dateOnlyValue, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './invoices/utils'
+import { DEFAULT_INVOICE_COLUMN_VISIBILITY, DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_COLUMNS, INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, normalizeColumnVisibility, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, classifyAgingBand, currentMonthKey, dateOnlyValue, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './invoices/utils'
 
 /* ── RaisedByBadge ──────────────────────────────────────────────────────── */
 export default function Invoices() {
@@ -69,6 +69,18 @@ export default function Invoices() {
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
   const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
+  const [columnVisibility, setColumnVisibility] = useState(() => {
+    // Restore the user's column choice; a corrupt or stale entry falls back to
+    // defaults rather than leaving the table in a broken state.
+    try {
+      return normalizeColumnVisibility(
+        JSON.parse(localStorage.getItem(INVOICE_COLUMN_VISIBILITY_STORAGE_KEY) || 'null'),
+      )
+    } catch {
+      return DEFAULT_INVOICE_COLUMN_VISIBILITY
+    }
+  })
+  const [showColumnMenu, setShowColumnMenu] = useState(false)
   const [tableDensity, setTableDensity] = useState('comfortable')
   const [hoveredRow,   setHoveredRow]   = useState(null)
   const [chartPreset, setChartPreset] = useState('60d')
@@ -799,6 +811,28 @@ export default function Invoices() {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortCol(col); setSortDir('desc') }
   }
+
+  // Persist the column choice so it survives a reload. Storage being
+  // unavailable (private mode, quota) must not break the table.
+  useEffect(() => {
+    try {
+      localStorage.setItem(INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility))
+    } catch { /* non-fatal — the choice just won't outlive this session */ }
+  }, [columnVisibility])
+
+  const visibleColumnCount = INVOICE_COLUMNS.filter(c => columnVisibility[c.key]).length
+
+  function toggleColumn(key) {
+    const col = INVOICE_COLUMNS.find(c => c.key === key)
+    if (!col || col.locked) return
+    setColumnVisibility(v => ({ ...v, [key]: !v[key] }))
+  }
+
+  // Width of the visible columns only, so hiding columns actually reclaims
+  // horizontal space instead of leaving the table stretched to its old size.
+  const visibleTableMinWidth = INVOICE_COLUMNS
+    .filter(c => columnVisibility[c.key])
+    .reduce((sum, c) => sum + (columnWidths[c.key] || DEFAULT_INVOICE_COLUMN_WIDTHS[c.key] || 120), 0)
 
   // Inline sort-label used inside <th className="tbl-head">.
   // Labelled via aria-label rather than title: a native tooltip here renders on
@@ -1998,6 +2032,61 @@ export default function Invoices() {
                 </button>
               ))}
             </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowColumnMenu(m => !m)}
+                aria-expanded={showColumnMenu}
+                aria-haspopup="true"
+                className="btn-ghost"
+                style={{ fontSize: '0.75rem', padding: '0.45rem 0.7rem' }}
+              >
+                <Columns3 size={12} />Columns
+                <span className="tabular-nums" style={{ color: 'var(--text-3)' }}>
+                  {visibleColumnCount}/{INVOICE_COLUMNS.length}
+                </span>
+              </button>
+              {showColumnMenu && (
+                <>
+                  {/* Click-away layer — closes without trapping focus */}
+                  <div className="fixed inset-0" style={{ zIndex: 40 }} onClick={() => setShowColumnMenu(false)} />
+                  <div
+                    className="absolute right-0 mt-1 card"
+                    style={{ zIndex: 41, minWidth: 210, padding: '0.4rem', maxHeight: 340, overflowY: 'auto' }}
+                  >
+                    {INVOICE_COLUMNS.map(({ key, label, locked }) => (
+                      <label
+                        key={key}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                        style={{
+                          fontSize: '0.75rem',
+                          cursor: locked ? 'not-allowed' : 'pointer',
+                          opacity: locked ? 0.5 : 1,
+                          color: 'var(--text-1)',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!columnVisibility[key]}
+                          disabled={locked}
+                          onChange={() => toggleColumn(key)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                    <div style={{ borderTop: '1px solid var(--card-border)', margin: '0.35rem 0' }} />
+                    <button
+                      type="button"
+                      onClick={() => setColumnVisibility(DEFAULT_INVOICE_COLUMN_VISIBILITY)}
+                      className="btn-ghost w-full"
+                      style={{ fontSize: '0.72rem', padding: '0.35rem 0.5rem', justifyContent: 'flex-start' }}
+                    >
+                      <RotateCcw size={11} />Reset columns
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setColumnWidths(DEFAULT_INVOICE_COLUMN_WIDTHS)}
@@ -2009,57 +2098,87 @@ export default function Invoices() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: 1700, tableLayout: 'fixed' }}>
+          <table className="w-full" style={{ minWidth: visibleTableMinWidth, tableLayout: 'fixed' }}>
             <thead>
               <tr>
                 <th className="tbl-head" style={{ width: columnWidths.row }}>
                   <ResizableHead width={columnWidths.row} onResizeStart={(e) => startColumnResize('row', e)}>#</ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.invoice_number }}>
+                {columnVisibility.invoice_number && (
+                  <th className="tbl-head" style={{ width: columnWidths.invoice_number }}>
                   <ResizableHead width={columnWidths.invoice_number} onResizeStart={(e) => startColumnResize('invoice_number', e)}><SortLabel col="Invoice Number">Invoice #</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.payment_status }}>
+                )}
+                {columnVisibility.payment_status && (
+                  <th className="tbl-head" style={{ width: columnWidths.payment_status }}>
                   <ResizableHead width={columnWidths.payment_status} onResizeStart={(e) => startColumnResize('payment_status', e)}><SortLabel col="Payment Status">Status</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
+                )}
+                {columnVisibility.amount_raised && (
+                  <th className="tbl-head" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
                   <ResizableHead width={columnWidths.amount_raised} onResizeStart={(e) => startColumnResize('amount_raised', e)} align="right"><SortLabel col="Amount Raised">Amount</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.aging }}>
+                )}
+                {columnVisibility.aging && (
+                  <th className="tbl-head" style={{ width: columnWidths.aging }}>
                   <ResizableHead width={columnWidths.aging} onResizeStart={(e) => startColumnResize('aging', e)}><SortLabel col="Agening (Days)">Aging</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.client_name }}>
+                )}
+                {columnVisibility.client_name && (
+                  <th className="tbl-head" style={{ width: columnWidths.client_name }}>
                   <ResizableHead width={columnWidths.client_name} onResizeStart={(e) => startColumnResize('client_name', e)}><SortLabel col="Client Name">Client</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.project }}>
+                )}
+                {columnVisibility.project && (
+                  <th className="tbl-head" style={{ width: columnWidths.project }}>
                   <ResizableHead width={columnWidths.project} onResizeStart={(e) => startColumnResize('project', e)}><SortLabel col="Project">Project</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.raised_date }}>
+                )}
+                {columnVisibility.raised_date && (
+                  <th className="tbl-head" style={{ width: columnWidths.raised_date }}>
                   <ResizableHead width={columnWidths.raised_date} onResizeStart={(e) => startColumnResize('raised_date', e)}><SortLabel col="Raised Date">Raised</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
+                )}
+                {columnVisibility.outstanding_amount && (
+                  <th className="tbl-head" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
                   <ResizableHead width={columnWidths.outstanding_amount} onResizeStart={(e) => startColumnResize('outstanding_amount', e)} align="right"><SortLabel col="Outstanding Amount">Outstanding</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
+                )}
+                {columnVisibility.amount_received && (
+                  <th className="tbl-head" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
                   <ResizableHead width={columnWidths.amount_received} onResizeStart={(e) => startColumnResize('amount_received', e)} align="right"><SortLabel col="Amount Received">Received</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
+                )}
+                {columnVisibility.amount_with_tax && (
+                  <th className="tbl-head" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
                   <ResizableHead width={columnWidths.amount_with_tax} onResizeStart={(e) => startColumnResize('amount_with_tax', e)} align="right"><SortLabel col="Amount with Tax">GST Total</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.category }}>
+                )}
+                {columnVisibility.category && (
+                  <th className="tbl-head" style={{ width: columnWidths.category }}>
                   <ResizableHead width={columnWidths.category} onResizeStart={(e) => startColumnResize('category', e)}><SortLabel col="Category">Category</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.milestone }}>
+                )}
+                {columnVisibility.milestone && (
+                  <th className="tbl-head" style={{ width: columnWidths.milestone }}>
                   <ResizableHead width={columnWidths.milestone} onResizeStart={(e) => startColumnResize('milestone', e)}><SortLabel col="Milestone">Milestone</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.raised_by }}>
+                )}
+                {columnVisibility.raised_by && (
+                  <th className="tbl-head" style={{ width: columnWidths.raised_by }}>
                   <ResizableHead width={columnWidths.raised_by} onResizeStart={(e) => startColumnResize('raised_by', e)}><SortLabel col="Raised By">Raised By</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.next_followup }}>
+                )}
+                {columnVisibility.next_followup && (
+                  <th className="tbl-head" style={{ width: columnWidths.next_followup }}>
                   <ResizableHead width={columnWidths.next_followup} onResizeStart={(e) => startColumnResize('next_followup', e)}><SortLabel col="Next followup">Next Followup</SortLabel></ResizableHead>
                 </th>
-                <th className="tbl-head" style={{ width: columnWidths.docs }}>
+                )}
+                {columnVisibility.docs && (
+                  <th className="tbl-head" style={{ width: columnWidths.docs }}>
                   <ResizableHead width={columnWidths.docs} onResizeStart={(e) => startColumnResize('docs', e)}>Docs</ResizableHead>
                 </th>
+                )}
                 <th className="tbl-head" style={{ width: columnWidths.actions }}>
                   <ResizableHead width={columnWidths.actions} onResizeStart={(e) => startColumnResize('actions', e)}>Actions</ResizableHead>
                 </th>
@@ -2069,7 +2188,7 @@ export default function Invoices() {
               {loading && !listData
                 ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 : records.length === 0
-                  ? <tr><td colSpan={17}>
+                  ? <tr><td colSpan={visibleColumnCount}>
                       <EmptyState
                         icon={<Receipt size={22} />}
                         title="No invoices found"
@@ -2088,6 +2207,15 @@ export default function Invoices() {
                       const isHovered = hoveredRow === r.id
                       const statusMeta = STATUS_META[f['Payment Status']] || {}
                       const accentColor = statusMeta.color || 'var(--accent)'
+                      // Client and Project frequently hold the same name (a
+                      // retainer billed under the client's own name). Repeating
+                      // it in adjacent columns is noise, so the Project cell
+                      // shows only the description in that case.
+                      const clientLabel = f['Client Name'] || f['Client'] || ''
+                      const projectLabel = f['Project'] || ''
+                      const projectSameAsClient =
+                        !!clientLabel && !!projectLabel &&
+                        clientLabel.trim().toLowerCase() === projectLabel.trim().toLowerCase()
 
                       const handleRowEnter = () => {
                         clearTimeout(hoverTimerRef.current)
@@ -2119,73 +2247,112 @@ export default function Invoices() {
                             </span>
                           </td>
 
-                          <td className="tbl-cell" style={{ width: columnWidths.invoice_number }}>
+                          {columnVisibility.invoice_number && (
+                            <td className="tbl-cell" style={{ width: columnWidths.invoice_number }}>
                             <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-1)' }}>
                               {f['Invoice Number'] || '—'}
                             </span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.payment_status }}>
+                          )}
+                          {columnVisibility.payment_status && (
+                            <td className="tbl-cell" style={{ width: columnWidths.payment_status }}>
                             <StatusPill status={f['Payment Status']} />
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
+                          )}
+                          {columnVisibility.amount_raised && (
+                            <td className="tbl-cell" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>
                               {fmt(f['Amount Raised'])}
                             </span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.aging }}>
+                          )}
+                          {columnVisibility.aging && (
+                            <td className="tbl-cell" style={{ width: columnWidths.aging }}>
                             <AgingBadge days={effectiveAging(f)} status={f['Payment Status']} />
                           </td>
-                          <td className="tbl-cell align-top" style={{ width: columnWidths.client_name }}>
+                          )}
+                          {columnVisibility.client_name && (
+                            <td className="tbl-cell align-top" style={{ width: columnWidths.client_name }}>
                             <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Client Name'] || f['Client'] || '—'}</span>
                           </td>
-                          <td className="tbl-cell align-top" style={{ width: columnWidths.project }}>
+                          )}
+                          {columnVisibility.project && (
+                            <td className="tbl-cell align-top" style={{ width: columnWidths.project }}>
                             <div className="min-w-0">
-                              <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Project'] || '—'}</span>
+                              {/* Suppressed only when the Client column is on
+                                  screen to show it — otherwise the name would
+                                  disappear from the row entirely. */}
+                              {!(projectSameAsClient && columnVisibility.client_name) && (
+                                <span className="text-xs font-semibold block" style={{ color: 'var(--text-1)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{projectLabel || '—'}</span>
+                              )}
                               {f['Description'] && (
                                 <span className="block text-[11px] mt-1" style={{ color: 'var(--text-3)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                                   {f['Description']}
                                 </span>
                               )}
+                              {/* A row with neither a name nor a description
+                                  still needs a placeholder to read as empty. */}
+                              {projectSameAsClient && columnVisibility.client_name && !f['Description'] && (
+                                <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>
+                              )}
                             </div>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
+                          )}
+                          {columnVisibility.raised_date && (
+                            <td className="tbl-cell" style={{ width: columnWidths.raised_date }}>
                             <span className="text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{fmtDate(f['Raised Date'])}</span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
+                          )}
+                          {columnVisibility.outstanding_amount && (
+                            <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
                             {outstanding > 0
                               ? <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-warning)' }}>{fmt(outstanding)}</span>
                               : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
+                          )}
+                          {columnVisibility.amount_received && (
+                            <td className="tbl-cell" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
                             <span className="text-xs tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>
                               {fmt(f['Amount Received'])}
                             </span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
+                          )}
+                          {columnVisibility.amount_with_tax && (
+                            <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
                             <span className="text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>
                               {fmt(f['Amount with Tax'])}
                             </span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.category }}>
+                          )}
+                          {columnVisibility.category && (
+                            <td className="tbl-cell" style={{ width: columnWidths.category }}>
                             <span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Category'] || '—'}</span>
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.milestone }}><span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Milestone'] || '—'}</span></td>
-                          <td className="tbl-cell min-w-0" style={{ width: columnWidths.raised_by, overflow: 'hidden' }}>
+                          )}
+                          {columnVisibility.milestone && (
+                            <td className="tbl-cell" style={{ width: columnWidths.milestone }}><span className="text-[11px]" style={{ color: 'var(--text-2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{f['Milestone'] || '—'}</span></td>
+                          )}
+                          {columnVisibility.raised_by && (
+                            <td className="tbl-cell min-w-0" style={{ width: columnWidths.raised_by, overflow: 'hidden' }}>
                             {f['Raised By']
                               ? <span className="inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] px-2 py-0.5 rounded-full" title={f['Raised By']} style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-2)' }}>
                                   <RaisedByBadge email={f['Raised By']} avatarMap={avatarMap} size={14} />
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
-                          <td className="tbl-cell" style={{ width: columnWidths.next_followup }}>
+                          )}
+                          {columnVisibility.next_followup && (
+                            <td className="tbl-cell" style={{ width: columnWidths.next_followup }}>
                             {f['Next followup']
                               ? <span className="text-xs tabular-nums" style={{ color: effectiveAging(f) > 0 && f['Payment Status'] === 'Pending' ? 'var(--fin-warning)' : 'var(--text-2)' }}>
                                   {fmtDate(f['Next followup'])}
                                 </span>
                               : <span style={{ color: 'var(--text-3)' }}>—</span>}
                           </td>
+                          )}
 
                           {/* Attachment thumbs */}
+                          {columnVisibility.docs && (
                           <td className="tbl-cell" onClick={e => e.stopPropagation()} style={{ width: columnWidths.docs }}>
                             {allFiles.length > 0 ? (
                               <div className="flex items-center gap-1">
@@ -2202,6 +2369,7 @@ export default function Invoices() {
                               <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>
                             )}
                           </td>
+                          )}
 
                           {/* View action */}
                           <td className="tbl-cell" onClick={e => e.stopPropagation()} style={{ width: columnWidths.actions }}>
@@ -2233,7 +2401,7 @@ export default function Invoices() {
                           style={{ background: 'transparent' }}
                           onMouseEnter={handleRowEnter}
                           onMouseLeave={handleRowLeave}>
-                          <td colSpan={17} style={{ padding: 0, border: 'none' }}>
+                          <td colSpan={visibleColumnCount} style={{ padding: 0, border: 'none' }}>
                             <div style={{
                               maxHeight: isHovered ? 320 : 0,
                               overflow: 'hidden',
