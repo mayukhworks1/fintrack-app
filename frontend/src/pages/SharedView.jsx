@@ -640,6 +640,46 @@ const COL_LABELS = {
   'Last Modified':              'Modified',
 }
 
+/* ── Column totals ─────────────────────────────────────────────────────────
+   Currency columns that can be summed. 'TDS %' and 'Agening (Days)' are
+   deliberately absent: a rate and a day count are not meaningful to add up. */
+export const SUMMABLE_COLS = new Set([
+  'Amount Billed So far',
+  'Actual Profit',
+  'Amount Raised',
+  'Amount with Tax',
+  'Amount Received',
+  'Outstanding Amount',
+  'GST Amount',
+  'TDS Amount',
+])
+
+/** Numeric value a column contributes to its total, or null if it has none.
+ *  Mirrors cellContent exactly — including the tax-ledger derivations and the
+ *  clamps behind its em dashes — so a column total always equals the sum of the
+ *  figures actually rendered in that column. */
+export function summableValue(col, f, resourceType) {
+  if (!SUMMABLE_COLS.has(col)) return null
+  if (resourceType === 'tax-ledger') {
+    const t = taxParts(f)
+    if (col === 'GST Amount')         return Number(t.gst || 0)
+    if (col === 'TDS Amount')         return Math.max(0, Number(t.tds || 0))
+    if (col === 'Outstanding Amount') return Math.max(0, Number(t.outstanding || 0))
+  }
+  return Number(f[col] || 0)
+}
+
+export function computeColumnTotals(records, cols, resourceType) {
+  const totals = {}
+  for (const col of cols) {
+    if (!SUMMABLE_COLS.has(col)) continue
+    let sum = 0
+    for (const r of records) sum += summableValue(col, r.fields || {}, resourceType) || 0
+    totals[col] = sum
+  }
+  return totals
+}
+
 function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   const tax = resourceType === 'tax-ledger' ? taxParts(f) : null
   if (resourceType === 'tax-ledger' && col === 'GST Amount') return (
@@ -718,6 +758,11 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
   const meta = RESOURCE_META[resourceType]
   const cols = (columns || meta.defaultColumns).filter(c => meta.columns.includes(c))
   const highlighted = new Set((highlightColumns || []).filter((col) => cols.includes(col)))
+
+  // Totals across every record in the shared view, so a recipient can read the
+  // figures off the page instead of adding up columns by hand.
+  const totals = computeColumnTotals(records, cols, resourceType)
+  const hasTotals = records.length > 0 && cols.some(c => SUMMABLE_COLS.has(c))
 
   // Build grid template: last data column always expands to fill remaining space
   const gridTemplate = [
@@ -815,6 +860,47 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
               </div>
             )
           })}
+
+          {/* Totals row — same gridTemplate as the header and data rows, so the
+              figures land under their own columns. Labelled in the first column
+              so it cannot be mistaken for another record. */}
+          {hasTotals && (
+            <div
+              className="grid px-4 gap-3"
+              style={{
+                gridTemplateColumns: gridTemplate,
+                alignItems: 'center',
+                minHeight: 48,
+                paddingTop: 10,
+                paddingBottom: 10,
+                background: '#f8fafc',
+                borderTop: '2px solid #e2e8f0',
+                borderLeft: '3px solid transparent',
+                // Deliberately not sticky: the wrapper is overflow-x-auto, which
+                // per spec forces overflow-y to auto too, making it a scroll
+                // container with unconstrained height — `bottom: 0` would resolve
+                // against something that never scrolls and quietly do nothing.
+              }}
+            >
+              {cols.map((col, i) => {
+                const isSummable = SUMMABLE_COLS.has(col)
+                return (
+                  <div key={col} className="min-w-0 px-3 py-2">
+                    {isSummable ? (
+                      <span className="text-[12px] font-bold tabular-nums text-gray-900">
+                        {fmtInr(totals[col])}
+                      </span>
+                    ) : i === 0 ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                        Total · {records.length} {records.length === 1 ? 'record' : 'records'}
+                      </span>
+                    ) : null}
+                  </div>
+                )
+              })}
+              <div />
+            </div>
+          )}
         </div>
       </div>
     </div>
