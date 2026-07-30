@@ -822,6 +822,27 @@ export default function Invoices() {
 
   const visibleColumnCount = INVOICE_COLUMNS.filter(c => columnVisibility[c.key]).length
 
+  // Totals for the money columns across the whole filtered view — every record
+  // the current filters produced, not just the 50 on screen. A total that only
+  // covered the visible page would silently change as you paged.
+  //
+  // Outstanding is clamped at zero per row to match its cell, which renders an
+  // em dash for anything not positive; the column total therefore equals the sum
+  // of the figures actually shown. Amounts are summed as rendered, i.e. in INR —
+  // this table formats every row through formatInr regardless of the record's
+  // Currency field, so the total inherits that same assumption.
+  const columnTotals = useMemo(() => {
+    let amountRaised = 0, outstanding = 0, amountReceived = 0, amountWithTax = 0
+    for (const r of records) {
+      const f = r.fields || {}
+      amountRaised   += Number(f['Amount Raised']   || 0)
+      amountReceived += Number(f['Amount Received'] || 0)
+      amountWithTax  += Number(f['Amount with Tax'] || 0)
+      outstanding    += Math.max(0, Number(f['Outstanding Amount'] || 0))
+    }
+    return { amountRaised, outstanding, amountReceived, amountWithTax }
+  }, [records])
+
   function toggleColumn(key) {
     const col = INVOICE_COLUMNS.find(c => c.key === key)
     if (!col || col.locked) return
@@ -1882,6 +1903,34 @@ export default function Invoices() {
 
       {/* ── Mobile card list (sm-down) ── */}
       <div className="invoice-mobile-stack md:hidden">
+        {/* Same view totals as the desktop tfoot. The mobile stack has no table
+            to hang a footer off, so they lead the list instead — otherwise a
+            phone user would have to scroll the entire view to add anything up. */}
+        {!(loading && !listData) && records.length > 0 && (
+          <div className="card" style={{ padding: '0.85rem 1rem' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                View total
+              </span>
+              <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                {records.length} {records.length === 1 ? 'invoice' : 'invoices'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {[
+                { label: 'Amount',    value: columnTotals.amountRaised,   color: 'var(--text-1)' },
+                { label: 'GST Total', value: columnTotals.amountWithTax,  color: 'var(--text-2)' },
+                { label: 'Received',  value: columnTotals.amountReceived, color: 'var(--fin-positive)' },
+                { label: 'Outstanding', value: columnTotals.outstanding,  color: 'var(--fin-warning)' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color }}>{fmt(value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {loading && !listData
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="card animate-pulse">
@@ -2581,6 +2630,61 @@ export default function Invoices() {
                     })
               }
             </tbody>
+
+            {/* Totals for the money columns across the whole filtered view.
+                Hidden while the skeleton is up or the view is empty — a row of
+                zeros reads as real data. Every cell repeats the same
+                columnVisibility guard as the header so the counts stay aligned
+                whatever is toggled off. */}
+            {!(loading && !listData) && records.length > 0 && (
+              <tfoot>
+                <tr className="invoice-total-row">
+                  <td className="tbl-cell" style={{ width: columnWidths.row }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Total</span>
+                  </td>
+                  {columnVisibility.invoice_number && (
+                    <td className="tbl-cell" style={{ width: columnWidths.invoice_number }}>
+                      <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>
+                        {records.length} {records.length === 1 ? 'invoice' : 'invoices'}
+                      </span>
+                    </td>
+                  )}
+                  {columnVisibility.payment_status && <td className="tbl-cell" style={{ width: columnWidths.payment_status }} />}
+                  {columnVisibility.amount_raised && (
+                    <td className="tbl-cell" style={{ width: columnWidths.amount_raised, textAlign: 'right' }}>
+                      <span className="text-xs tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{fmt(columnTotals.amountRaised)}</span>
+                    </td>
+                  )}
+                  {columnVisibility.aging && <td className="tbl-cell" style={{ width: columnWidths.aging }} />}
+                  {columnVisibility.client_name && <td className="tbl-cell" style={{ width: columnWidths.client_name }} />}
+                  {columnVisibility.project && <td className="tbl-cell" style={{ width: columnWidths.project }} />}
+                  {columnVisibility.raised_date && <td className="tbl-cell" style={{ width: columnWidths.raised_date }} />}
+                  {columnVisibility.outstanding_amount && (
+                    <td className="tbl-cell" style={{ width: columnWidths.outstanding_amount, textAlign: 'right' }}>
+                      {columnTotals.outstanding > 0
+                        ? <span className="text-xs tabular-nums font-bold" style={{ color: 'var(--fin-warning)' }}>{fmt(columnTotals.outstanding)}</span>
+                        : <span className="text-xs" style={{ color: 'var(--text-3)' }}>—</span>}
+                    </td>
+                  )}
+                  {columnVisibility.amount_received && (
+                    <td className="tbl-cell" style={{ width: columnWidths.amount_received, textAlign: 'right' }}>
+                      <span className="text-xs tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{fmt(columnTotals.amountReceived)}</span>
+                    </td>
+                  )}
+                  {columnVisibility.amount_with_tax && (
+                    <td className="tbl-cell" style={{ width: columnWidths.amount_with_tax, textAlign: 'right' }}>
+                      <span className="text-xs tabular-nums font-bold" style={{ color: 'var(--text-2)' }}>{fmt(columnTotals.amountWithTax)}</span>
+                    </td>
+                  )}
+                  {columnVisibility.category && <td className="tbl-cell" style={{ width: columnWidths.category }} />}
+                  {columnVisibility.milestone && <td className="tbl-cell" style={{ width: columnWidths.milestone }} />}
+                  {columnVisibility.raised_by && <td className="tbl-cell" style={{ width: columnWidths.raised_by }} />}
+                  {columnVisibility.next_followup && <td className="tbl-cell" style={{ width: columnWidths.next_followup }} />}
+                  {columnVisibility.docs && <td className="tbl-cell" style={{ width: columnWidths.docs }} />}
+                  <td className="tbl-cell" style={{ width: columnWidths.actions }} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
         {/* ── Table pagination ── */}

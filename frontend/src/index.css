@@ -938,6 +938,18 @@ html.dark .main-app-theme {
     top: 0;
     z-index: 3;
   }
+  /* Totals row. Pinned to the bottom of the scroll area so the figures stay
+     visible while working down a long view — the counterpart to the sticky
+     header. Needs the opaque background or rows show through, and a top border
+     to read as a summary rather than one more record. */
+  .invoice-total-row > .tbl-cell {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--bg-input);
+    border-top: 2px solid var(--card-border);
+  }
+
   .tbl-row {
     border-bottom: 1px solid var(--card-border);
     transition: background 0.12s;
