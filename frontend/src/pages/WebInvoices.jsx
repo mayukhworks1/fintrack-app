@@ -248,6 +248,28 @@ export default function WebInvoices() {
   })
   const records = applyConditions(baseRecords, filterConditions, r => r.fields ?? {})
 
+  // Totals for the money columns, grouped by currency. Unlike the main invoice
+  // table — which formats everything as INR — this module renders each row in
+  // its own Currency, so a single summed figure across a mixed view would be
+  // meaningless. Grouping keeps it honest: one currency gives one line, a mixed
+  // view lists each. Outstanding is clamped per row to match its cell, which
+  // shows an em dash for anything not positive.
+  const currencyTotals = useMemo(() => {
+    const byCurrency = new Map()
+    for (const r of records) {
+      const f = r.fields || {}
+      const cur = f['Currency'] || 'RS'
+      const t = byCurrency.get(cur) || { currency: cur, count: 0, raised: 0, withTax: 0, received: 0, outstanding: 0 }
+      t.count       += 1
+      t.raised      += Number(f['Amount Raised']   || 0)
+      t.withTax     += Number(f['Amount with Tax'] || 0)
+      t.received    += Number(f['Amount Received'] || 0)
+      t.outstanding += Math.max(0, Number(f['Outstanding Amount'] || 0))
+      byCurrency.set(cur, t)
+    }
+    return [...byCurrency.values()].sort((a, b) => b.count - a.count)
+  }, [records])
+
   const s        = summary
   const overdue  = s?.overdue_invoices || []
   const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
@@ -2699,31 +2721,31 @@ export default function WebInvoices() {
                         })
                   }
                 </tbody>
-                {records.length > 0 && (() => {
-                  const tot = records.reduce((acc, r) => {
-                    const f = r.fields || {}
-                    acc.raised      += Number(f['Amount Raised']      || 0)
-                    acc.withTax     += Number(f['Amount with Tax']    || 0)
-                    acc.received    += Number(f['Amount Received']    || 0)
-                    acc.outstanding += Number(f['Outstanding Amount'] || 0)
-                    return acc
-                  }, { raised: 0, withTax: 0, received: 0, outstanding: 0 })
-                  const fmtTot = n => fmtCurrency(n, 'RS')
-                  return (
-                    <tfoot>
-                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-layer)' }}>
+                {/* One totals row per currency. Rows render in their own
+                    Currency, so a single figure across a mixed view added
+                    rupees to dollars and then labelled the result in rupees.
+                    A single-currency view — the normal case — still shows one
+                    line, now with the right symbol. */}
+                {currencyTotals.length > 0 && (
+                  <tfoot>
+                    {currencyTotals.map((t, i) => (
+                      <tr key={t.currency}
+                        style={{
+                          borderTop: i === 0 ? '2px solid var(--border)' : '1px solid var(--border)',
+                          background: 'var(--bg-layer)',
+                        }}>
                         <td colSpan={6} className="tbl-cell font-semibold text-xs" style={{ color: 'var(--text-2)' }}>
-                          Totals · {records.length} invoice{records.length !== 1 ? 's' : ''}
+                          Totals{currencyTotals.length > 1 ? ` · ${t.currency}` : ''} · {t.count} invoice{t.count !== 1 ? 's' : ''}
                         </td>
-                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtTot(tot.raised)}</td>
-                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtTot(tot.withTax)}</td>
-                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--fin-positive)' }}>{fmtTot(tot.received)}</td>
-                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: tot.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{fmtTot(tot.outstanding)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtCurrency(t.raised, t.currency)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--text-1)' }}>{fmtCurrency(t.withTax, t.currency)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: 'var(--fin-positive)' }}>{fmtCurrency(t.received, t.currency)}</td>
+                        <td className="tbl-cell font-bold tabular-nums text-xs" style={{ color: t.outstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{fmtCurrency(t.outstanding, t.currency)}</td>
                         <td colSpan={5} />
                       </tr>
-                    </tfoot>
-                  )
-                })()}
+                    ))}
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
