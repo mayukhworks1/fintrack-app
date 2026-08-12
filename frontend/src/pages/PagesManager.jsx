@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
@@ -22,15 +23,12 @@ function absUrl(u) {
 // ---------------------------------------------------------------------------
 // Mobile hook
 // ---------------------------------------------------------------------------
-function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 768)
-  useEffect(() => {
-    const h = () => setMobile(window.innerWidth < 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return mobile
-}
+// Deliberately 767px, not the 1023px of the shared hooks/useMediaQuery
+// useIsMobile: this module switches to cards at the md breakpoint, and adopting
+// the shared hook wholesale would flip tablets from table to cards. Expressed
+// through the shared primitive so the resize plumbing is not duplicated —
+// matchMedia also tracks orientation changes a resize listener can miss.
+const useIsMobile = () => useMediaQuery('(max-width: 767px)')
 
 // ---------------------------------------------------------------------------
 // Debounce hook
@@ -941,7 +939,7 @@ function SpreadsheetEditor({ value, onChange }) {
         <button title="Add column" onClick={addCol} style={{ ...btnTiny, fontSize:11, padding:'3px 8px' }}>+ Col</button>
       </div>
       {/* Grid */}
-      <div style={{ flex:1, overflowAuto:'auto', overflow:'auto' }}>
+      <div style={{ flex:1, overflow:'auto' }}>
         <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'100%', fontSize:13 }}>
           <thead>
             <tr>
