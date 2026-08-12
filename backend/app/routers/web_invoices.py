@@ -65,6 +65,9 @@ _TEABLE_FIELD_ATTRS = (
 # the service does not allow would be stripped again further down.
 _NULLABLE_TEABLE_FIELDS = frozenset({"Raised Date", "Cleared Date", "Next followup"})
 
+# Attachment cells clear with null rather than an empty array.
+_ATTACHMENT_FIELDS = frozenset({"Reference", "Invoice PDF"})
+
 
 class WebInvoiceFields(BaseModel):
     invoice_number:  Optional[str]        = None
@@ -190,6 +193,17 @@ class WebInvoiceFields(BaseModel):
         out = {}
         for teable_name, attr in _TEABLE_FIELD_ATTRS:
             value = m[teable_name]
+
+            if teable_name in _ATTACHMENT_FIELDS:
+                if value:
+                    out[teable_name] = value
+                elif isinstance(value, list) and attr in provided:
+                    # Explicit [] means the caller removed the last file. Teable
+                    # clears an attachment cell with null; an empty array is
+                    # stripped downstream and the removal would be lost.
+                    out[teable_name] = None
+                continue
+
             if value is not None:
                 out[teable_name] = value
             elif attr in provided and teable_name in _NULLABLE_TEABLE_FIELDS:

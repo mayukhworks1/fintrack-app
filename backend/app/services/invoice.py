@@ -536,7 +536,12 @@ class InvoiceService:
         url = f"{self._record_url}/{record_id}"
         body = {
             "fieldKeyType": "name",
-            "record": {"fields": _clean_fields(fields, allow_null_fields={"Raised Date", "Cleared Date", "Next followup"})},
+            # Reference / Invoice PDF are listed so a null from the router — its
+            # translation of "the caller removed the last file" — survives to
+            # Teable instead of being stripped as an empty value.
+            "record": {"fields": _clean_fields(fields, allow_null_fields={
+                "Raised Date", "Cleared Date", "Next followup", "Reference", "Invoice PDF",
+            })},
         }
         async with shared_client(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)

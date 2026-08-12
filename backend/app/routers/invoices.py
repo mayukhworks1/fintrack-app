@@ -90,6 +90,32 @@ def _validate_paid_invoice(fields: dict) -> None:
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
+# Attachment cells clear with null rather than an empty array.
+_ATTACHMENT_FIELDS = frozenset({"Reference", "Invoice PDF"})
+
+# Teable field name -> model attribute, so to_teable_fields can consult
+# model_fields_set for the attribute backing each Teable column.
+_INVOICE_ATTR_BY_TEABLE_NAME = {
+    "Invoice Number":  "invoice_number",
+    "Project":         "project",
+    "Client Name":     "client_name",
+    "Category":        "category",
+    "Description":     "description",
+    "Milestone":       "milestone",
+    "Raised By":       "raised_by",
+    "Raised Date":     "raised_date",
+    "Cleared Date":    "cleared_date",
+    "Amount Raised":   "amount_raised",
+    "Amount with Tax": "amount_with_tax",
+    "Amount Received": "amount_received",
+    "Payment Status":  "payment_status",
+    "Remark":          "remark",
+    "Next followup":   "next_followup",
+    "Reference":       "reference",
+    "Invoice PDF":     "invoice_pdf",
+}
+
+
 class InvoiceFields(BaseModel):
     """Fields that callers can set. Read-only computed fields are ignored."""
     invoice_number:   Optional[str]   = None
@@ -193,12 +219,31 @@ class InvoiceFields(BaseModel):
             "Invoice PDF":     self.invoice_pdf,
         }
         allow_null = set(include_null_fields or [])
-        return {
-            k: v for k, v in m.items()
-            # Exclude None, empty strings, and empty arrays — Teable linked-record
-            # fields (Reference, Invoice PDF) reject [] with a validation error.
-            if (v is not None and v != "" and v != []) or k in allow_null
-        }
+        # Which keys the caller actually sent, so "absent" and "explicitly
+        # cleared" stay distinguishable — every field defaults to None, so
+        # without this an update could blank a field nobody touched.
+        provided = self.model_fields_set
+
+        out: dict = {}
+        for key, value in m.items():
+            attr = _INVOICE_ATTR_BY_TEABLE_NAME[key]
+
+            if key in _ATTACHMENT_FIELDS:
+                if value:
+                    out[key] = value
+                elif isinstance(value, list) and attr in provided:
+                    # An explicit [] means "remove the last file". Teable clears
+                    # an attachment cell with null, not with an empty array, so
+                    # translate rather than drop it — dropping is what made
+                    # removing the final attachment silently no-op.
+                    out[key] = None
+                continue
+
+            if value is not None and value != "" and value != []:
+                out[key] = value
+            elif key in allow_null and attr in provided:
+                out[key] = None
+        return out
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────

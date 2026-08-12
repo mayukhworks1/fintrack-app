@@ -210,7 +210,9 @@ describe('api service structure', () => {
 
 describe('admin request filters', () => {
   it('exposes user identity in the advanced condition builder', () => {
-    const source = readFileSync(resolve(__dirname, '../pages/AdminDashboard.jsx'), 'utf8')
+    // Lives in AuditLogTab since AdminDashboard was decomposed into per-tab
+    // modules; the assertion tracked the old path and had been failing since.
+    const source = readFileSync(resolve(__dirname, '../pages/admin/AuditLogTab.jsx'), 'utf8')
     expect(source).toContain("{ key: 'user', label: 'User', type: 'text' }")
     expect(source).toContain("{ key: 'user_email', label: 'User Email', type: 'text' }")
     expect(source).toContain("{ key: 'user_name', label: 'User Name', type: 'text' }")

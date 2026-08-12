@@ -640,7 +640,9 @@ class WebInvoiceService:
         url = f"{self._record_url}/{record_id}"
         body = {
             "fieldKeyType": "name",
-            "record": {"fields": _clean_fields(fields, allow_null_fields={"Raised Date", "Cleared Date", "Next followup"})},
+            "record": {"fields": _clean_fields(fields, allow_null_fields={
+                "Raised Date", "Cleared Date", "Next followup", "Reference", "Invoice PDF",
+            })},
         }
         async with shared_client(timeout=15) as client:
             res = await client.patch(url, json=body, headers=self._headers)
