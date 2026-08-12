@@ -4,8 +4,16 @@ Project duration refresh service.
 Computes `Duration (Months)` as decimal months elapsed since `Project Start Date`
 and PATCHes the value back to Teable for all active projects every hour.
 
-Active = any status that is NOT "Completed" (On Hold, In progress, Not started,
-Input Pending, etc.)  — completed projects keep their final duration frozen.
+Active = running work: In progress, Not started, Input Pending, etc.
+
+Frozen = Completed *and* On Hold. Both keep their last duration instead of
+climbing every hour — a paused project is not ageing, and reporting otherwise
+overstates how long it has been running.
+
+Caveat: the formula below is pure elapsed time from the start date, so a project
+that comes off hold recomputes to include the paused period. Freezing stops the
+figure climbing *while* held; genuinely excluding held time would require
+recording each hold interval, which this service does not track.
 
 Formula:
     months = (today_UTC - start_date).days / 30.4375
@@ -20,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -54,8 +63,29 @@ AGING_DAY_CANDIDATES = [
 ]
 STATUS_CANDIDATES = ["Project Status", "Status", "Stage", "Project Stage"]
 
-# Statuses where aging should NOT be updated (project is closed/frozen)
-_FROZEN_STATUSES = {"✅ completed", "completed", "✅ complete", "complete", "done", "closed", "archived"}
+# Statuses where duration/aging should NOT keep climbing.
+#
+# On Hold belongs here: a paused project is not ageing, and letting the worker
+# tick its Duration and Aging upward every hour reports time the project was not
+# actually running.
+#
+# Compared after _normalize_status, so no emoji-prefixed variants are needed —
+# "⏸ On Hold" and "✅ Completed" both reduce to their bare words.
+_FROZEN_STATUSES = {
+    "completed", "complete", "done", "closed", "archived",
+    "on hold", "hold", "paused", "on-hold",
+}
+
+
+def _normalize_status(value: Any) -> str:
+    """Lowercase and strip emoji/punctuation so status labels compare reliably.
+
+    Teable statuses carry decorative prefixes ("✅ Completed", "⏸ On Hold"), and
+    matching those literally means every new emoji silently reintroduces the bug.
+    """
+    s = str(value or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    return " ".join(s.split())
 
 
 def _detect_field(field_keys: list[str], candidates: list[str]) -> str | None:
@@ -253,7 +283,7 @@ async def run_project_duration_refresh_cycle() -> dict[str, Any]:
                     continue
 
                 status = str((fields.get(status_field) if status_field else "") or "").strip()
-                if status.lower() in _FROZEN_STATUSES:
+                if _normalize_status(status) in _FROZEN_STATUSES:
                     skipped += 1
                     skip_reasons.append({"project": name, "reason": f"frozen status: {status!r}"})
                     continue
