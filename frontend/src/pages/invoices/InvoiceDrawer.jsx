@@ -5,7 +5,7 @@ import { api } from '../../services/api'
 import { AlertTriangle, CheckCircle2, Loader2, Mail, RotateCcw, Save, Sparkles, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AttachmentUploadField, Field, SelectInput, SuggestInput } from './ui'
-import { EMPTY_FORM, INVOICE_PARSE_FIELD_LABELS, STATUSES, buildInvoiceScalarPayload, isRetainerCategory, normalizeInvoiceScalarForm } from './utils'
+import { EMPTY_FORM, INVOICE_PARSE_FIELD_LABELS, STATUSES, buildInvoiceScalarPayload, isRetainerCategory, normalizeInvoiceFormForCompare } from './utils'
 
 export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onClose, onSaved, onDeleted, options = {} }) {
   const { userEmail, authRole, isEmailAuth, hasPerm } = useAuth()
@@ -35,7 +35,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
   const retainerSelected = isRetainerCategory(form.category)
   const hasPaymentAttempt = form.payment_status === 'Paid' || String(form.amount_received).trim() || form.cleared_date
   const hasFormChanges = useMemo(
-    () => JSON.stringify(normalizeInvoiceScalarForm(form)) !== JSON.stringify(normalizeInvoiceScalarForm(initialForm)),
+    () => JSON.stringify(normalizeInvoiceFormForCompare(form)) !== JSON.stringify(normalizeInvoiceFormForCompare(initialForm)),
     [form, initialForm]
   )
   const canSubmit = !saving && (!isEdit || paymentOnly || hasFormChanges)

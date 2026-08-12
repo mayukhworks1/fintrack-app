@@ -86,6 +86,26 @@ export const normalizeInvoiceScalarForm = (form) => INVOICE_SCALAR_FORM_KEYS.red
   return acc
 }, {})
 
+// Attachment fields are held in form state but are not scalars, so they need
+// their own comparable shape. Identity is the file token/id where Teable gives
+// one and the name otherwise — the presigned `url` rotates between reads and
+// would make an untouched form look edited.
+const attachmentSignature = (list) => (Array.isArray(list) ? list : [])
+  .map(a => a?.token || a?.id || a?.name || '')
+  .join('|')
+
+/** Comparable snapshot of everything the drawer can edit, attachments included.
+ *
+ *  The drawer gates saving on this: comparing scalars alone meant removing a
+ *  file registered as "no changes", which left the Save button disabled and made
+ *  handleSave return silently — the removal was dropped with no error shown.
+ */
+export const normalizeInvoiceFormForCompare = (form) => ({
+  ...normalizeInvoiceScalarForm(form),
+  reference:   attachmentSignature(form?.reference),
+  invoice_pdf: attachmentSignature(form?.invoice_pdf),
+})
+
 export const invoiceAmountParts = (fields = {}) => {
   const base = Number(fields['Amount Raised'] || 0)
   const gross = Number(fields['Amount with Tax'] || base)
@@ -125,6 +145,14 @@ export const buildInvoiceScalarPayload = (form, { isEdit = false, paymentOnly = 
     : form.next_followup
       ? `${form.next_followup}T00:00:00.000Z`
       : (isEdit ? null : undefined),
+  // Attachment arrays must be sent, not just uploaded. Adding a file persists
+  // immediately through the upload endpoint, but there is no delete endpoint —
+  // removal happens by PATCHing the remaining list. Omitting these meant the
+  // file vanished from the form and came back on reload.
+  ...(isEdit ? {
+    reference:   Array.isArray(form.reference)   ? form.reference   : [],
+    invoice_pdf: Array.isArray(form.invoice_pdf) ? form.invoice_pdf : [],
+  } : {}),
 })
 
 export const isRetainerCategory = (value) => /retainer/i.test(String(value || ''))
