@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check,
-  Square, Printer, TrendingUp, Zap, Clock, Activity, BarChart2,
+  Square, Printer, Zap, Clock, Activity, BarChart2,
   History, Eye, Trash2,
 } from 'lucide-react'
 import { api } from '../services/api'
+import BrandMark from '../components/BrandMark'
 
 /* ── Markdown-lite renderer (tuned for the new professional theme) ───────── */
 function AiText({ text }) {
@@ -595,7 +596,7 @@ export default function Report() {
           <div className="print-only print-letterhead">
             <div className="print-brand">
               <div className="print-logo">
-                <TrendingUp size={20} color="#fff" />
+                <BrandMark size={36} />
               </div>
               <div>
                 <p className="print-brand-name">FinTrack</p>

@@ -1952,12 +1952,16 @@ h1 { letter-spacing: -0.03em; }
     align-items: center;
     gap: 10pt;
   }
+  /* The brand mark carries its own tile, so this is just a sizing box — no
+     background of its own. print-color-adjust keeps the tile and its gradient
+     from being stripped by the browser's ink-saving pass. */
   .print-logo {
     width: 36pt; height: 36pt;
-    border-radius: 8pt;
-    background: #2563eb !important;
     display: flex; align-items: center; justify-content: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
+  .print-logo svg { width: 100%; height: 100%; }
   .print-brand-name {
     font-size: 18pt;
     font-weight: 800;
@@ -2158,15 +2162,15 @@ html.dark .web-invoices-shell {
   color: white;
 }
 
+/* Holds the reversed brand mark. No chip or ring behind it — the sidebar is
+   near-black and the mark is drawn light, so it stands on the surface directly
+   rather than sitting inside a pill. */
 .runey-brand-mark {
   width: 2.35rem;
   height: 2.35rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: #f9fafb;
-  box-shadow: inset 0 0 0 1px rgba(15,23,42,0.08), 0 8px 20px rgba(0,0,0,0.22);
 }
 
 .runey-brand-title {

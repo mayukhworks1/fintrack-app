@@ -1,7 +1,7 @@
 import { NavLink, Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
-  MessageSquareText, FileText, TrendingUp,
+  MessageSquareText, FileText,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
   Plus, Landmark, FileSpreadsheet, Layers, Globe
@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
+import BrandMark from './BrandMark'
 
 /* ── New Invoice quick-action button ── */
 function NewQuickAction({ collapsed }) {
@@ -26,42 +27,6 @@ function NewQuickAction({ collapsed }) {
         {!collapsed && <span>New Invoice</span>}
       </button>
     </div>
-  )
-}
-
-/* ── Brand icon — minimal fin/track monogram ── */
-function BrandIcon({ size = 28 }) {
-  return (
-    <svg
-      width={size} height={size}
-      viewBox="0 0 32 32"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0 }}
-    >
-      <defs>
-        <linearGradient id="ft-bg" x1="3" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1A2140" />
-          <stop offset="1" stopColor="#0A0F1E" />
-        </linearGradient>
-        <linearGradient id="ft-accent" x1="9" y1="7" x2="24" y2="23" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7D95FF" />
-          <stop offset="1" stopColor="#8CE35A" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill="url(#ft-bg)" />
-      <path
-        d="M10 7.5C10 6.67 10.67 6 11.5 6H22C22.83 6 23.5 6.67 23.5 7.5C23.5 8.33 22.83 9 22 9H13V13H20.25C21.08 13 21.75 13.67 21.75 14.5C21.75 15.33 21.08 16 20.25 16H13V24.5C13 25.33 12.33 26 11.5 26C10.67 26 10 25.33 10 24.5V7.5Z"
-        fill="white"
-      />
-      <path
-        d="M17.25 18.5L22.75 13"
-        stroke="url(#ft-accent)"
-        strokeWidth="2.8"
-        strokeLinecap="round"
-      />
-      <circle cx="23.25" cy="12.5" r="2.3" fill="url(#ft-accent)" />
-    </svg>
   )
 }
 
@@ -136,7 +101,8 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           style={{ textDecoration: 'none' }}
         >
           <span className="runey-brand-mark">
-            <BrandIcon size={collapsed ? 28 : 28} />
+            {/* Sidebar is #171717 in every theme — the reversed mark reads there. */}
+            <BrandMark size={30} variant="glyph" />
           </span>
           {!collapsed && (
             <div className="min-w-0">
@@ -438,7 +404,7 @@ export default function Layout({ children, style }) {
             className="flex items-center gap-2 -ml-0.5 p-1 rounded-xl"
             style={{ textDecoration: 'none' }}
           >
-            <BrandIcon size={28} />
+            <BrandMark size={28} />
             <span
               className="font-bold text-sm tracking-tight"
               style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}

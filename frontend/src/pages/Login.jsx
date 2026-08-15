@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, TrendingUp, ArrowRight, Mail, Clock } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Mail, Clock } from 'lucide-react'
+import BrandMark from '../components/BrandMark'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
 
@@ -113,12 +114,7 @@ export default function Login() {
       <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm animate-fade-in">
           <div className="flex items-center justify-center gap-2.5 mb-8">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--accent-btn)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
-            >
-              <TrendingUp size={16} className="text-white" aria-hidden="true" />
-            </div>
+            <BrandMark size={36} />
             <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
               FinTrack
             </span>
@@ -252,12 +248,7 @@ export default function Login() {
       <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm animate-fade-in">
           <div className="flex items-center justify-center gap-2.5 mb-8">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--accent-btn)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
-            >
-              <TrendingUp size={16} className="text-white" aria-hidden="true" />
-            </div>
+            <BrandMark size={36} />
             <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
               FinTrack
             </span>
@@ -304,12 +295,7 @@ export default function Login() {
 
         {/* Brand wordmark above card */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'var(--accent-btn)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
-          >
-            <TrendingUp size={16} className="text-white" aria-hidden="true" />
-          </div>
+          <BrandMark size={36} />
           <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
             FinTrack
           </span>
