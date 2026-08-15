@@ -24,10 +24,13 @@
 
     <title>FinTrack — AI Project Finance Manager</title>
 
-    <!-- Typography — Inter variable font (crisp at all weights & sizes) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <!-- Typography — Outfit variable font, self-hosted (see src/index.css).
+         Preloaded so text paints in the real face on first frame instead of
+         swapping in after a round trip. Both subsets are preloaded: latin
+         carries the UI text and latin-ext carries the rupee sign, which is
+         above the fold in every KPI tile. 47 KB for the full 100-900 axis. -->
+    <link rel="preload" href="/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/outfit-latin-ext.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- Cloudflare Web Analytics -->
     <script defer src="https://static.cloudflareinsights.com/beacon.min.js"

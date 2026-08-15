@@ -97,7 +97,7 @@ function inline(s) {
 }
 
 const MD_CSS = `
-.md{color:#1e293b;line-height:1.85;font-size:clamp(15px,2.5vw,17px);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.md{color:#1e293b;line-height:1.85;font-size:clamp(15px,2.5vw,17px);font-family:var(--font-sans)}
 .md h1,.md h2,.md h3,.md h4,.md h5,.md h6{font-weight:800;color:#0f172a;line-height:1.2;margin:1.6em 0 .5em}
 .md h1{font-size:clamp(24px,4vw,38px);border-bottom:2px solid #e2e8f0;padding-bottom:.35em}
 .md h2{font-size:clamp(20px,3vw,28px);border-bottom:1px solid #e2e8f0;padding-bottom:.25em}
@@ -447,7 +447,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: '#111827' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'var(--font-sans)', color: '#111827' }}>
       <ReadingProgress />
       <div style={{ maxWidth: showTOC ? 1060 : 820, margin: '0 auto', padding: '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
         {/* Main content */}

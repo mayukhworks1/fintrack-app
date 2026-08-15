@@ -280,7 +280,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                     textAnchor="middle" dominantBaseline="central"
                     fontSize={isHov ? "8.5" : "7.5"} fontWeight="700"
                     fill="white"
-                    fontFamily="Inter, ui-sans-serif, system-ui"
+                    fontFamily="Outfit, ui-sans-serif, system-ui"
                   >
                     {initials(day.invoices[0].project || day.invoices[0].client || day.invoices[0].raisedBy)}
                   </text>
@@ -291,7 +291,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                       <text x={x + 9} y={top - 22}
                         textAnchor="middle" dominantBaseline="central"
                         fontSize="6.5" fontWeight="800" fill="white"
-                        fontFamily="Inter, ui-sans-serif, system-ui"
+                        fontFamily="Outfit, ui-sans-serif, system-ui"
                       >{day.invoices.length}</text>
                     </g>
                   )}
@@ -322,7 +322,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
               <text x={x} y={PAD_TOP - 12}
                 textAnchor="middle" dominantBaseline="central"
                 fontSize="9" fontWeight="700" fill="white"
-                fontFamily="Inter, ui-sans-serif, system-ui"
+                fontFamily="Outfit, ui-sans-serif, system-ui"
               >{fmtInr(hoverDay.cum)} total</text>
             </g>
           )
@@ -348,7 +348,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                   fontSize={isHov ? "9.5" : "9"}
                   fontWeight={isHov ? "700" : "500"}
                   fill={isHov ? 'var(--accent)' : 'var(--text-3, #9ca3af)'}
-                  fontFamily="Inter, ui-sans-serif, system-ui"
+                  fontFamily="Outfit, ui-sans-serif, system-ui"
                 >{shortDate(day.date)}</text>
               )}
             </g>
