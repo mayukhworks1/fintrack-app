@@ -87,7 +87,7 @@
   /* Text */
   --text-1:           #0f172a;
   --text-2:           #4a5568;
-  --text-3:           #8fa0b8;
+  --text-3:           #697688;
 
   /* Primary — Blue */
   --accent:           #2563eb;
@@ -206,7 +206,7 @@
   --border-focus:     rgba(47,91,255,0.28);
   --text-1:           #142033;
   --text-2:           #5f625f;
-  --text-3:           #908b82;
+  --text-3:           #78746d;
   --accent:           #2f5bff;
   --accent-dim:       #eef3ff;
   --accent-glow:      rgba(47,91,255,0.12);
@@ -220,13 +220,13 @@
   --table-row-odd:    rgba(244,247,252,0.92);
   --table-row-hover:  rgba(236,242,255,0.95);
   --table-row-shadow: inset 0 1px 0 rgba(255,255,255,0.62), 0 10px 24px rgba(15,23,42,0.06);
-  --fin-positive:     #1b9a66;
+  --fin-positive:     #178558;
   --fin-pos-bg:       #ecf8f2;
   --fin-pos-border:   #c9ead9;
-  --fin-warning:      #d18a1a;
+  --fin-warning:      #a06a14;
   --fin-warn-bg:      #fff6e8;
   --fin-warn-border:  #f4ddb1;
-  --fin-negative:     #dc6a5f;
+  --fin-negative:     #b8594f;
   --fin-neg-bg:       #fff2f0;
   --fin-neg-border:   #f3d0ca;
   --nav-active-bg:    #eff4ff;
@@ -291,7 +291,7 @@ html.dark .main-app-theme {
   --border-focus:     rgba(94,127,255,0.42);
   --text-1:           #f2f2ee;
   --text-2:           #b8b5aa;
-  --text-3:           #7c786f;
+  --text-3:           #848076;
   --accent:           #5c84ff;
   --accent-dim:       rgba(92,132,255,0.14);
   --accent-glow:      rgba(92,132,255,0.18);
@@ -377,7 +377,7 @@ html.dark .main-app-theme {
   --border-focus:     rgba(59,130,246,0.50);
   --text-1:           #e2e8f0;
   --text-2:           #8fa0b8;
-  --text-3:           #4a5a72;
+  --text-3:           #6980a3;
   --accent:           #4a9eff;
   --accent-dim:       rgba(74,158,255,0.10);
   --accent-glow:      rgba(74,158,255,0.16);
@@ -2418,3 +2418,56 @@ html.dark .web-invoices-shell {
 .dark .nav-item:hover { background: rgba(74,158,255,0.06); }
 .dark .nav-item.active { background: rgba(74,158,255,0.10); }
 .dark .nav-item.active::before { background: var(--accent); }
+
+/* ══════════════════════════════════════════════════════════════════
+   Reduced motion
+
+   Honours the OS-level "reduce motion" setting. Vestibular disorders
+   are triggered by movement, not by duration, so transforms and the
+   looping animations (shimmer, pulse) are what actually matter here —
+   they are cut rather than shortened.
+
+   Colour and opacity transitions are kept, at a near-zero duration, so
+   hover and focus states still read as state changes instead of
+   snapping with no feedback at all. `scroll-behavior: auto` stops
+   in-page anchors from smooth-scrolling the whole viewport.
+══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Entrance animations translate the element into place; with the
+     duration collapsed they must also land at their final position,
+     otherwise the content is stuck at its start offset. */
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-slide-in,
+  .animate-scale-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Purely decorative loops — no information is carried by the motion. */
+  .animate-pulse,
+  .animate-pulse-slow,
+  .animate-bounce,
+  .animate-shimmer,
+  .skeleton {
+    animation: none !important;
+  }
+
+  /* The spinner is the exception: it is the only signal that work is in
+     flight, so it keeps turning — just slowly enough not to strobe. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

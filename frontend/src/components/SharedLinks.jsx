@@ -193,7 +193,7 @@ export function ShareLinkModal({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         {/* scrollable body */}
@@ -450,7 +450,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
             <h3 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Edit Link Scope</h3>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>You are updating one existing public URL, not creating a new one.</p>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
         <div className="overflow-y-auto flex-1 p-5 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="rounded-xl p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -772,7 +772,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
             </div>
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-2">

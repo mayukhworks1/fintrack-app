@@ -144,7 +144,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                   </button>
                 </>
               )}
-              <button onClick={onClose} className="btn-icon p-2" style={{ color: 'var(--text-3)' }}>
+              <button aria-label="Close" onClick={onClose} className="btn-icon p-2" style={{ color: 'var(--text-3)' }}>
                 <X size={16} />
               </button>
             </div>

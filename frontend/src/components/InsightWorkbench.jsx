@@ -22,7 +22,7 @@ function ModalShell({ title, subtitle, onClose, children }) {
             <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{title}</h2>
             {subtitle && <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="btn-ghost"><X size={14} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-ghost"><X size={14} /></button>
         </div>
         <div className="p-5 overflow-auto max-h-[calc(88vh-72px)]">
           {children}

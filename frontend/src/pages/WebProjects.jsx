@@ -222,7 +222,7 @@ function Drawer({ open, onClose, title, children, footer }) {
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
           <h2 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
+          <button aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-3)' }}>
             <X size={16} />
           </button>
@@ -339,7 +339,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
               )}
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          <button aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ color: 'var(--text-3)' }}>
             <X size={16} />
           </button>
@@ -618,7 +618,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
               )}
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          <button aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ color: 'var(--text-3)' }}>
             <X size={16} />
           </button>
@@ -955,7 +955,7 @@ function ProjectDetailView({
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={onBack}
+        <button aria-label="Back" onClick={onBack}
           className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
           style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
           <ArrowLeft size={18} />
@@ -971,7 +971,7 @@ function ProjectDetailView({
           </div>
         </div>
         <div className="flex gap-2 flex-wrap justify-end flex-shrink-0">
-          <button onClick={onRefresh}
+          <button aria-label="Refresh" onClick={onRefresh}
             className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
             <RefreshCw size={14} />
@@ -1282,7 +1282,7 @@ function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allRe
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
+          <button aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-3)' }}>
             <X size={16} />
           </button>
@@ -2179,7 +2179,9 @@ export default function WebProjects() {
           <p className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>Web Projects</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={toggle} className="w-8 h-8 rounded-lg flex items-center justify-center"
+          <button onClick={toggle}
+            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
             {dark ? <Sun size={14} /> : <Moon size={14} />}
           </button>

@@ -54,7 +54,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
           <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
             {isEdit ? 'Edit Status Update' : 'New Status Update'}
           </h2>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         <form onSubmit={e => { e.preventDefault(); if (form.client && form.project) onSave(form) }}
@@ -228,7 +228,7 @@ export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} selected</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-5 space-y-4">
@@ -390,7 +390,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} · no login needed</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -577,7 +577,7 @@ export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose,
             <h3 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Edit Link Scope</h3>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>You are updating one existing public URL, not creating a new one.</p>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -828,7 +828,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
               {!loading && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{views.length} link{views.length !== 1 ? 's' : ''}</p>}
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
         {/* Body */}
@@ -1363,7 +1363,7 @@ export function AppearancePanel({
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Customize Board</p>
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Appearance, density, and status options</p>
         </div>
-        <button onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>
+        <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>
           <X size={14} />
         </button>
       </div>

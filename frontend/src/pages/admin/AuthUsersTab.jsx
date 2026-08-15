@@ -47,7 +47,7 @@ export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
             <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Set password</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{userEmail}</p>
           </div>
-          <button onClick={onClose} style={{ color: 'var(--text-3)' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -696,7 +696,7 @@ export function UserTimelineDrawer({ userId, onClose }) {
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-red-50" style={{ color: 'var(--text-3)' }}>
+          <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-lg hover:bg-red-50" style={{ color: 'var(--text-3)' }}>
             <X size={15} />
           </button>
         </div>

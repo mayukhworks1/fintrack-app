@@ -438,7 +438,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
             <h3 style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: 16, margin: 0 }}>Purge Audit Log</h3>
             <p style={{ color: 'var(--text-3)', fontSize: 12, margin: 0 }}>Removes entries older than selected threshold</p>
           </div>
-          <button onClick={onCancel} style={{ marginLeft: 'auto', color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button aria-label="Cancel" onClick={onCancel} style={{ marginLeft: 'auto', color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>
             <X size={18} />
           </button>
         </div>

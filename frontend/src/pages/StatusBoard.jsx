@@ -1041,7 +1041,7 @@ export default function StatusBoard() {
                 style={{ background: 'rgba(14,165,233,0.12)', color: '#0ea5e9', border: '1px solid rgba(14,165,233,0.25)' }}>
                 <Share2 size={13} /> <span className="hidden sm:inline">Share</span>
               </button>
-              <button onClick={clearSelection} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>
+              <button aria-label="Clear selection" onClick={clearSelection} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>
                 <X size={15} />
               </button>
             </div>

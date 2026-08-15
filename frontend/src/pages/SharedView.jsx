@@ -1036,7 +1036,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
                 )}
               </div>
             </div>
-            <button onClick={onClose}
+            <button aria-label="Close" onClick={onClose}
               className="flex-shrink-0 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
               <X size={16} />
             </button>
@@ -1250,7 +1250,7 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
         {/* sticky header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid #e5e7eb' }}>
           <h2 className="text-base font-bold text-gray-900">Update {resourceType === 'status' ? 'Status' : resourceType === 'projects' ? 'Project' : 'Invoice'}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600"><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600"><X size={16} /></button>
         </div>
         {/* scrollable body */}
         <form onSubmit={e => { e.preventDefault(); onSave(form) }} className="flex flex-col flex-1 min-h-0">

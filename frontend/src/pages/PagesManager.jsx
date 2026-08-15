@@ -394,7 +394,7 @@ function AnalyticsDrawer({ page, onClose }) {
                 <Download size={12} strokeWidth={2} /> Export CSV
               </button>
             )}
-            <button onClick={onClose} style={{ ...btnGhost, padding:'6px 8px', borderRadius:8, display:'inline-flex', alignItems:'center', color:'var(--text-3)' }}>
+            <button aria-label="Close" onClick={onClose} style={{ ...btnGhost, padding:'6px 8px', borderRadius:8, display:'inline-flex', alignItems:'center', color:'var(--text-3)' }}>
               <X size={16} strokeWidth={2} />
             </button>
           </div>
@@ -555,7 +555,7 @@ function ShareModal({ page, onClose, onCopy }) {
       <div style={{ background:'var(--bg-base)', borderRadius:16, padding:28, maxWidth:420, width:'100%', boxShadow:'0 16px 64px rgba(0,0,0,0.25)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div style={{ fontWeight:700, fontSize:16 }}>Share Page</div>
-          <button onClick={onClose} style={{ ...btnGhost, padding:'6px 8px', borderRadius:8, display:'inline-flex', alignItems:'center', color:'var(--text-3)' }}><X size={16} strokeWidth={2} /></button>
+          <button aria-label="Close" onClick={onClose} style={{ ...btnGhost, padding:'6px 8px', borderRadius:8, display:'inline-flex', alignItems:'center', color:'var(--text-3)' }}><X size={16} strokeWidth={2} /></button>
         </div>
         <div style={{ textAlign:'center', marginBottom:20 }}>
           <img src={qr} alt="QR code" width={180} height={180} style={{ borderRadius:12, border:'1px solid var(--border)' }} />
