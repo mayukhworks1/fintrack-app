@@ -3,10 +3,14 @@ import { useToast } from '../../context/ToastContext'
 import { api } from '../../services/api'
 import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useDialog } from '../../hooks/useDialog'
 import { ComboBox, StatusAttachmentField } from './StatusFields'
 import { ALL_COLUMNS, EXPIRY_OPTS, MAX_SHARED_VIEW_RECORDS, THEME_PRESETS, fmtDate, isExpired, parseAttachments, statusStyle, summarizeShareScope } from './utils'
 
 export function StatusModal({ initial, onClose, onSave, saving, allRecords, statusOptions, onAddStatusOption, options }) {
+  // Derived from the prop, not from isEdit below — the hook call runs first and
+  // reading isEdit here would hit its temporal dead zone.
+  const dialog = useDialog({ label: initial ? 'Edit status update' : 'New status update' })
   const isEdit = !!initial
   const [form, setForm] = useState({
     client:                  initial?.fields?.['Client'] || '',
@@ -46,7 +50,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
+      <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh', overflow: 'auto' }}>
 
         <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0 z-10"
@@ -187,6 +191,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
+  const dialog = useDialog({ label: 'AI status update' })
   const [loading, setLoading] = useState(false)
   const [result,  setResult]  = useState(null)
   const [error,   setError]   = useState(null)
@@ -214,7 +219,7 @@ export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)' }}>
@@ -319,6 +324,7 @@ export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ShareModal({ selectedRecords, viewConfig = null, title: defaultTitle = '', isViewShare = false, onClose }) {
+  const dialog = useDialog({ label: 'Share' })
   const [step,      setStep]      = useState('form')
   const [title,     setTitle]     = useState(defaultTitle)
   const [expiry,    setExpiry]    = useState(0)
@@ -377,7 +383,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
+      <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
@@ -527,6 +533,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose, onSave }) {
+  const dialog = useDialog({ label: 'Edit share scope', onClose })
   const [mode, setMode] = useState(view?.is_dynamic ? 'live' : 'snapshot')
   const [saving, setSaving] = useState(false)
   const { showToast } = useToast()
@@ -570,7 +577,7 @@ export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose,
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
+      <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
@@ -646,6 +653,7 @@ export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose,
 }
 
 export function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, visibleRecords = [] }) {
+  const dialog = useDialog({ label: 'Manage share links' })
   const { showToast } = useToast()
   const [views,         setViews]         = useState([])
   const [loading,       setLoading]       = useState(true)
@@ -812,7 +820,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '90vh' }}>
 
         {/* Header */}
@@ -1266,6 +1274,7 @@ export function SavedViewsMenu({ currentConfig, onLoad, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ConfirmModal({ message, confirmLabel = 'Delete', onConfirm, onClose }) {
+  const dialog = useDialog({ label: confirmLabel || 'Confirm' })
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', h)
@@ -1275,7 +1284,7 @@ export function ConfirmModal({ message, confirmLabel = 'Delete', onConfirm, onCl
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-5"
+      <div {...dialog.panelProps} className="w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-5"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-start gap-3">

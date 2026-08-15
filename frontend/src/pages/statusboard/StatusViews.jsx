@@ -5,6 +5,7 @@ import { Check, Clock, Eye, GripVertical, Loader2, Paperclip, Pencil, Plus, Tras
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clientColor, fmtDate, fmtShortDate, hexToRgba, parseAttachments, statusStyle } from './utils'
+import { useDialog } from '../../hooks/useDialog'
 
 export function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus }) {
   const total = records.length
@@ -66,6 +67,7 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
+  const dialog = useDialog({ label: 'Status detail' })
   const navigate = useNavigate()
   const [previewDocs, setPreviewDocs] = useState(null)
   const f = record?.fields || {}
@@ -97,7 +99,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}>
-      <div
+      <div {...dialog.panelProps}
         className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}
         onClick={e => e.stopPropagation()}

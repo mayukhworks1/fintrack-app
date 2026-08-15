@@ -2,13 +2,17 @@
 import { BookOpen, Briefcase, Check, FileText, Globe, Mail, Repeat2, Users, X as XIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { HELP_CONTACT } from './utils'
+import { useDialog } from '../../hooks/useDialog'
 
 export function HelpModal({ open, onClose }) {
+  // active: open — this component stays mounted while closed, so the Escape
+  // handler would otherwise fire onClose for a dialog that is not on screen.
+  const dialog = useDialog({ label: 'Help', onClose, active: open })
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+      <div {...dialog.panelProps} className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
 
         {/* Header */}
