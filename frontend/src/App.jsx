@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'  // eager — landing route
 import Login from './pages/Login'          // eager — auth gate
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
+import { isChunkLoadError } from './utils/chunkError'
 
 const BANNER_H = 37
 
@@ -49,16 +50,6 @@ function ImpersonationBanner() {
 
 /* Lazy-loaded routes — split into separate chunks for snappier initial paint */
 const CHUNK_RELOAD_KEY = 'fintrack:chunk-reload'
-
-function isChunkLoadError(error) {
-  const msg = String(error?.message || error || '')
-  return (
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Importing a module script failed') ||
-    msg.includes('Failed to load module script') ||
-    msg.includes('error loading dynamically imported module')
-  )
-}
 
 function lazyWithReload(importer) {
   return lazy(async () => {

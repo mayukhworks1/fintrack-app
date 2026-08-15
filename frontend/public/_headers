@@ -19,3 +19,17 @@
 # Font files are immutable for a given filename — rename on any font change.
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Build output is content-hashed, so a given filename can never change contents.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html is the only file that knows the current chunk hashes. A cached copy
+# sends the browser after chunks a deploy has already replaced, which is what
+# produces "not a valid JavaScript MIME type" in a tab left open across a
+# release — and it also stops the automatic reload from recovering, because the
+# reload would just be handed the same stale document.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
