@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../context/ConfirmContext'
 
 const EXPIRY_OPTS = [
   { label: 'Never', value: 0 },
@@ -553,6 +554,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
 }
 
 export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = [], onClose }) {
+  const confirm = useConfirm()
   const { showToast } = useToast()
   const [views, setViews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -626,7 +628,11 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
   }
 
   async function deleteView(token) {
-    if (!confirm('Delete this share link?')) return
+    if (!(await confirm({
+      title: 'Delete share link',
+      message: 'Delete this share link? Anyone holding the URL will lose access immediately.',
+      confirmLabel: 'Delete link',
+    }))) return
     const prev = views
     setDeletingTokens(tokens => new Set(tokens).add(token))
     setViews(vs => vs.filter(v => v.token !== token))
@@ -721,7 +727,11 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
   async function deleteSelectedAccesses(token) {
     const ids = selectedAccessIds(token)
     if (!ids.length) return
-    if (!confirm(`Delete ${ids.length} selected activity record${ids.length !== 1 ? 's' : ''}?`)) return
+    if (!(await confirm({
+      title: 'Delete activity records',
+      message: `Delete ${ids.length} selected activity record${ids.length !== 1 ? 's' : ''}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+    }))) return
     setDeletingAccessesByToken(tokens => new Set(tokens).add(token))
     try {
       await api.sharedViews.deleteAccesses(token, ids)

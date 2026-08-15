@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import BrandMark from '../components/BrandMark'
+import { useConfirm } from '../context/ConfirmContext'
 
 /* ── Markdown-lite renderer (tuned for the new professional theme) ───────── */
 function AiText({ text }) {
@@ -129,6 +130,7 @@ const REPORT_TEMPLATES = [
 
 /* ── Main Report page ────────────────────────────────────────────────────── */
 export default function Report() {
+  const confirm = useConfirm()
   const [reportMode, setReportMode] = useState('board-pack')
   const [report,     setReport]    = useState('')
   const [reportMeta, setReportMeta] = useState({})
@@ -274,7 +276,11 @@ export default function Report() {
   }
 
   const deleteHistory = async (id) => {
-    if (!window.confirm('Delete this saved report from history?')) return
+    if (!(await confirm({
+      title: 'Delete saved report',
+      message: 'Delete this saved report from history? This cannot be undone.',
+      confirmLabel: 'Delete',
+    }))) return
     setDeletingHistoryId(id)
     try {
       await api.ai.reportHistoryDelete(id)

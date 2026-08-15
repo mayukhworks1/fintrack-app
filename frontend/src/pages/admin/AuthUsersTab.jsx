@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { RefreshCw, Clock, Trash2, X, Download, UserPlus, Mail, Save, SendHorizontal, KeyRound, Eye, Lock } from 'lucide-react'
 import { api } from '../../services/api'
+import { useConfirm } from '../../context/ConfirmContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { AuthStatusBadge, Badge, EditableName, Empty, Err, FMulti, FPill, FSel, FilterBar, Pager, Skeleton, UserAvatar } from './ui'
@@ -16,6 +17,9 @@ function displayName(user) {
 }
 
 export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
+  // Named askConfirm, not confirm: `confirm` is already the password
+  // confirmation field in this component.
+  const askConfirm = useConfirm()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
@@ -26,7 +30,11 @@ export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!canSubmit) return
-    if (!window.confirm(`Set a new password for ${userEmail}? Their active sessions will be revoked immediately.`)) return
+    if (!(await askConfirm({
+      title: 'Set a new password',
+      message: `Set a new password for ${userEmail}? Their active sessions will be revoked immediately.`,
+      confirmLabel: 'Set password',
+    }))) return
     setBusy(true)
     try {
       const res = await api.admin.setUserPassword(userId, password)
@@ -95,6 +103,7 @@ export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
 }
 
 export function AuthUsersTab() {
+  const confirm = useConfirm()
   const toast = useToast()
   const { authRole, startImpersonation } = useAuth()
   const navigate = useNavigate()
@@ -173,10 +182,16 @@ export function AuthUsersTab() {
 
   const act = useCallback(async (row, action) => {
     const role_key = roleByUser[row.id] || row.roles?.[0] || 'user'
-    if (action === 'reject' && !window.confirm(`Reject ${row.email}? They will not be able to sign in.`)) return
-    if (action === 'disable' && !window.confirm(`Disable ${row.email} and revoke active sessions?`)) return
-    if (action === 'revoke' && !window.confirm(`Revoke active sessions for ${row.email}?`)) return
-    if (action === 'role' && !window.confirm(`Change ${row.email} role to ${role_key}? Their active sessions will be revoked so the new role applies safely.`)) return
+    // Each guarded action gets its own copy; the dialog is only raised for the
+    // action actually being taken.
+    const prompts = {
+      reject:  { title: 'Reject user',   confirmLabel: 'Reject',  message: `Reject ${row.email}? They will not be able to sign in.` },
+      disable: { title: 'Disable user',  confirmLabel: 'Disable', message: `Disable ${row.email} and revoke their active sessions?` },
+      revoke:  { title: 'Revoke sessions', confirmLabel: 'Revoke', message: `Revoke active sessions for ${row.email}?` },
+      role:    { title: 'Change role',   confirmLabel: 'Change role', tone: 'default',
+                 message: `Change ${row.email} role to ${role_key}? Their active sessions will be revoked so the new role applies safely.` },
+    }
+    if (prompts[action] && !(await confirm(prompts[action]))) return
     setActingId(`${row.id}:${action}`)
     try {
       if (action === 'approve') await api.admin.approveAuthUser(row.id, { role_key })
@@ -246,7 +261,11 @@ export function AuthUsersTab() {
     const msg = isActive
       ? `Delete ACTIVE user ${row.email}? This will immediately revoke their sessions and cannot be undone.`
       : `Permanently delete ${row.email}? This cannot be undone.`
-    if (!window.confirm(msg)) return
+    if (!(await confirm({
+      title: isActive ? 'Delete active user' : 'Delete user',
+      message: msg,
+      confirmLabel: 'Delete user',
+    }))) return
     setActingId(`${row.id}:delete`)
     try {
       await api.admin.deleteAuthUser(row.id, isActive)
@@ -272,7 +291,12 @@ export function AuthUsersTab() {
   }, [load])
 
   const resendInvite = useCallback(async (row) => {
-    if (!window.confirm(`Resend invite email to ${row.email}?`)) return
+    if (!(await confirm({
+      title: 'Resend invite',
+      message: `Resend the invite email to ${row.email}?`,
+      confirmLabel: 'Resend invite',
+      tone: 'default',
+    }))) return
     setActingId(`${row.id}:invite`)
     try {
       const res = await api.admin.resendInvite(row.id)
@@ -283,7 +307,11 @@ export function AuthUsersTab() {
   }, [])
 
   const forcePasswordReset = useCallback(async (row) => {
-    if (!window.confirm(`Force password reset for ${row.email}? This will revoke all their active sessions.`)) return
+    if (!(await confirm({
+      title: 'Force password reset',
+      message: `Force a password reset for ${row.email}? This will revoke all their active sessions.`,
+      confirmLabel: 'Force reset',
+    }))) return
     setActingId(`${row.id}:forcereset`)
     try {
       const res = await api.admin.forcePasswordReset(row.id)
@@ -294,7 +322,11 @@ export function AuthUsersTab() {
   }, [])
 
   const impersonate = useCallback(async (row) => {
-    if (!window.confirm(`Impersonate ${row.email}? You will be logged in as this user for up to 2 hours. A banner will appear so you can exit at any time.`)) return
+    if (!(await confirm({
+      title: 'Impersonate user',
+      message: `Impersonate ${row.email}? You will be signed in as this user for up to 2 hours. A banner will appear so you can exit at any time.`,
+      confirmLabel: 'Impersonate',
+    }))) return
     setActingId(`${row.id}:impersonate`)
     try {
       const res = await api.admin.impersonate(row.id)

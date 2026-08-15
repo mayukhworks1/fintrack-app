@@ -25,10 +25,12 @@ import { InvoiceDrawer } from './webinvoices/InvoiceDrawer'
 import { AppSidebar, MobileBottomNav, MobileHeader } from './webinvoices/nav'
 import { AgingBadge, AttachThumb, DashboardMetric, DashboardSignal, KpiCard, MonthStatusPill, RaisedByBadge, SkeletonRow, StatusPill } from './webinvoices/ui'
 import { DEFAULT_PICKLISTS, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, STATUS_META, classifyAgingBand, currencySymbol, currentMonthKey, dateOnlyValue, endOfMonthIso, firstDayIso, fmt, fmtCurrency, fmtDate, getRetainerCategoryOption, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, parseIsoDate, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './webinvoices/utils'
+import { useConfirm } from '../context/ConfirmContext'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
 export default function WebInvoices() {
+  const confirm = useConfirm()
   const toast = useToast()
   const { isAll, logout, hasPerm } = useAuth()
   const canCreateInvoice  = hasPerm('module.invoices.create')
@@ -594,11 +596,16 @@ export default function WebInvoices() {
 
   function openInvoiceRequestForm(group, monthKeyValue) {
     const label = monthLabel(monthKeyValue)
-    const confirmed = window.confirm(
-      `Open the external invoice request form for ${group.project} (${label})?`
-    )
-    if (!confirmed) return
-    window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')
+    // onConfirm rather than awaiting the promise: window.open() has to run
+    // inside the click handler while the user gesture is still live, and a
+    // popup opened after an await is blocked.
+    confirm({
+      title: 'Open invoice request form',
+      message: `Open the external invoice request form for ${group.project} (${label})? It opens in a new tab.`,
+      confirmLabel: 'Open form',
+      tone: 'default',
+      onConfirm: () => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer'),
+    })
   }
 
   function openRetainerRecordForm(group, monthKeyValue) {

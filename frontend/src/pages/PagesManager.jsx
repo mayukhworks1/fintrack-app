@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useConfirm } from '../context/ConfirmContext'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -288,6 +289,7 @@ function DetailGrid({ geo, cli, v, isMobile }) {
 // Analytics Drawer
 // ---------------------------------------------------------------------------
 function AnalyticsDrawer({ page, onClose }) {
+  const confirm = useConfirm()
   const isMobile = useIsMobile()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -320,7 +322,11 @@ function AnalyticsDrawer({ page, onClose }) {
 
   const handleDeleteView = async (e, viewId) => {
     e.stopPropagation()
-    if (!window.confirm('Delete this view record?')) return
+    if (!(await confirm({
+      title: 'Delete view record',
+      message: 'Delete this view record? This cannot be undone.',
+      confirmLabel: 'Delete',
+    }))) return
     setDeletingId(viewId)
     try {
       await api.pages.deleteView(page.id, viewId)
@@ -332,7 +338,11 @@ function AnalyticsDrawer({ page, onClose }) {
 
   const handleBulkDelete = async () => {
     if (!selected.size) return
-    if (!window.confirm(`Delete ${selected.size} selected view record${selected.size>1?'s':''}? This cannot be undone.`)) return
+    if (!(await confirm({
+      title: 'Delete view records',
+      message: `Delete ${selected.size} selected view record${selected.size>1?'s':''}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+    }))) return
     setBulkDeleting(true)
     const ids=[...selected]
     try {
@@ -685,11 +695,16 @@ function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attac
 
 // Lists uploaded attachments referenced in the content with a delete action.
 function AttachmentsBar({ content, onChange }) {
+  const confirm = useConfirm()
   const [deleting, setDeleting] = useState(null)
   const assets = useMemo(() => extractAssets(content), [content])
   if (!assets.length) return null
   const remove = async (a) => {
-    if (!window.confirm(`Remove "${a.name}"? This deletes the file from storage and its reference from the page.`)) return
+    if (!(await confirm({
+      title: 'Remove attachment',
+      message: `Remove "${a.name}"? This deletes the file from storage and its reference from the page.`,
+      confirmLabel: 'Remove',
+    }))) return
     setDeleting(a.path)
     onChange(removeAssetRef(content, a.path))      // remove reference immediately
     try { await api.pages.deleteAsset(a.path) } catch { /* best-effort; reference already gone */ }
@@ -1034,6 +1049,7 @@ function TemplatePicker({ contentType, onSelect }) {
 // Version History Panel
 // ---------------------------------------------------------------------------
 function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRestore }) {
+  const confirm = useConfirm()
   const [versions, setVersions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [previewVer, setPreviewVer] = useState(null) // { id, title, content, content_type, version_num, saved_at }
@@ -1060,7 +1076,12 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
   }
 
   const handleRestore = async (ver) => {
-    if (!window.confirm(`Restore to version ${ver.version_num} from ${new Date(ver.saved_at).toLocaleString()}?\n\nYour current content will be saved as a new version first.`)) return
+    if (!(await confirm({
+      title: `Restore version ${ver.version_num}`,
+      message: `Restore to the version saved ${new Date(ver.saved_at).toLocaleString()}? Your current content is saved as a new version first, so nothing is lost.`,
+      confirmLabel: 'Restore',
+      tone: 'default',
+    }))) return
     setRestoring(ver.id)
     try {
       const r = await api.pages.restoreVersion(pageId, ver.id)
@@ -1189,6 +1210,7 @@ const CONTENT_TYPES = [
 ]
 
 function PageDrawer({ page, onClose, onSaved, initialType }) {
+  const confirm = useConfirm()
   const isMobile = useIsMobile()
   const textareaRef = useRef(null)
   // currentId tracks the DB row: starts from the passed page, but auto-save can
@@ -1326,10 +1348,18 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
       if (!d) return
       const parsed = JSON.parse(d)
       if (parsed.content && parsed.ts > Date.now() - 7 * 24 * 3600 * 1000) {
-        if (window.confirm('Restore unsaved draft from last session?')) {
+        // Effect body cannot await; the promise form keeps the same guard.
+        confirm({
+          title: 'Restore unsaved draft',
+          message: 'An unsaved draft from your last session was found. Restore it?',
+          confirmLabel: 'Restore draft',
+          cancelLabel: 'Discard',
+          tone: 'default',
+        }).then(ok => {
+          if (!ok) return
           set('content', parsed.content)
           if (parsed.title && !form.title) set('title', parsed.title)
-        }
+        })
       }
     } catch {}
   }, [])

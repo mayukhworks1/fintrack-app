@@ -4,8 +4,10 @@ import { RefreshCw, CheckCircle2, XCircle, Trash2 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Empty, Err, FMulti, FPill, FSel, FilterBar, Pager, SessionStatusChip, Skeleton, deviceIcon, roleBadge } from './ui'
 import { countryFlag, fmt, relTime, ts } from './utils'
+import { useConfirm } from '../../context/ConfirmContext'
 
 export function SessionsTab() {
+  const confirm = useConfirm()
   const [data, setData]            = useState(null)
   const [loading, setLoading]      = useState(true)
   const [error, setError]          = useState(null)
@@ -39,7 +41,11 @@ export function SessionsTab() {
   useEffect(() => { load() }, [load])
 
   const purgeInactiveSessions = useCallback(async () => {
-    if (!window.confirm('Delete inactive/expired sessions older than 30 days? The 100 most recent sessions are always kept.')) return
+    if (!(await confirm({
+      title: 'Purge old sessions',
+      message: 'Delete inactive and expired sessions older than 30 days? The 100 most recent sessions are always kept.',
+      confirmLabel: 'Delete sessions',
+    }))) return
     setPurging(true); setPurgeMsg(null)
     try {
       const res = await api.admin.purgeSessions({ days: 30 })
