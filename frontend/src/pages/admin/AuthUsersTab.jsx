@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { AuthStatusBadge, Badge, EditableName, Empty, Err, FMulti, FPill, FSel, FilterBar, Pager, Skeleton, UserAvatar } from './ui'
 import { relTime, ts } from './utils'
+import { useDialog } from '../../hooks/useDialog'
 
 function displayName(user) {
   const fn = (user?.first_name || '').trim()
@@ -17,6 +18,7 @@ function displayName(user) {
 }
 
 export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
+  const dialog = useDialog({ label: 'Set a new password', onClose })
   // Named askConfirm, not confirm: `confirm` is already the password
   // confirmation field in this component.
   const askConfirm = useConfirm()
@@ -49,7 +51,7 @@ export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="rounded-2xl p-6 w-full max-w-sm space-y-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+      <div {...dialog.panelProps} className="rounded-2xl p-6 w-full max-w-sm space-y-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Set password</p>
@@ -680,6 +682,7 @@ export function AuthUsersTab() {
 // ── Tab: AI Chats ─────────────────────────────────────────────────────────────
 
 export function UserTimelineDrawer({ userId, onClose }) {
+  const dialog = useDialog({ label: 'User activity', onClose })
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -712,7 +715,7 @@ export function UserTimelineDrawer({ userId, onClose }) {
     <div className="fixed inset-0 z-50 flex items-start justify-end overlay-safe"
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="h-full w-full max-w-xl flex flex-col overflow-hidden"
+      <div {...dialog.panelProps} className="h-full w-full max-w-xl flex flex-col overflow-hidden"
         style={{ background: 'var(--bg-base)', borderLeft: '1px solid var(--border)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"

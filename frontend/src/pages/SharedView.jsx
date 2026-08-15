@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { DocPreviewModal, AttachmentList, fileTypeInfo } from '../components/DocPreviewModal'
+import { useDialog } from '../hooks/useDialog'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -992,6 +993,7 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDe
 }
 
 function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
+  const dialog = useDialog({ label: 'Record detail', onClose })
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
   const f = record?.fields || {}
   const groupValue = f[meta.clientField] || 'Unknown'
@@ -1012,7 +1014,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
       style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(10px)' }}
       onClick={onClose}>
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col rounded-[24px] shadow-2xl"
+      <div {...dialog.panelProps} className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col rounded-[24px] shadow-2xl"
         style={{ background: '#fff', border: '1px solid #e5e7eb' }}
         onClick={e => e.stopPropagation()}>
 
@@ -1209,6 +1211,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
 }
 
 function EditModal({ resourceType, record, statusOptions, saving, onClose, onSave }) {
+  const dialog = useDialog({ label: 'Edit record', onClose })
   const f = record?.fields || {}
   const [form, setForm] = useState({})
   useEffect(() => {
@@ -1245,7 +1248,7 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh' }}>
         {/* sticky header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid #e5e7eb' }}>

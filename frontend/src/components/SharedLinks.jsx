@@ -8,6 +8,7 @@ import {
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import { useConfirm } from '../context/ConfirmContext'
+import { useDialog } from '../hooks/useDialog'
 
 const EXPIRY_OPTS = [
   { label: 'Never', value: 0 },
@@ -113,6 +114,7 @@ export function ShareLinkModal({
   allowEdit = true,
   onClose,
 }) {
+  const dialog = useDialog({ label: 'Share link' })
   const [step, setStep] = useState('form')
   const [title, setTitle] = useState(defaultTitle)
   const [expiry, setExpiry] = useState(0)
@@ -178,7 +180,7 @@ export function ShareLinkModal({
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         {/* sticky header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -392,6 +394,7 @@ export function ShareLinkModal({
 }
 
 function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecords, recordLabel, highlightableColumns = [], onClose, onSave }) {
+  const dialog = useDialog({ label: 'Edit share scope', onClose })
   const [mode, setMode] = useState(view?.is_dynamic ? 'live' : 'snapshot')
   const [highlightColumns, setHighlightColumns] = useState(() => normalizeHighlightColumns(view?.view_config?.highlightColumns || currentViewConfig?.highlightColumns, highlightableColumns))
   const [saving, setSaving] = useState(false)
@@ -444,7 +447,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
@@ -554,6 +557,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
 }
 
 export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = [], onClose }) {
+  const dialog = useDialog({ label: 'Manage share links' })
   const confirm = useConfirm()
   const { showToast } = useToast()
   const [views, setViews] = useState([])
@@ -773,7 +777,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+      <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">

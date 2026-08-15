@@ -7,6 +7,7 @@ import { api } from '../../services/api'
 import { FilterSelect, FilterMulti } from '../../components/FilterSelect'
 import { useAvatarSrc } from '../../hooks/useAvatarSrc'
 import { fmt } from './utils'
+import { useDialog } from '../../hooks/useDialog'
 
 export function Badge({ children, color = 'default' }) {
   const colors = {
@@ -403,6 +404,7 @@ export function FilterBar({ children, count, onReset, rightSlot }) {
 // ── Purge confirmation modal ──────────────────────────────────────────────────
 
 export function PurgeModal({ onConfirm, onCancel, purging, result }) {
+  const dialog = useDialog({ label: 'Purge records', onClose })
   // mode: 'hours' | 'days'
   const [mode,       setMode]  = useState('days')
   const [hours,      setHours] = useState(24)
@@ -424,7 +426,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}>
-      <div style={{
+      <div {...dialog.panelProps} style={{
         background: 'var(--card-bg)', border: '1px solid var(--border)',
         borderRadius: 18, padding: 28, width: '100%', maxWidth: 480,
         boxShadow: '0 24px 60px rgba(0,0,0,0.3)',

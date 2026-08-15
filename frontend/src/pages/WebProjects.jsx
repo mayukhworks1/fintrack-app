@@ -21,6 +21,7 @@ import { useToast } from '../context/ToastContext'
 import { useTheme } from '../context/ThemeContext'
 import { formatInr } from '../utils/format'
 import clsx from 'clsx'
+import { useDialog } from '../hooks/useDialog'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ function SectionLabel({ icon: Icon, children }) {
 // ── Simple Drawer (non-project, e.g. resource) ────────────────────────────────
 
 function Drawer({ open, onClose, title, children, footer }) {
+  const dialog = useDialog({ label: title, onClose, active: open })
   useEffect(() => {
     if (!open) return
     const h = (e) => { if (e.key === 'Escape') onClose() }
@@ -217,7 +219,7 @@ function Drawer({ open, onClose, title, children, footer }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} onClick={onClose} />
-      <div className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl"
+      <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl"
         style={{ background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
@@ -242,6 +244,7 @@ function Drawer({ open, onClose, title, children, footer }) {
 // ── Project Drawer (polished, portal-based) ───────────────────────────────────
 
 function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit }) {
+  const dialog = useDialog({ label: 'Project', onClose, active: open })
   const [d, setD] = useState({
     project_name: '', client: '', status: 'Planning', priority: 'Medium',
     project_lead: '', description: '', est_start: '', est_end: '',
@@ -319,7 +322,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
-      <div className="relative ml-auto flex flex-col h-full shadow-2xl"
+      <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full shadow-2xl"
         style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
@@ -539,6 +542,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
 // ── Resource Drawer (polished portal, same style as ProjectDrawer) ─────────────
 
 function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [] }) {
+  const dialog = useDialog({ label: 'Resource', onClose, active: open })
   const EMPTY = {
     resource_name: '', role: '', type_: 'Employee',
     rate: '', rate_unit: 'Per Month', units: '',
@@ -598,7 +602,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
-      <div className="relative ml-auto flex flex-col h-full shadow-2xl"
+      <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full shadow-2xl"
         style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
 
         {/* Header */}
@@ -1220,6 +1224,7 @@ function ProjectDetailView({
 // Shows all system resources; user can toggle which ones are assigned to a project
 
 function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allResources = [], onAssign, onUnassign }) {
+  const dialog = useDialog({ label: 'Assign resources', onClose, active: open })
   const [toggling, setToggling] = useState({}) // resourceId → boolean (loading)
   const [localAssigned, setLocalAssigned] = useState(new Set(assignedIds))
 
@@ -1265,7 +1270,7 @@ function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allRe
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
-      <div className="relative flex flex-col rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh]"
+      <div {...dialog.panelProps} className="relative flex flex-col rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh]"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
