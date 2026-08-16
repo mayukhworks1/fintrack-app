@@ -1,0 +1,11 @@
+# FinTrack is a private finance workspace, not a public site.
+#
+# Disallow is deliberately total. Beyond the signed-in app, /view/<token> and
+# /p/<slug> serve real client invoice and project data to anyone holding the
+# link — those links are unguessable, but an indexed one stops being private.
+# There is nothing here that benefits from being crawled.
+
+User-agent: *
+Disallow: /
+
+# No sitemap: nothing on this domain is meant to be discovered by search.
