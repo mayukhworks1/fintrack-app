@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, useCallback } from 'react'
+import { lazy, Suspense, useEffect, useState, useCallback, useMemo } from 'react'
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2, ShieldCheck } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
@@ -9,6 +9,8 @@ import Login from './pages/Login'          // eager — auth gate
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
 import { isChunkLoadError } from './utils/chunkError'
+import { usePageMeta } from './hooks/usePageMeta'
+import { metaForPath, titleFor } from './utils/pageMeta'
 
 const BANNER_H = 37
 
@@ -116,6 +118,25 @@ function RouteFallback() {
 export default function App() {
   const { status, isWeb, isAll, isAdmin, isViewer, isImpersonating } = useAuth()
   const location = useLocation()
+
+  // Baseline title and description for the current route. Pages whose title
+  // depends on loaded data override this once that data arrives — the override
+  // lands later, and this only re-runs when the path or auth status changes, so
+  // it never clobbers them on an unrelated re-render.
+  //
+  // Auth status is part of the decision because the signed-out app renders
+  // Login at whatever path was requested; without this, arriving at /invoices
+  // unauthenticated would title the sign-in screen "Invoices".
+  const isPublicRoute = location.pathname.startsWith('/view/') || location.pathname.startsWith('/p/')
+  const routeMeta = useMemo(() => {
+    if (isPublicRoute) return metaForPath(location.pathname)
+    if (status === 'loading') return { title: titleFor(null) }
+    if (status !== 'authed') {
+      return { title: titleFor('Sign in'), description: 'Sign in to your FinTrack workspace.' }
+    }
+    return metaForPath(location.pathname)
+  }, [location.pathname, status, isPublicRoute])
+  usePageMeta(routeMeta)
 
   useEffect(() => {
     if (status !== 'authed' || isAdmin) return

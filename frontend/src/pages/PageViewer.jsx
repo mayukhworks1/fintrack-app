@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
+import { usePageMeta } from '../hooks/usePageMeta'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -418,29 +419,35 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
   const readMins = Math.max(1, Math.round(wordCount / 200))
 
-  useEffect(() => {
-    document.title = title ? `${title} — FinTrack Pages` : 'FinTrack Pages'
-    return () => { document.title = 'FinTrack' }
-  }, [title])
+  // Title and description go through the shared hook, which restores the
+  // previous values instead of deleting the nodes. The old version removed
+  // og:title/og:description/og:url outright on unmount, taking the app's own
+  // share metadata with them until the next full reload.
+  usePageMeta(isHtml ? {} : {
+    title: title ? `${title} — FinTrack Pages` : undefined,
+    description: title ? (description || `${title} — shared via FinTrack Pages`) : undefined,
+  })
 
-  // Inject OG / Twitter meta for non-HTML pages
+  // og:url and og:type are specific to a published page and have no equivalent
+  // in the shared hook, so they are managed here — restoring, not removing.
   useEffect(() => {
     if (!title || isHtml) return
-    const set = (prop, val, attr = 'property') => {
-      const sel = attr === 'name' ? `meta[name="${prop}"]` : `meta[property="${prop}"]`
-      let el = document.head.querySelector(sel)
-      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, prop); document.head.appendChild(el) }
+    const prev = {}
+    const set = (prop, val) => {
+      let el = document.head.querySelector(`meta[property="${prop}"]`)
+      if (!el) { el = document.createElement('meta'); el.setAttribute('property', prop); document.head.appendChild(el) }
+      prev[prop] = el.getAttribute('content')
       el.setAttribute('content', val)
     }
-    const url = window.location.href
-    const desc = description || `${title} — shared via FinTrack Pages`
-    set('og:title', title); set('og:description', desc); set('og:url', url); set('og:type', 'article')
-    set('twitter:card', 'summary', 'name'); set('twitter:title', title, 'name'); set('twitter:description', desc, 'name')
+    set('og:url', window.location.href)
+    set('og:type', 'article')
     return () => {
-      ['og:title','og:description','og:url','og:type'].forEach(p => document.head.querySelector(`meta[property="${p}"]`)?.remove())
-      ;['twitter:card','twitter:title','twitter:description'].forEach(p => document.head.querySelector(`meta[name="${p}"]`)?.remove())
+      for (const [prop, val] of Object.entries(prev)) {
+        const el = document.head.querySelector(`meta[property="${prop}"]`)
+        if (el && val !== null) el.setAttribute('content', val)
+      }
     }
-  }, [title, description, isHtml])
+  }, [title, isHtml])
 
   if (isHtml) {
     return <>{children}</>
