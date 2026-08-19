@@ -4,6 +4,7 @@ import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
+import { buildPageDocument, PAGE_SANDBOX, PAGE_MESSAGE_CHANNEL } from '../utils/pageHtml'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -195,63 +196,46 @@ function CSVTable({ text }) {
 }
 
 // ---------------------------------------------------------------------------
-// HTML — replaces the entire browser document
+// HTML — author content in an isolated frame
 // ---------------------------------------------------------------------------
 function HTMLPage({ content }) {
-  // User-authored HTML is rendered inside a sandboxed iframe. The sandbox omits
-  // `allow-same-origin`, so even if the page contains <script> it runs in an
-  // opaque origin and cannot read the parent's cookies, localStorage, or auth
-  // token. Previously this used document.write() into the top document, which
-  // executed arbitrary author script against the real origin (full XSS).
-  // Inject anchor-navigation shim so #id links work inside the sandboxed iframe
-  // without needing allow-same-origin (which would expose parent auth context).
-  const anchorShim = `<script>
-(function(){
-  function patchLinks(){
-    document.querySelectorAll('a[href]').forEach(function(a){
-      var h=a.getAttribute('href')||'';
-      if(!h.startsWith('#')&&!h.startsWith('javascript')){
-        a.setAttribute('target','_blank');
-        a.setAttribute('rel','noopener noreferrer');
-      }
-    });
-    // For iframes that fail to load (X-Frame-Options), show an "Open in new tab" fallback button.
-    // We no longer pre-emptively replace iframes — let them try to load first.
-    document.querySelectorAll('iframe[src]').forEach(function(fr){
-      var src=fr.getAttribute('src')||'';
-      if(!src||src.startsWith('#')||src.startsWith('about:')) return;
-      // Add a small "open in new tab" helper link BELOW each iframe as a convenience.
-      var link=document.createElement('a');
-      link.href=src; link.target='_blank'; link.rel='noopener noreferrer';
-      link.textContent='Open in new tab ↗';
-      link.style.cssText='display:inline-block;margin-top:6px;font-size:12px;color:#1a56db;text-decoration:underline;';
-      if(fr.parentNode) fr.parentNode.insertBefore(link, fr.nextSibling);
-    });
-  }
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',patchLinks);}else{patchLinks();}
-  document.addEventListener('click',function(e){
-    var a=e.target.closest('a[href^="#"]');
-    if(!a) return;
-    var id=a.getAttribute('href').slice(1);
-    if(!id) return;
-    var el=document.getElementById(id)||document.querySelector('[name="'+id+'"]');
-    if(el){e.preventDefault();el.scrollIntoView({behavior:'smooth',block:'start'});}
-  });
-})();
-</script>`
-  // <base target="_blank"> forces ALL links/forms to open new tabs at browser level —
-  // this fires before any JS and catches button onclick handlers too.
-  const baseTag = `<base target="_blank">`
-  const raw = /^\s*<!DOCTYPE|^\s*<html/i.test(content)
-    ? content.replace(/<head([^>]*)>/i, '<head$1>' + baseTag).replace(/<\/head>/i, anchorShim + '</head>')
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${baseTag}${anchorShim}</head><body>${content}</body></html>`
-  const html = rewriteAssetUrls(raw)
+  const frameRef = useRef(null)
+  const [height, setHeight] = useState(0)
+
+  const html = useMemo(() => rewriteAssetUrls(buildPageDocument(content)), [content])
+
+  // The frame is opaque-origin by design, so its height cannot be measured from
+  // here — it reports its own via postMessage. Matching on the source window
+  // rather than the origin is deliberate: a sandboxed frame without
+  // allow-same-origin posts with origin "null", which is not a value worth
+  // comparing against.
+  useEffect(() => {
+    const onMessage = (e) => {
+      if (e.source !== frameRef.current?.contentWindow) return
+      const d = e.data
+      if (!d || d.channel !== PAGE_MESSAGE_CHANNEL || d.type !== 'height') return
+      const h = Number(d.height)
+      if (Number.isFinite(h) && h > 0) setHeight(Math.ceil(h))
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
   return (
     <iframe
+      ref={frameRef}
       title="Published page"
       srcDoc={html}
-      sandbox="allow-scripts allow-popups allow-forms allow-same-origin"
-      style={{ width: '100%', minHeight: '100vh', border: 'none', display: 'block' }}
+      sandbox={PAGE_SANDBOX}
+      scrolling="no"
+      style={{
+        width: '100%',
+        // Falls back to the viewport until the first height report lands, so
+        // the page never flashes as a collapsed strip.
+        height: height ? `${height}px` : '100vh',
+        border: 'none',
+        display: 'block',
+      }}
     />
   )
 }

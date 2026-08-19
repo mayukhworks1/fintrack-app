@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useConfirm } from '../context/ConfirmContext'
+import { buildPageDocument, PAGE_SANDBOX } from '../utils/pageHtml'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -118,13 +119,19 @@ function CSVPreview({ text }) {
     </div>
   )
 }
-function HTMLPreview({ content }) {
-  const wrap = (html) => /^\s*<!DOCTYPE/i.test(html)||/^\s*<html/i.test(html) ? html
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:14px;font-family:-apple-system,sans-serif;font-size:14px;line-height:1.6;color:#1e293b}</style></head><body>${html}</body></html>`
-  // No allow-same-origin: author HTML previews run in an opaque origin and
-  // cannot reach the parent's auth token / localStorage even if they contain
-  // <script>. (allow-scripts + allow-same-origin together would defeat the sandbox.)
-  return <iframe srcDoc={wrap(content)} style={{ width:'100%', height:300, border:'none' }} sandbox="allow-scripts allow-popups allow-forms" title="preview" />
+function HTMLPreview({ content, height = 300 }) {
+  // Same builder as the published viewer, so the preview is not a different
+  // rendering of the same markup. `padded` only affects bare fragments — a full
+  // document keeps whatever spacing its author wrote.
+  const doc = useMemo(() => buildPageDocument(content, { padded: true }), [content])
+  return (
+    <iframe
+      srcDoc={doc}
+      style={{ width:'100%', height, border:'none', display:'block', background:'#fff' }}
+      sandbox={PAGE_SANDBOX}
+      title="preview"
+    />
+  )
 }
 function ContentPreview({ contentType, content }) {
   if (!content) return <div style={{ color:'var(--text-2)', fontSize:13, padding:'20px', textAlign:'center' }}>No content yet.</div>
