@@ -1578,14 +1578,28 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     text: 'Start typing your plain text content…',
   }
 
+  // height pinned to the dynamic viewport for the same reason as the panel:
+  // inset:0 alone is measured against the large viewport on iOS while the
+  // address bar is expanded, which pushes the top of the panel out of reach.
+  const drawerBase = { position:'fixed', inset:0, height:'100dvh', display:'flex', justifyContent:'flex-end' }
   const drawerStyle = fullscreen
-    ? { position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.6)', display:'flex', justifyContent:'flex-end' }
-    : { position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', justifyContent:'flex-end' }
+    ? { ...drawerBase, zIndex:2000, background:'rgba(0,0,0,0.6)' }
+    : { ...drawerBase, zIndex:1000, background:'rgba(0,0,0,0.45)' }
 
   const panelStyle = {
     width: fullscreen ? '100vw' : isMobile ? '100vw' : '94vw',
     maxWidth: fullscreen ? '100vw' : 1200,
-    height: '100%',
+    // 100dvh, not 100%: on iOS the address bar expands and contracts, and a
+    // fixed inset:0 panel measured against the large viewport gets its top
+    // pushed off screen — which is what hid the document-type row.
+    height: '100dvh',
+    maxHeight: '100dvh',
+    // The notch and home indicator overlay the viewport. Without these the
+    // first header row sits under the status bar and cannot be tapped. The
+    // rest of the app already does this; this drawer was the exception.
+    paddingTop: 'env(safe-area-inset-top, 0px)',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    boxSizing: 'border-box',
     background: 'var(--bg-base)',
     overflowY: 'hidden',
     boxShadow: '-4px 0 32px rgba(0,0,0,0.2)',
