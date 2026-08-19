@@ -1216,6 +1216,152 @@ const CONTENT_TYPES = [
   { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
 ]
 
+// Prompt-driven page generation.
+//
+// The model is constrained server-side to self-contained HTML/CSS because the
+// published page runs under the app's CSP — no JS, no external stylesheets or
+// fonts. Anything it returns outside that is stripped, and `removed` reports
+// what went so the author is not left wondering why something vanished.
+const AI_EXAMPLES = {
+  html: [
+    'A one-page Q3 client update with a hero, three KPI cards and a delivery timeline',
+    'A pricing page for a web design retainer with three tiers and an FAQ',
+    'A project proposal page with scope, milestones and a payment schedule table',
+  ],
+  markdown: [
+    'A monthly delivery status report with sections per project',
+    'A scope-of-work document for a website redesign engagement',
+    'An onboarding checklist for a new client',
+  ],
+}
+
+function AiComposer({ contentType, content, onApply, isMobile }) {
+  const confirm = useConfirm()
+  const [open, setOpen]       = useState(false)
+  const [prompt, setPrompt]   = useState('')
+  const [busy, setBusy]       = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [err, setErr]         = useState('')
+  const [note, setNote]       = useState(null)
+  const [refine, setRefine]   = useState(true)
+
+  const hasContent = (content || '').trim().length > 0
+  const examples = AI_EXAMPLES[contentType] || AI_EXAMPLES.html
+
+  // Generation regularly runs 20-40s. A spinner with no elapsed time reads as
+  // a hang, so the count is shown.
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return }
+    const t0 = Date.now()
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [busy])
+
+  const run = async () => {
+    const p = prompt.trim()
+    if (!p || busy) return
+    // Replacing is destructive and there is no undo beyond version history.
+    if (hasContent && !refine) {
+      const ok = await confirm({
+        title: 'Replace this page?',
+        message: 'The current content will be replaced by the generated page. Your last saved version stays in history.',
+        confirmLabel: 'Replace',
+      })
+      if (!ok) return
+    }
+    setBusy(true); setErr(''); setNote(null)
+    try {
+      const res = await api.pages.aiGenerate({
+        prompt: p,
+        content_type: contentType,
+        existing: (refine && hasContent) ? content : undefined,
+      })
+      onApply(res.content)
+      setNote({ model: res.model, removed: res.removed || [] })
+      setPrompt('')
+    } catch (e) {
+      setErr(e.message || 'Generation failed. Try again, or rephrase the prompt.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <div style={{ padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+        <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
+          ✨ Design with AI
+        </button>
+        <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:8 }}>
+          Describe the page you want and it will be written for you
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding:isMobile?'10px 12px':'10px 14px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <span style={{ fontSize:12, fontWeight:700 }}>✨ Design with AI</span>
+        <button onClick={()=>setOpen(false)} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', marginLeft:'auto' }}>Hide</button>
+      </div>
+
+      <textarea
+        value={prompt}
+        onChange={e=>setPrompt(e.target.value)}
+        onKeyDown={e=>{ if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') run() }}
+        placeholder={hasContent && refine
+          ? 'What should change? e.g. "make the hero dark and add a testimonials section"'
+          : 'Describe the page. e.g. "a Q3 client update with KPI cards and a timeline"'}
+        rows={isMobile ? 3 : 2}
+        disabled={busy}
+        style={{ ...inputStyle, width:'100%', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+      />
+
+      {!prompt && (
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+          {examples.map(ex=>(
+            <button key={ex} onClick={()=>setPrompt(ex)} disabled={busy}
+              style={{ fontSize:11, border:'1px solid var(--border)', borderRadius:99, padding:'3px 10px', background:'var(--bg-base)', color:'var(--text-2)', cursor:'pointer', textAlign:'left' }}>
+              {ex.length > 58 ? ex.slice(0, 58) + '…' : ex}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+        {hasContent && (
+          <label style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--text-2)', cursor:'pointer' }}>
+            <input type="checkbox" checked={refine} onChange={e=>setRefine(e.target.checked)} disabled={busy} />
+            Revise the current page
+          </label>
+        )}
+        <button onClick={run} disabled={busy || !prompt.trim()}
+          style={{ ...btnPrimary, marginLeft:'auto', opacity:(busy||!prompt.trim())?0.6:1 }}>
+          {busy ? `Generating… ${elapsed}s` : (hasContent && refine ? 'Revise page' : 'Generate page')}
+        </button>
+      </div>
+
+      {busy && (
+        <div style={{ fontSize:11, color:'var(--text-2)' }}>
+          Writing the document — this usually takes 20–40 seconds.
+        </div>
+      )}
+      {err && <div style={{ fontSize:12, color:'#ef4444' }}>{err}</div>}
+      {note && (
+        <div style={{ fontSize:11, color:'var(--text-2)' }}>
+          ✓ Generated with {note.model}. Review it in Preview before publishing.
+          {note.removed.length > 0 && (
+            <span style={{ color:'#b45309' }}>
+              {' '}Removed {note.removed.join(', ')} — blocked on published pages.
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PageDrawer({ page, onClose, onSaved, initialType }) {
   const confirm = useConfirm()
   const isMobile = useIsMobile()
@@ -1572,6 +1718,17 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
             )}
           </div>
         </div>
+
+        {/* AI composer — Web Page and Document only. Spreadsheet and Plain
+            Text are structured formats the generator has no useful contract for. */}
+        {(isHtml || isMarkdown) && tab === 'edit' && (
+          <AiComposer
+            contentType={form.content_type}
+            content={form.content}
+            isMobile={isMobile}
+            onApply={c=>{ setContent(c); setShowTemplates(false) }}
+          />
+        )}
 
         {/* Templates bar */}
         {showTemplates && tab !== 'history' && (

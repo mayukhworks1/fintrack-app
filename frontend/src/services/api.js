@@ -754,5 +754,12 @@ export const api = {
     versions:      (id)            => request(`/api/pages/${id}/versions`),
     getVersion:    (id, verId)     => request(`/api/pages/${id}/versions/${verId}`),
     restoreVersion:(id, verId)     => request(`/api/pages/${id}/versions/${verId}/restore`, { method: 'POST' }),
+    // Generation runs long enough that the default timeout would fire before
+    // the model finishes, so it gets its own budget. retries=0 deliberately:
+    // a slow generation is not a failed one, and retrying would run the model
+    // two more times for the same request.
+    aiGenerate:    (data)          => request('/api/pages/ai-generate', {
+      method: 'POST', body: JSON.stringify(data), timeout: 120000,
+    }, 0),
   },
 }

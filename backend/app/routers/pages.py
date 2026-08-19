@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ..db.postgres import get_pool
+from ..services.page_ai import generate_page
 from .deps import require_auth
 
 router = APIRouter()
@@ -347,6 +348,14 @@ class LogViewBody(BaseModel):
     gps_accuracy:   float | None = None
 
 
+class AIGenerateBody(BaseModel):
+    prompt:       str
+    content_type: str = "html"
+    # When present the model revises this document instead of starting fresh,
+    # which is what lets an author iterate on a design across several prompts.
+    existing:     str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Authenticated endpoints
 # ---------------------------------------------------------------------------
@@ -403,6 +412,41 @@ async def create_page(
             expires_at,
         )
         return _page_dict(row)
+
+
+@router.post("/api/pages/ai-generate")
+async def ai_generate_page(
+    body: AIGenerateBody,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """
+    Generate or revise page content from a prompt.
+
+    Returns the document only — nothing is persisted. The author reviews it in
+    the editor and decides whether to keep it, so a poor generation can never
+    overwrite a published page on its own.
+    """
+    try:
+        result = await generate_page(
+            prompt=body.prompt,
+            content_type=body.content_type,
+            existing=body.existing,
+        )
+    except ValueError as e:
+        # Prompt/validation problems are the caller's to fix, not server faults.
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Page generation failed: {e}")
+
+    return {
+        "content":     result["content"],
+        "model":       result["model_short"] or result["model"],
+        # Names what was stripped because the CSP would have blocked it, so the
+        # author is told rather than left with markup that silently does nothing.
+        "removed":     result["removed"],
+        "content_type": body.content_type,
+    }
 
 
 @router.post("/api/pages/upload")

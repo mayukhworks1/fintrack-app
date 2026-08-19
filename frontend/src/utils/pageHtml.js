@@ -18,7 +18,7 @@
 export const VIEWER_RESET = `
 :where(html,body){margin:0;padding:0}
 :where(*,*::before,*::after){box-sizing:border-box}
-:where(body){overflow-x:hidden}
+:where(body){overflow-x:hidden;overflow-wrap:break-word}
 :where(img,svg,video,canvas){max-width:100%;height:auto}
 :where(iframe,table,pre){max-width:100%}
 :where(pre){overflow-x:auto}
