@@ -92,6 +92,34 @@ class _SharedClientProxy:
     async def head(self, *a, **kw):    return await get_http().head(*a, **self._merge(kw))
     async def request(self, *a, **kw): return await get_http().request(*a, **self._merge(kw))
 
+    @property
+    def is_closed(self) -> bool:
+        """Always False — the proxy owns no connection of its own.
+
+        It resolves the shared client per request, and get_http() rebuilds that
+        client if it was closed, so a proxy handle stays valid for the life of
+        the process.
+
+        This exists because call sites written against httpx.AsyncClient cache
+        their client and rebuild it when is_closed turns True. Without the
+        attribute, that guard raised AttributeError on the second call and every
+        call after it — which is exactly how the OpenRouter model cascade came
+        to fail on every model except the first.
+        """
+        return False
+
+    def __getattr__(self, name: str):
+        """Delegate the rest of the AsyncClient surface to the shared client.
+
+        The proxy only overrides the verbs it needs to merge defaults into;
+        anything else a caller reasonably expects from an AsyncClient should
+        still resolve rather than raising. Private names are excluded so a
+        genuine internal typo still fails loudly instead of being forwarded.
+        """
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(get_http(), name)
+
     def stream(self, *a, **kw):
         return get_http().stream(*a, **self._merge(kw))
 
