@@ -1451,7 +1451,47 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     <div style={drawerStyle} onClick={flushAndClose}>
       <div style={panelStyle} onClick={e=>e.stopPropagation()}>
 
-        {/* Header */}
+        {/* Header.
+            Mobile gets a purpose-built layout rather than relying on flex-wrap.
+            In the single-row version the type <select> sits at width:auto beside
+            the stats text and four buttons; on a 390px screen it collapses to a
+            few pixels wide and cannot be tapped, which is why the document type
+            could not be changed on a phone. Here it gets a labelled row of its
+            own and the actions get theirs. */}
+        {isMobile ? (
+          <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label htmlFor="ft-doctype" style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', flexShrink:0 }}>Type</label>
+              <select id="ft-doctype" value={form.content_type}
+                onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content)}}
+                style={{ ...inputStyle, flex:1, minWidth:0, fontWeight:600 }}>
+                {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <button onClick={()=>setFullscreen(f=>!f)} aria-label={fullscreen?'Exit fullscreen':'Fullscreen'}
+                style={{ ...btnGhost, fontSize:15, padding:'5px 12px', flexShrink:0 }}>{fullscreen?'⊡':'⊞'}</button>
+            </div>
+            <div style={{ display:'flex', gap:6 }}>
+              <button onClick={flushAndClose} style={{ ...btnGhost, flex:1 }} disabled={saving}>Close</button>
+              <button onClick={()=>handleSave(false)} style={{ ...btnSecondary, flex:1 }} disabled={saving}>{saving?'Saving…':'Draft'}</button>
+              <button onClick={()=>handleSave(true)} style={{ ...btnPrimary, flex:1 }} disabled={saving}>
+                {saving?'Publishing…':isEdit&&page?.is_published?'Update':'Publish'}
+              </button>
+            </div>
+            <div style={{ display:'flex', gap:6, fontSize:11, color:'var(--text-2)', flexWrap:'wrap', minHeight:14 }}>
+              {stats.label && <span>{stats.label}</span>}
+              {stats.readTime !== '—' && <span>· {stats.readTime}</span>}
+              {form.content.length > charLimit * 0.8 && (
+                <span style={{ color:form.content.length>charLimit?'#ef4444':'#f59e0b', fontWeight:600 }}>
+                  {form.content.length.toLocaleString()} / {charLimit.toLocaleString()}
+                </span>
+              )}
+              {autoSaveStatus === 'saved'  && <span style={{ color:'#10b981' }}>✓ Saved</span>}
+              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error'  && <span style={{ color:'#ef4444' }} title={autoSaveError}>⚠ Save failed</span>}
+              {error && <span style={{ color:'#ef4444' }}>{error}</span>}
+            </div>
+          </div>
+        ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
             <select value={form.content_type} onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content)}}
@@ -1481,6 +1521,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Meta fields */}
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:10, flexWrap:'wrap', flexShrink:0 }}>
