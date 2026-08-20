@@ -33,8 +33,6 @@ from __future__ import annotations
 
 import re
 
-from ..config import settings
-
 # ---------------------------------------------------------------------------
 # Sandbox
 # ---------------------------------------------------------------------------
@@ -85,19 +83,21 @@ _DEV_FRAME_ANCESTORS = [
 
 def frame_ancestors() -> str:
     """
-    Who may embed a published page.
+    Who may embed a published page — deliberately open.
 
-    FRONTEND_URL is the SPA that frames it, and production sets it (the CORS
-    policy already depends on it). When it is unset the fallback is permissive
-    rather than strict: getting this wrong does not degrade a published page,
-    it stops the iframe loading at all, and a public marketing page being
-    embeddable elsewhere is a far smaller problem than one that never renders.
+    Restricting this to FRONTEND_URL is tempting and would be a mistake. The
+    cost of getting the host list wrong is not a weaker page, it is no page:
+    the iframe is refused and the visitor sees an empty screen. And the list is
+    easy to get wrong, because the origin a visitor actually types (a custom
+    domain, an apex vs www, a preview deployment) need not be the one the
+    backend was configured with.
+
+    Against that, the directive buys nothing here. Clickjacking needs something
+    worth hijacking, and there is nothing: the framed document is sandboxed to
+    an opaque origin, so it carries no session, cannot read the app's storage
+    and cannot act on the visitor's behalf. It is public author content, served
+    from a public URL.
     """
-    raw = (settings.frontend_url or "").strip()
-    if raw and raw != "*":
-        origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
-        if origins:
-            return " ".join(["'self'", *origins, *_DEV_FRAME_ANCESTORS])
     return " ".join(["'self'", "https:", *_DEV_FRAME_ANCESTORS])
 
 

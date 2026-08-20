@@ -122,17 +122,18 @@ class TestPolicy:
     def test_names_who_may_frame_the_page(self):
         assert "frame-ancestors" in page_render.csp_header()
 
-    def test_frame_ancestors_follows_the_configured_frontend(self, monkeypatch):
-        monkeypatch.setattr(page_render.settings, "frontend_url", "https://app.example.com/")
-        ancestors = page_render.frame_ancestors()
-        assert "https://app.example.com" in ancestors
-        assert "https:" not in ancestors.split()  # not the open fallback
-
-    def test_frame_ancestors_falls_open_when_unconfigured(self, monkeypatch):
-        """A wrong value here does not degrade the page, it stops the iframe
-        loading at all — so an unset FRONTEND_URL must not lock it down."""
-        monkeypatch.setattr(page_render.settings, "frontend_url", "")
+    # Pinning this to a configured host list is what would break it: the origin
+    # a visitor types (custom domain, apex vs www, a preview deployment) need
+    # not be the one the backend was configured with, and a mismatch shows an
+    # empty screen rather than a degraded page. Nothing is lost by staying
+    # open — the framed document is opaque-origin, so it carries no session and
+    # there is nothing to hijack.
+    def test_frame_ancestors_does_not_depend_on_deployment_config(self):
         assert "https:" in page_render.frame_ancestors().split()
+
+    def test_frame_ancestors_covers_the_dev_server(self):
+        """Vite serves over http, which `https:` does not match."""
+        assert "http://localhost:5173" in page_render.frame_ancestors()
 
 
 class TestHeaders:
