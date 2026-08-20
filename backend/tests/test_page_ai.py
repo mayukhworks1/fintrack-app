@@ -208,3 +208,115 @@ body{margin:0;background:var(--clr-bg)}
     def test_accepts_a_bare_fragment(self):
         from app.services.page_ai import find_truncation
         assert find_truncation("<h1>Just a heading</h1>") is None
+
+
+@pytest.mark.asyncio
+class TestAgenticFeatures:
+    """Tests for the new Agentic Web Studio backend capabilities."""
+
+    async def test_analyze_prompt_needs_validation(self):
+        from app.services.page_ai import analyze_prompt_needs
+        with pytest.raises(ValueError, match="prompt is required"):
+            await analyze_prompt_needs("")
+        with pytest.raises(ValueError, match="Web Page and Document"):
+            await analyze_prompt_needs("test prompt", content_type="pdf")
+
+    async def test_analyze_prompt_needs_parses_json(self, monkeypatch):
+        import json
+        from app.services import page_ai
+
+        mock_payload = {
+            "needs_interview": True,
+            "questions": [
+                {
+                    "id": "theme",
+                    "text": "What visual style?",
+                    "type": "single",
+                    "options": ["Dark", "Light"],
+                }
+            ],
+        }
+
+        async def mock_try_chat(*args, **kwargs):
+            return {"content": json.dumps(mock_payload), "model": "mock", "model_short": "mock"}
+
+        monkeypatch.setattr(page_ai, "_try_chat", mock_try_chat)
+
+        res = await page_ai.analyze_prompt_needs("make a website")
+        assert res["needs_interview"] is True
+        assert len(res["questions"]) == 1
+        assert res["questions"][0]["id"] == "theme"
+
+    async def test_analyze_prompt_needs_handles_invalid_json(self, monkeypatch):
+        from app.services import page_ai
+
+        async def mock_try_chat(*args, **kwargs):
+            return {"content": "Not JSON at all", "model": "mock", "model_short": "mock"}
+
+        monkeypatch.setattr(page_ai, "_try_chat", mock_try_chat)
+
+        res = await page_ai.analyze_prompt_needs("make a website")
+        assert res["needs_interview"] is False
+        assert res["questions"] == []
+
+    async def test_edit_page_section_validation(self):
+        from app.services.page_ai import edit_page_section
+        with pytest.raises(ValueError, match="No page content"):
+            await edit_page_section("", "hero", "make it blue")
+        with pytest.raises(ValueError, match="section_id is required"):
+            await edit_page_section("<section>x</section>", "", "make it blue")
+        with pytest.raises(ValueError, match="prompt describing"):
+            await edit_page_section("<section>x</section>", "hero", "   ")
+
+    async def test_edit_page_section_not_found(self):
+        from app.services.page_ai import edit_page_section
+        html = '<!DOCTYPE html><html><body><section data-agent-section="hero">Hero</section></body></html>'
+        with pytest.raises(ValueError, match='Section "pricing" not found'):
+            await edit_page_section(html, "pricing", "add 3 tiers")
+
+    async def test_edit_page_section_success(self, monkeypatch):
+        from app.services import page_ai
+        html = (
+            '<!DOCTYPE html><html><body>'
+            '<section data-agent-section="hero"><h1>Old Hero</h1></section>'
+            '<section data-agent-section="footer"><p>Footer</p></section>'
+            '</body></html>'
+        )
+
+        async def mock_try_chat(*args, **kwargs):
+            return {
+                "content": '<section data-agent-section="hero"><h1>New Hero</h1></section>',
+                "model": "mock",
+                "model_short": "mock",
+            }
+
+        monkeypatch.setattr(page_ai, "_try_chat", mock_try_chat)
+
+        res = await page_ai.edit_page_section(html, "hero", "update headline")
+        assert "<h1>New Hero</h1>" in res["content"]
+        assert '<section data-agent-section="footer"><p>Footer</p></section>' in res["content"]
+        assert "Old Hero" not in res["content"]
+
+    async def test_fix_page_script_error_validation(self):
+        from app.services.page_ai import fix_page_script_error
+        with pytest.raises(ValueError, match="No page content"):
+            await fix_page_script_error("", {"message": "Error"})
+        with pytest.raises(ValueError, match="Error details"):
+            await fix_page_script_error("<html></html>", {})
+
+    async def test_fix_page_script_error_success(self, monkeypatch):
+        from app.services import page_ai
+        html = "<!DOCTYPE html><html><body><script>bad()</script></body></html>"
+
+        async def mock_try_chat(*args, **kwargs):
+            return {
+                "content": "<!DOCTYPE html><html><body><script>good()</script></body></html>",
+                "model": "mock",
+                "model_short": "mock",
+            }
+
+        monkeypatch.setattr(page_ai, "_try_chat", mock_try_chat)
+
+        res = await page_ai.fix_page_script_error(html, {"message": "bad is not defined", "lineno": 1})
+        assert "<script>good()</script>" in res["content"]
+

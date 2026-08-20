@@ -764,5 +764,42 @@ export const api = {
     aiGenerate:    (data)          => request('/api/pages/ai-generate', {
       method: 'POST', body: JSON.stringify(data), timeout: 120000,
     }, 0),
+    // ── Agentic Studio endpoints ──────────────────────────────────────
+    // SSE streaming page generation — returns the raw Response for the caller
+    // to consume via ReadableStream, matching the chatStream pattern.
+    aiStream: async (data, opts = {}) => {
+      const token = getAuthToken()
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+      if (!_deviceHint) {
+        try { _deviceHint = await getDeviceHintHeader() } catch {}
+      }
+      const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+      const res = await fetch(`${BASE_URL}/api/pages/ai/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader,
+          ...hintHeader,
+        },
+        body: JSON.stringify(data),
+        signal: opts.signal,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        const error = new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+        error.status = res.status
+        throw error
+      }
+      return res
+    },
+    aiInterview:   (data)          => request('/api/pages/ai/interview', {
+      method: 'POST', body: JSON.stringify(data), timeout: AI_TIMEOUT_MS,
+    }),
+    aiSectionEdit: (data)          => request('/api/pages/ai/section-edit', {
+      method: 'POST', body: JSON.stringify(data), timeout: 120000,
+    }, 0),
+    aiFixError:    (data)          => request('/api/pages/ai/fix-error', {
+      method: 'POST', body: JSON.stringify(data), timeout: 120000,
+    }, 0),
   },
 }

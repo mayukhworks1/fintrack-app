@@ -147,3 +147,17 @@ class TestHeaders:
     def test_protected_pages_are_never_cached(self):
         assert "no-store" in page_render.render_headers()["Cache-Control"]
         assert "max-age=60" in page_render.render_headers(cacheable=True)["Cache-Control"]
+
+
+class TestAgentBridge:
+    def test_preview_mode_injects_agent_bridge(self):
+        out = page_render.build_document("<p>Hello</p>", preview=True)
+        assert "__ft_page_error" in out
+        assert "__ft_section_click" in out
+        assert "data-agent-section" in out
+
+    def test_standard_render_omits_agent_bridge(self):
+        out = page_render.build_document("<p>Hello</p>", preview=False)
+        assert "__ft_page_error" not in out
+        assert "__ft_section_click" not in out
+

@@ -22,13 +22,13 @@ from typing import Any
 import httpx
 from ..utils.http import shared_client
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from ..config import settings
 from ..db import valkey as vk
 from ..db.postgres import get_pool
-from ..services.page_ai import generate_page
+from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from .deps import require_auth
 
@@ -429,6 +429,29 @@ class AIGenerateBody(BaseModel):
     existing:     str | None = None
 
 
+class AIInterviewBody(BaseModel):
+    prompt: str
+    content_type: str = "html"
+
+
+class AIStreamBody(BaseModel):
+    prompt: str
+    content_type: str = "html"
+    existing: str | None = None
+    clarifications: dict | None = None
+
+
+class AISectionEditBody(BaseModel):
+    content: str
+    section_id: str
+    prompt: str
+
+
+class AIFixErrorBody(BaseModel):
+    content: str
+    error: dict
+
+
 # ---------------------------------------------------------------------------
 # Authenticated endpoints
 # ---------------------------------------------------------------------------
@@ -521,6 +544,96 @@ async def ai_generate_page(
         "warnings":    result["warnings"],
         "content_type": body.content_type,
     }
+
+
+@router.post("/api/pages/ai/interview")
+async def ai_interview(
+    body: AIInterviewBody,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """Analyse a prompt and return clarifying questions if needed."""
+    try:
+        result = await analyze_prompt_needs(
+            prompt=body.prompt,
+            content_type=body.content_type,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Interview analysis failed: {e}")
+    return result
+
+
+@router.post("/api/pages/ai/stream")
+async def ai_stream_page(
+    body: AIStreamBody,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """Stream page generation as SSE events."""
+    async def event_stream():
+        try:
+            async for frame in stream_generate_page(
+                prompt=body.prompt,
+                content_type=body.content_type,
+                existing=body.existing,
+                clarifications=body.clarifications,
+            ):
+                yield f"data: {json.dumps(frame)}\n\n"
+        except ValueError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Generation failed: {e}'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/api/pages/ai/section-edit")
+async def ai_section_edit(
+    body: AISectionEditBody,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """Surgically edit a single section of a page."""
+    try:
+        result = await edit_page_section(
+            full_html=body.content,
+            section_id=body.section_id,
+            prompt=body.prompt,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Section edit failed: {e}")
+    return result
+
+
+@router.post("/api/pages/ai/fix-error")
+async def ai_fix_error(
+    body: AIFixErrorBody,
+    request: Request,
+    role: str = Depends(require_auth),
+):
+    """Attempt to fix a runtime JavaScript error in a page."""
+    try:
+        result = await fix_page_script_error(
+            full_html=body.content,
+            error_details=body.error,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error fix failed: {e}")
+    return result
 
 
 @router.post("/api/pages/preview")

@@ -6,6 +6,7 @@ import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
+import AgentInterviewCard from '../components/AgentInterviewCard'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
@@ -1297,19 +1298,28 @@ const AI_EXAMPLES = {
 
 function AiComposer({ contentType, content, onApply, isMobile }) {
   const confirm = useConfirm()
-  const [open, setOpen]       = useState(false)
-  const [prompt, setPrompt]   = useState('')
-  const [busy, setBusy]       = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-  const [err, setErr]         = useState('')
-  const [note, setNote]       = useState(null)
-  const [refine, setRefine]   = useState(true)
+  const [open, setOpen]               = useState(false)
+  const [prompt, setPrompt]           = useState('')
+  const [busy, setBusy]               = useState(false)
+  const [elapsed, setElapsed]         = useState(0)
+  const [err, setErr]                 = useState('')
+  const [note, setNote]               = useState(null)
+  const [refine, setRefine]           = useState(true)
+
+  // ── Agent Studio additions ──────────────────────────────────────────
+  const [mode, setMode]               = useState('idle') // idle | interviewing | streaming | section-edit | error-fix
+  const [interview, setInterview]     = useState(null)   // {questions: [...]}
+  const [streamDraft, setStreamDraft] = useState('')     // live-streamed HTML
+  const [thought, setThought]         = useState('')     // thought frame text
+  const [plan, setPlan]               = useState(null)    // plan frame {sections: [...]}
+  const [pageError, setPageError]     = useState(null)    // {message, lineno, ...}
+  const [sectionEdit, setSectionEdit] = useState(null)    // {sectionId, prompt}
+  const abortRef                      = useRef(null)
 
   const hasContent = (content || '').trim().length > 0
   const examples = AI_EXAMPLES[contentType] || AI_EXAMPLES.html
 
-  // Generation regularly runs 20-40s. A spinner with no elapsed time reads as
-  // a hang, so the count is shown.
+  // Elapsed time counter
   useEffect(() => {
     if (!busy) { setElapsed(0); return }
     const t0 = Date.now()
@@ -1317,10 +1327,144 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
     return () => clearInterval(id)
   }, [busy])
 
-  const run = async () => {
+  // Listen for postMessage from the preview iframe (error capture + section click)
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.data || typeof e.data !== 'object') return
+      if (e.data.type === '__ft_page_error') {
+        setPageError({
+          message: e.data.message || 'Unknown error',
+          lineno: e.data.lineno || 0,
+          colno: e.data.colno || 0,
+          stack: e.data.stack || '',
+        })
+      }
+      if (e.data.type === '__ft_section_click' && e.data.sectionId) {
+        setSectionEdit({ sectionId: e.data.sectionId, prompt: '' })
+        setMode('section-edit')
+        setOpen(true)
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
+
+  // ── Interview flow ──────────────────────────────────────────────────
+  const runInterview = async () => {
     const p = prompt.trim()
     if (!p || busy) return
+    setBusy(true); setErr(''); setNote(null); setInterview(null)
+    try {
+      const res = await api.pages.aiInterview({ prompt: p, content_type: contentType })
+      if (res.needs_interview && res.questions?.length) {
+        setInterview(res)
+        setMode('interviewing')
+      } else {
+        // Prompt is specific enough — go straight to streaming
+        await runStream(p, null)
+        return
+      }
+    } catch (e) {
+      setErr(e.message || 'Interview analysis failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // ── SSE streaming generation ────────────────────────────────────────
+  const runStream = async (promptText, clarifications) => {
+    const p = (promptText || prompt).trim()
+    if (!p) return
     // Replacing is destructive and there is no undo beyond version history.
+    if (hasContent && !refine) {
+      const ok = await confirm({
+        title: 'Replace this page?',
+        message: 'The current content will be replaced by the generated page. Your last saved version stays in history.',
+        confirmLabel: 'Replace',
+      })
+      if (!ok) return
+    }
+    setBusy(true); setErr(''); setNote(null); setStreamDraft(''); setThought(''); setPlan(null)
+    setMode('streaming'); setInterview(null)
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    try {
+      const res = await api.pages.aiStream({
+        prompt: p,
+        content_type: contentType,
+        existing: (refine && hasContent) ? content : undefined,
+        clarifications: clarifications || undefined,
+      }, { signal: controller.signal })
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+      let doneFrame = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        // Parse SSE lines from buffer
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // keep the incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (!data || data === '[DONE]') continue
+          try {
+            const frame = JSON.parse(data)
+            if (frame.type === 'thought') {
+              setThought(frame.text || '')
+            } else if (frame.type === 'plan') {
+              setPlan(frame)
+            } else if (frame.type === 'delta') {
+              fullContent += frame.delta
+              setStreamDraft(fullContent)
+            } else if (frame.type === 'done') {
+              doneFrame = frame
+            } else if (frame.type === 'error') {
+              throw new Error(frame.message || 'Generation failed')
+            }
+          } catch (parseErr) {
+            if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr
+          }
+        }
+      }
+
+      if (doneFrame) {
+        onApply(doneFrame.content)
+        setNote({
+          model: doneFrame.model_short || doneFrame.model || '',
+          warnings: doneFrame.warnings || [],
+        })
+        setPrompt('')
+      } else if (fullContent.trim()) {
+        // No done frame but we have content — use what we streamed
+        onApply(fullContent)
+        setNote({ model: '', warnings: ['Stream ended without a final frame'] })
+        setPrompt('')
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        setErr(e.message || 'Generation failed. Try again, or rephrase the prompt.')
+      }
+    } finally {
+      setBusy(false)
+      setMode('idle')
+      abortRef.current = null
+    }
+  }
+
+  // ── Classic non-streaming generation (fallback) ─────────────────────
+  const runClassic = async () => {
+    const p = prompt.trim()
+    if (!p || busy) return
     if (hasContent && !refine) {
       const ok = await confirm({
         title: 'Replace this page?',
@@ -1346,18 +1490,86 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
     }
   }
 
+  // ── Section surgery ─────────────────────────────────────────────────
+  const runSectionEdit = async () => {
+    if (!sectionEdit?.sectionId || !sectionEdit?.prompt?.trim() || busy) return
+    setBusy(true); setErr('')
+    try {
+      const res = await api.pages.aiSectionEdit({
+        content: content,
+        section_id: sectionEdit.sectionId,
+        prompt: sectionEdit.prompt,
+      })
+      onApply(res.content)
+      setNote({
+        model: res.model_short || '',
+        warnings: res.warnings || [],
+      })
+      setSectionEdit(null)
+      setMode('idle')
+    } catch (e) {
+      setErr(e.message || 'Section edit failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // ── Error self-healing ──────────────────────────────────────────────
+  const runFixError = async () => {
+    if (!pageError || busy) return
+    setBusy(true); setErr(''); setMode('error-fix')
+    try {
+      const res = await api.pages.aiFixError({
+        content: content,
+        error: pageError,
+      })
+      onApply(res.content)
+      setNote({
+        model: res.model_short || '',
+        warnings: res.warnings || [],
+      })
+      setPageError(null)
+      setMode('idle')
+    } catch (e) {
+      setErr(e.message || 'Auto-fix failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // ── Cancel streaming ────────────────────────────────────────────────
+  const cancel = () => {
+    if (abortRef.current) abortRef.current.abort()
+    setBusy(false)
+    setMode('idle')
+  }
+
+  // Main run handler — uses interview + streaming by default
+  const run = () => runInterview()
+
   if (!open) {
     return (
       <div style={{ padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
         <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
-          ✨ Design with AI
+          ✨ Agent Studio
         </button>
         {/* The strapline wraps to a second line on a phone, doubling the height
             of a row that exists only to hold one button. */}
         {!isMobile && (
           <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:8 }}>
-            Describe the page you want and it will be written for you
+            AI-powered page design with live streaming, interviews and section editing
           </span>
+        )}
+
+        {/* Self-healing error banner — visible even when the studio is collapsed */}
+        {pageError && (
+          <div style={{ marginTop:4, padding:'6px 10px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+            <span style={{ color:'#dc2626' }}>⚠ Runtime error: {pageError.message.slice(0, 80)}</span>
+            <button onClick={runFixError} disabled={busy}
+              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'#dc2626', marginLeft:'auto', flexShrink:0 }}>
+              🔧 Auto-Fix
+            </button>
+          </div>
         )}
       </div>
     )
@@ -1366,55 +1578,153 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   return (
     <div style={{ padding:isMobile?'10px 12px':'10px 14px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <span style={{ fontSize:12, fontWeight:700 }}>✨ Design with AI</span>
+        <span style={{ fontSize:12, fontWeight:700 }}>✨ Agent Studio</span>
+        {mode === 'streaming' && (
+          <span style={{ fontSize:11, color:'var(--accent, #3b82f6)', fontWeight:600 }}>
+            ● Live streaming
+          </span>
+        )}
         <button onClick={()=>setOpen(false)} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', marginLeft:'auto' }}>Hide</button>
       </div>
 
-      <textarea
-        value={prompt}
-        onChange={e=>setPrompt(e.target.value)}
-        onKeyDown={e=>{ if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') run() }}
-        placeholder={hasContent && refine
-          ? 'What should change? e.g. "make the hero dark and add a testimonials section"'
-          : 'Describe the page. e.g. "a Q3 client update with KPI cards and a timeline"'}
-        rows={isMobile ? 3 : 2}
-        disabled={busy}
-        style={{ ...inputStyle, width:'100%', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
-      />
-
-      {!prompt && (
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-          {examples.map(ex=>(
-            <button key={ex} onClick={()=>setPrompt(ex)} disabled={busy}
-              style={{ fontSize:11, border:'1px solid var(--border)', borderRadius:99, padding:'3px 10px', background:'var(--bg-base)', color:'var(--text-2)', cursor:'pointer', textAlign:'left' }}>
-              {ex.length > 58 ? ex.slice(0, 58) + '…' : ex}
+      {/* ── Section Edit Mode ──────────────────────────────────────────── */}
+      {mode === 'section-edit' && sectionEdit && (
+        <div style={{ padding:'10px 12px', background:'color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent)', borderRadius:'var(--radius, 8px)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
+          <span style={{ fontSize:12, fontWeight:600, color:'var(--text-1)' }}>
+            ✏️ Editing section: <code style={{ background:'var(--bg-base)', padding:'1px 6px', borderRadius:4, fontSize:11 }}>{sectionEdit.sectionId}</code>
+          </span>
+          <textarea
+            value={sectionEdit.prompt}
+            onChange={e => setSectionEdit(prev => ({ ...prev, prompt: e.target.value }))}
+            onKeyDown={e => { if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') runSectionEdit() }}
+            placeholder='What should change? e.g. "make this a 3-tier pricing layout with a monthly/annual toggle"'
+            rows={2}
+            disabled={busy}
+            style={{ ...inputStyle, width:'100%', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+          />
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+            <button onClick={() => { setSectionEdit(null); setMode('idle') }} disabled={busy}
+              style={{ ...btnGhost, fontSize:12 }}>Cancel</button>
+            <button onClick={runSectionEdit} disabled={busy || !sectionEdit.prompt?.trim()}
+              style={{ ...btnPrimary, fontSize:12, opacity:(busy||!sectionEdit.prompt?.trim())?0.6:1 }}>
+              {busy ? `Editing… ${elapsed}s` : 'Apply change'}
             </button>
-          ))}
+          </div>
         </div>
       )}
 
-      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-        {hasContent && (
-          <label style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--text-2)', cursor:'pointer' }}>
-            <input type="checkbox" checked={refine} onChange={e=>setRefine(e.target.checked)} disabled={busy} />
-            Revise the current page
-          </label>
-        )}
-        <button onClick={run} disabled={busy || !prompt.trim()}
-          style={{ ...btnPrimary, marginLeft:'auto', opacity:(busy||!prompt.trim())?0.6:1 }}>
-          {busy ? `Generating… ${elapsed}s` : (hasContent && refine ? 'Revise page' : 'Generate page')}
-        </button>
-      </div>
-
-      {busy && (
-        <div style={{ fontSize:11, color:'var(--text-2)' }}>
-          Writing the document — this usually takes 20–40 seconds.
+      {/* ── Self-healing error banner ──────────────────────────────────── */}
+      {pageError && mode !== 'section-edit' && (
+        <div style={{ padding:'8px 12px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ fontSize:12, color:'#dc2626', flex:1, minWidth:0 }}>
+            ⚠ Script error: {pageError.message.slice(0, 120)}
+            {pageError.lineno > 0 && <span style={{ color:'#9ca3af' }}> (line {pageError.lineno})</span>}
+          </span>
+          <button onClick={runFixError} disabled={busy}
+            style={{ ...btnPrimary, padding:'4px 12px', fontSize:11, background:'#dc2626', flexShrink:0 }}>
+            {busy && mode === 'error-fix' ? `Fixing… ${elapsed}s` : '🔧 Auto-Fix with AI'}
+          </button>
+          <button onClick={() => setPageError(null)}
+            style={{ ...btnGhost, padding:'4px 8px', fontSize:11 }}>Dismiss</button>
         </div>
       )}
+
+      {/* ── Interview card ─────────────────────────────────────────────── */}
+      {mode === 'interviewing' && interview?.questions?.length > 0 && (
+        <AgentInterviewCard
+          questions={interview.questions}
+          onSubmit={(answers) => runStream(prompt, answers)}
+          onSkip={() => runStream(prompt, null)}
+          disabled={busy}
+        />
+      )}
+
+      {/* ── Streaming status ───────────────────────────────────────────── */}
+      {mode === 'streaming' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {thought && (
+            <div style={{ fontSize:11, color:'var(--text-2)', fontStyle:'italic', padding:'4px 8px', background:'var(--bg-base)', borderRadius:'var(--radius, 8px)' }}>
+              💭 {thought}
+            </div>
+          )}
+          {plan && plan.sections?.length > 0 && (
+            <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)' }}>Sections:</span>
+              {plan.sections.map(s => (
+                <span key={s} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent)', color:'var(--accent, #3b82f6)', fontWeight:500 }}>
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ flex:1, height:3, borderRadius:2, background:'var(--border)', overflow:'hidden' }}>
+              <div style={{ width:'100%', height:'100%', background:'var(--accent, #3b82f6)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
+            </div>
+            <span style={{ fontSize:11, color:'var(--text-2)', flexShrink:0 }}>{elapsed}s</span>
+            <button onClick={cancel} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', color:'#ef4444' }}>Cancel</button>
+          </div>
+          <style>{`@keyframes indeterminate { 0% { transform:scaleX(0) translateX(-50%) } 50% { transform:scaleX(0.4) translateX(25%) } 100% { transform:scaleX(0) translateX(150%) } }`}</style>
+        </div>
+      )}
+
+      {/* ── Prompt input (shown when not in interview/section-edit mode) ── */}
+      {mode !== 'interviewing' && mode !== 'section-edit' && (
+        <>
+          <textarea
+            value={prompt}
+            onChange={e=>setPrompt(e.target.value)}
+            onKeyDown={e=>{ if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') run() }}
+            placeholder={hasContent && refine
+              ? 'What should change? e.g. "make the hero dark and add a testimonials section"'
+              : 'Describe the page. e.g. "a Q3 client update with KPI cards and a timeline"'}
+            rows={isMobile ? 3 : 2}
+            disabled={busy}
+            style={{ ...inputStyle, width:'100%', resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+          />
+
+          {!prompt && !busy && (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {examples.map(ex=>(
+                <button key={ex} onClick={()=>setPrompt(ex)} disabled={busy}
+                  style={{ fontSize:11, border:'1px solid var(--border)', borderRadius:99, padding:'3px 10px', background:'var(--bg-base)', color:'var(--text-2)', cursor:'pointer', textAlign:'left' }}>
+                  {ex.length > 58 ? ex.slice(0, 58) + '…' : ex}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+            {hasContent && (
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--text-2)', cursor:'pointer' }}>
+                <input type="checkbox" checked={refine} onChange={e=>setRefine(e.target.checked)} disabled={busy} />
+                Revise the current page
+              </label>
+            )}
+            <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+              <button onClick={runClassic} disabled={busy || !prompt.trim()} title="Generate without streaming or interview"
+                style={{ ...btnSecondary, fontSize:12, opacity:(busy||!prompt.trim())?0.6:1 }}>
+                Classic
+              </button>
+              <button onClick={run} disabled={busy || !prompt.trim()}
+                style={{ ...btnPrimary, opacity:(busy||!prompt.trim())?0.6:1 }}>
+                {busy && mode !== 'streaming' ? `Generating… ${elapsed}s` : (hasContent && refine ? '✨ Revise' : '✨ Generate')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {!busy && mode === 'idle' && (
+        <div style={{ fontSize:10, color:'var(--text-2)', opacity:0.7 }}>
+          💡 Tip: Click a section in Preview to edit it surgically. Runtime errors trigger auto-fix.
+        </div>
+      )}
+
       {err && <div style={{ fontSize:12, color:'#ef4444' }}>{err}</div>}
       {note && (
         <div style={{ fontSize:11, color:'var(--text-2)' }}>
-          ✓ Generated with {note.model}. Review it in Preview before publishing.
+          ✓ Generated with {note.model || 'AI'}. Review it in Preview before publishing.
           {note.warnings.length > 0 && (
             <span style={{ color:'#b45309' }}>
               {' '}Check {note.warnings.join('; ')}.

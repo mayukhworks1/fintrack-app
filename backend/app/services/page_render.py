@@ -257,6 +257,78 @@ VIEWER_RUNTIME = r"""
 })();
 """.strip()
 
+# The agent bridge enables two-way communication between the sandboxed preview
+# iframe and the parent editor:
+# 1. Error capture — any unhandled error or rejection is forwarded to the parent
+#    so the editor can offer its "Auto-Fix with AI" feature.
+# 2. Section inspector — hovering over a data-agent-section element draws an
+#    outline; clicking it sends the section ID to the parent for surgical editing.
+# The bridge deliberately communicates via postMessage rather than direct parent
+# access, because the sandbox forbids same-origin access.
+AGENT_BRIDGE = r"""
+(function(){
+  // ── Error capture ──────────────────────────────────────────────────
+  function report(msg, src, line, col, err){
+    try {
+      parent.postMessage({
+        type: '__ft_page_error',
+        message: String(msg),
+        source:  String(src || ''),
+        lineno:  line || 0,
+        colno:   col  || 0,
+        stack:   err && err.stack ? err.stack.slice(0, 1000) : '',
+      }, '*');
+    } catch(_){}
+  }
+  window.addEventListener('error', function(e){
+    report(e.message, e.filename, e.lineno, e.colno, e.error);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var msg = e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled promise rejection';
+    report(msg, '', 0, 0, e.reason instanceof Error ? e.reason : null);
+  });
+
+  // ── Section inspector ──────────────────────────────────────────────
+  var ATTR = 'data-agent-section';
+  var currentHighlight = null;
+  var outlineStyle = '2px solid rgba(59,130,246,.7)';
+  var savedOutline = '';
+
+  document.addEventListener('mouseover', function(e){
+    var sec = e.target.closest('[' + ATTR + ']');
+    if (sec === currentHighlight) return;
+    if (currentHighlight) { currentHighlight.style.outline = savedOutline; }
+    currentHighlight = sec;
+    if (sec) {
+      savedOutline = sec.style.outline || '';
+      sec.style.outline = outlineStyle;
+      sec.style.outlineOffset = '-2px';
+      sec.style.cursor = 'pointer';
+    }
+  });
+
+  document.addEventListener('mouseout', function(e){
+    if (!e.relatedTarget || !e.relatedTarget.closest) {
+      if (currentHighlight) { currentHighlight.style.outline = savedOutline; currentHighlight = null; }
+    }
+  });
+
+  document.addEventListener('click', function(e){
+    var sec = e.target.closest('[' + ATTR + ']');
+    if (!sec) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      parent.postMessage({
+        type: '__ft_section_click',
+        sectionId: sec.getAttribute(ATTR),
+        sectionTag: sec.tagName.toLowerCase(),
+      }, '*');
+    } catch(_){}
+  }, true);
+})();
+""".strip()
+
 
 # ---------------------------------------------------------------------------
 # Document assembly
@@ -269,7 +341,7 @@ _BODY_CLOSE = re.compile(r"</body\s*>", re.IGNORECASE)
 _HTML_CLOSE = re.compile(r"</html\s*>", re.IGNORECASE)
 
 
-def build_document(content: str | None, padded: bool = False) -> str:
+def build_document(content: str | None, padded: bool = False, preview: bool = False) -> str:
     """
     Wrap author content into a complete document.
 
@@ -289,7 +361,8 @@ def build_document(content: str | None, padded: bool = False) -> str:
         f"<style>{VIEWER_RESET}{pad}</style>"
         f"<script>{VIEWER_PRELUDE}</script>"
     )
-    runtime = f"<script>{VIEWER_RUNTIME}</script>"
+    bridge = f"<script>{AGENT_BRIDGE}</script>" if preview else ""
+    runtime = f"<script>{VIEWER_RUNTIME}</script>{bridge}"
 
     if not _HAS_DOCUMENT.match(body):
         return f"<!DOCTYPE html><html><head>{head}</head><body>{body}{runtime}</body></html>"
