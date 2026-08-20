@@ -320,3 +320,26 @@ class TestAgenticFeatures:
         res = await page_ai.fix_page_script_error(html, {"message": "bad is not defined", "lineno": 1})
         assert "<script>good()</script>" in res["content"]
 
+    async def test_enrich_page_assets_replaces_placeholders(self):
+        from app.services.page_ai import enrich_page_assets
+        html = '<img src="https://via.placeholder.com/600x400?text=Leadership" alt="Leadership">'
+        out = enrich_page_assets(html)
+        assert "via.placeholder.com" not in out
+        assert "images.unsplash.com" in out
+
+    async def test_enrich_page_assets_upgrades_dummy_boxes(self):
+        from app.services.page_ai import enrich_page_assets
+        html = '<div class="course-thumbnail" style="background:#64748b">Leadership</div>'
+        out = enrich_page_assets(html)
+        assert "images.unsplash.com" in out
+        assert '<img src=' in out
+        assert 'alt="Leadership"' in out
+
+    async def test_enrich_page_assets_injects_lucide_script(self):
+        from app.services.page_ai import enrich_page_assets
+        html = '<html><body><i data-lucide="award"></i></body></html>'
+        out = enrich_page_assets(html)
+        assert "unpkg.com/lucide" in out
+        assert "lucide.createIcons()" in out
+
+

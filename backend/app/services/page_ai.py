@@ -82,7 +82,33 @@ MODERN DESIGN SYSTEM — use these CSS tokens as the foundation:
   styles. Add `outline:2px solid var(--clr-accent);outline-offset:2px` on
   focus-visible.
 
-SECTION TAGGING — every top-level <section> in <body> MUST carry
+REAL MEDIA & ASSETS — ALWAYS supply real, working, high-resolution media assets. NEVER use empty gray boxes, plain text placeholders (e.g. <div>Leadership</div>), or broken placeholder services:
+- Real Photography (Unsplash CDN): Use valid Unsplash images with `auto=format&fit=crop&q=80`:
+  * Hero / Covers:
+    - Business / Leadership / Strategy: `https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1400&q=80`
+    - Courses / Education / Workshops: `https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1400&q=80`
+    - Tech / Coding / Engineering: `https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=1400&q=80`
+    - Modern Architecture / Offices: `https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1400&q=80`
+    - Finance / Analytics / Data: `https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1400&q=80`
+  * Topic / Course / Card Thumbnails:
+    - Leadership / Management: `https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=80`
+    - Strategic Planning / Growth: `https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80`
+    - Software Development / AI: `https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80`
+    - Data Science / Graphs: `https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80`
+    - Finance & Accounting: `https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80`
+    - UX / Design / Creative: `https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=800&q=80`
+    - Public Speaking / Workshop: `https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=80`
+  * Avatars / Headshots:
+    - `https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&h=200&q=80`
+    - `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&h=200&q=80`
+    - `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80`
+    - `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&h=200&q=80`
+    - `https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&h=200&q=80`
+- Icons: Use Lucide Icons by adding `<script src="https://unpkg.com/lucide@latest"></script>` and rendering icons with `<i data-lucide="book-open"></i>`, `<i data-lucide="trending-up"></i>`, `<i data-lucide="users"></i>`, `<i data-lucide="award"></i>`, `<i data-lucide="star"></i>`, `<i data-lucide="play"></i>`, `<i data-lucide="check"></i>`, etc., followed by `<script>lucide.createIcons();</script>` before </body>. Or use inline colored SVGs.
+- Videos: Use responsive HTML5 video `<video controls autoplay loop muted playsinline poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80" style="width:100%;border-radius:1rem;aspect-ratio:16/9;object-fit:cover"><source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4"></video>` or responsive YouTube embed iframe.
+- Always include `loading="lazy"`, `decoding="async"`, `alt="..."`, and responsive styles (`max-width:100%;border-radius:...;object-fit:cover`) on images.
+
+SECTION TAGGING — every top-level container/section in <body> MUST carry
 `data-agent-section="<short-id>"` where <short-id> is a lowercase kebab-case
 identifier describing the section, e.g. "hero", "features", "pricing", "cta",
 "testimonials", "footer". These tags enable the editor to target individual
@@ -134,6 +160,98 @@ _MARKDOWN_RULES = """You generate well-structured Markdown documents.
 
 def _rules_for(content_type: str) -> str:
     return _MARKDOWN_RULES if content_type == "markdown" else _HTML_RULES
+
+
+# --- asset enrichment & placeholder sanitizer -----------------------------
+
+_TOPIC_ASSETS = {
+    "leadership": "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1000&q=80",
+    "management": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1000&q=80",
+    "business": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80",
+    "strategy": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1000&q=80",
+    "tech": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80",
+    "code": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1000&q=80",
+    "software": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1000&q=80",
+    "data": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1000&q=80",
+    "finance": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1000&q=80",
+    "course": "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1000&q=80",
+    "education": "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&w=1000&q=80",
+    "learning": "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1000&q=80",
+    "design": "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=1000&q=80",
+    "creative": "https://images.unsplash.com/photo-1542744094-3a31f272c490?auto=format&fit=crop&w=1000&q=80",
+    "marketing": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1000&q=80",
+    "hero": "https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=1400&q=80",
+    "workspace": "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
+    "team": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80",
+    "default": "https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80",
+}
+
+_DUMMY_URL_RE = re.compile(
+    r'https?://(?:via\.placeholder\.com|placehold\.co|dummyimage\.com|placeholder\.com)[^"\'\s>]*',
+    re.IGNORECASE,
+)
+
+# Detects empty gray container placeholders with bare text (like <div ...>Leadership</div>)
+_EMPTY_BOX_RE = re.compile(
+    r'<div([^>]*\b(?:class|style)\s*=\s*["\'][^"\']*(?:thumbnail|placeholder|course-image|hero-image|card-img|bg-[a-z]+|background:\s*#[0-9a-fA-F]{3,6})[^"\']*["\'][^>]*)>\s*([a-zA-Z0-9\s\-&]{1,40})\s*</div>',
+    re.IGNORECASE,
+)
+
+
+def _resolve_topic_image(hint: str) -> str:
+    """Match a text hint to a high-quality topical Unsplash image URL."""
+    low = hint.lower()
+    for key, url in _TOPIC_ASSETS.items():
+        if key in low:
+            return url
+    return _TOPIC_ASSETS["default"]
+
+
+def enrich_page_assets(html: str) -> str:
+    """
+    Sanitize dummy placeholders and inject real high-resolution media assets.
+    """
+    if not html:
+        return html
+
+    out = html
+
+    # 1. Replace placeholder service URLs with real Unsplash images
+    def _replace_placeholder_url(m):
+        raw_url = m.group(0)
+        return _resolve_topic_image(raw_url)
+
+    out = _DUMMY_URL_RE.sub(_replace_placeholder_url, out)
+
+    # 2. Upgrade empty text-in-box placeholder divs into rich responsive image cards
+    def _upgrade_empty_box(m):
+        attrs = m.group(1)
+        text_label = m.group(2).strip()
+        img_url = _resolve_topic_image(text_label)
+        # Wrap image with responsive container
+        return (
+            f'<div{attrs} style="position:relative;overflow:hidden;min-height:220px;border-radius:inherit;">'
+            f'<img src="{img_url}" alt="{text_label}" '
+            f'style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" '
+            f'loading="lazy" decoding="async" />'
+            f'</div>'
+        )
+
+    out = _EMPTY_BOX_RE.sub(_upgrade_empty_box, out)
+
+    # 3. If Lucide icons are used, ensure Lucide script is loaded
+    if 'data-lucide=' in out and 'unpkg.com/lucide' not in out:
+        lucide_script = (
+            '<script src="https://unpkg.com/lucide@latest"></script>'
+            '<script>window.addEventListener("DOMContentLoaded",function(){if(window.lucide)lucide.createIcons();});'
+            'if(window.lucide)lucide.createIcons();</script>'
+        )
+        if '</body>' in out:
+            out = out.replace('</body>', f'{lucide_script}</body>', 1)
+        else:
+            out += lucide_script
+
+    return out
 
 
 # --- output cleaning -------------------------------------------------------
@@ -247,6 +365,9 @@ def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
     found = [i for i in (lowered.find("<!doctype"), lowered.find("<html")) if i != -1]
     if found and min(found) > 0:
         text = text[min(found):]
+
+    # Enrich assets: sanitize placeholder boxes/URLs and ensure real imagery/icons
+    text = enrich_page_assets(text)
 
     return text, find_fragile_patterns(text)
 
