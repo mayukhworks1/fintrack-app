@@ -10,21 +10,26 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import re
 import secrets
 import string
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 from ..utils.http import shared_client
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
+from ..config import settings
+from ..db import valkey as vk
 from ..db.postgres import get_pool
 from ..services.page_ai import generate_page
+from ..services import page_render
 from .deps import require_auth
 
 router = APIRouter()
@@ -32,6 +37,70 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+# --- editor preview store ---------------------------------------------------
+#
+# Short-lived, because a preview only has to survive the round trip from the
+# editor's iframe. Valkey keeps it working across workers; the in-process copy
+# keeps it working when Valkey is not configured at all, which is the common
+# single-worker deployment.
+PREVIEW_TTL_SECONDS = 900
+MAX_PREVIEW_CHARS = 400_000
+_PREVIEW_KEY = "pagepreview:"
+_preview_local: dict[str, tuple[float, str]] = {}
+
+
+def _preview_sweep() -> None:
+    now = time.time()
+    for tok in [t for t, (exp, _) in _preview_local.items() if exp < now]:
+        _preview_local.pop(tok, None)
+
+
+async def _preview_put(token: str, content: str) -> None:
+    _preview_sweep()
+    _preview_local[token] = (time.time() + PREVIEW_TTL_SECONDS, content)
+    await vk.cache_set(_PREVIEW_KEY + token, content, PREVIEW_TTL_SECONDS)
+
+
+async def _preview_get(token: str) -> str | None:
+    _preview_sweep()
+    hit = _preview_local.get(token)
+    if hit:
+        return hit[1]
+    value = await vk.cache_get(_PREVIEW_KEY + token)
+    return value if isinstance(value, str) else None
+
+
+# --- unlock tokens for password-protected pages ------------------------------
+#
+# The renderer serves the document directly to an iframe, so it cannot be
+# handed a password. Verifying the password mints a short-lived token instead,
+# and the renderer accepts nothing else for a protected page.
+RENDER_TOKEN_TTL_SECONDS = 6 * 60 * 60
+
+
+def _render_token(slug: str, ttl: int = RENDER_TOKEN_TTL_SECONDS) -> str:
+    expiry = int(time.time()) + ttl
+    payload = f"{expiry}:{slug}"
+    sig = hmac.new(settings.app_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{expiry}.{sig}"
+
+
+def _render_token_valid(slug: str, token: str | None) -> bool:
+    if not token or "." not in token:
+        return False
+    expiry_raw, _, sig = token.partition(".")
+    try:
+        expiry = int(expiry_raw)
+    except ValueError:
+        return False
+    if expiry < time.time():
+        return False
+    expected = hmac.new(
+        settings.app_secret.encode(), f"{expiry}:{slug}".encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    return hmac.compare_digest(sig, expected)
+
 
 def _slugify(text: str) -> str:
     s = text.lower().strip()
@@ -348,6 +417,10 @@ class LogViewBody(BaseModel):
     gps_accuracy:   float | None = None
 
 
+class PreviewBody(BaseModel):
+    content: str = ""
+
+
 class AIGenerateBody(BaseModel):
     prompt:       str
     content_type: str = "html"
@@ -442,11 +515,34 @@ async def ai_generate_page(
     return {
         "content":     result["content"],
         "model":       result["model_short"] or result["model"],
-        # Names what was stripped because the CSP would have blocked it, so the
-        # author is told rather than left with markup that silently does nothing.
-        "removed":     result["removed"],
+        # Names anything in the generated markup that publishes badly — a
+        # relative file path, content hidden until a script reveals it — so the
+        # author is told up front rather than discovering it after publishing.
+        "warnings":    result["warnings"],
         "content_type": body.content_type,
     }
+
+
+@router.post("/api/pages/preview")
+async def create_page_preview(body: PreviewBody, role: str = Depends(require_auth)):
+    """
+    Park unsaved editor content so it can be rendered by the public renderer.
+
+    The editor preview has to go through the same document pipeline as the
+    published page or the two drift — and they did: the preview showed markup
+    the published page then rendered differently. It cannot simply post the
+    content to the renderer, because a public endpoint that echoes arbitrary
+    HTML back under a permissive CSP is a reflected-XSS hole on the API origin.
+    So the content is stored behind an unguessable token by an authenticated
+    author, and the renderer only ever serves what it finds under that token.
+    """
+    content = body.content or ""
+    if len(content) > MAX_PREVIEW_CHARS:
+        raise HTTPException(413, "This document is too large to preview.")
+
+    token = secrets.token_urlsafe(24)
+    await _preview_put(token, content)
+    return {"token": token, "expires_in": PREVIEW_TTL_SECONDS}
 
 
 @router.post("/api/pages/upload")
@@ -1085,6 +1181,50 @@ async def public_get_page(slug: str, request: Request):
     )
 
 
+@router.get("/api/public/pages/preview/{token}", response_class=HTMLResponse)
+async def public_render_preview(token: str):
+    """Render whatever an author parked under this token. Declared before the
+    slug route so `preview` is never mistaken for a page slug."""
+    content = await _preview_get(token)
+    if content is None:
+        raise HTTPException(404, "This preview has expired. Close and reopen the preview.")
+    return HTMLResponse(
+        content=page_render.build_document(content, padded=True),
+        headers={**page_render.render_headers(), "X-Robots-Tag": "noindex, nofollow"},
+    )
+
+
+@router.get("/api/public/pages/{slug}/render", response_class=HTMLResponse)
+async def public_render_page(slug: str, t: str | None = None):
+    """
+    Serve a published page as its own document.
+
+    The SPA frames this URL rather than assembling the markup itself. That is
+    the whole point: a document fetched over the network carries the policy set
+    here instead of inheriting the app's, so the author's scripts, stylesheets
+    and web fonts actually run. See services/page_render.py for why that broke
+    entire pages before.
+    """
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
+
+    if not row or not row["is_published"]:
+        raise HTTPException(404, "Page not found")
+    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(410, "Page has expired")
+    if row["is_password_protected"] and not _render_token_valid(slug, t):
+        raise HTTPException(401, "This page is protected.")
+
+    return HTMLResponse(
+        content=page_render.build_document(row["content"] or ""),
+        headers=page_render.render_headers(cacheable=not row["is_password_protected"]),
+    )
+
+
 @router.post("/api/public/pages/{slug}/verify")
 async def public_verify_password(slug: str, body: VerifyPasswordBody):
     pool = get_pool()
@@ -1107,7 +1247,9 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
     if _hash_password(body.password) != (row["password_hash"] or ""):
         raise HTTPException(401, "Incorrect password")
 
-    return _public_page_dict(row)
+    # The renderer serves the document straight into an iframe and has no way
+    # to be told a password, so proof of the password travels as a token.
+    return {**_public_page_dict(row), "render_token": _render_token(slug)}
 
 
 @router.post("/api/public/pages/{slug}/view")

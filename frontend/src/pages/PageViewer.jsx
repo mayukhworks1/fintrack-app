@@ -4,7 +4,7 @@ import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
-import { buildPageDocument, PAGE_SANDBOX, PAGE_MESSAGE_CHANNEL } from '../utils/pageHtml'
+import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -15,12 +15,6 @@ function absAsset(url) {
   if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url
   if (url.startsWith('/api/')) return `${API_BASE_URL}${url}`
   return url
-}
-function rewriteAssetUrls(html) {
-  if (!API_BASE_URL || !html) return html
-  // src="/api/..." or href="/api/..." (single or double quoted)
-  return html.replace(/(\s(?:src|href)=)(["'])(\/api\/[^"']+)\2/gi,
-    (_, attr, q, path) => `${attr}${q}${API_BASE_URL}${path}${q}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -198,41 +192,23 @@ function CSVTable({ text }) {
 // ---------------------------------------------------------------------------
 // HTML — author content in an isolated frame
 // ---------------------------------------------------------------------------
-function HTMLPage({ content }) {
-  const frameRef = useRef(null)
-  const [height, setHeight] = useState(0)
-
-  const html = useMemo(() => rewriteAssetUrls(buildPageDocument(content)), [content])
-
-  // The frame is opaque-origin by design, so its height cannot be measured from
-  // here — it reports its own via postMessage. Matching on the source window
-  // rather than the origin is deliberate: a sandboxed frame without
-  // allow-same-origin posts with origin "null", which is not a value worth
-  // comparing against.
-  useEffect(() => {
-    const onMessage = (e) => {
-      if (e.source !== frameRef.current?.contentWindow) return
-      const d = e.data
-      if (!d || d.channel !== PAGE_MESSAGE_CHANNEL || d.type !== 'height') return
-      const h = Number(d.height)
-      if (Number.isFinite(h) && h > 0) setHeight(Math.ceil(h))
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
-
+function HTMLPage({ slug, token, title }) {
+  // The frame fills the viewport and does its own scrolling, rather than being
+  // grown to the height of its content. Growing it made the outer page scroll
+  // instead, which means the framed document's viewport never moves — so
+  // position:sticky headers never stick, 100vh sections are as tall as the
+  // whole document, and anything driven by scroll position never fires. Given
+  // its own viewport the page behaves exactly as it would standing alone.
   return (
     <iframe
-      ref={frameRef}
-      title="Published page"
-      srcDoc={html}
+      title={title || 'Published page'}
+      src={pageRenderUrl(slug, token)}
       sandbox={PAGE_SANDBOX}
-      scrolling="no"
       style={{
+        position: 'fixed',
+        inset: 0,
         width: '100%',
-        // Falls back to the viewport until the first height report lands, so
-        // the page never flashes as a collapsed strip.
-        height: height ? `${height}px` : '100vh',
+        height: '100%',
         border: 'none',
         display: 'block',
       }}
@@ -348,10 +324,10 @@ function PasswordPrompt({ title, onSubmit, error, loading }) {
 // ---------------------------------------------------------------------------
 // Page content renderer
 // ---------------------------------------------------------------------------
-function PageContent({ page }) {
+function PageContent({ page, slug }) {
   const { content_type, content } = page
   if (!content) return <div style={{ color: '#9ca3af', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
-  if (content_type === 'html') return <HTMLPage content={content} />
+  if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
   if (content_type === 'csv') return <CSVTable text={content} />
   if (content_type === 'text') {
     return (
@@ -407,8 +383,13 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   // previous values instead of deleting the nodes. The old version removed
   // og:title/og:description/og:url outright on unmount, taking the app's own
   // share metadata with them until the next full reload.
-  usePageMeta(isHtml ? {} : {
-    title: title ? `${title} — FinTrack Pages` : undefined,
+  //
+  // HTML pages get a title too. A framed document's own <title> cannot reach
+  // the tab, so without this a published landing page sat under whatever the
+  // app last set. It takes the page's title unadorned — a marketing page has
+  // no business advertising the tool that published it.
+  usePageMeta({
+    title: title ? (isHtml ? title : `${title} — FinTrack Pages`) : undefined,
     description: title ? (description || `${title} — shared via FinTrack Pages`) : undefined,
   })
 
@@ -622,7 +603,7 @@ export default function PageViewer() {
       contentType={page?.content_type}
       content={page?.content}
     >
-      <PageContent page={page} />
+      <PageContent page={page} slug={slug} />
     </ViewerShell>
   )
 }

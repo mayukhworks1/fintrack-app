@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useConfirm } from '../context/ConfirmContext'
-import { buildPageDocument, PAGE_SANDBOX } from '../utils/pageHtml'
+import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -119,15 +119,41 @@ function CSVPreview({ text }) {
     </div>
   )
 }
-function HTMLPreview({ content, height = 300 }) {
-  // Same builder as the published viewer, so the preview is not a different
-  // rendering of the same markup. `padded` only affects bare fragments — a full
-  // document keeps whatever spacing its author wrote.
-  const doc = useMemo(() => buildPageDocument(content, { padded: true }), [content])
+// Fills its pane rather than sitting in a 300px window. Now that a preview is
+// the real page — scripts, fonts, full-height sections and all — a fixed strip
+// showed too little of it to judge anything.
+function HTMLPreview({ content, height = '100%' }) {
+  const [url, setUrl]   = useState('')
+  const [err, setErr]   = useState('')
+
+  // The preview goes through the same renderer as the published page, so what
+  // the author sees here is what a visitor gets — scripts, fonts and all.
+  // Parking the content behind a token is what makes that possible: a public
+  // endpoint that rendered any HTML posted at it would be a reflected-XSS hole
+  // on the API origin, so only an authenticated author can put content there.
+  //
+  // Debounced, because this runs on every keystroke in the editor.
+  useEffect(() => {
+    if (!content) { setUrl(''); setErr(''); return }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      api.pages.preview(content)
+        .then(res => {
+          if (cancelled) return
+          if (res?.token) { setUrl(previewRenderUrl(res.token)); setErr('') }
+          else setErr('Preview is unavailable right now.')
+        })
+        .catch(() => { if (!cancelled) setErr('Preview is unavailable right now.') })
+    }, 400)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [content])
+
+  if (err) return <div style={{ padding:20, fontSize:12, color:'#b45309', textAlign:'center' }}>{err}</div>
+  if (!url) return <div style={{ padding:20, fontSize:12, color:'var(--text-2)', textAlign:'center' }}>Rendering preview…</div>
   return (
     <iframe
-      srcDoc={doc}
-      style={{ width:'100%', height, border:'none', display:'block', background:'#fff' }}
+      src={url}
+      style={{ width:'100%', height, minHeight:320, border:'none', display:'block', background:'#fff' }}
       sandbox={PAGE_SANDBOX}
       title="preview"
     />
@@ -1218,10 +1244,11 @@ const CONTENT_TYPES = [
 
 // Prompt-driven page generation.
 //
-// The model is constrained server-side to self-contained HTML/CSS because the
-// published page runs under the app's CSP — no JS, no external stylesheets or
-// fonts. Anything it returns outside that is stripped, and `removed` reports
-// what went so the author is not left wondering why something vanished.
+// Published pages are served as their own document, so the model may use
+// JavaScript, external stylesheets and web fonts freely. What it cannot use is
+// a relative file path or persistent storage, and `warnings` reports anything
+// of that kind in the result rather than letting the author find out after
+// publishing.
 const AI_EXAMPLES = {
   html: [
     'A one-page Q3 client update with a hero, three KPI cards and a delivery timeline',
@@ -1277,7 +1304,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
         existing: (refine && hasContent) ? content : undefined,
       })
       onApply(res.content)
-      setNote({ model: res.model, removed: res.removed || [] })
+      setNote({ model: res.model, warnings: res.warnings || [] })
       setPrompt('')
     } catch (e) {
       setErr(e.message || 'Generation failed. Try again, or rephrase the prompt.')
@@ -1351,9 +1378,9 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
       {note && (
         <div style={{ fontSize:11, color:'var(--text-2)' }}>
           ✓ Generated with {note.model}. Review it in Preview before publishing.
-          {note.removed.length > 0 && (
+          {note.warnings.length > 0 && (
             <span style={{ color:'#b45309' }}>
-              {' '}Removed {note.removed.join(', ')} — blocked on published pages.
+              {' '}Check {note.warnings.join('; ')}.
             </span>
           )}
         </div>

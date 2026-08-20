@@ -748,6 +748,9 @@ export const api = {
     publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(r => r.json()),
     publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
     publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
+    // Parks unsaved editor content so the public renderer can serve it. The
+    // preview and the published page then come out of the same pipeline.
+    preview:       (content)   => request('/api/pages/preview', { method: 'POST', body: JSON.stringify({ content }) }),
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
     deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),

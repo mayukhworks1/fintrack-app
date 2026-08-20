@@ -1,15 +1,16 @@
 """
 Output cleaning for AI-generated pages.
 
-Everything stripped here is stripped because the app's Content-Security-Policy
-blocks it at render time. Leaving it in is not a security hole — the browser
-drops it — but it hands the author markup that looks functional in the editor
-and silently does nothing once published.
+Published pages are served as their own document, so script, external CSS and
+web fonts all work and nothing needs stripping. What is left is unwrapping the
+model's formatting, and naming the two things that still publish badly: a
+relative file path with no directory to resolve against, and content that stays
+hidden until a script reveals it.
 """
 
 import pytest
 
-from app.services.page_ai import clean_output, strip_unsupported, generate_page
+from app.services.page_ai import clean_output, find_fragile_patterns, generate_page
 
 
 class TestFenceUnwrapping:
@@ -61,56 +62,69 @@ class TestFenceUnwrapping:
         assert removed == []
 
 
-class TestStripsWhatTheCSPBlocks:
-    def test_removes_script_blocks_and_reports_them(self):
-        out, removed = strip_unsupported(
-            "<p>a</p><script>alert(1)</script><p>b</p>"
-        )
-        assert "<script" not in out
-        assert "alert(1)" not in out
-        assert "<p>a</p>" in out and "<p>b</p>" in out
-        assert any("script" in r for r in removed)
+class TestNothingWorkingIsRemoved:
+    """
+    These all used to be stripped, back when the page inherited the app's CSP.
+    They work now, and deleting them would delete the page's behaviour.
+    """
 
-    def test_removes_external_script_tags(self):
-        out, removed = strip_unsupported('<script src="https://cdn.example/x.js"></script>')
-        assert "cdn.example" not in out
-        assert removed
-
-    def test_removes_external_stylesheets(self):
-        out, removed = strip_unsupported(
-            '<link rel="stylesheet" href="https://cdn.example/t.css">'
-        )
-        assert "cdn.example" not in out
-        assert any("stylesheet" in r for r in removed)
-
-    def test_removes_css_imports(self):
-        out, removed = strip_unsupported("<style>@import url('https://fonts.x/c.css'); p{}</style>")
-        assert "@import" not in out
-        assert "p{}" in out
-
-    def test_removes_inline_event_handlers(self):
-        out, removed = strip_unsupported('<button onclick="go()">Go</button>')
-        assert "onclick" not in out
-        assert "Go" in out
-        assert any("handler" in r for r in removed)
-
-    # External images and data URIs are explicitly allowed by img-src, so
-    # stripping them would remove working content.
-    def test_keeps_external_images(self):
-        src = '<img src="https://example.com/a.png" alt="A">'
-        out, removed = strip_unsupported(src)
+    def test_keeps_script(self):
+        src = "<p>a</p><script>init()</script>"
+        out, _ = clean_output(src, "html")
         assert out == src
-        assert removed == []
 
-    def test_keeps_inline_styles_and_svg(self):
-        src = '<style>body{margin:0}</style><svg aria-hidden="true"><circle r="4"/></svg>'
-        out, removed = strip_unsupported(src)
+    def test_keeps_external_stylesheets_and_web_fonts(self):
+        src = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces">'
+        out, _ = clean_output(src, "html")
         assert out == src
-        assert removed == []
 
-    def test_reports_nothing_for_clean_markup(self):
-        _, removed = strip_unsupported("<!DOCTYPE html><html><body><h1>Hi</h1></body></html>")
-        assert removed == []
+    def test_keeps_inline_event_handlers(self):
+        src = '<button onclick="go()">Go</button>'
+        out, _ = clean_output(src, "html")
+        assert out == src
+
+    def test_keeps_external_images_and_inline_svg(self):
+        src = '<img src="https://example.com/a.png" alt="A"><svg><circle r="4"/></svg>'
+        out, warnings = clean_output(src, "html")
+        assert out == src
+        assert warnings == []
+
+
+class TestWarnsAboutWhatPublishesBadly:
+    def test_flags_a_relative_file_path(self):
+        """There is no directory beside a published page, so it can only 404."""
+        warnings = find_fragile_patterns('<img src="tw-logo-black.png" alt="Logo">')
+        assert any("relative" in w for w in warnings)
+        assert any("tw-logo-black.png" in w for w in warnings)
+
+    def test_accepts_every_url_form_that_does_resolve(self):
+        assert find_fragile_patterns(
+            '<img src="https://x.test/a.png"><img src="/api/public/pages/asset/b.png">'
+            '<img src="data:image/gif;base64,R0lGOD"><a href="#top">t</a>'
+            '<a href="mailto:a@b.test">m</a>'
+        ) == []
+
+    # The exact shape that published a working page as a blank screen.
+    def test_flags_content_hidden_until_a_script_reveals_it(self):
+        warnings = find_fragile_patterns(
+            "<style>.rv{opacity:0;transform:translateY(22px)}.rv.in{opacity:1;transform:none}</style>"
+            "<section class='rv'>Everything</section>"
+        )
+        assert any("hidden until script" in w for w in warnings)
+
+    def test_leaves_a_hidden_class_alone_when_css_can_reveal_it(self):
+        """A hover or checkbox reveal needs no script, so it is not fragile."""
+        assert find_fragile_patterns(
+            "<style>.tip{opacity:0}.card:hover .tip{opacity:1}</style>"
+        ) == []
+
+    def test_says_nothing_about_a_healthy_document(self):
+        _, warnings = clean_output(
+            "<!DOCTYPE html><html><body><h1>Hi</h1>"
+            '<img src="https://x.test/a.png" alt="a"></body></html>',
+            "html",
+        )
+        assert warnings == []
 
 
 @pytest.mark.asyncio

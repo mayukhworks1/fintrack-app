@@ -1,20 +1,12 @@
 """
 AI page generation for the Pages module.
 
-Generated markup is published at /p/<slug> and rendered inside a sandboxed
-iframe that inherits the app's Content-Security-Policy. That policy is the real
-specification for what the model is allowed to produce, so the constraints below
-are not stylistic preferences — anything outside them is silently dropped by the
-browser and the author sees a broken page with no explanation:
-
-    img-src   'self' data: blob: https:   → external images DO work
-    style-src 'self' 'unsafe-inline'      → inline <style> works, external CSS does not
-    font-src  'self' data:                → web fonts are blocked
-    script-src 'self'                     → all page JavaScript is blocked
-
-The output is therefore self-contained HTML and CSS. Anything the model returns
-outside that is stripped before it reaches the editor, and the caller is told
-what was removed rather than left to discover it at publish time.
+Generated markup is published at /p/<slug>, where it is served as its own
+document by services/page_render.py and framed sandboxed. It therefore runs
+under that renderer's policy, not the app's: scripts, external stylesheets and
+web fonts all work. The constraints that remain are the ones the sandbox
+genuinely imposes — no persistent storage, no relative URLs — plus the ones
+that decide whether a page reads well on a phone.
 """
 
 from __future__ import annotations
@@ -40,18 +32,27 @@ MAX_EXISTING_CHARS = 24000
 
 _HTML_RULES = """You generate complete, self-contained HTML documents.
 
-HARD CONSTRAINTS — the page is rendered inside a sandboxed iframe under a strict
-Content-Security-Policy. Violating these produces a silently broken page:
-- NO JavaScript. No <script> tags, no inline handlers (onclick, onload). Script
-  is blocked outright. Anything interactive must be done with CSS only.
-- NO external stylesheets and NO web fonts. No <link rel="stylesheet">, no
-  @import, no Google Fonts, no Tailwind or Bootstrap CDN. All CSS goes in a
-  single <style> block in <head>.
-- Use a system font stack, e.g.
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif
-- External images ARE allowed over https, as are data: URIs. Prefer inline
-  <svg> for icons, charts, logos and decorative shapes — it always renders and
-  never 404s. Only use an <img> when a photograph is genuinely needed.
+THE ENVIRONMENT — the page is served as its own document and displayed in a
+sandboxed iframe. Inline <script>, <style>, external stylesheets, Google Fonts
+and https images all work normally. What does NOT work:
+- NO relative URLs to files. src="logo.png" or href="style.css" has nothing to
+  resolve against and 404s. Every external reference must be an absolute https
+  URL or a data: URI. Prefer inline <svg> for icons, logos, charts and
+  decorative shapes — it always renders and never 404s. Use <img> only when a
+  photograph is genuinely needed.
+- NO persistent storage. localStorage and sessionStorage are backed by memory
+  and are empty on every visit, so never make first paint depend on a stored
+  value. A theme toggle is fine; a page that stays blank until a saved
+  preference is read is not.
+- NO server. Forms cannot be submitted anywhere useful — handle them in
+  JavaScript and show a confirmation in the page.
+
+JAVASCRIPT — allowed and encouraged, in a single <script> before </body>, with
+one rule that matters more than any other: NEVER let content start hidden
+unless the script that reveals it cannot fail. Reveal-on-scroll built as
+`.rv{opacity:0}` + `.rv.in{opacity:1}` leaves the entire page blank if anything
+above it throws. Either animate from a visible state, or pair the hidden state
+with a <noscript> override. Guard every getElementById result before using it.
 
 QUALITY BAR:
 - Output a complete document: <!DOCTYPE html> through </html>.
@@ -106,38 +107,51 @@ def _rules_for(content_type: str) -> str:
 _FENCE_OPEN = re.compile(r"^\s*```[a-zA-Z]*\s*\n", re.MULTILINE)
 _FENCE_CLOSE = re.compile(r"\n\s*```\s*$")
 _FENCE_ANY = re.compile(r"^[ \t]*```[a-zA-Z]*[ \t]*$", re.MULTILINE)
-_SCRIPT = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)
-_SCRIPT_SELF_CLOSING = re.compile(r"<script\b[^>]*/?>", re.IGNORECASE)
-_EXT_STYLESHEET = re.compile(
-    r"""<link\b[^>]*\brel\s*=\s*["']?stylesheet["']?[^>]*>""", re.IGNORECASE
+
+# A src/href that is neither absolute, root-relative, a data/blob URI, a
+# fragment nor a protocol handler. There is no directory beside a published
+# page for it to resolve against, so it can only 404.
+_RELATIVE_ASSET = re.compile(
+    r"""\s(?:src|href)\s*=\s*["'](?!https?:|//|/|data:|blob:|#|mailto:|tel:)([^"']+)["']""",
+    re.IGNORECASE,
 )
-_CSS_IMPORT = re.compile(r"@import\s+(?:url\()?[^;]+;?", re.IGNORECASE)
-_INLINE_HANDLER = re.compile(r"\son[a-z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+
+# The reveal-on-scroll idiom: a class whose base rule hides the element and
+# whose compound rule (.rv.in) restores it. CSS cannot add that second class —
+# only script can — so if the script does not run, or throws before it reaches
+# this, the content is hidden permanently.
+_HIDDEN_RULE = re.compile(
+    r"(?<![\w.-])(\.[\w-]+)\s*(?:,[^{]*)?\{[^}]*?(?:opacity\s*:\s*0(?!\.)|visibility\s*:\s*hidden)",
+    re.IGNORECASE,
+)
 
 
-def strip_unsupported(html: str) -> tuple[str, list[str]]:
+def find_fragile_patterns(html: str) -> list[str]:
     """
-    Remove what the CSP would block anyway, and report it.
+    Name the things that publish badly, without touching the document.
 
-    Leaving these in would not be a security hole — the browser drops them — but
-    it would leave the author with markup that looks functional in the editor and
-    silently does nothing once published.
+    Nothing here is invalid HTML, and none of it can be fixed by deleting it —
+    stripping a hidden-until-scrolled class would strip the animation the author
+    asked for. So this reports rather than edits, and the editor shows it beside
+    the generated page.
     """
-    removed: list[str] = []
-    out = html
+    warnings: list[str] = []
 
-    def _sub(pattern, label, text):
-        new, n = pattern.subn("", text)
-        if n:
-            removed.append(f"{label} ({n})")
-        return new
+    relative = {m.group(1) for m in _RELATIVE_ASSET.finditer(html)}
+    if relative:
+        sample = ", ".join(sorted(relative)[:3])
+        warnings.append(
+            f"{len(relative)} relative file path(s) that will not resolve ({sample})"
+        )
 
-    out = _sub(_SCRIPT, "script blocks", out)
-    out = _sub(_SCRIPT_SELF_CLOSING, "script tags", out)
-    out = _sub(_EXT_STYLESHEET, "external stylesheets", out)
-    out = _sub(_CSS_IMPORT, "CSS @import", out)
-    out = _sub(_INLINE_HANDLER, "inline event handlers", out)
-    return out, removed
+    hidden = {m.group(1) for m in _HIDDEN_RULE.finditer(html)}
+    revealed = {c for c in hidden if re.search(re.escape(c) + r"\.[\w-]+\s*[,{]", html)}
+    if revealed:
+        warnings.append(
+            f"content hidden until script runs ({', '.join(sorted(revealed)[:3])})"
+        )
+
+    return warnings
 
 
 def find_truncation(html: str) -> str | None:
@@ -173,7 +187,7 @@ def find_truncation(html: str) -> str | None:
 
 
 def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
-    """Unwrap the model's formatting, then drop anything the CSP would block."""
+    """Unwrap the model's formatting, then report anything that publishes badly."""
     text = (raw or "").strip()
 
     if content_type == "markdown":
@@ -200,7 +214,7 @@ def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
     if found and min(found) > 0:
         text = text[min(found):]
 
-    return strip_unsupported(text)
+    return text, find_fragile_patterns(text)
 
 
 # --- entry point -----------------------------------------------------------
@@ -217,7 +231,7 @@ async def generate_page(
     starting over — which is what makes iterating on a design possible instead
     of regenerating something unrelated on every prompt.
 
-    Returns {content, model, model_short, removed}.
+    Returns {content, model, model_short, warnings}.
     """
     prompt = (prompt or "").strip()
     if not prompt:
@@ -256,7 +270,7 @@ async def generate_page(
         extract=False,
     )
 
-    content, removed = clean_output(result.get("content", ""), content_type)
+    content, warnings = clean_output(result.get("content", ""), content_type)
     if not content.strip():
         raise ValueError("The model returned an empty document. Try rephrasing the prompt.")
 
@@ -274,5 +288,5 @@ async def generate_page(
         "content": content,
         "model": result.get("model", ""),
         "model_short": result.get("model_short", ""),
-        "removed": removed,
+        "warnings": warnings,
     }

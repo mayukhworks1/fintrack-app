@@ -4,13 +4,14 @@
   "installCommand": "cd frontend && npm install",
   "//rewrites": "Built assets are excluded from the SPA catch-all. Otherwise a request for a chunk a deploy has replaced returns index.html with Content-Type text/html, and the browser reports a MIME-type error instead of a plain 404.",
   "rewrites": [{ "source": "/((?!assets/|fonts/).*)", "destination": "/index.html" }],
+  "//frame-src": "Published pages are framed from the API origin, which is set at build time via VITE_API_URL and so cannot be named literally here — hence https: rather than a single host. It governs only what this app may embed; script-src 'self' is what stops anything else choosing the target.",
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' https://static.cloudflareinsights.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' https://static.cloudflareinsights.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' blob: https:; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
