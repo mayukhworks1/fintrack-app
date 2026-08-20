@@ -328,22 +328,27 @@ async def generate_page(
 
 # --- agentic interview engine -----------------------------------------------
 
-_INTERVIEW_SYSTEM = """You are a design interviewer. The user wants to create a web page. \
-Analyse their prompt and decide whether it is specific enough to generate a high-quality page, \
-or whether it would benefit from 2-3 clarifying questions.
+_INTERVIEW_SYSTEM = """You are an intelligent design and document architect. \
+The user wants to generate a document or web page from a prompt. \
+Analyse their prompt and decide whether it is specific and unambiguous enough to generate immediately, \
+or whether it would benefit from 2-3 tailored clarifying questions to produce an outstanding result.
 
-A prompt is SPECIFIC ENOUGH when it names all of: the page subject, the visual tone, \
-and at least two content sections. If it meets that bar, return:
+A prompt is SPECIFIC ENOUGH when it already clearly specifies:
+1. The exact subject and purpose.
+2. The desired tone, layout, or visual styling.
+3. The specific sections, components, or content blocks.
+If it is already specific and comprehensive, return:
 {"needs_interview": false}
 
-Otherwise return a JSON object:
+If the prompt is brief, open-ended, or ambiguous, generate 2-3 focused questions tailored \
+specifically to what the user asked for. Return a JSON object:
 {"needs_interview": true, "questions": [...]}
 
-Each question object has:
-- "id": a short lowercase kebab-case identifier
-- "text": the question in plain English (one sentence)
-- "type": "single" (pick one) or "multi" (pick several)
-- "options": array of 3-5 short option strings
+Each question object MUST have:
+- "id": a short lowercase kebab-case identifier (e.g. "theme", "layout", "widgets", "tone", "sections")
+- "text": a concise, friendly question string
+- "type": "single" (for mutually exclusive choices) or "multi" (for multiple selectable items)
+- "options": an array of 3-5 high-quality, domain-relevant options
 
 Return ONLY the JSON object. No commentary, no markdown fences."""
 
@@ -361,7 +366,7 @@ _INTERVIEW_EXAMPLES = [
                         "Dark glassmorphic with neon accents",
                         "Clean and modern with soft whites",
                         "Warm editorial with serif typography",
-                        "Bold and colourful with gradients",
+                        "Bold and vibrant with gradients",
                     ],
                 },
                 {
@@ -406,7 +411,7 @@ async def analyze_prompt_needs(
         messages.append({"role": "user", "content": ex["prompt"]})
         messages.append({"role": "assistant", "content": ex["response"]})
 
-    messages.append({"role": "user", "content": prompt})
+    messages.append({"role": "user", "content": f"Format: {content_type.upper()}\nPrompt: {prompt}"})
 
     result = await _try_chat(
         messages,
@@ -438,9 +443,9 @@ async def analyze_prompt_needs(
 
 # --- SSE streaming page generator -------------------------------------------
 
-# Regex to extract section data-agent-section attributes from generated HTML
+# Tag-agnostic regex to extract data-agent-section identifiers
 _SECTION_TAG = re.compile(
-    r'<section[^>]*\bdata-agent-section\s*=\s*["\']([^"\']+)["\']',
+    r'<[a-zA-Z0-9]+\b[^>]*\bdata-agent-section\s*=\s*["\']([^"\']+)["\']',
     re.IGNORECASE,
 )
 
@@ -616,17 +621,17 @@ _SECTION_EXTRACT = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-_SECTION_EDIT_SYSTEM = """You are a surgical HTML section editor. You will receive:
+_SECTION_EDIT_SYSTEM = """You are a surgical HTML component editor. You will receive:
 1. The FULL HTML of a complete page (for context only).
-2. The EXACT section to edit (identified by data-agent-section attribute).
+2. The EXACT container component/section to edit (identified by data-agent-section attribute).
 3. The user's change request.
 
-Return ONLY the revised <section ...>...</section> block — complete with its
-opening and closing tags and the same data-agent-section attribute. Do NOT
-return the whole page, do NOT wrap in markdown fences, do NOT add commentary.
+Return ONLY the revised container element block — complete with its opening and closing
+tags and the same data-agent-section attribute. Do NOT return the whole page, do NOT wrap
+in markdown fences, do NOT add commentary.
 
-Preserve everything the user did not ask you to change — content, structure,
-styling, and classes. Match the existing code style exactly."""
+Preserve everything the user did not ask you to change — content, structure, styling, and
+classes. Match the existing code style exactly."""
 
 
 async def edit_page_section(
@@ -635,7 +640,7 @@ async def edit_page_section(
     prompt: str,
 ) -> dict:
     """
-    Edit a single <section data-agent-section="..."> without touching the rest.
+    Edit a single element with data-agent-section="..." without touching the rest.
 
     Returns {"content": full_html_with_patch, "model_short": str, "warnings": [...]}.
     """
@@ -646,11 +651,11 @@ async def edit_page_section(
     if not (prompt or "").strip():
         raise ValueError("A prompt describing the change is required.")
 
-    # Build a regex specific to this section_id
+    # Tag-agnostic pattern matching opening tag, content, and matching closing tag
     pattern = re.compile(
-        rf'(<section[^>]*\bdata-agent-section\s*=\s*["\']'
+        rf'(<([a-zA-Z0-9]+)[^>]*\bdata-agent-section\s*=\s*["\']'
         + re.escape(section_id)
-        + rf'["\'][^>]*>)(.*?)(</section>)',
+        + rf'["\'][^>]*>)(.*?)(</\2>)',
         re.DOTALL | re.IGNORECASE,
     )
     match = pattern.search(full_html)
@@ -674,8 +679,8 @@ async def edit_page_section(
         {
             "role": "user",
             "content": (
-                f'Edit the section data-agent-section="{section_id}":\n\n'
-                f"--- CURRENT SECTION ---\n{section_html}\n--- END ---\n\n"
+                f'Edit the element with data-agent-section="{section_id}":\n\n'
+                f"--- CURRENT COMPONENT ---\n{section_html}\n--- END ---\n\n"
                 f"Change: {prompt}"
             ),
         },
@@ -695,11 +700,11 @@ async def edit_page_section(
     new_section = re.sub(r"\n?```\s*$", "", new_section).strip()
 
     if not new_section:
-        raise ValueError("The model returned an empty section. Try rephrasing.")
+        raise ValueError("The model returned an empty component. Try rephrasing.")
 
-    # Verify the returned content is actually a section tag
-    if not re.match(r"^\s*<section", new_section, re.IGNORECASE):
-        raise ValueError("The model did not return a valid section block.")
+    # Verify the returned content is actually an HTML element block
+    if not re.match(r"^\s*<[a-zA-Z0-9]+", new_section, re.IGNORECASE):
+        raise ValueError("The model did not return a valid element block.")
 
     # Patch the section back into the full HTML
     patched = full_html[:match.start()] + new_section + full_html[match.end():]

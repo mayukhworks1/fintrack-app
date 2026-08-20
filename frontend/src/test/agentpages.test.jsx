@@ -76,6 +76,22 @@ describe('AgentInterviewCard', () => {
     expect(handleSkip).toHaveBeenCalledTimes(1)
   })
 
+  it('allows writing custom additional requirements note', () => {
+    const handleSubmit = vi.fn()
+    render(<AgentInterviewCard questions={sampleQuestions} onSkip={vi.fn()} onSubmit={handleSubmit} />)
+
+    fireEvent.change(screen.getByPlaceholderText(/Use emerald primary color/), {
+      target: { value: 'Include monthly discount calculator' },
+    })
+    fireEvent.click(screen.getByText('✨ Generate with preferences'))
+
+    expect(handleSubmit).toHaveBeenCalledWith({
+      theme: '',
+      sections: '',
+      _custom: 'Include monthly discount calculator',
+    })
+  })
+
   it('returns null when questions list is empty', () => {
     const { container } = render(<AgentInterviewCard questions={[]} onSkip={vi.fn()} onSubmit={vi.fn()} />)
     expect(container.firstChild).toBeNull()

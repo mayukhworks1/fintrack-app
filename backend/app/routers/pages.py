@@ -1302,7 +1302,7 @@ async def public_render_preview(token: str):
     if content is None:
         raise HTTPException(404, "This preview has expired. Close and reopen the preview.")
     return HTMLResponse(
-        content=page_render.build_document(content, padded=True),
+        content=page_render.build_document(content, padded=True, preview=True),
         headers={**page_render.render_headers(), "X-Robots-Tag": "noindex, nofollow"},
     )
 

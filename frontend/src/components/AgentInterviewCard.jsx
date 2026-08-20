@@ -115,6 +115,31 @@ export default function AgentInterviewCard({ questions = [], onSubmit, onSkip, d
         </div>
       ))}
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>
+          Additional notes or specific requirements (optional)
+        </span>
+        <input
+          type="text"
+          value={answers._custom || ''}
+          onChange={e => setAnswers(prev => ({ ...prev, _custom: e.target.value }))}
+          placeholder="e.g. 'Use emerald primary color and Indian Rupee format'"
+          disabled={disabled}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '6px 10px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius, 6px)',
+            background: 'var(--bg-base, #f8fafc)',
+            color: 'var(--text-1)',
+            fontSize: 12,
+            outline: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
         <button
           type="button"
