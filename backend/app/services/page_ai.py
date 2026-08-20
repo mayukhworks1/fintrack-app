@@ -23,9 +23,13 @@ import re
 
 from .openrouter import _try_chat
 
-# Bounded so one request cannot monopolise the model cascade. A full landing
-# page lands around 2.5-3.5k tokens; beyond this the model is usually repeating.
-MAX_TOKENS = 4200
+# A full landing page with its own stylesheet runs longer than first assumed —
+# 4200 truncated real output mid-CSS, which produced a document with an
+# unterminated <style> and no <body> at all. A browser then reads the rest of
+# the file as stylesheet text and renders nothing, so the author got a blank
+# page with no error. Raised, with a structural truncation check behind it for
+# the models in the cascade whose own output ceiling is lower than this.
+MAX_TOKENS = 8000
 
 # Enough freedom for varied layout, low enough to keep the markup well-formed.
 TEMPERATURE = 0.6
@@ -73,6 +77,11 @@ QUALITY BAR:
   initial-scale=1">.
 - Write real, specific copy for the subject. Never lorem ipsum, never
   bracketed placeholders like [Company Name].
+- Keep the stylesheet economical. Group selectors that share declarations, use
+  shorthand properties, and do not restate the same rule for several elements.
+  A document that runs past the output limit is cut off mid-file and renders as
+  a blank page, so finishing the document matters more than styling every
+  detail.
 
 OUTPUT FORMAT:
 Return only the HTML document. No commentary before or after, no markdown code
@@ -129,6 +138,38 @@ def strip_unsupported(html: str) -> tuple[str, list[str]]:
     out = _sub(_CSS_IMPORT, "CSS @import", out)
     out = _sub(_INLINE_HANDLER, "inline event handlers", out)
     return out, removed
+
+
+def find_truncation(html: str) -> str | None:
+    """
+    Return why the document looks unfinished, or None if it looks complete.
+
+    The model can stop mid-file when it reaches its output ceiling. The result
+    still looks plausible — it opens with a valid doctype and head — but a
+    <style> that never closes makes the browser treat everything after it as
+    stylesheet text, so the page renders completely blank. That is far worse
+    than an error, because nothing points at the cause.
+    """
+    if not html.strip():
+        return "the model returned nothing"
+
+    low = html.lower()
+
+    # An unbalanced <style> is the specific failure that renders blank.
+    if low.count("<style") != low.count("</style>"):
+        return "the stylesheet was cut off before it finished"
+
+    # A document that opened <html> but never closed it stopped early.
+    if "<html" in low and "</html>" not in low:
+        return "the document was cut off before the closing </html>"
+    if "<body" in low and "</body>" not in low:
+        return "the document was cut off before the closing </body>"
+
+    # A full document with no body at all never got that far.
+    if "<html" in low and "<body" not in low:
+        return "the document was cut off before the page content began"
+
+    return None
 
 
 def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
@@ -218,6 +259,16 @@ async def generate_page(
     content, removed = clean_output(result.get("content", ""), content_type)
     if not content.strip():
         raise ValueError("The model returned an empty document. Try rephrasing the prompt.")
+
+    if content_type == "html":
+        # Better to refuse than to hand back markup that publishes as a blank page.
+        reason = find_truncation(content)
+        if reason:
+            raise ValueError(
+                f"The generated page is incomplete — {reason}. "
+                "Ask for a simpler page, or describe one section at a time and "
+                "build it up with follow-up prompts."
+            )
 
     return {
         "content": content,
