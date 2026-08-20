@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useConfirm } from '../context/ConfirmContext'
 import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import { api, API_BASE_URL } from '../services/api'
@@ -20,6 +21,27 @@ function absUrl(u) {
   if (!u) return u
   if (/^https?:\/\//.test(u)) return u
   return `${API_BASE_URL}${u}`
+}
+
+// ---------------------------------------------------------------------------
+// Overlay portal
+// ---------------------------------------------------------------------------
+// Full-screen overlays have to leave <main> to actually be full-screen.
+//
+// The app shell runs a fade-in animation on <main>, and an element with a
+// running animation on opacity forms a stacking context. The mobile top bar is
+// a sibling of <main>, sticky at z-index 30. Once <main> is its own stacking
+// context, everything inside it — however high its z-index climbs — is painted
+// as a single unit BELOW that bar. That is why the page editor opened with the
+// FinTrack header still sitting on top of it, stealing the first band of a
+// phone screen and leaving the panel unable to reach the top of the viewport.
+//
+// Rendering into <body> puts the overlay in the root stacking context, where
+// its z-index means what it says. It also guarantees position:fixed is measured
+// against the viewport rather than an ancestor.
+function Overlay({ children }) {
+  if (typeof document === 'undefined') return children
+  return createPortal(children, document.body)
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +440,7 @@ function AnalyticsDrawer({ page, onClose }) {
   const inputStyle = { background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', fontSize:12, color:'var(--text-1)', outline:'none' }
 
   return (
+    <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.5)', display:'flex', justifyContent:'flex-end' }} onClick={onClose}>
       <div style={{ width:isMobile?'100vw':'96vw', maxWidth:1300, height:'100%', background:'var(--bg-base)', overflowY:'auto', boxShadow:'-4px 0 40px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }} onClick={e=>e.stopPropagation()}>
 
@@ -573,6 +596,7 @@ function AnalyticsDrawer({ page, onClose }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -594,6 +618,7 @@ function ShareModal({ page, onClose, onCopy }) {
   const [copied, setCopied] = useState(false)
   const copy = () => { navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); onCopy?.() }) }
   return (
+    <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ background:'var(--bg-base)', borderRadius:16, padding:28, maxWidth:420, width:'100%', boxShadow:'0 16px 64px rgba(0,0,0,0.25)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
@@ -626,6 +651,7 @@ function ShareModal({ page, onClose, onCopy }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -806,7 +832,7 @@ function removeAssetRef(content, path) {
   return c
 }
 
-function MarkdownToolbar({ textareaRef, value, onChange }) {
+function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
   const wrap = (before, after, placeholder = 'text') => {
     const ta = textareaRef.current
     if (!ta) return
@@ -865,9 +891,14 @@ function MarkdownToolbar({ textareaRef, value, onChange }) {
   ]
 
   return (
-    <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexWrap:'wrap', alignItems:'center', flexShrink:0 }}>
+    // On a phone the wrapped version became three stacked rows — 125px of
+    // toolbar above a 286px editor. One row that scrolls sideways keeps every
+    // tool reachable and costs a third of the height.
+    <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)',
+                  flexWrap:isMobile?'nowrap':'wrap', overflowX:isMobile?'auto':'visible', scrollbarWidth:'none',
+                  alignItems:'center', flexShrink:0 }}>
       {tools.map((group, gi) => (
-        <div key={gi} style={{ display:'flex', gap:1, marginRight:8 }}>
+        <div key={gi} style={{ display:'flex', gap:1, marginRight:8, flexShrink:0 }}>
           {group.groups.map(t => (
             <button key={t.tip} title={t.tip} onMouseDown={e=>{ e.preventDefault(); t.action() }}
               style={{ background:'transparent', border:'none', borderRadius:5, padding:'4px 7px', fontSize:t.mono?12:13, cursor:'pointer', color:'var(--text-1)', fontWeight:t.bold?700:400, fontFamily:t.mono?'monospace':'inherit', lineHeight:1.3, transition:'background .1s', userSelect:'none' }}
@@ -879,8 +910,10 @@ function MarkdownToolbar({ textareaRef, value, onChange }) {
           {gi < tools.length-1 && <div style={{ width:1, background:'var(--border)', margin:'2px 4px' }} />}
         </div>
       ))}
-      <div style={{ width:1, background:'var(--border)', margin:'2px 4px' }} />
-      <AssetButton textareaRef={textareaRef} value={value} onChange={onChange} format={formatAssetMd} label="📎 Image / File" />
+      <div style={{ width:1, background:'var(--border)', margin:'2px 4px', flexShrink:0 }} />
+      <span style={{ flexShrink:0 }}>
+        <AssetButton textareaRef={textareaRef} value={value} onChange={onChange} format={formatAssetMd} label={isMobile ? '📎 Image' : '📎 Image / File'} />
+      </span>
     </div>
   )
 }
@@ -1319,9 +1352,13 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
         <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
           ✨ Design with AI
         </button>
-        <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:8 }}>
-          Describe the page you want and it will be written for you
-        </span>
+        {/* The strapline wraps to a second line on a phone, doubling the height
+            of a row that exists only to hold one button. */}
+        {!isMobile && (
+          <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:8 }}>
+            Describe the page you want and it will be written for you
+          </span>
+        )}
       </div>
     )
   }
@@ -1409,12 +1446,19 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   })
   const [slugManual, setSlugManual] = useState(!!page?.slug)
   const [tab, setTab] = useState('edit')
+  // Mobile only: slug, description, password and document type live behind this
+  // rather than above the editor. Open by default for a page that has no title
+  // yet, since a brand-new page needs them before anything else makes sense.
+  const [showSettings, setShowSettings] = useState(!page?.id)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved', 'error', 'offline'
   const [autoSaveError, setAutoSaveError] = useState('')
-  const [showTemplates, setShowTemplates] = useState(!page?.content)
+  // Desktop opens the gallery for a blank page; a phone does not, because the
+  // row costs 60px above the editor. The "Use template" button in the tab row
+  // is how it is reached there.
+  const [showTemplates, setShowTemplates] = useState(!page?.content && !isMobile)
   const [slugStatus, setSlugStatus] = useState(null) // null | { available, suggestions }
   const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
@@ -1593,6 +1637,11 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     onClose()
   }
 
+  // On a phone, opening Settings replaces the editor rather than pushing it
+  // down. Sharing the screen left the textarea 66px tall — a form and an editor
+  // cannot both fit a phone viewport, so only one is on screen at a time.
+  const mobileSettingsMode = isMobile && showSettings
+
   const stats = docStats(form.content, form.content_type)
   const shareUrl = form.slug ? `${window.location.origin}/p/${form.slug}` : ''
   const isSpreadsheet = form.content_type === 'csv'
@@ -1635,6 +1684,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   }
 
   return (
+    <Overlay>
     <div style={drawerStyle} onClick={flushAndClose}>
       <div style={panelStyle} onClick={e=>e.stopPropagation()}>
 
@@ -1646,42 +1696,52 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
             could not be changed on a phone. Here it gets a labelled row of its
             own and the actions get theirs. */}
         {isMobile ? (
-          <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <label htmlFor="ft-doctype" style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', flexShrink:0 }}>Type</label>
-              <select id="ft-doctype" value={form.content_type}
-                onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content)}}
-                style={{ ...inputStyle, flex:1, minWidth:0, fontWeight:600 }}>
-                {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <button onClick={()=>setFullscreen(f=>!f)} aria-label={fullscreen?'Exit fullscreen':'Fullscreen'}
-                style={{ ...btnGhost, fontSize:15, padding:'5px 12px', flexShrink:0 }}>{fullscreen?'⊡':'⊞'}</button>
-            </div>
-            <div style={{ display:'flex', gap:6 }}>
-              <button onClick={flushAndClose} style={{ ...btnGhost, flex:1 }} disabled={saving}>Close</button>
-              <button onClick={()=>handleSave(false)} style={{ ...btnSecondary, flex:1 }} disabled={saving}>{saving?'Saving…':'Draft'}</button>
-              <button onClick={()=>handleSave(true)} style={{ ...btnPrimary, flex:1 }} disabled={saving}>
-                {saving?'Publishing…':isEdit&&page?.is_published?'Update':'Publish'}
+          <>
+            {/* One bar, not four. The old header stacked a type row, three
+                full-width buttons and a stats line — and below it came the meta
+                fields, an AI row, an upload row, tabs and a description banner,
+                so on a 390x700 phone roughly 500px of chrome sat above a
+                sliver of editor. Everything that is not "who am I and how do I
+                publish" now lives behind Settings. */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 10px 8px 4px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <button onClick={flushAndClose} aria-label="Close editor" disabled={saving}
+                style={{ ...btnGhost, padding:'4px 10px', fontSize:20, lineHeight:1.1, flexShrink:0 }}>×</button>
+              <input
+                aria-label="Page title"
+                placeholder="Page title…"
+                value={form.title}
+                onChange={e=>set('title',e.target.value)}
+                style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, border:'none', outline:'none', background:'transparent', color:'var(--text-1)', padding:'4px 2px' }} />
+              <button onClick={()=>handleSave(true)} disabled={saving}
+                style={{ ...btnPrimary, padding:'8px 13px', flexShrink:0, whiteSpace:'nowrap' }}>
+                {saving ? '…' : isEdit && page?.is_published ? 'Update' : 'Publish'}
               </button>
             </div>
-            <div style={{ display:'flex', gap:6, fontSize:11, color:'var(--text-2)', flexWrap:'wrap', minHeight:14 }}>
-              {stats.label && <span>{stats.label}</span>}
-              {stats.readTime !== '—' && <span>· {stats.readTime}</span>}
-              {form.content.length > charLimit * 0.8 && (
-                <span style={{ color:form.content.length>charLimit?'#ef4444':'#f59e0b', fontWeight:600 }}>
-                  {form.content.length.toLocaleString()} / {charLimit.toLocaleString()}
-                </span>
-              )}
-              {autoSaveStatus === 'saved'  && <span style={{ color:'#10b981' }}>✓ Saved</span>}
-              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error'  && <span style={{ color:'#ef4444' }} title={autoSaveError}>⚠ Save failed</span>}
-              {error && <span style={{ color:'#ef4444' }}>{error}</span>}
-            </div>
-          </div>
+
+            {/* The status line doubles as the disclosure, so it costs one row
+                rather than two. Auto-save is what makes this safe: the state it
+                reports is the reason an explicit Draft button no longer needs
+                to be on screen at all times. */}
+            <button
+              onClick={()=>setShowSettings(s=>!s)}
+              aria-expanded={showSettings}
+              style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'6px 12px', border:'none', borderBottom:'1px solid var(--border)', background:'var(--bg-card)', color:'var(--text-2)', fontSize:11, cursor:'pointer', textAlign:'left', flexShrink:0 }}>
+              <span style={{ flex:1, minWidth:0, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                /p/{form.slug || '…'}
+              </span>
+              {autoSaveStatus === 'saved'  && <span style={{ color:'#10b981', flexShrink:0 }}>✓ Saved</span>}
+              {autoSaveStatus === 'saving' && <span style={{ flexShrink:0 }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error'  && <span style={{ color:'#ef4444', flexShrink:0 }} title={autoSaveError}>⚠ Not saved</span>}
+              <span style={{ flexShrink:0, fontWeight:700, color:'var(--accent)' }}>
+                Settings {showSettings ? '▲' : '▼'}
+              </span>
+            </button>
+            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'#ef4444', flexShrink:0 }}>{error}</div>}
+          </>
         ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-            <select value={form.content_type} onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content)}}
+            <select value={form.content_type} onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content && !isMobile)}}
               style={{ ...inputStyle, width:'auto', fontSize:12, padding:'5px 8px', fontWeight:600 }}>
               {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
@@ -1710,14 +1770,30 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         </div>
         )}
 
-        {/* Meta fields */}
-        <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:10, flexWrap:'wrap', flexShrink:0 }}>
-          <div style={{ flex:'3 1 200px' }}>
-            <input style={{ ...inputStyle, fontSize:16, fontWeight:700, border:'none', borderBottom:'2px solid var(--border)', borderRadius:0, padding:'6px 0', background:'transparent' }}
-              placeholder="Page title…"
-              value={form.title} onChange={e=>set('title',e.target.value)} />
-          </div>
-          <div style={{ flex:'2 1 150px' }}>
+        {/* Meta fields. On a phone the whole block is behind Settings and gets
+            its own scroll, so opening it can never push the editor off screen. */}
+        {(!isMobile || showSettings) && (
+        <div style={{ padding:isMobile?'12px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?14:10, flexWrap:'wrap', alignContent:'flex-start', flexShrink:0, flex:mobileSettingsMode?'1 1 auto':'0 0 auto', minHeight:0, overflowY:isMobile?'auto':undefined, background:isMobile?'var(--bg-card)':undefined }}>
+          {isMobile ? (
+            <div style={{ flex:'1 1 100%' }}>
+              <label style={labelStyle} htmlFor="ft-doctype">Document type</label>
+              <select id="ft-doctype" value={form.content_type}
+                onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content && !isMobile)}}
+                style={{ ...inputStyle, width:'100%', fontWeight:600 }}>
+                {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <div style={{ fontSize:11, color:'var(--text-2)', marginTop:4 }}>
+                {CONTENT_TYPES.find(t=>t.value===form.content_type)?.hint}
+              </div>
+            </div>
+          ) : (
+            <div style={{ flex:'3 1 200px' }}>
+              <input style={{ ...inputStyle, fontSize:16, fontWeight:700, border:'none', borderBottom:'2px solid var(--border)', borderRadius:0, padding:'6px 0', background:'transparent' }}
+                placeholder="Page title…"
+                value={form.title} onChange={e=>set('title',e.target.value)} />
+            </div>
+          )}
+          <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
             <label style={labelStyle}>Slug (URL)</label>
             <div style={{ position:'relative' }}>
               <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, paddingLeft:38 }}
@@ -1745,21 +1821,36 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
               <div style={{ marginTop:4, fontSize:11, color:'#16a34a' }}>✓ URL is available</div>
             )}
           </div>
-          <div style={{ flex:'2 1 150px' }}>
+          <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
             <label style={labelStyle}>Description (for SEO)</label>
             <input style={inputStyle} placeholder="Short description" value={form.description} onChange={e=>set('description',e.target.value)} />
           </div>
-          <div style={{ flex:'0 0 auto', display:'flex', alignItems:'flex-end', gap:8 }}>
+          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto', display:'flex', alignItems:isMobile?'center':'flex-end', gap:8, flexWrap:'wrap' }}>
             <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' }}>
               <input type="checkbox" checked={form.is_password_protected} onChange={e=>set('is_password_protected',e.target.checked)} />
               🔒 Password
             </label>
             {form.is_password_protected&&(
-              <input style={{ ...inputStyle, width:110, fontSize:12 }} type="password" placeholder="Set password" value={form.password} onChange={e=>set('password',e.target.value)} />
+              <input style={{ ...inputStyle, width:isMobile?'100%':110, fontSize:12 }} type="password" placeholder="Set password" value={form.password} onChange={e=>set('password',e.target.value)} />
             )}
           </div>
+          {isMobile && (stats.label || stats.readTime !== '—') && (
+            <div style={{ flex:'1 1 100%', fontSize:11, color:'var(--text-2)' }}>
+              {stats.label}{stats.readTime !== '—' ? ` · ${stats.readTime}` : ''}
+            </div>
+          )}
+          {isMobile && (
+            <div style={{ flex:'1 1 100%', display:'flex', gap:8, alignItems:'center', borderTop:'1px solid var(--border)', paddingTop:12 }}>
+              <button onClick={()=>handleSave(false)} disabled={saving} style={{ ...btnSecondary, flex:1 }}>
+                {saving ? 'Saving…' : 'Save as draft'}
+              </button>
+              <button onClick={()=>setShowSettings(false)} style={{ ...btnGhost, flex:1 }}>Done</button>
+            </div>
+          )}
         </div>
+        )}
 
+        {!mobileSettingsMode && (<>
         {/* AI composer — Web Page and Document only. Spreadsheet and Plain
             Text are structured formats the generator has no useful contract for. */}
         {(isHtml || isMarkdown) && tab === 'edit' && (
@@ -1778,12 +1869,14 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
 
         {/* Toolbar for markdown */}
         {isMarkdown && tab === 'edit' && (
-          <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} />
+          <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} isMobile={isMobile} />
         )}
         {isHtml && tab === 'edit' && (
           <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
-            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label="📎 Insert image / file" />
-            <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>
+            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
+            {/* The explanation is worth a line on a desktop toolbar and worth a
+                row of a phone screen — which it is not. */}
+            {!isMobile && <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>}
           </div>
         )}
         {(isMarkdown || isHtml) && tab === 'edit' && (
@@ -1804,8 +1897,10 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
           )}
         </div>
 
-        {/* Editor-type banner — only when editing/previewing */}
-        {tab !== 'history' && (
+        {/* Editor-type banner. Desktop only: it is pure explanation, and the
+            document type it names is one tap away under Settings on a phone,
+            where the same two sentences cost a visible slice of the editor. */}
+        {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
               {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
@@ -1855,8 +1950,10 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
             </div>
           )}
         </div>
+        </>)}
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -1865,6 +1962,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
 // ---------------------------------------------------------------------------
 function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
+    <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onCancel}>
       <div style={{ background:'var(--bg-base)', borderRadius:'var(--radius)', padding:28, maxWidth:380, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>Confirm</div>
@@ -1875,6 +1973,7 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
