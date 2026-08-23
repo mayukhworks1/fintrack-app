@@ -50,6 +50,26 @@ def _require_email_auth(request: Request) -> None:
         raise HTTPException(403, "Studio requires a signed-in account.")
 
 
+def _decode(value, fallback):
+    """
+    Read a JSONB column back into Python.
+
+    asyncpg returns JSONB as text unless a codec is registered on the pool, and
+    this app registers none — every other router that reads a JSONB column calls
+    json.loads on it for the same reason. A value that is already decoded (a
+    future codec, or a test fixture) passes straight through.
+    """
+    if value is None:
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if isinstance(parsed, type(fallback)) else fallback
+
+
 def _safe_name(name: str) -> str:
     stem = (name or "file").rsplit(".", 1)[0]
     slug = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-")
@@ -68,6 +88,26 @@ async def _permitted_datasets(request: Request) -> set[str]:
         return set(studio_data.DATASETS)
     granted = await get_effective_permissions(_user_id(request))
     return {k for k, ds in studio_data.DATASETS.items() if ds.permission in granted}
+
+
+# The parts of a result that are already stored in their own columns. Anything
+# else the renderer needs — rows, columns, chart type, unit, the SQL — goes into
+# `payload`, so a new field on an answer replays from history without another
+# migration.
+_TURN_COLUMNS = {"answer", "model", "verdict", "sources", "latency_ms",
+                 "kind", "question", "thread_id", "quota"}
+
+
+def _payload_of(result: dict) -> dict:
+    """
+    What must be kept to redraw this answer later.
+
+    `quota` is excluded deliberately: it is the state of the budget at the
+    moment of asking, and replaying a week-old count as though it were current
+    is exactly the kind of stale-number-presented-as-live this module is
+    supposed to avoid.
+    """
+    return {k: v for k, v in result.items() if k not in _TURN_COLUMNS}
 
 
 async def _persist_turn(request: Request, thread_id: str | None,
@@ -93,12 +133,15 @@ async def _persist_turn(request: Request, thread_id: str | None,
         await pool.execute(
             """
             INSERT INTO studio_turns
-                (thread_id, question, answer, model, verdict, sources, latency_ms)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7)
+                (thread_id, question, answer, model, verdict, sources, latency_ms,
+                 kind, payload)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
             """,
             thread_id, question, result.get("answer", ""), result.get("model", ""),
             result.get("verdict") or result.get("kind") or "data",
             json.dumps(result.get("sources") or []), result.get("latency_ms"),
+            result.get("kind") or "documents",
+            json.dumps(_payload_of(result), default=str),
         )
         await pool.execute(
             "UPDATE studio_threads SET updated_at = NOW() WHERE id = $1::uuid", thread_id
@@ -400,6 +443,22 @@ async def ask(
     return result
 
 
+@router.get("/health")
+async def health(
+    request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.studio.view")),
+):
+    """
+    Which retrieval is actually running here.
+
+    The UI states this rather than implying semantic search that may not be
+    installed — the same reason the quota reports whether it is metered.
+    """
+    _require_email_auth(request)
+    return await studio_ask.capabilities()
+
+
 @router.get("/datasets")
 async def list_datasets(
     request: Request,
@@ -418,6 +477,7 @@ async def list_datasets(
                 "metrics": [{"key": m.key, "label": m.label, "unit": m.unit}
                             for m in ds.metrics.values()],
                 "dimensions": [{"key": d.key, "label": d.label} for d in ds.dimensions.values()],
+                "examples": list(ds.examples),
             }
             for ds in studio_data.DATASETS.values() if ds.key in allowed
         ],
@@ -576,7 +636,8 @@ async def get_thread(
 
     rows = await pool.fetch(
         """
-        SELECT question, answer, model, verdict, sources, latency_ms, created_at
+        SELECT question, answer, model, verdict, sources, latency_ms, created_at,
+               kind, payload
           FROM studio_turns WHERE thread_id = $1::uuid ORDER BY created_at
         """,
         thread_id,
@@ -584,14 +645,22 @@ async def get_thread(
     return {
         "id": str(thread["id"]),
         "title": thread["title"],
+        # The payload is spread first so the columns always win: they are the
+        # authoritative copy of the fields they own.
         "turns": [
             {
+                **_decode(r["payload"], {}),
                 "question": r["question"],
                 "answer": r["answer"],
                 "model": r["model"],
                 "verdict": r["verdict"],
-                "sources": r["sources"],
+                # asyncpg hands back JSONB as text unless a codec is registered,
+                # and none is. Returned raw, `sources` reached the client as a
+                # string: its length rendered as a source count in the hundreds,
+                # and opening a citation threw.
+                "sources": _decode(r["sources"], []),
                 "latency_ms": r["latency_ms"],
+                "kind": r["kind"] or "documents",
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             }
             for r in rows

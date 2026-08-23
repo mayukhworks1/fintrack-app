@@ -9,6 +9,7 @@ exhausting a shared free-tier account.
 
 import pytest
 
+from app.routers import studio
 from app.services import ai_usage, studio_docs, studio_ask
 
 
@@ -268,3 +269,67 @@ class TestConversationHistory:
     def test_the_first_question_has_nothing_to_borrow(self):
         assert studio_ask.expand_query("payment terms?", None) == "payment terms?"
         assert studio_ask.expand_query("payment terms?", []) == "payment terms?"
+
+
+class TestTurnPersistence:
+    """
+    The second half of the same symptom. Turns were written, but a data answer
+    was written as prose alone: the chart, the table, the unit and the SQL that
+    produced them lived only in the response, so reopening a conversation
+    replayed the sentence describing figures that were no longer there.
+    """
+
+    def test_the_renderer_fields_survive_a_round_trip(self):
+        result = {
+            "answer": "Ravensbourne is highest.", "kind": "data",
+            "model": "x", "latency_ms": 12,
+            "rows": [{"project": "Ravensbourne", "value": 91000.0}],
+            "columns": ["project", "value"], "chart": "bar",
+            "unit": "currency", "metric_label": "Outstanding",
+            "dataset_label": "Invoices", "sql": "SELECT 1",
+        }
+        payload = studio._payload_of(result)
+        assert payload["rows"] == result["rows"]
+        assert payload["chart"] == "bar"
+        assert payload["sql"] == "SELECT 1"
+        assert payload["unit"] == "currency"
+
+    def test_columns_with_their_own_home_are_not_duplicated(self):
+        payload = studio._payload_of({
+            "answer": "a", "model": "b", "verdict": "pass",
+            "sources": [{"n": 1}], "latency_ms": 5, "kind": "documents",
+        })
+        assert payload == {}
+
+    def test_the_quota_is_not_replayed(self):
+        """It is the budget at the moment of asking. Redrawing a week-old count
+        as though it were current is the stale-number-as-live problem again."""
+        payload = studio._payload_of({"answer": "a", "quota": {"used": 3, "limit": 200}})
+        assert "quota" not in payload
+
+
+class TestJsonbDecoding:
+    """
+    asyncpg returns JSONB as text unless a codec is registered on the pool, and
+    this app registers none. Returned raw, `sources` reached the browser as a
+    string: its character count rendered as a source count in the hundreds, and
+    opening a citation called .find on a string and threw.
+    """
+
+    def test_a_json_string_becomes_a_list(self):
+        assert studio._decode('[{"n": 1, "title": "MSA"}]', []) == [{"n": 1, "title": "MSA"}]
+
+    def test_an_already_decoded_value_passes_through(self):
+        """A future codec, or a test fixture, must not be double-parsed."""
+        assert studio._decode([{"n": 1}], []) == [{"n": 1}]
+        assert studio._decode({"chart": "bar"}, {}) == {"chart": "bar"}
+
+    def test_null_and_junk_fall_back_rather_than_raising(self):
+        assert studio._decode(None, []) == []
+        assert studio._decode("not json at all", []) == []
+        assert studio._decode("", {}) == {}
+
+    def test_the_wrong_shape_falls_back(self):
+        """A scalar where a list belongs would break the renderer downstream."""
+        assert studio._decode('"just a string"', []) == []
+        assert studio._decode("42", {}) == {}

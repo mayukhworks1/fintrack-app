@@ -69,6 +69,11 @@ class Dataset:
     # means the dataset has no ownership concept — see scope handling in build().
     owner_sql: str | None = None
     description: str = ""
+    # Handwritten rather than generated from metric names. "Show total_outstanding
+    # by project" is what auto-phrasing produces, and it reads like a schema
+    # dump — which teaches the user to talk to the machine instead of showing
+    # them the machine understands them.
+    examples: tuple[str, ...] = ()
 
 
 # --- registry --------------------------------------------------------------
@@ -84,6 +89,12 @@ _INVOICES = Dataset(
     permission="module.invoices.view",
     date_column="raised_date",
     description="Invoices raised, received and outstanding, by project, category or status.",
+    examples=(
+        "Which projects have the most outstanding?",
+        "How much did we receive last quarter?",
+        "Average days to payment by client category",
+        "Invoice totals by month this year",
+    ),
     owner_sql="LOWER(COALESCE(fields->>'Raised By', '')) = LOWER({p})",
     metrics={
         "total_raised": Metric("total_raised", "Total raised", "COALESCE(SUM(amount_raised), 0)"),
@@ -127,6 +138,11 @@ _PROJECTS = Dataset(
     permission="module.projects.view",
     date_column="created_time",
     description="Projects with amount billed, profit and margin, by client or status.",
+    examples=(
+        "Total billed by client",
+        "Which clients have the best margin?",
+        "How many projects are active by status?",
+    ),
     metrics={
         "total_billed": Metric("total_billed", "Total billed", "COALESCE(SUM(amount_billed), 0)"),
         "total_profit": Metric("total_profit", "Total profit", "COALESCE(SUM(actual_profit), 0)"),

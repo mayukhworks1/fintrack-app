@@ -770,6 +770,9 @@ export const api = {
       method: 'POST', body: JSON.stringify(data), timeout: 120000,
     }, 0),
     datasets:      ()          => request('/api/studio/datasets'),
+    // Which retrieval is actually running on this deployment — the UI states it
+    // rather than implying semantic search that may not be installed.
+    health:        ()          => request('/api/studio/health'),
     // Two model calls (question → spec, then numbers → prose), so it takes the
     // AI budget and no retries: a slow answer is not a failed one.
     analyze:       (data)      => request('/api/studio/analyze', {

@@ -445,3 +445,66 @@ async def ask(
         "latency_ms": int((time.time() - started) * 1000),
         "retrieval": "hybrid" if "hybrid" in methods else ("vector" if "vector" in methods else "lexical"),
     }
+
+
+async def capabilities() -> dict:
+    """
+    What Studio can actually do on *this* deployment.
+
+    The semantic pieces — the embedding array column and the ft_cosine function
+    — are created behind exception guards, because the managed Postgres plan
+    does not offer pgvector and an unguarded DDL failure would abort the whole
+    schema batch. That means they may legitimately be absent, and the honest
+    thing is to report which retrieval is live rather than let a page imply
+    semantic search that is not running.
+    """
+    pool = get_pool()
+    if not pool:
+        return {"text_search": False, "semantic": False, "reason": "database unavailable"}
+
+    async def has(sql: str, *args) -> bool:
+        try:
+            return bool(await pool.fetchval(sql, *args))
+        except Exception:
+            return False
+
+    text_search = await has(
+        "SELECT 1 FROM information_schema.columns "
+        " WHERE table_name = 'studio_doc_chunks' AND column_name = 'content_tsv'"
+    )
+    vec_column = await has(
+        "SELECT 1 FROM information_schema.columns "
+        " WHERE table_name = 'studio_doc_chunks' AND column_name = 'embedding_vec'"
+    )
+    cosine = await has("SELECT 1 FROM pg_proc WHERE proname = 'ft_cosine'")
+
+    embedded = 0
+    total = 0
+    if vec_column:
+        try:
+            row = await pool.fetchrow(
+                "SELECT COUNT(*) AS total, "
+                "       COUNT(*) FILTER (WHERE embedding_vec IS NOT NULL) AS embedded "
+                "  FROM studio_doc_chunks"
+            )
+            total, embedded = int(row["total"]), int(row["embedded"])
+        except Exception:
+            pass
+
+    semantic = bool(vec_column and cosine and embedded)
+    if semantic:
+        reason = f"{embedded} of {total} passages carry embeddings"
+    elif not vec_column or not cosine:
+        reason = "the embedding column is not available on this database"
+    elif not embedded:
+        reason = "no passages have been embedded yet — check the OpenRouter key"
+    else:
+        reason = ""
+
+    return {
+        "text_search": text_search,
+        "semantic": semantic,
+        "reason": reason,
+        "chunks": total,
+        "embedded": embedded,
+    }

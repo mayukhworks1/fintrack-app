@@ -1123,6 +1123,14 @@ CREATE TABLE IF NOT EXISTS studio_turns (
 );
 CREATE INDEX IF NOT EXISTS stt_thread_idx ON studio_turns (thread_id, created_at);
 
+-- A data answer is a chart, a table, a unit and the SQL that produced them.
+-- Storing only the prose meant reopening a conversation replayed the sentence
+-- and silently dropped the figures it was describing, which is most of the
+-- answer. `payload` carries whatever the renderer needs; `kind` says which
+-- renderer to hand it to.
+ALTER TABLE studio_turns ADD COLUMN IF NOT EXISTS kind    VARCHAR(20);
+ALTER TABLE studio_turns ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 """
 # ---------------------------------------------------------------------------
 

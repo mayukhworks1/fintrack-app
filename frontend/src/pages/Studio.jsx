@@ -9,7 +9,7 @@
  * failure this module exists to avoid, so the sources are shown beside the
  * answer rather than hidden behind a toggle.
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Sparkles, FileText, Upload, Trash2, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Loader2, Quote, History, BarChart3,
@@ -213,6 +213,12 @@ export default function Studio() {
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState('')
   const [quota, setQuota] = useState(null)
+  // What the analyst can be asked about, and what retrieval is actually
+  // installed. Both were already served by the API and neither was ever
+  // fetched: data mode was an empty box with no hint of what it understands,
+  // and the documents side implied a semantic index that may not exist.
+  const [datasets, setDatasets] = useState(null)
+  const [health, setHealth] = useState(null)
 
   const loadDocs = useCallback(async () => {
     try {
@@ -296,6 +302,14 @@ export default function Studio() {
     api.studio.usage().then(r => setQuota(r?.quota || null)).catch(() => {})
   }, [turns.length])
 
+  // Fetched once each and cached in state. Neither changes during a session,
+  // and the dataset list is filtered server-side to what this account may
+  // actually query — so an empty list is a real answer, not a loading state.
+  useEffect(() => {
+    api.studio.datasets().then(r => setDatasets(r?.datasets || [])).catch(() => setDatasets([]))
+    api.studio.health().then(setHealth).catch(() => {})
+  }, [])
+
   // Ingestion runs detached on the server, so the row's status is the only way
   // to know it finished. The dependency is a boolean, not the document array:
   // depending on `docs` meant every poll changed the dependency, so the
@@ -308,6 +322,29 @@ export default function Studio() {
   }, [hasPending, loadDocs])
 
   const ready = docs.filter(d => d.status === 'ready')
+
+  // Interleaved rather than concatenated, so a user with several datasets sees
+  // one starter from each before a second from any — four invoice questions
+  // followed by nothing else would read as if invoices were all there is.
+  const examples = useMemo(() => {
+    const lists = (datasets || []).map(d => d.examples || [])
+    const out = []
+    for (let i = 0; i < 3; i++) {
+      for (const list of lists) if (list[i]) out.push(list[i])
+    }
+    return out.slice(0, 5)
+  }, [datasets])
+
+  const datasetNames = useMemo(() => {
+    const names = (datasets || []).map(d => d.label.toLowerCase())
+    if (!names.length) return ''
+    if (names.length === 1) return names[0]
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  }, [datasets])
+
+  // Documents are only a precondition in documents mode; the analyst queries
+  // tables and needs none.
+  const canAsk = !asking && !!question.trim() && (mode === 'data' || ready.length > 0)
 
   const acceptFiles = useCallback(async (files) => {
     if (!files.length) return
@@ -369,9 +406,13 @@ export default function Studio() {
     return n
   })
 
-  const handleAsk = async () => {
-    const q = question.trim()
+  // Takes the question as an argument rather than reading state, so a starter
+  // chip can set the box and ask in the same click — setQuestion is async, and
+  // reading state here would send the previous question.
+  const handleAsk = async (override) => {
+    const q = (typeof override === 'string' ? override : question).trim()
     if (!q || asking) return
+    setQuestion(q)
     setAsking(true); setError('')
     try {
       const res = mode === 'data'
@@ -459,7 +500,7 @@ export default function Studio() {
           onChange={e => setQuestion(e.target.value)}
           onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleAsk() }}
           placeholder={mode === 'data'
-            ? 'Which clients have the most outstanding this year?'
+            ? (examples[0] || 'Which clients have the most outstanding this year?')
             : ready.length
               ? 'What are the payment terms in the Britannia agreement?'
               : 'Upload a document below to get started.'}
@@ -476,25 +517,75 @@ export default function Studio() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
             {mode === 'data'
-              ? 'Querying your invoices and projects'
+              ? datasetNames
+                ? `Querying your ${datasetNames}`
+                : 'Querying your finance data'
               : selected.size > 0
                 ? `Searching ${selected.size} selected document${selected.size === 1 ? '' : 's'}`
                 : `Searching all ${ready.length} document${ready.length === 1 ? '' : 's'}`}
           </span>
           <button
-            onClick={handleAsk}
-            disabled={asking || !question.trim() || (mode === 'documents' && !ready.length)}
+            onClick={() => handleAsk()}
+            disabled={!canAsk}
             style={{
               marginLeft: 'auto', padding: '9px 18px', borderRadius: 8, border: 'none',
-              background: (asking || !question.trim() || !ready.length) ? 'var(--border)' : 'var(--accent)',
-              color: (asking || !question.trim() || !ready.length) ? 'var(--text-2)' : '#fff',
+              // Previously keyed off the document count in both modes, so in
+              // data mode — where documents are irrelevant — the button read as
+              // disabled while still being clickable.
+              background: canAsk ? 'var(--accent)' : 'var(--border)',
+              color: canAsk ? '#fff' : 'var(--text-2)',
               fontSize: 14, fontWeight: 600,
-              cursor: (asking || !question.trim() || !ready.length) ? 'default' : 'pointer',
+              cursor: canAsk ? 'pointer' : 'default',
             }}
           >
             {asking ? 'Reading…' : 'Ask'}
           </button>
         </div>
+
+        {/* Starter questions. Handwritten per dataset and filtered server-side
+            to what this account may query, so the list is both idiomatic and
+            honest about what will actually answer. Without it, data mode was a
+            blank box that gave no clue what it understands. */}
+        {mode === 'data' && !turns.length && examples.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {examples.map(ex => (
+              <button
+                key={ex}
+                onClick={() => handleAsk(ex)}
+                disabled={asking}
+                style={{
+                  padding: '6px 11px', borderRadius: 99, fontSize: 12,
+                  border: '1px solid var(--border)', background: 'var(--bg-base)',
+                  color: 'var(--text-1)', cursor: asking ? 'default' : 'pointer',
+                  textAlign: 'left', lineHeight: 1.35,
+                }}
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Nothing to query is a permission fact, not a failure — say which. */}
+        {mode === 'data' && datasets?.length === 0 && (
+          <div style={{ fontSize: 12, color: '#b45309', lineHeight: 1.5 }}>
+            Your account cannot view any of the finance tables the analyst reads,
+            so there is nothing here to ask about yet.
+          </div>
+        )}
+
+        {/* What retrieval is genuinely running. Stated rather than implied, for
+            the same reason the quota below reports whether it is metered. */}
+        {mode === 'documents' && health && ready.length > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>
+            {health.semantic
+              ? `Keyword and meaning-based search — ${health.reason}.`
+              : health.text_search
+                ? `Keyword search over ${health.chunks.toLocaleString()} passages. Meaning-based search is off: ${health.reason}.`
+                : 'Full-text search is not available on this database — answers fall back to plain keyword matching.'}
+          </div>
+        )}
+
         {error && <div style={{ fontSize: 12, color: '#ef4444' }}>{error}</div>}
       </div>
 
