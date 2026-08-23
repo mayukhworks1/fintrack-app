@@ -196,7 +196,15 @@ export default function Studio() {
   const loadDocs = useCallback(async () => {
     try {
       const res = await api.studio.documents()
-      setDocs(res?.documents || [])
+      const next = res?.documents || []
+      // Replace state only when something actually changed. The poll below runs
+      // every few seconds while a document ingests, and handing React a fresh
+      // array each time re-rendered the whole page — including the answer and
+      // its citations — on every tick, for no new information.
+      setDocs(prev => {
+        const sig = (list) => list.map(d => `${d.id}:${d.status}:${d.chunk_count}`).join('|')
+        return sig(prev) === sig(next) ? prev : next
+      })
     } catch { /* the empty state covers it */ }
   }, [])
 
@@ -207,12 +215,15 @@ export default function Studio() {
   }, [turns.length])
 
   // Ingestion runs detached on the server, so the row's status is the only way
-  // to know it finished. Poll only while something is actually pending.
+  // to know it finished. The dependency is a boolean, not the document array:
+  // depending on `docs` meant every poll changed the dependency, so the
+  // interval was cleared and recreated on each tick instead of running once.
+  const hasPending = docs.some(d => d.status === 'pending')
   useEffect(() => {
-    if (!docs.some(d => d.status === 'pending')) return
-    const id = setInterval(loadDocs, 3000)
+    if (!hasPending) return
+    const id = setInterval(loadDocs, 2500)
     return () => clearInterval(id)
-  }, [docs, loadDocs])
+  }, [hasPending, loadDocs])
 
   const ready = docs.filter(d => d.status === 'ready')
 

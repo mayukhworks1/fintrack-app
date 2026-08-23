@@ -118,6 +118,40 @@ class TestQueryTerms:
         assert studio_ask._terms("") == []
 
 
+class TestSearchQuery:
+    """
+    The reported failure: a real question over an uploaded document returned
+    "no matching passages". Both websearch_to_tsquery and plainto_tsquery join
+    words with AND, so "What are the payment terms in the Britannia agreement?"
+    required one chunk to contain payment AND term AND britannia AND agreement.
+    Almost no natural question survives that.
+    """
+
+    def test_terms_are_ored_not_anded(self):
+        q = studio_ask._tsquery_or("What are the payment terms in the Britannia agreement?")
+        assert "|" in q
+        assert "&" not in q
+
+    def test_keeps_every_content_word(self):
+        q = studio_ask._tsquery_or("What are the payment terms in the Britannia agreement?")
+        for word in ("payment", "terms", "britannia", "agreement"):
+            assert word in q
+
+    def test_strips_punctuation_that_would_break_the_parser(self):
+        """to_tsquery parses its input as an expression and raises on stray
+        punctuation — an apostrophe would turn a search into a 500."""
+        q = studio_ask._tsquery_or("what is the client's year-end date?")
+        assert "'" not in q and "-" not in q
+        assert "clients" in q and "yearend" in q
+
+    def test_returns_none_when_there_is_nothing_to_search_for(self):
+        assert studio_ask._tsquery_or("what is it?") is None
+        assert studio_ask._tsquery_or("") is None
+
+    def test_does_not_repeat_a_term(self):
+        assert studio_ask._tsquery_or("invoice invoice invoice") == "invoice"
+
+
 class TestCitationContext:
     def test_numbers_sources_so_the_model_has_something_to_cite(self):
         context = studio_ask.build_context([

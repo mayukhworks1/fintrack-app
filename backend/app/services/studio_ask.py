@@ -41,6 +41,23 @@ _STOPWORDS = {
 }
 
 
+def _tsquery_or(query: str) -> str | None:
+    """
+    Build an OR tsquery from a question's content words.
+
+    Terms are stripped to letters and digits before being joined. `to_tsquery`
+    parses its input as an expression and raises on stray punctuation — an
+    apostrophe or a hyphen from the user's question would otherwise turn a
+    search into a 500.
+    """
+    lemmas: list[str] = []
+    for term in _terms(query):
+        clean = re.sub(r"[^a-z0-9]", "", term)
+        if len(clean) >= 3 and clean not in lemmas:
+            lemmas.append(clean)
+    return " | ".join(lemmas) if lemmas else None
+
+
 _HEADLINE_MARK = re.compile(r"</?b>")
 
 
@@ -74,13 +91,21 @@ async def _text_search(pool, query: str, document_ids: list[str] | None, limit: 
     to read every chunk in the corpus on every question; this is an index lookup
     with proper relevance ranking, stemming and stopword handling behind it.
 
-    `websearch_to_tsquery` is used rather than `plainto_tsquery` because it
-    understands quoted phrases and OR the way a person types them, and it never
-    raises on odd punctuation — `to_tsquery` does.
+    The query ORs the question's terms rather than ANDing them. Both
+    `websearch_to_tsquery` and `plainto_tsquery` join words with AND, which
+    means "What are the payment terms in the Britannia agreement?" only matches
+    a chunk containing payment AND term AND britannia AND agreement — so a real
+    question with four content words matched nothing at all. With OR, a chunk
+    carrying three of the four still surfaces, and `ts_rank_cd` puts it above
+    one carrying two. Recall is what retrieval owes the model; precision is what
+    ranking is for.
 
     The excerpt comes from `ts_headline`, so a citation shows the sentence that
     actually matched instead of whatever happened to open the chunk.
     """
+    tsquery = _tsquery_or(query)
+    if not tsquery:
+        return []
     try:
         rows = await pool.fetch(
             """
@@ -91,14 +116,14 @@ async def _text_search(pool, query: str, document_ids: list[str] | None, limit: 
                                'MaxWords=48, MinWords=20, ShortWord=3, MaxFragments=1') AS headline
               FROM studio_doc_chunks c
               JOIN studio_documents d ON d.id = c.document_id,
-                   websearch_to_tsquery('english', $1) AS q
+                   to_tsquery('english', $1) AS q
              WHERE d.status = 'ready'
                AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
                AND c.content_tsv @@ q
              ORDER BY rank DESC
              LIMIT $3
             """,
-            query, document_ids, limit,
+            tsquery, document_ids, limit,
         )
     except Exception as exc:
         # The tsvector column is created behind an exception guard, so it can be
@@ -312,11 +337,19 @@ async def ask(question: str, document_ids: list[str] | None = None) -> dict:
     chunks = await retrieve(question, document_ids)
 
     if not chunks:
+        # Say which words were searched for. "Nothing matched" invites the user
+        # to suspect the upload; naming the terms usually shows them at a glance
+        # that the answer lives in a document they have not added, or that they
+        # used different wording than the document does.
+        searched = ", ".join(_terms(question)[:6])
         return {
             "answer": (
-                "Nothing in the uploaded documents matches that question. "
-                "Either the document covering it has not been added yet, or it is "
-                "still being processed."
+                f"No passage in the selected documents mentions {searched}. "
+                "The document covering it may not be uploaded, or it may use "
+                "different wording — try the phrasing the document itself would use."
+                if searched else
+                "That question has no searchable terms in it. Try naming the "
+                "thing you want to know about."
             ),
             "sources": [],
             "model": "",
