@@ -739,10 +739,30 @@ export const api = {
     documents:     ()          => request('/api/studio/documents'),
     document:      (id)        => request(`/api/studio/documents/${id}`),
     deleteDocument:(id)        => request(`/api/studio/documents/${id}`, { method: 'DELETE' }),
-    upload:        (fileObj)   => {
+    // XMLHttpRequest rather than fetch: fetch reports download progress but not
+    // upload progress, and a 15 MB PDF over a phone connection is exactly when
+    // a progress bar stops the user wondering whether anything is happening.
+    upload:        (fileObj, onProgress) => new Promise((resolve, reject) => {
       const fd = new FormData(); fd.append('file', fileObj)
-      return request('/api/studio/documents', { method: 'POST', body: fd, headers: null, timeout: 120000 }, 0)
-    },
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${BASE_URL}/api/studio/documents`)
+      const token = getAuthToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      if (_deviceHint) xhr.setRequestHeader('X-Client-Hint', _deviceHint)
+      xhr.timeout = 180000
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        let body = {}
+        try { body = JSON.parse(xhr.responseText || '{}') } catch { /* handled below */ }
+        if (xhr.status >= 200 && xhr.status < 300) return resolve(body)
+        reject(new Error(body?.detail || body?.error?.message || `Upload failed (${xhr.status})`))
+      }
+      xhr.onerror   = () => reject(new Error('Upload failed — check your connection.'))
+      xhr.ontimeout = () => reject(new Error('Upload timed out. Try a smaller file.'))
+      xhr.send(fd)
+    }),
     // A question runs two model calls (answer + verification), so it gets the
     // AI budget rather than the default request timeout, and no retries — a
     // slow answer is not a failed one.

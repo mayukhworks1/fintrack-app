@@ -55,14 +55,25 @@ function DocRow({ doc, selected, onToggle, onDelete }) {
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {busy && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Loader2 size={11} className="animate-spin" aria-hidden="true" /> Processing…
+            <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+            Reading pages and building the index…
           </span>}
           {doc.status === 'ready' && (
-            <span>{doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.chunk_count} sections</span>
+            <span>{doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.chunk_count} searchable sections</span>
           )}
           {failed && <span style={{ color: '#ef4444' }}>{doc.error || 'Could not be read'}</span>}
           <span>{fmtBytes(doc.byte_size)}</span>
         </div>
+        {busy && (
+          // Indeterminate: the server does not report ingestion percentage, and
+          // a fake percentage that stalls at 90% is worse than an honest pulse.
+          <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, marginTop: 7, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: '35%', background: 'var(--accent)',
+              borderRadius: 2, animation: 'ft-studio-scan 1.1s ease-in-out infinite',
+            }} />
+          </div>
+        )}
       </div>
       <button
         onClick={() => onDelete(doc)}
@@ -174,7 +185,8 @@ export default function Studio() {
   const [docs, setDocs] = useState([])
   const [selected, setSelected] = useState(() => new Set())
   const [docsOpen, setDocsOpen] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploads, setUploads] = useState([])
+  const [dragging, setDragging] = useState(false)
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState([])
   const [asking, setAsking] = useState(false)
@@ -204,21 +216,41 @@ export default function Studio() {
 
   const ready = docs.filter(d => d.status === 'ready')
 
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
+  const acceptFiles = useCallback(async (files) => {
     if (!files.length) return
-    setUploading(true); setError('')
-    for (const f of files) {
+    setError('')
+    setDocsOpen(true)
+    // Each file gets its own row with its own bar. A single global "Uploading…"
+    // tells you nothing about which of five files is moving, or whether the big
+    // one has stalled.
+    setUploads(files.map(f => ({ name: f.name, size: f.size, pct: 0, state: 'uploading' })))
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      const mark = (patch) => setUploads(u => u.map((row, idx) => idx === i ? { ...row, ...patch } : row))
       try {
-        await api.studio.upload(f)
+        await api.studio.upload(f, pct => mark({ pct }))
+        mark({ pct: 100, state: 'done' })
       } catch (err) {
+        mark({ state: 'failed', error: err?.message || 'Upload failed' })
         setError(err?.message || `Could not upload ${f.name}`)
       }
+      loadDocs()
     }
-    setUploading(false)
-    setDocsOpen(true)
-    loadDocs()
+
+    // Rows clear once the server-side rows take over the reporting.
+    setTimeout(() => setUploads(u => u.filter(row => row.state === 'failed')), 1500)
+  }, [loadDocs])
+
+  const handleUpload = (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    acceptFiles(files)
+  }
+
+  const onDrop = (e) => {
+    e.preventDefault(); setDragging(false)
+    acceptFiles(Array.from(e.dataTransfer?.files || []))
   }
 
   const handleDelete = async (doc) => {
@@ -265,6 +297,15 @@ export default function Studio() {
 
   return (
     <div style={{ padding: '20px 16px 48px', maxWidth: 880, margin: '0 auto' }}>
+      <style>{`
+        @keyframes ft-studio-scan {
+          0%   { transform: translateX(-100%) }
+          100% { transform: translateX(320%) }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="ft-studio-scan"] { animation: none !important; width: 100% !important; opacity: .45 }
+        }
+      `}</style>
 
       <header style={{ marginBottom: 18 }}>
         <h1 style={{
@@ -364,6 +405,28 @@ export default function Studio() {
 
         {docsOpen && (
           <div>
+            {uploads.map((up, i) => (
+              <div key={`up-${i}`} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
+                  <span style={{
+                    flex: 1, minWidth: 0, fontWeight: 600, color: 'var(--text-1)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{up.name}</span>
+                  <span style={{ fontSize: 11, color: up.state === 'failed' ? '#ef4444' : 'var(--text-2)', flexShrink: 0 }}>
+                    {up.state === 'failed' ? 'Failed' : up.state === 'done' ? 'Uploaded' : `${up.pct}%`}
+                  </span>
+                </div>
+                {up.state !== 'failed' && (
+                  <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, marginTop: 7, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${up.pct}%`, background: 'var(--accent)',
+                      transition: 'width .18s linear',
+                    }} />
+                  </div>
+                )}
+                {up.error && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 5 }}>{up.error}</div>}
+              </div>
+            ))}
             {docs.map(doc => (
               <DocRow
                 key={doc.id}
@@ -378,7 +441,17 @@ export default function Studio() {
                 No documents yet.
               </div>
             )}
-            <div style={{ padding: 12 }}>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              style={{
+                margin: 12, padding: '16px 12px', borderRadius: 10,
+                border: `1.5px dashed ${dragging ? 'var(--accent)' : 'var(--border)'}`,
+                background: dragging ? 'var(--bg-base)' : 'transparent',
+                textAlign: 'center', transition: 'border-color .15s, background .15s',
+              }}
+            >
               <input
                 ref={fileRef}
                 type="file"
@@ -389,19 +462,18 @@ export default function Studio() {
               />
               <button
                 onClick={() => fileRef.current?.click()}
-                disabled={uploading}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '8px 14px', borderRadius: 8,
-                  border: '1px solid var(--border)', background: 'var(--bg-base)',
-                  color: 'var(--text-1)', fontSize: 13, fontWeight: 600,
-                  cursor: uploading ? 'default' : 'pointer',
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-1)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 }}
               >
                 <Upload size={14} aria-hidden="true" />
-                {uploading ? 'Uploading…' : 'Add documents'}
+                Add documents
               </button>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 7 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.5 }}>
+                Drop files here, or choose them above.<br />
                 PDF, text, Markdown, CSV or JSON — up to 15 MB each. Scanned PDFs
                 need OCR before they can be read.
               </div>

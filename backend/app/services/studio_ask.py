@@ -41,6 +41,17 @@ _STOPWORDS = {
 }
 
 
+_HEADLINE_MARK = re.compile(r"</?b>")
+
+
+def _strip_marks(headline: str) -> str:
+    """
+    ts_headline wraps matches in <b> tags. The excerpt is rendered as text, so
+    the tags would show up literally in a citation.
+    """
+    return _HEADLINE_MARK.sub("", headline or "").strip()
+
+
 def _terms(query: str, limit: int = 12) -> list[str]:
     words = re.findall(r"[a-z0-9][a-z0-9'./-]{1,}", (query or "").lower())
     seen: set[str] = set()
@@ -55,31 +66,114 @@ def _terms(query: str, limit: int = 12) -> list[str]:
     return out
 
 
-async def _lexical(pool, terms: list[str], document_ids: list[str] | None) -> list[dict]:
+async def _text_search(pool, query: str, document_ids: list[str] | None, limit: int) -> list[dict]:
     """
-    Always runs. Vector search needs pgvector installed and an embedding call
-    that can fail or rate-limit; keyword matching needs neither, so it is what
-    keeps the feature working on a degraded deployment rather than returning
-    nothing.
+    Postgres full-text search over the GIN-indexed tsvector.
+
+    This is the primary retrieval path. It replaced a regex hit-count that had
+    to read every chunk in the corpus on every question; this is an index lookup
+    with proper relevance ranking, stemming and stopword handling behind it.
+
+    `websearch_to_tsquery` is used rather than `plainto_tsquery` because it
+    understands quoted phrases and OR the way a person types them, and it never
+    raises on odd punctuation — `to_tsquery` does.
+
+    The excerpt comes from `ts_headline`, so a citation shows the sentence that
+    actually matched instead of whatever happened to open the chunk.
+    """
+    try:
+        rows = await pool.fetch(
+            """
+            SELECT c.id, c.document_id, c.page_number, c.content, c.embedding_vec,
+                   d.title, d.filename,
+                   ts_rank_cd(c.content_tsv, q) AS rank,
+                   ts_headline('english', c.content, q,
+                               'MaxWords=48, MinWords=20, ShortWord=3, MaxFragments=1') AS headline
+              FROM studio_doc_chunks c
+              JOIN studio_documents d ON d.id = c.document_id,
+                   websearch_to_tsquery('english', $1) AS q
+             WHERE d.status = 'ready'
+               AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
+               AND c.content_tsv @@ q
+             ORDER BY rank DESC
+             LIMIT $3
+            """,
+            query, document_ids, limit,
+        )
+    except Exception as exc:
+        # The tsvector column is created behind an exception guard, so it can be
+        # absent on an instance where the DDL failed. Retrieval degrades to
+        # keyword matching rather than the feature disappearing.
+        logger.debug("studio full-text search unavailable: %s", exc)
+        return []
+    return [dict(r) | {"method": "lexical", "score": float(r["rank"])} for r in rows]
+
+
+async def _keyword_fallback(pool, terms: list[str], document_ids: list[str] | None) -> list[dict]:
+    """
+    Last resort for a question full-text search cannot parse into a query —
+    all stopwords, or a bare identifier like an invoice number that the English
+    dictionary stems into nothing.
     """
     if not terms:
         return []
     pattern = "|".join(re.escape(t) for t in terms)
     rows = await pool.fetch(
         """
-        SELECT c.id, c.document_id, c.page_number, c.content, d.title, d.filename,
-               (SELECT COUNT(*) FROM regexp_matches(LOWER(c.content), $1, 'g')) AS hits
+        SELECT c.id, c.document_id, c.page_number, c.content, c.embedding_vec,
+               d.title, d.filename
           FROM studio_doc_chunks c
           JOIN studio_documents d ON d.id = c.document_id
          WHERE d.status = 'ready'
            AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
-           AND LOWER(c.content) ~ $1
-         ORDER BY hits DESC
+           AND c.content ~* $1
          LIMIT $3
         """,
         pattern, document_ids, TOP_K * 2,
     )
-    return [dict(r) | {"method": "lexical", "score": float(r["hits"])} for r in rows]
+    return [dict(r) | {"method": "lexical", "score": 0.5} for r in rows]
+
+
+async def _cosine_rerank(pool, query: str, candidates: list[dict]) -> list[dict]:
+    """
+    Re-order full-text candidates by semantic similarity.
+
+    pgvector is not available on this deployment, so there is no ANN index to
+    search — but cosine over a *bounded* candidate set costs almost nothing.
+    Full-text search narrows the corpus to a few dozen rows first, and only
+    those are scored, which keeps semantic ranking affordable without the
+    extension. Anything that fails here leaves the full-text order intact.
+    """
+    scored = [c for c in candidates if c.get("embedding_vec")]
+    if not scored:
+        return candidates
+
+    vec = await embeddings.get_embedding(query)
+    if not vec:
+        return candidates
+
+    try:
+        rows = await pool.fetch(
+            """
+            SELECT c.id, ft_cosine(c.embedding_vec, $2::float8[]) AS similarity
+              FROM studio_doc_chunks c
+             WHERE c.id = ANY($1::bigint[])
+               AND c.embedding_vec IS NOT NULL
+            """,
+            [c["id"] for c in scored], vec,
+        )
+    except Exception as exc:
+        logger.debug("studio cosine re-rank failed: %s", exc)
+        return candidates
+
+    sims = {r["id"]: float(r["similarity"] or 0) for r in rows}
+    for c in candidates:
+        if c["id"] in sims:
+            c["similarity"] = sims[c["id"]]
+            c["method"] = "hybrid"
+    # Rank on similarity where we have it, otherwise keep the text rank below it.
+    candidates.sort(key=lambda c: (c.get("similarity") is not None, c.get("similarity", 0)), reverse=True)
+    return candidates
 
 
 async def _vector(pool, query: str, document_ids: list[str] | None) -> list[dict]:
@@ -136,13 +230,37 @@ def _merge(lexical: list[dict], vector: list[dict]) -> list[dict]:
     return ranked[:TOP_K]
 
 
+# How many full-text hits are handed to the cosine re-ranker. Wide enough that
+# the right passage is usually somewhere in the set, narrow enough that scoring
+# it costs milliseconds rather than a scan of the corpus.
+RERANK_CANDIDATES = 40
+
+
 async def retrieve(query: str, document_ids: list[str] | None = None) -> list[dict]:
+    """
+    Full-text search first, then semantic re-ranking of what it found.
+
+    Ordering the two this way is what makes semantic search possible at all
+    here: without pgvector there is no index to search vectors with, so the
+    candidate set has to be narrowed by something that *is* indexed before
+    similarity is computed.
+    """
     pool = get_pool()
     if not pool:
         return []
-    lexical = await _lexical(pool, _terms(query), document_ids)
-    vector = await _vector(pool, query, document_ids)
-    return _merge(lexical, vector)
+
+    candidates = await _text_search(pool, query, document_ids, RERANK_CANDIDATES)
+    if not candidates:
+        candidates = await _keyword_fallback(pool, _terms(query), document_ids)
+
+    # When the extension does exist, its index finds passages full-text search
+    # missed entirely, so those are merged in rather than replaced.
+    native = await _vector(pool, query, document_ids)
+    if native:
+        return _merge(candidates[:TOP_K * 2], native)
+
+    ranked = await _cosine_rerank(pool, query, candidates)
+    return ranked[:TOP_K]
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -242,12 +360,15 @@ async def ask(question: str, document_ids: list[str] | None = None) -> dict:
                 "title": c.get("title") or c.get("filename") or "Document",
                 "page": c.get("page_number"),
                 "method": c["method"],
-                "excerpt": (c.get("content") or "")[:280],
+                # ts_headline gives the sentence that actually matched. Falling
+                # back to the top of the chunk shows whatever happened to open
+                # it, which often has nothing to do with the question.
+                "excerpt": _strip_marks(c.get("headline") or "") or (c.get("content") or "")[:280],
             }
             for i, c in enumerate(chunks, start=1)
         ],
         "model": result.get("model_short") or result.get("model", ""),
         "verdict": verdict,
         "latency_ms": int((time.time() - started) * 1000),
-        "retrieval": "hybrid" if len(methods) > 1 or "hybrid" in methods else methods.pop(),
+        "retrieval": "hybrid" if "hybrid" in methods else ("vector" if "vector" in methods else "lexical"),
     }

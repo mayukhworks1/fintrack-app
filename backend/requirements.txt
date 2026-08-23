@@ -12,7 +12,17 @@ redis[asyncio]==5.0.8
 pytest==8.3.4
 pytest-asyncio==0.24.0
 huggingface_hub>=0.26.0
-langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-community>=0.3.0
 pgvector>=0.3.2
+
+# langchain, langchain-openai and langchain-community were removed here.
+#
+# Nothing in this codebase ever imported them — the only LangChain-related code
+# is three os.environ assignments that turn on LangSmith tracing, and those are
+# plain env vars needing no package. Meanwhile the three loose lower bounds gave
+# pip's resolver an enormous search space, and it backtracked through every
+# release of langchain and langgraph on every Space build: hundreds of metadata
+# downloads, builds running tens of minutes, and an image carrying ~100 MB of
+# unused dependencies that slowed every cold start.
+#
+# If LangChain is genuinely wanted later, add it back pinned to exact versions
+# so the resolver has nothing to search.

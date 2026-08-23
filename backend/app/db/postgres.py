@@ -1047,13 +1047,54 @@ CREATE TABLE IF NOT EXISTS studio_doc_chunks (
 );
 CREATE INDEX IF NOT EXISTS sdc_doc_idx ON studio_doc_chunks (document_id, chunk_index);
 
+-- Full-text search index. This is the primary retrieval path, not a fallback:
+-- pgvector is an extension the managed Postgres plan does not offer, so the
+-- vector column below may never exist. Full-text search is core Postgres, needs
+-- no extension, and a GIN index makes it an index lookup rather than the
+-- regex scan over every chunk that this replaced.
+-- Guarded, like every other optional piece of schema in this file. The whole
+-- SCHEMA string runs as one statement batch inside init_pool(); an unguarded
+-- statement that raises does not skip a feature, it aborts the batch and leaves
+-- the app with no pool at all. A search index is not worth that risk.
+DO $$
+BEGIN
+  ALTER TABLE studio_doc_chunks
+    ADD COLUMN IF NOT EXISTS content_tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+  CREATE INDEX IF NOT EXISTS sdc_tsv_idx ON studio_doc_chunks USING GIN (content_tsv);
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'studio_doc_chunks full-text column skipped: %', SQLERRM;
+END
+$$;
+
+-- Embeddings stored as a plain float array, which needs no extension either.
+-- Brute-force cosine over a whole corpus would be slow, so this is only ever
+-- computed over the handful of candidates full-text search already narrowed to
+-- — semantic ranking without an ANN index, at a cost that stays bounded.
+DO $$
+BEGIN
+  ALTER TABLE studio_doc_chunks ADD COLUMN IF NOT EXISTS embedding_vec DOUBLE PRECISION[];
+
+  CREATE OR REPLACE FUNCTION ft_cosine(a DOUBLE PRECISION[], b DOUBLE PRECISION[])
+  RETURNS DOUBLE PRECISION AS $fn$
+    SELECT COALESCE(SUM(x * y), 0)
+         / NULLIF(SQRT(SUM(x * x)) * SQRT(SUM(y * y)), 0)
+      FROM unnest(a, b) AS t(x, y);
+  $fn$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'studio_doc_chunks embedding array/function skipped: %', SQLERRM;
+END
+$$;
+
+-- The pgvector column stays defined when the extension happens to be present,
+-- so an instance that gains it later gets the faster path with no migration.
 DO $$
 BEGIN
   ALTER TABLE studio_doc_chunks ADD COLUMN IF NOT EXISTS embedding vector(1536);
   CREATE INDEX IF NOT EXISTS sdc_ivfflat_idx ON studio_doc_chunks
     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 20);
 EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'studio_doc_chunks embedding column skipped (pgvector absent): %', SQLERRM;
+  RAISE WARNING 'studio_doc_chunks pgvector column skipped (extension absent): %', SQLERRM;
 END
 $$;
 

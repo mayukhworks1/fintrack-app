@@ -147,6 +147,25 @@ def chunk_pages(pages: Iterable[str]) -> list[dict]:
 
 # --- ingestion -------------------------------------------------------------
 
+async def _has_column(pool, table: str, column: str) -> bool:
+    """
+    Optional columns are created behind exception guards, so they may not exist.
+    Checking beforehand is not optional politeness: asyncpg aborts a transaction
+    on its first failed statement, so discovering the absence mid-insert would
+    poison every remaining row.
+    """
+    try:
+        return bool(await pool.fetchval(
+            """
+            SELECT 1 FROM information_schema.columns
+             WHERE table_name = $1 AND column_name = $2
+            """,
+            table, column,
+        ))
+    except Exception:
+        return False
+
+
 async def ingest_document(document_id: str) -> None:
     """
     Read the stored file, chunk it, embed each chunk, and mark the row ready.
@@ -189,44 +208,63 @@ async def ingest_document(document_id: str) -> None:
                 "No text could be extracted. A scanned PDF needs OCR before it can be searched."
             )
 
-        # Embeddings are best-effort per chunk: pgvector may be absent, or the
-        # embedding API may rate-limit partway through. A chunk with no vector
-        # is still found by lexical search, so partial success beats failure.
-        vectors: list[str | None] = []
-        has_vectors = await embeddings.is_pgvector_available()
+        # Embeddings are best-effort per chunk: the embedding API can fail or
+        # rate-limit partway through, and a chunk with no vector is still found
+        # by full-text search — so partial success beats failure.
+        #
+        # They are stored as a plain float array, which needs no extension. That
+        # is what lets semantic re-ranking work on a Postgres without pgvector;
+        # the vector column is written too when the extension happens to exist.
+        raw_vectors: list[list[float] | None] = []
         for chunk in chunks:
-            if not has_vectors:
-                vectors.append(None)
-                continue
-            vec = await embeddings.get_embedding(chunk["content"])
-            vectors.append(embeddings._vec_literal(vec) if vec else None)
+            raw_vectors.append(await embeddings.get_embedding(chunk["content"]))
+
+        has_pgvector = await embeddings.is_pgvector_available()
+
+        # Checked before the transaction opens, not caught inside it: asyncpg
+        # aborts a transaction on the first failed statement, so a try/except
+        # around the INSERT would poison every row after it.
+        has_vec_column = await _has_column(pool, "studio_doc_chunks", "embedding_vec")
 
         async with pool.acquire() as conn:
             async with conn.transaction():
                 await conn.execute(
                     "DELETE FROM studio_doc_chunks WHERE document_id = $1::uuid", document_id
                 )
-                for index, (chunk, vec) in enumerate(zip(chunks, vectors)):
-                    if vec is not None:
-                        await conn.execute(
+                for index, (chunk, vec) in enumerate(zip(chunks, raw_vectors)):
+                    if has_vec_column:
+                        row_id = await conn.fetchval(
                             """
                             INSERT INTO studio_doc_chunks
-                                (document_id, chunk_index, page_number, content, token_est, embedding)
-                            VALUES ($1::uuid, $2, $3, $4, $5, $6::vector)
+                                (document_id, chunk_index, page_number, content, token_est, embedding_vec)
+                            VALUES ($1::uuid, $2, $3, $4, $5, $6::float8[])
+                            RETURNING id
                             """,
                             document_id, index, chunk["page_number"],
                             chunk["content"], chunk["token_est"], vec,
                         )
                     else:
-                        await conn.execute(
+                        row_id = await conn.fetchval(
                             """
                             INSERT INTO studio_doc_chunks
                                 (document_id, chunk_index, page_number, content, token_est)
                             VALUES ($1::uuid, $2, $3, $4, $5)
+                            RETURNING id
                             """,
                             document_id, index, chunk["page_number"],
                             chunk["content"], chunk["token_est"],
                         )
+                    if vec and has_pgvector:
+                        try:
+                            await conn.execute(
+                                "UPDATE studio_doc_chunks SET embedding = $2::vector WHERE id = $1",
+                                row_id, embeddings._vec_literal(vec),
+                            )
+                        except Exception:
+                            # The float array is already stored and is what
+                            # retrieval actually uses, so a pgvector write that
+                            # fails costs nothing worth aborting the ingest for.
+                            pass
                 await conn.execute(
                     """
                     UPDATE studio_documents
@@ -237,7 +275,7 @@ async def ingest_document(document_id: str) -> None:
                     document_id, len(pages), len(chunks),
                 )
 
-        embedded = sum(1 for v in vectors if v is not None)
+        embedded = sum(1 for v in raw_vectors if v is not None)
         logger.info(
             "studio ingest ready (%s): %d pages, %d chunks, %d embedded",
             document_id, len(pages), len(chunks), embedded,
