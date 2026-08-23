@@ -321,9 +321,35 @@ Rules:
   a person would, with the bracketed citations doing that work."""
 
 
-async def ask(question: str, document_ids: list[str] | None = None) -> dict:
+def expand_query(question: str, history: list[dict] | None) -> str:
+    """
+    Fold the previous exchange into a follow-up before searching.
+
+    "What about the second milestone?" carries almost no searchable terms on its
+    own — the subject lives in the question before it. Retrieval runs on the
+    expanded text so a follow-up finds the same region of the document the
+    conversation is already in; the model still sees the original wording.
+
+    Only short questions are expanded. A fully-formed question is its own best
+    query, and padding it with older terms would drag retrieval off-topic.
+    """
+    if not history or len(_terms(question)) >= 4:
+        return question
+    prior = " ".join(str(h.get("question") or "") for h in history[-2:])
+    return f"{prior} {question}".strip()
+
+
+async def ask(
+    question: str,
+    document_ids: list[str] | None = None,
+    history: list[dict] | None = None,
+) -> dict:
     """
     Answer a question from the corpus.
+
+    `history` is the recent turns of the same conversation. Without it every
+    question is answered in isolation, which makes ordinary follow-ups
+    ("and the payment schedule?") unanswerable.
 
     Returns {answer, sources, model, verdict, latency_ms, retrieval}.
     """
@@ -334,7 +360,7 @@ async def ask(question: str, document_ids: list[str] | None = None) -> dict:
         raise ValueError("That question is too long — try asking it more directly.")
 
     started = time.time()
-    chunks = await retrieve(question, document_ids)
+    chunks = await retrieve(expand_query(question, history), document_ids)
 
     if not chunks:
         # Say which words were searched for. "Nothing matched" invites the user
@@ -359,12 +385,26 @@ async def ask(question: str, document_ids: list[str] | None = None) -> dict:
         }
 
     context = build_context(chunks)
+
+    # Prior turns go in as real conversation, so the model can resolve "it" and
+    # "that clause" against what was actually said rather than guessing. Only
+    # the last two, and answers are truncated: the sources are the ground truth
+    # and a long transcript would crowd them out of a free model's context.
+    messages: list[dict] = [
+        {"role": "system", "content": _SYSTEM},
+        {"role": "system", "content": f"SOURCES:\n\n{context}"},
+    ]
+    for turn in (history or [])[-2:]:
+        prior_q = str(turn.get("question") or "").strip()
+        prior_a = str(turn.get("answer") or "").strip()
+        if prior_q:
+            messages.append({"role": "user", "content": prior_q[:500]})
+        if prior_a:
+            messages.append({"role": "assistant", "content": prior_a[:900]})
+    messages.append({"role": "user", "content": question})
+
     result = await _try_chat(
-        [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "system", "content": f"SOURCES:\n\n{context}"},
-            {"role": "user", "content": question},
-        ],
+        messages,
         max_tokens=1200,
         temperature=0.2,
         extract=False,

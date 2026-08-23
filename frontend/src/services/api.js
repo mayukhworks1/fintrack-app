@@ -771,6 +771,7 @@ export const api = {
     }, 0),
     threads:       ()          => request('/api/studio/threads'),
     thread:        (id)        => request(`/api/studio/threads/${id}`),
+    deleteThread:  (id)        => request(`/api/studio/threads/${id}`, { method: 'DELETE' }),
     usage:         ()          => request('/api/studio/usage'),
   },
 

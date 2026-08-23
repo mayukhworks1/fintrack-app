@@ -276,15 +276,34 @@ async def ask(
             "It resets on a rolling 24-hour window.",
         )
 
+    pool = get_pool()
+
+    # Prior turns of this conversation, so a follow-up is answered in context
+    # rather than in isolation. Loaded before the model call because the answer
+    # depends on them.
+    history: list[dict] = []
+    if pool and body.thread_id:
+        try:
+            rows = await pool.fetch(
+                """
+                SELECT question, answer FROM studio_turns
+                 WHERE thread_id = $1::uuid
+                 ORDER BY created_at DESC LIMIT 3
+                """,
+                body.thread_id,
+            )
+            history = [dict(r) for r in reversed(rows)]
+        except Exception as exc:
+            logger.debug("studio: could not load thread history: %s", exc)
+
     try:
-        result = await studio_ask.ask(body.question, body.document_ids or None)
+        result = await studio_ask.ask(body.question, body.document_ids or None, history)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("studio ask failed")
         raise HTTPException(502, f"Could not answer that: {exc}")
 
-    pool = get_pool()
     if pool:
         try:
             thread_id = body.thread_id
@@ -335,11 +354,14 @@ async def list_threads(
     scope = owner_scope_email(request)
     rows = await pool.fetch(
         """
-        SELECT t.id, t.title, t.updated_at, COUNT(u.id) AS turns
+        SELECT t.id, t.title, t.updated_at, t.created_at,
+               COUNT(u.id) AS turns,
+               MAX(u.created_at) AS last_asked
           FROM studio_threads t
           LEFT JOIN studio_turns u ON u.thread_id = t.id
          WHERE ($1::text IS NULL OR LOWER(t.owner_email) = LOWER($1))
          GROUP BY t.id
+        HAVING COUNT(u.id) > 0
          ORDER BY t.updated_at DESC
          LIMIT 50
         """,
@@ -351,11 +373,45 @@ async def list_threads(
                 "id": str(r["id"]),
                 "title": r["title"],
                 "turns": int(r["turns"]),
-                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                "updated_at": (r["last_asked"] or r["updated_at"]).isoformat()
+                              if (r["last_asked"] or r["updated_at"]) else None,
             }
             for r in rows
         ]
     }
+
+
+@router.delete("/threads/{thread_id}")
+async def delete_thread(
+    thread_id: str,
+    request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.studio.ask")),
+):
+    """
+    Delete a conversation and its turns.
+
+    Transcripts quote the contents of private documents, so history a user
+    cannot clear is a liability rather than a feature. Turns go with the thread
+    through ON DELETE CASCADE.
+    """
+    _require_email_auth(request)
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+
+    scope = owner_scope_email(request)
+    deleted = await pool.fetchval(
+        """
+        DELETE FROM studio_threads
+         WHERE id = $1::uuid AND ($2::text IS NULL OR LOWER(owner_email) = LOWER($2))
+        RETURNING id
+        """,
+        thread_id, scope,
+    )
+    if not deleted:
+        raise HTTPException(404, "Conversation not found")
+    return {"ok": True}
 
 
 @router.get("/threads/{thread_id}")

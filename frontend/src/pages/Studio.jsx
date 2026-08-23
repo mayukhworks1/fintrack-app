@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Sparkles, FileText, Upload, Trash2, ChevronDown, ChevronRight,
-  AlertTriangle, CheckCircle2, Loader2, Quote,
+  AlertTriangle, CheckCircle2, Loader2, Quote, History,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useConfirm } from '../context/ConfirmContext'
@@ -24,6 +24,16 @@ function fmtBytes(n) {
   if (!n) return '0 KB'
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fmtWhen(iso) {
+  if (!iso) return ''
+  const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (secs < 60) return 'just now'
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  if (secs < 604800) return `${Math.floor(secs / 86400)}d ago`
+  return new Date(iso).toLocaleDateString()
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +199,11 @@ export default function Studio() {
   const [dragging, setDragging] = useState(false)
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState([])
+  const [threads, setThreads] = useState([])
+  const [threadId, setThreadId] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('t') || null } catch { return null }
+  })
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState('')
   const [quota, setQuota] = useState(null)
@@ -209,6 +224,67 @@ export default function Studio() {
   }, [])
 
   useEffect(() => { loadDocs() }, [loadDocs])
+
+  const loadThreads = useCallback(async () => {
+    try {
+      const res = await api.studio.threads()
+      setThreads(res?.threads || [])
+    } catch { /* history is additive; its absence is not an error worth showing */ }
+  }, [])
+
+  // Open a conversation and put it in the URL, so a reload, a bookmark and the
+  // back button all return to it. Turns were previously component state alone,
+  // which meant every refresh threw the conversation away even though the
+  // server had been storing it the whole time.
+  const selectThread = useCallback(async (id, { keepTurns = false } = {}) => {
+    setThreadId(id)
+    try {
+      const url = new URL(window.location.href)
+      if (id) url.searchParams.set('t', id); else url.searchParams.delete('t')
+      window.history.replaceState({}, '', url)
+    } catch { /* URL sync is a convenience, never a blocker */ }
+
+    if (keepTurns || !id) return
+    try {
+      const res = await api.studio.thread(id)
+      // Newest first, matching how new answers are prepended.
+      setTurns([...(res?.turns || [])].reverse())
+    } catch {
+      setTurns([])
+    }
+  }, [])
+
+  const handleDeleteThread = useCallback(async (t) => {
+    const ok = await confirm({
+      title: 'Delete this conversation?',
+      message: `"${t.title || 'Untitled conversation'}" and its ${t.turns} question${t.turns === 1 ? '' : 's'} will be removed. The documents stay.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await api.studio.deleteThread(t.id)
+      if (t.id === threadId) { setTurns([]); selectThread(null) }
+      loadThreads()
+    } catch (err) {
+      setError(err?.message || 'Could not delete that conversation.')
+    }
+  }, [confirm, threadId, selectThread, loadThreads])
+
+  const newConversation = useCallback(() => {
+    setTurns([]); setError('')
+    selectThread(null)
+  }, [selectThread])
+
+  useEffect(() => { loadThreads() }, [loadThreads])
+
+  // Restore whatever conversation the URL points at on first load.
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current || !threadId) return
+    restoredRef.current = true
+    selectThread(threadId)
+  }, [threadId, selectThread])
 
   useEffect(() => {
     api.studio.usage().then(r => setQuota(r?.quota || null)).catch(() => {})
@@ -295,10 +371,15 @@ export default function Studio() {
       const res = await api.studio.ask({
         question: q,
         document_ids: selected.size ? Array.from(selected) : undefined,
+        // Continuing a conversation rather than starting a new one on every
+        // question is what lets the server answer follow-ups in context.
+        thread_id: threadId || undefined,
       })
       setTurns(t => [{ question: q, ...res }, ...t])
       setQuestion('')
+      if (res?.thread_id && res.thread_id !== threadId) selectThread(res.thread_id, { keepTurns: true })
       if (res?.quota) setQuota(res.quota)
+      loadThreads()
     } catch (err) {
       setError(err?.message || 'Could not answer that. Try again in a moment.')
     } finally {
@@ -389,6 +470,90 @@ export default function Studio() {
               <Answer turn={turn} />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Conversations. The turns were always saved server-side; nothing read
+          them back, so a refresh looked like the history had been discarded. */}
+      {threads.length > 0 && (
+        <div style={{
+          marginTop: 16, border: '1px solid var(--border)', borderRadius: 12,
+          background: 'var(--bg-card)', overflow: 'hidden',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <button
+              onClick={() => setHistoryOpen(o => !o)}
+              aria-expanded={historyOpen}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                padding: '12px 14px', background: 'none', border: 'none',
+                cursor: 'pointer', color: 'var(--text-1)', fontSize: 14, fontWeight: 700,
+                textAlign: 'left',
+              }}
+            >
+              {historyOpen ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+              <History size={14} aria-hidden="true" />
+              Conversations
+              <span style={{ fontWeight: 500, color: 'var(--text-2)', fontSize: 12 }}>{threads.length}</span>
+            </button>
+            {turns.length > 0 && (
+              <button
+                onClick={newConversation}
+                style={{
+                  margin: '0 12px', padding: '5px 11px', fontSize: 12, fontWeight: 600,
+                  borderRadius: 7, border: '1px solid var(--border)',
+                  background: 'var(--bg-base)', color: 'var(--text-1)', cursor: 'pointer',
+                  flexShrink: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                New
+              </button>
+            )}
+          </div>
+
+          {historyOpen && (
+            <div style={{ borderTop: '1px solid var(--border)', maxHeight: 320, overflowY: 'auto' }}>
+              {threads.map(t => (
+                <div
+                  key={t.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '10px 12px', borderBottom: '1px solid var(--border)',
+                    background: t.id === threadId ? 'var(--bg-base)' : 'transparent',
+                  }}
+                >
+                  <button
+                    onClick={() => selectThread(t.id)}
+                    style={{
+                      flex: 1, minWidth: 0, textAlign: 'left', background: 'none',
+                      border: 'none', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    <div style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: t.id === threadId ? 'var(--accent)' : 'var(--text-1)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {t.title || 'Untitled conversation'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+                      {t.turns} question{t.turns === 1 ? '' : 's'} · {fmtWhen(t.updated_at)}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteThread(t)}
+                    aria-label={`Delete conversation: ${t.title || 'Untitled'}`}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: 4, color: 'var(--text-2)', flexShrink: 0,
+                    }}
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -242,3 +242,29 @@ class TestCallContext:
         """Accounting must never be the reason a model call fails."""
         ai_usage.bind(user_id=None, endpoint="test")
         ai_usage.record(model="x/y:free", latency_ms=10, ok=False, error="boom")
+
+
+class TestConversationHistory:
+    """
+    The reported symptom: "why does it not save historical data". The turns were
+    being written to studio_turns all along — the client kept them in component
+    state, never sent thread_id back, and never read the threads endpoints. So
+    every question opened a fresh thread and every refresh looked like amnesia.
+    """
+
+    def test_a_short_followup_borrows_the_previous_question(self):
+        """"What about the second one?" has no searchable subject of its own."""
+        history = [{"question": "What are the payment terms in the MSA?", "answer": "Net 30."}]
+        expanded = studio_ask.expand_query("and the second one?", history)
+        assert "payment" in expanded
+        assert "second" in expanded
+
+    def test_a_complete_question_is_left_alone(self):
+        """Padding a well-formed question with older terms drags retrieval
+        off-topic — the question is already its own best query."""
+        q = "What is the termination notice period in the Britannia agreement?"
+        assert studio_ask.expand_query(q, [{"question": "unrelated earlier thing"}]) == q
+
+    def test_the_first_question_has_nothing_to_borrow(self):
+        assert studio_ask.expand_query("payment terms?", None) == "payment terms?"
+        assert studio_ask.expand_query("payment terms?", []) == "payment terms?"
