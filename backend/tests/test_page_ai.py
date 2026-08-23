@@ -490,3 +490,55 @@ class TestPromptForbidsTheCollapse:
         from app.services.page_ai import _HTML_RULES
         assert "min-content" in _HTML_RULES
         assert "margin-inline" in _HTML_RULES
+
+
+class TestDesignDirections:
+    """
+    A weak model given "make it look good" produces the same page every time —
+    Inter, a purple gradient hero, rounded cards, everything centred. So it is
+    not asked to invent an identity; it is handed one and asked to build with it.
+    """
+
+    def test_a_brief_picks_the_direction_it_implies(self):
+        from app.services import page_design
+        assert page_design.pick("a dark developer portfolio").key == "nightfall"
+        assert page_design.pick("a finance analytics dashboard").key == "technical"
+        assert page_design.pick("a long-form magazine article").key == "editorial"
+
+    def test_an_explicit_choice_always_wins(self):
+        from app.services import page_design
+        assert page_design.pick("a dark developer portfolio", "warm").key == "warm"
+
+    def test_an_unknown_choice_falls_back_to_the_brief(self):
+        from app.services import page_design
+        assert page_design.pick("a finance dashboard", "neon-vaporwave").key == "technical"
+
+    def test_an_unmatched_brief_rotates_instead_of_defaulting(self):
+        """Five pages from one person should not be five variations of one look."""
+        from app.services import page_design
+        seen = {page_design.pick("a page about a thing").key for _ in range(60)}
+        assert len(seen) > 1
+
+    def test_every_direction_carries_a_complete_token_set(self):
+        from app.services import page_design
+        for d in page_design.DIRECTIONS:
+            for token in ("--ground", "--surface", "--ink", "--muted", "--accent",
+                          "--radius", "--font-body", "--measure"):
+                assert token in d.tokens, f"{d.key} is missing {token}"
+            assert d.fonts_href.startswith("https://fonts.googleapis.com/")
+
+    def test_the_scaffold_tells_the_model_to_use_tokens_not_hex(self):
+        from app.services import page_design
+        scaffold = page_design.scaffold(page_design.BY_KEY["editorial"])
+        assert "never a raw hex value" in scaffold
+        assert "Fraunces" in scaffold
+
+    def test_html_generation_carries_a_direction_and_markdown_does_not(self):
+        from app.services.page_ai import _rules_for
+        assert "DESIGN DIRECTION" in _rules_for("html", "a landing page")
+        assert "DESIGN DIRECTION" not in _rules_for("markdown", "a report")
+
+    def test_the_catalogue_is_renderable_by_the_editor(self):
+        from app.services import page_design
+        for entry in page_design.catalogue():
+            assert entry["key"] and entry["label"] and entry["summary"]

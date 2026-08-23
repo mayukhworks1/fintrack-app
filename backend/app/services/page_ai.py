@@ -15,6 +15,7 @@ import json
 import re
 from typing import Any, AsyncIterator
 
+from . import page_design
 from .openrouter import (
     _try_chat,
     _stream_post_with_retries,
@@ -165,7 +166,22 @@ _MARKDOWN_RULES = """You generate well-structured Markdown documents.
 - Keep any embedded HTML minimal; it is rendered through a restricted renderer."""
 
 
-def _rules_for(content_type: str) -> str:
+def _rules_for(content_type: str, brief: str = "", style: str | None = None) -> str:
+    """
+    The system prompt, with a design direction appended for HTML.
+
+    The direction goes last on purpose. A weak model follows the end of a long
+    prompt more reliably than the middle, and the visual identity is the part
+    that decides whether the page looks designed or generated.
+    """
+    base = _rules_for_base(content_type)
+    if content_type != "html":
+        return base
+    direction = page_design.pick(brief, style)
+    return f"{base}\n\n{page_design.scaffold(direction)}"
+
+
+def _rules_for_base(content_type: str) -> str:
     return _MARKDOWN_RULES if content_type == "markdown" else _HTML_RULES
 
 
@@ -421,6 +437,7 @@ async def generate_page(
     prompt: str,
     content_type: str = "html",
     existing: str | None = None,
+    style: str | None = None,
 ) -> dict:
     """
     Generate or revise a page.
@@ -439,9 +456,13 @@ async def generate_page(
     if content_type not in ("html", "markdown"):
         raise ValueError("AI generation supports the Web Page and Document types.")
 
-    messages = [{"role": "system", "content": _rules_for(content_type)}]
+    messages = [{"role": "system", "content": _rules_for(content_type, prompt, style)}]
 
     if existing and existing.strip():
+        # Revising: the document already has a visual identity, and issuing a
+        # fresh direction here is how "make the hero darker" comes back as a
+        # different site altogether.
+        messages[0]["content"] = _rules_for_base(content_type)
         base = existing.strip()
         if len(base) > MAX_EXISTING_CHARS:
             raise ValueError(

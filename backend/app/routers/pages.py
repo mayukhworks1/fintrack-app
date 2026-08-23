@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from ..config import settings
 from ..db import valkey as vk
 from ..db.postgres import get_pool
+from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from .deps import require_auth
@@ -424,6 +425,9 @@ class PreviewBody(BaseModel):
 class AIGenerateBody(BaseModel):
     prompt:       str
     content_type: str = "html"
+    # Which visual direction to build in. Omitted lets the server pick from
+    # the brief, which is better than every page looking the same.
+    style:        str | None = None
     # When present the model revises this document instead of starting fresh,
     # which is what lets an author iterate on a design across several prompts.
     existing:     str | None = None
@@ -510,6 +514,12 @@ async def create_page(
         return _page_dict(row)
 
 
+@router.get("/api/pages/ai/styles")
+async def list_styles(role: str = Depends(require_auth)):
+    """The design directions a page can be generated in."""
+    return {"styles": page_design.catalogue()}
+
+
 @router.post("/api/pages/ai-generate")
 async def ai_generate_page(
     body: AIGenerateBody,
@@ -528,6 +538,7 @@ async def ai_generate_page(
             prompt=body.prompt,
             content_type=body.content_type,
             existing=body.existing,
+            style=body.style,
         )
     except ValueError as e:
         # Prompt/validation problems are the caller's to fix, not server faults.

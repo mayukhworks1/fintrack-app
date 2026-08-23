@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useConfirm } from '../context/ConfirmContext'
 import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
+import StreamingDraft from '../components/StreamingDraft'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -1657,6 +1658,10 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
               ))}
             </div>
           )}
+          <StreamingDraft
+            content={streamDraft}
+            label={mode === 'section-edit' ? 'Rewriting the section' : 'Writing the page'}
+          />
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, height:3, borderRadius:2, background:'var(--border)', overflow:'hidden' }}>
               <div style={{ width:'100%', height:'100%', background:'var(--accent, #3b82f6)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
