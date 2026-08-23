@@ -10,7 +10,7 @@ every path, not just the happy one.
 
 import pytest
 
-from app.services import studio_data
+from app.services import studio_analyst, studio_data
 from app.services.studio_data import SpecError, build
 
 
@@ -211,3 +211,76 @@ class TestValueFormatting:
     def test_survives_a_non_numeric_value(self):
         from app.services.studio_analyst import format_value
         assert format_value(None, "currency") == "None"
+
+
+class TestSpecExtraction:
+    """
+    "What are current outstanding?" came back as "I could not turn that into a
+    query. Try rephrasing it." — for a question the model was answering
+    correctly. The extractor was a single greedy `\\{.*\\}`, which spans from the
+    first brace in the response to the last, so anything else braced in the
+    reply swallowed the spec and broke the parse. Rephrasing could not have
+    helped, which is what made the message actively misleading.
+    """
+
+    GOOD = ('{"dataset":"invoices","metric":"total_outstanding","dimensions":[],'
+            '"period":"all_time","sort":"metric_desc","limit":10,"chart":"table"}')
+
+    def _metric(self, raw):
+        return studio_analyst.parse_spec(raw)["metric"]
+
+    def test_a_bare_spec_still_parses(self):
+        assert self._metric(self.GOOD) == "total_outstanding"
+
+    def test_code_fences_are_stripped(self):
+        assert self._metric(f"```json\n{self.GOOD}\n```") == "total_outstanding"
+
+    def test_prose_on_either_side_is_ignored(self):
+        assert self._metric(f"Sure! Here it is:\n{self.GOOD}") == "total_outstanding"
+        assert self._metric(f"{self.GOOD}\n\nThat gives your total.") == "total_outstanding"
+
+    def test_a_reasoning_trace_full_of_braces_is_discarded(self):
+        raw = ("<think>Candidates are {total_raised, total_outstanding}; "
+               "outstanding is the one asked for.</think>\n" + self.GOOD)
+        assert self._metric(raw) == "total_outstanding"
+
+    def test_a_brace_in_prose_no_longer_swallows_the_spec(self):
+        raw = "The metric key is {total_outstanding}. Spec:\n" + self.GOOD
+        assert self._metric(raw) == "total_outstanding"
+
+    def test_a_trailing_note_no_longer_swallows_the_spec(self):
+        assert self._metric(self.GOOD + "\nNote: use {month} to group.") == "total_outstanding"
+
+    def test_an_example_object_is_skipped_for_the_real_spec(self):
+        """The first balanced object is not automatically the answer."""
+        raw = 'For example {"limit": 5} would cap it. Answer:\n' + self.GOOD
+        assert self._metric(raw) == "total_outstanding"
+
+    def test_a_brace_inside_a_string_value_does_not_break_counting(self):
+        raw = '{"dataset":"invoices","metric":"total_outstanding","note":"use {x}"}'
+        assert self._metric(raw) == "total_outstanding"
+
+    def test_an_escaped_quote_inside_a_string_does_not_break_counting(self):
+        raw = r'{"dataset":"invoices","metric":"total_outstanding","note":"a \"q\" {y}"}'
+        assert self._metric(raw) == "total_outstanding"
+
+    def test_a_refusal_object_is_returned_rather_than_treated_as_junk(self):
+        spec = studio_analyst.parse_spec('{"error":"no such metric"}')
+        assert spec["error"] == "no such metric"
+
+    def test_a_response_with_no_json_at_all_still_fails(self):
+        with pytest.raises(studio_data.SpecError):
+            studio_analyst.parse_spec("I am unable to help with that request.")
+
+    def test_the_failure_message_suggests_something_actionable(self):
+        """"Try rephrasing it" alone gave the user nothing to act on."""
+        with pytest.raises(studio_data.SpecError) as exc:
+            studio_analyst.parse_spec("no json here")
+        assert "outstanding by project" in str(exc.value)
+
+    def test_the_extracted_spec_compiles_to_real_sql(self):
+        """End to end: the reported question, through parse and compile."""
+        compiled = studio_data.build(studio_analyst.parse_spec(self.GOOD), None)
+        assert compiled.columns == ["value"]
+        assert "invoices_mirror" in compiled.sql
+        assert compiled.metric.unit == "currency"

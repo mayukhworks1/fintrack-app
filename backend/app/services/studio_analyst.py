@@ -58,28 +58,96 @@ def _system_prompt() -> str:
     )
 
 
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
+# Reasoning traces are stripped before the JSON is looked for. Several models in
+# the free cascade emit them even with reasoning excluded, and their contents are
+# full of braces.
+_THINK_BLOCK = re.compile(r"<(think|thinking|reasoning)>.*?</\1>", re.DOTALL | re.IGNORECASE)
+
+# Keys that mark a candidate object as the spec rather than some other object
+# the model happened to write on the way there.
+_SPEC_KEYS = frozenset({"dataset", "metric", "error"})
+
+
+def _json_candidates(text: str):
+    """
+    Yield every balanced {...} span in `text`, outermost first, left to right.
+
+    The previous implementation was a single greedy `\\{.*\\}`, which spans from
+    the first brace in the response to the last. That works only when the JSON
+    is the sole braced thing present. It is not: models narrate ("the metric key
+    is {total_outstanding}"), show an example spec before the real one, append a
+    closing note, or emit a reasoning trace — and in every one of those cases the
+    greedy span swallowed prose and failed to parse, producing "I could not turn
+    that into a query" for a question the model had in fact answered correctly.
+
+    Brace counting is string-aware, so a brace inside a JSON string value does
+    not throw off the depth.
+    """
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    yield text[start:i + 1]
+                    start = -1
 
 
 def parse_spec(raw: str) -> dict:
     """
     Pull the spec out of whatever the model wrapped it in.
 
-    Free models add prose and code fences despite instructions, so the JSON is
-    located rather than assumed to be the whole response.
+    Free models add prose, code fences and reasoning despite instructions, so
+    the JSON is located rather than assumed to be the whole response. Candidates
+    are tried in order and the first one that both parses and looks like a spec
+    wins — an example object the model wrote before its real answer is skipped
+    rather than being mistaken for it.
     """
-    text = (raw or "").strip()
-    text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
-    match = _JSON_BLOCK.search(text)
-    if not match:
-        raise studio_data.SpecError("I could not turn that into a query. Try rephrasing it.")
-    try:
-        spec = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        raise studio_data.SpecError("I could not turn that into a query. Try rephrasing it.")
-    if not isinstance(spec, dict):
-        raise studio_data.SpecError("I could not turn that into a query. Try rephrasing it.")
-    return spec
+    text = _THINK_BLOCK.sub(" ", (raw or "").strip())
+    text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text.strip()).strip()
+
+    fallback: dict | None = None
+    for candidate in _json_candidates(text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if _SPEC_KEYS & parsed.keys():
+            return parsed
+        # Parsed, but carries none of the keys that identify a spec. Keep it in
+        # case nothing better turns up, so a model that renames a key still gets
+        # a specific validation error from build() instead of this generic one.
+        if fallback is None:
+            fallback = parsed
+
+    if fallback is not None:
+        return fallback
+
+    logger.warning("analyst: no spec JSON in model response: %r", (raw or "")[:400])
+    raise studio_data.SpecError(
+        "I could not turn that into a query. Try naming the measure and the "
+        "grouping directly — for example, \"total outstanding by project\"."
+    )
 
 
 def format_value(value, unit: str) -> str:
