@@ -9,7 +9,7 @@ exhausting a shared free-tier account.
 
 import pytest
 
-from app.services import studio_docs, studio_ask, studio_usage
+from app.services import ai_usage, studio_docs, studio_ask
 
 
 class TestFileTypeGate:
@@ -187,20 +187,58 @@ class TestAskValidation:
 @pytest.mark.asyncio
 class TestQuota:
     """
-    Every model in the cascade is on OpenRouter's free tier, which is limited
-    per account rather than per user — so one person's retry loop degrades the
-    assistant for everyone.
+    The reported symptom: the UI showed "0 of 200 AI calls used today" and never
+    moved. The cause was that ai_traces was written from exactly one call site —
+    the /api/ai/chat handler — so Studio questions, streaming chat, reports and
+    page generation were all invisible to it. Accounting now happens inside
+    _try_chat, the one function every model call passes through.
     """
 
-    async def test_an_anonymous_caller_is_not_metered(self):
-        """No user id means no auth_users row to account against."""
-        state = await studio_usage.quota_state(None)
+    async def test_an_unmetered_caller_says_so_rather_than_reporting_zero(self):
+        """A legacy password session has no user row to count against. Showing
+        a confident "0 of 200" for a limit that will never be enforced is the
+        dishonesty this flag exists to prevent."""
+        state = await ai_usage.quota_state(None)
+        assert state["metered"] is False
         assert state["allowed"] is True
-        assert state["limit"] == studio_usage.DAILY_CALL_LIMIT
 
     async def test_usage_is_zero_without_a_database(self):
-        usage = await studio_usage.usage_for(None)
-        assert usage == {"calls": 0, "prompt_tokens": 0, "answer_tokens": 0, "avg_latency_ms": 0}
+        usage = await ai_usage.usage_for(None)
+        assert usage["calls"] == 0 and usage["failed"] == 0
 
     async def test_breakdown_degrades_to_empty(self):
-        assert await studio_usage.breakdown() == []
+        assert await ai_usage.breakdown() == []
+
+    async def test_model_health_degrades_to_empty(self):
+        assert await ai_usage.model_health() == []
+
+
+class TestLimits:
+    def test_limit_comes_from_settings_not_a_constant(self, monkeypatch):
+        """Raising a limit must be an environment change, not a redeploy."""
+        monkeypatch.setattr(ai_usage.settings, "ai_daily_call_limit", 500)
+        assert ai_usage.limit_for(None) == 500
+
+    def test_a_role_can_have_its_own_ceiling(self, monkeypatch):
+        monkeypatch.setattr(ai_usage.settings, "ai_daily_limit_by_role",
+                            {"viewer": 25, "admin": 2000})
+        assert ai_usage.limit_for("viewer") == 25
+        assert ai_usage.limit_for("admin") == 2000
+        assert ai_usage.limit_for("manager") == ai_usage.settings.ai_daily_call_limit
+
+    def test_a_malformed_override_falls_back_rather_than_raising(self, monkeypatch):
+        monkeypatch.setattr(ai_usage.settings, "ai_daily_limit_by_role", {"viewer": "many"})
+        assert ai_usage.limit_for("viewer") == ai_usage.settings.ai_daily_call_limit
+
+
+class TestCallContext:
+    def test_binding_attributes_calls_to_the_current_request(self):
+        ai_usage.bind(user_id="u-1", endpoint="/api/studio/ask", request_id="r-9")
+        ctx = ai_usage.current()
+        assert ctx.user_id == "u-1"
+        assert ctx.endpoint == "/api/studio/ask"
+
+    def test_recording_without_a_pool_never_raises(self):
+        """Accounting must never be the reason a model call fails."""
+        ai_usage.bind(user_id=None, endpoint="test")
+        ai_usage.record(model="x/y:free", latency_ms=10, ok=False, error="boom")

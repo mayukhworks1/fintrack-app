@@ -119,6 +119,17 @@ class Settings(BaseSettings):
     # OpenRouter embedding model for pgvector RAG.
     openrouter_embed_model: str = "openai/text-embedding-3-small"
     # Optional LangSmith tracing (set LANGCHAIN_API_KEY + LANGCHAIN_TRACING_V2=true)
+    # ── AI usage limits ────────────────────────────────────────────────────
+    # Calls per user per rolling 24 hours, across every AI feature. Every model
+    # in the cascade is on OpenRouter's free tier, which is rate-limited per
+    # ACCOUNT rather than per user, so one person's retry loop degrades the
+    # assistant for everyone. Set AI_DAILY_CALL_LIMIT to change it without a
+    # code change.
+    ai_daily_call_limit: int = 200
+    # Optional per-role ceilings, e.g. {"viewer": 50, "admin": 1000}. Read on
+    # every check, so a change takes effect on restart rather than redeploy.
+    ai_daily_limit_by_role: dict[str, int] = {}
+
     langchain_api_key:    Optional[str] = None
     langchain_tracing_v2: bool = False
     langchain_project:    str = "fintrack"

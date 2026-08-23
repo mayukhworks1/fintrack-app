@@ -493,9 +493,16 @@ export default function Studio() {
         )}
       </div>
 
-      {quota && quota.limit > 0 && (
-        <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-2)', textAlign: 'right' }}>
-          {quota.used} of {quota.limit} AI calls used today
+      {/* Only claimed when the number is real. `metered` is false for a session
+          with no user row behind it, where a confident "0 of 200" would be a
+          count of a limit the server never intends to enforce. */}
+      {quota && quota.metered && quota.limit > 0 && (
+        <div style={{
+          marginTop: 12, fontSize: 11, textAlign: 'right',
+          color: quota.remaining <= 10 ? '#b45309' : 'var(--text-2)',
+        }}>
+          {quota.used} of {quota.limit} AI calls used in the last 24 hours
+          {quota.remaining <= 10 && ` · ${quota.remaining} left`}
         </div>
       )}
     </div>

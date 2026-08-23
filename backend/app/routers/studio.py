@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from ..db.postgres import get_pool
-from ..services import storage, studio_ask, studio_docs, studio_usage
+from ..services import ai_usage, storage, studio_ask, studio_docs
 from .deps import require_auth, require_permission, owner_scope_email
 
 logger = logging.getLogger("fintrack.studio")
@@ -268,7 +268,7 @@ async def ask(
     _require_email_auth(request)
     user_id = _user_id(request)
 
-    quota = await studio_usage.quota_state(user_id)
+    quota = await ai_usage.quota_state(user_id, getattr(request.state, 'auth_role', None))
     if not quota["allowed"]:
         raise HTTPException(
             429,
@@ -317,7 +317,7 @@ async def ask(
             # transcript could not be written.
             logger.warning("studio: could not persist turn: %s", exc)
 
-    result["quota"] = await studio_usage.quota_state(user_id)
+    result["quota"] = await ai_usage.quota_state(user_id, getattr(request.state, 'auth_role', None))
     return result
 
 
@@ -419,8 +419,8 @@ async def my_usage(
     _require_email_auth(request)
     user_id = _user_id(request)
     return {
-        "usage": await studio_usage.usage_for(user_id),
-        "quota": await studio_usage.quota_state(user_id),
+        "usage": await ai_usage.usage_for(user_id),
+        "quota": await ai_usage.quota_state(user_id, getattr(request.state, 'auth_role', None)),
     }
 
 
@@ -433,4 +433,4 @@ async def all_usage(
 ):
     """Who is spending the AI budget. Gated on the existing audit permission."""
     _require_email_auth(request)
-    return {"hours": hours, "users": await studio_usage.breakdown(hours=hours)}
+    return {"hours": hours, "users": await ai_usage.breakdown(hours=hours)}

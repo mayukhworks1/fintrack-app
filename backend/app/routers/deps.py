@@ -100,6 +100,20 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     request.state.auth_teable_email = row["teable_email"] or row["email"]
     request.state.auth_role        = auth_role
     request.state.is_email_auth    = True
+
+    # Attribute every model call made while serving this request. Bound here
+    # rather than in middleware because that runs before auth resolves, so the
+    # user is not known yet. Dependencies share the endpoint's task, so the
+    # contextvar reaches _try_chat without being threaded through call sites.
+    try:
+        from ..services import ai_usage
+        ai_usage.bind(
+            user_id=str(row["user_id"]),
+            endpoint=request.url.path[:60],
+            request_id=getattr(request.state, "request_id", None),
+        )
+    except Exception:
+        pass
     try:
         await pool.execute(
             """

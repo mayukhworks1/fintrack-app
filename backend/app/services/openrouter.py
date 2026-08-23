@@ -28,6 +28,7 @@ import base64
 import io
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import AsyncIterator
 from typing import Any, Optional
@@ -280,6 +281,28 @@ def _heuristic_strip(content: str) -> str:
 
 
 # ── HTTP layer ────────────────────────────────────────────────────────
+def _meter(model: str, started: float, tokens: dict | None = None,
+           ok: bool = True, error: str | None = None) -> None:
+    """
+    Record one model attempt.
+
+    Imported lazily to keep this module free of a database dependency: the
+    OpenRouter client is used by tests and scripts that never open a pool, and
+    accounting must never be the reason a model call fails.
+    """
+    try:
+        from . import ai_usage
+        ai_usage.record(
+            model=model,
+            latency_ms=int((time.time() - started) * 1000),
+            tokens=tokens if isinstance(tokens, dict) else None,
+            ok=ok,
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 def _make_headers() -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -369,6 +392,7 @@ async def _try_chat(
     errors: list[str] = []
 
     for spec in (models if models is not None else _ordered_models()):
+        attempt_started = time.time()
         try:
             payload: dict[str, Any] = {
                 "model": spec.id,
@@ -422,17 +446,22 @@ async def _try_chat(
 
             content = _extract_answer(raw) if extract else raw.strip()
             if not content:
+                _meter(spec.id, attempt_started, ok=False,
+                       error="response had no extractable answer")
                 errors.append(f"{_short(spec.id)}: response had no extractable answer")
                 continue
 
+            _meter(spec.id, attempt_started, tokens=data.get("usage"), ok=True)
             return {"content": content, "model": spec.id, "model_short": _short(spec.id)}
 
         except (httpx.TimeoutException, httpx.ConnectError):
+            _meter(spec.id, attempt_started, ok=False, error="timeout/network")
             errors.append(f"{_short(spec.id)}: timeout/network")
             continue
         except ValueError:
             raise
         except Exception as e:
+            _meter(spec.id, attempt_started, ok=False, error=str(e))
             errors.append(f"{_short(spec.id)}: {str(e)[:100]}")
             continue
 
