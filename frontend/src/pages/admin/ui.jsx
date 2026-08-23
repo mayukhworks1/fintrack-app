@@ -404,7 +404,11 @@ export function FilterBar({ children, count, onReset, rightSlot }) {
 // ── Purge confirmation modal ──────────────────────────────────────────────────
 
 export function PurgeModal({ onConfirm, onCancel, purging, result }) {
-  const dialog = useDialog({ label: 'Purge records', onClose })
+  // onCancel, not onClose: this component names its dismiss prop differently
+  // from the other dialogs, and passing the wrong identifier here is not a
+  // silent no-op — `onClose` is undeclared, so referencing it throws a
+  // ReferenceError that takes the whole admin tab down.
+  const dialog = useDialog({ label: 'Purge records', onClose: onCancel })
   // mode: 'hours' | 'days'
   const [mode,       setMode]  = useState('days')
   const [hours,      setHours] = useState(24)
