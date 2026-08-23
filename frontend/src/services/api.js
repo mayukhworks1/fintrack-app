@@ -769,6 +769,12 @@ export const api = {
     ask:           (data)      => request('/api/studio/ask', {
       method: 'POST', body: JSON.stringify(data), timeout: 120000,
     }, 0),
+    datasets:      ()          => request('/api/studio/datasets'),
+    // Two model calls (question → spec, then numbers → prose), so it takes the
+    // AI budget and no retries: a slow answer is not a failed one.
+    analyze:       (data)      => request('/api/studio/analyze', {
+      method: 'POST', body: JSON.stringify(data), timeout: 120000,
+    }, 0),
     threads:       ()          => request('/api/studio/threads'),
     thread:        (id)        => request(`/api/studio/threads/${id}`),
     deleteThread:  (id)        => request(`/api/studio/threads/${id}`, { method: 'DELETE' }),

@@ -12,11 +12,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Sparkles, FileText, Upload, Trash2, ChevronDown, ChevronRight,
-  AlertTriangle, CheckCircle2, Loader2, Quote, History,
+  AlertTriangle, CheckCircle2, Loader2, Quote, History, BarChart3,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useConfirm } from '../context/ConfirmContext'
 import { usePageMeta } from '../hooks/usePageMeta'
+import DataAnswer from '../components/DataAnswer'
 
 const ACCEPTED = '.pdf,.txt,.md,.markdown,.csv,.json,.log'
 
@@ -204,6 +205,11 @@ export default function Studio() {
     try { return new URLSearchParams(window.location.search).get('t') || null } catch { return null }
   })
   const [historyOpen, setHistoryOpen] = useState(false)
+  // 'documents' searches uploaded files; 'data' queries the finance tables.
+  // Two different engines behind one box, so the mode is explicit rather than
+  // guessed from the wording — a wrong guess wastes a call and confuses the
+  // answer.
+  const [mode, setMode] = useState('documents')
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState('')
   const [quota, setQuota] = useState(null)
@@ -368,7 +374,9 @@ export default function Studio() {
     if (!q || asking) return
     setAsking(true); setError('')
     try {
-      const res = await api.studio.ask({
+      const res = mode === 'data'
+        ? await api.studio.analyze({ question: q, thread_id: threadId || undefined })
+        : await api.studio.ask({
         question: q,
         document_ids: selected.size ? Array.from(selected) : undefined,
         // Continuing a conversation rather than starting a new one on every
@@ -419,13 +427,42 @@ export default function Studio() {
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10,
       }}>
+        {/* Which engine answers. Explicit rather than inferred from wording —
+            guessing wrong costs a model call and returns a confusing answer. */}
+        <div style={{ display: 'flex', gap: 6 }} role="tablist" aria-label="What to ask about">
+          {[
+            { key: 'documents', label: 'Documents', Icon: FileText },
+            { key: 'data', label: 'Finance data', Icon: BarChart3 },
+          ].map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={mode === key}
+              onClick={() => setMode(key)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                cursor: 'pointer',
+                border: `1px solid ${mode === key ? 'var(--accent)' : 'var(--border)'}`,
+                background: mode === key ? 'var(--accent)' : 'var(--bg-base)',
+                color: mode === key ? '#fff' : 'var(--text-2)',
+              }}
+            >
+              <Icon size={13} aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+
         <textarea
           value={question}
           onChange={e => setQuestion(e.target.value)}
           onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleAsk() }}
-          placeholder={ready.length
-            ? 'What are the payment terms in the Britannia agreement?'
-            : 'Upload a document below to get started.'}
+          placeholder={mode === 'data'
+            ? 'Which clients have the most outstanding this year?'
+            : ready.length
+              ? 'What are the payment terms in the Britannia agreement?'
+              : 'Upload a document below to get started.'}
           rows={3}
           disabled={asking}
           aria-label="Your question"
@@ -438,13 +475,15 @@ export default function Studio() {
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
-            {selected.size > 0
-              ? `Searching ${selected.size} selected document${selected.size === 1 ? '' : 's'}`
-              : `Searching all ${ready.length} document${ready.length === 1 ? '' : 's'}`}
+            {mode === 'data'
+              ? 'Querying your invoices and projects'
+              : selected.size > 0
+                ? `Searching ${selected.size} selected document${selected.size === 1 ? '' : 's'}`
+                : `Searching all ${ready.length} document${ready.length === 1 ? '' : 's'}`}
           </span>
           <button
             onClick={handleAsk}
-            disabled={asking || !question.trim() || !ready.length}
+            disabled={asking || !question.trim() || (mode === 'documents' && !ready.length)}
             style={{
               marginLeft: 'auto', padding: '9px 18px', borderRadius: 8, border: 'none',
               background: (asking || !question.trim() || !ready.length) ? 'var(--border)' : 'var(--accent)',
@@ -467,7 +506,7 @@ export default function Studio() {
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)' }}>
                 {turn.question}
               </div>
-              <Answer turn={turn} />
+              {turn.kind === 'data' ? <DataAnswer turn={turn} /> : <Answer turn={turn} />}
             </div>
           ))}
         </div>

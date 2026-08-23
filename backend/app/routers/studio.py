@@ -24,8 +24,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from ..db.postgres import get_pool
-from ..services import ai_usage, storage, studio_ask, studio_docs
-from .deps import require_auth, require_permission, owner_scope_email
+from ..services import ai_usage, storage, studio_analyst, studio_ask, studio_data, studio_docs
+from .deps import (require_auth, require_permission, owner_scope_email,
+                   get_effective_permissions)
 
 logger = logging.getLogger("fintrack.studio")
 
@@ -53,6 +54,65 @@ def _safe_name(name: str) -> str:
     stem = (name or "file").rsplit(".", 1)[0]
     slug = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-")
     return slug[:40] or "file"
+
+
+async def _permitted_datasets(request: Request) -> set[str]:
+    """
+    Which analyst datasets this user may query.
+
+    Each dataset declares the module permission its data already sits behind, so
+    the analyst grants nothing new — it is another view of records the person can
+    already open. A superadmin passes everything, matching require_permission.
+    """
+    if (getattr(request.state, "auth_role", "") or "") == "superadmin":
+        return set(studio_data.DATASETS)
+    granted = await get_effective_permissions(_user_id(request))
+    return {k for k, ds in studio_data.DATASETS.items() if ds.permission in granted}
+
+
+async def _persist_turn(request: Request, thread_id: str | None,
+                        question: str, result: dict) -> None:
+    """
+    Record the exchange. Shared by /ask and /analyze so both kinds of question
+    land in the same conversation rather than two parallel histories.
+    """
+    pool = get_pool()
+    if not pool:
+        return
+    try:
+        if not thread_id:
+            row = await pool.fetchrow(
+                """
+                INSERT INTO studio_threads (title, created_by, owner_email)
+                VALUES ($1, $2::uuid, $3) RETURNING id
+                """,
+                question[:200], _user_id(request),
+                getattr(request.state, "auth_user_email", None),
+            )
+            thread_id = str(row["id"])
+        await pool.execute(
+            """
+            INSERT INTO studio_turns
+                (thread_id, question, answer, model, verdict, sources, latency_ms)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7)
+            """,
+            thread_id, question, result.get("answer", ""), result.get("model", ""),
+            result.get("verdict") or result.get("kind") or "data",
+            json.dumps(result.get("sources") or []), result.get("latency_ms"),
+        )
+        await pool.execute(
+            "UPDATE studio_threads SET updated_at = NOW() WHERE id = $1::uuid", thread_id
+        )
+        result["thread_id"] = thread_id
+    except Exception as exc:
+        # A question that was answered must not fail because the transcript
+        # could not be written.
+        logger.warning("studio: could not persist turn: %s", exc)
+
+
+class AnalyzeBody(BaseModel):
+    question: str
+    thread_id: str | None = None
 
 
 class AskBody(BaseModel):
@@ -337,6 +397,83 @@ async def ask(
             logger.warning("studio: could not persist turn: %s", exc)
 
     result["quota"] = await ai_usage.quota_state(user_id, getattr(request.state, 'auth_role', None))
+    return result
+
+
+@router.get("/datasets")
+async def list_datasets(
+    request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.studio.view")),
+):
+    """What the analyst can be asked about, filtered to what this user may see."""
+    _require_email_auth(request)
+    allowed = await _permitted_datasets(request)
+    return {
+        "datasets": [
+            {
+                "key": ds.key,
+                "label": ds.label,
+                "description": ds.description,
+                "metrics": [{"key": m.key, "label": m.label, "unit": m.unit}
+                            for m in ds.metrics.values()],
+                "dimensions": [{"key": d.key, "label": d.label} for d in ds.dimensions.values()],
+            }
+            for ds in studio_data.DATASETS.values() if ds.key in allowed
+        ],
+        "periods": list(studio_data.PERIODS),
+    }
+
+
+@router.post("/analyze")
+async def analyze(
+    body: AnalyzeBody,
+    request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.studio.ask")),
+):
+    """
+    Answer a question about the finance data.
+
+    Two gates sit in front of the model, and neither can be reached from the
+    spec: the dataset must be one this user already has the module permission
+    for, and the row scope is applied by the compiler from the session. The
+    analyst can never become a way around a permission somebody does not have.
+    """
+    _require_email_auth(request)
+    user_id = _user_id(request)
+
+    quota = await ai_usage.quota_state(user_id, getattr(request.state, "auth_role", None))
+    if not quota["allowed"]:
+        raise HTTPException(
+            429,
+            f"Daily AI limit reached ({quota['used']}/{quota['limit']} calls). "
+            "It resets on a rolling 24-hour window.",
+        )
+
+    try:
+        result = await studio_analyst.analyze(body.question, owner_scope_email(request))
+    except studio_data.SpecError as exc:
+        raise HTTPException(400, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        logger.exception("studio analyze failed")
+        raise HTTPException(502, f"Could not answer that: {exc}")
+
+    # Checked after compiling rather than before: the dataset is only known once
+    # the spec exists, and refusing here costs one model call rather than
+    # pre-emptively narrowing what can be asked.
+    allowed = await _permitted_datasets(request)
+    dataset_key = (result.get("spec") or {}).get("dataset")
+    if dataset_key not in allowed:
+        raise HTTPException(
+            403,
+            f"That question is about {dataset_key}, which your account cannot view.",
+        )
+
+    result["quota"] = await ai_usage.quota_state(user_id, getattr(request.state, "auth_role", None))
+    await _persist_turn(request, body.thread_id, body.question, result)
     return result
 
 
