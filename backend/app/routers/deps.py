@@ -18,11 +18,71 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, Header, HTTPException, Query, Request
 from ..db.postgres import get_pool
+from ..utils.tasks import spawn
 from .auth import verify_token
+
+logger = logging.getLogger("fintrack.deps")
+
+# How long a resolved permission set is trusted before it is re-read. Short
+# enough that revoking a permission takes effect while the admin is still
+# looking at the screen, long enough that a page holding two 10-second pollers
+# stops re-deriving the same set on every one of them.
+_PERM_TTL_SECONDS = 20.0
+
+# user_id -> (expires_at_monotonic, permissions)
+_perm_cache: dict[str, tuple[float, set[str]]] = {}
+
+
+def invalidate_permission_cache(user_id: str | None = None) -> None:
+    """
+    Drop cached permissions so the next request re-reads them.
+
+    Called by the admin endpoints that change a grant, so an edit to the
+    permission matrix does not wait out the TTL before it bites.
+    """
+    if user_id:
+        _perm_cache.pop(str(user_id), None)
+    else:
+        _perm_cache.clear()
+
+
+async def _touch_auth_session(session_id: str) -> None:
+    """
+    Bump last_seen_at / request_count out of band, at most once every 5 minutes
+    per session — mirroring db.audit.touch_session, which does exactly this for
+    login_sessions.
+    """
+    try:
+        from ..db.valkey import set_nx
+        if not await set_nx(f"auth_session_touch:{session_id}", "1", ttl=300):
+            return
+    except Exception:
+        # Valkey unavailable — fall through and write. Losing the rate limit is
+        # acceptable; losing last_seen_at entirely is not.
+        pass
+
+    pool = get_pool()
+    if not pool:
+        return
+    try:
+        await pool.execute(
+            """
+            UPDATE auth_sessions
+               SET last_seen_at  = NOW(),
+                   request_count = COALESCE(request_count, 0) + 1
+             WHERE id = $1::uuid
+            """,
+            session_id,
+        )
+    except Exception as exc:
+        logger.debug("auth session touch failed: %s", exc)
 
 
 def _get_token(
@@ -83,10 +143,27 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     if row["revoked_at"] is not None:
         raise HTTPException(status_code=401, detail="Session has been revoked")
     if row["expires_at"] is not None:
-        # DB-side NOW() comparison avoids timezone/local clock drift.
-        expired = await pool.fetchval("SELECT $1::timestamptz <= NOW()", row["expires_at"])
-        if expired:
-            raise HTTPException(status_code=401, detail="Session has expired")
+        # Compared in-process. This used to be `SELECT $1::timestamptz <= NOW()`
+        # — a whole round trip to Aiven to compare two timestamps we already
+        # held, paid on every authenticated request in the app. asyncpg returns
+        # expires_at tz-aware, so the comparison here is the same comparison;
+        # the drift it was guarding against is seconds, against an expiry
+        # measured in days.
+        expires_at = row["expires_at"]
+        if isinstance(expires_at, str):
+            # asyncpg hands back a datetime for timestamptz, so this is a
+            # belt-and-braces path. It is here because the alternative to
+            # parsing is an AttributeError inside the auth dependency, which
+            # would sign every user out at once.
+            try:
+                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            except ValueError:
+                expires_at = None
+        if expires_at is not None:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Session has expired")
     if row["status"] != "active":
         raise HTTPException(status_code=403, detail=f"User is {row['status']}")
 
@@ -114,18 +191,13 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
         )
     except Exception:
         pass
-    try:
-        await pool.execute(
-            """
-            UPDATE auth_sessions
-               SET last_seen_at = NOW(),
-                   request_count = COALESCE(request_count, 0) + 1
-             WHERE id = $1
-            """,
-            row["session_id"],
-        )
-    except Exception:
-        pass
+    # Bookkeeping, not authorisation — so it no longer blocks the response.
+    # This was an inline write on every single authenticated request: a WAL
+    # write plus a round trip before the handler had run a line, and repeated
+    # contention on one row per active session. login_sessions has had the
+    # rate-limited fire-and-forget treatment for the same job all along; this
+    # is the same pattern applied to auth_sessions.
+    spawn(_touch_auth_session(str(row["session_id"])), name="touch-auth-session")
     return {
         "session_id": str(row["session_id"]),
         "user_id": str(row["user_id"]),
@@ -262,10 +334,25 @@ async def require_superadmin(request: Request, role: str = Depends(require_auth)
 # associated user_id/auth_roles row and keep their existing coarse role gating
 # unchanged, so nothing here can lock out the legacy password logins.
 
-async def get_effective_permissions(user_id: str | None) -> set[str]:
-    """Resolve a user's effective permission_keys: union of their role(s) permissions, with per-user overrides applied."""
+async def get_effective_permissions(user_id: str | None, *, fresh: bool = False) -> set[str]:
+    """
+    Resolve a user's effective permission_keys: union of their role(s)
+    permissions, with per-user overrides applied.
+
+    Cached for _PERM_TTL_SECONDS. This query — a correlated subquery over every
+    permission row, grouped — ran on every permission-gated request, which is
+    nearly all of them, and its answer changes only when an admin edits the
+    matrix. Pass fresh=True where the current value must be authoritative.
+    """
     if not user_id:
         return set()
+
+    key = str(user_id)
+    if not fresh:
+        hit = _perm_cache.get(key)
+        if hit and hit[0] > time.monotonic():
+            return hit[1]
+
     pool = get_pool()
     if not pool:
         return set()
@@ -290,6 +377,14 @@ async def get_effective_permissions(user_id: str | None) -> set[str]:
         granted = r["override"] if r["override"] is not None else bool(r["from_role"])
         if granted:
             effective.add(r["permission_key"])
+
+    _perm_cache[key] = (time.monotonic() + _PERM_TTL_SECONDS, effective)
+    # The map is keyed by user and this is a single-worker process, so it stays
+    # small; the sweep only matters over a long uptime with many logins.
+    if len(_perm_cache) > 512:
+        now = time.monotonic()
+        for k in [k for k, (exp, _) in _perm_cache.items() if exp <= now]:
+            _perm_cache.pop(k, None)
     return effective
 
 

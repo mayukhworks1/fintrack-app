@@ -14,6 +14,7 @@ from ..db.attribution import empty_actor
 from ..db import valkey as vk
 from ..db.postgres import get_pool
 from ..utils.cache import cache
+from ..utils.tasks import spawn
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
 WEB_INVOICE_FIELD_IDS = {
@@ -628,11 +629,16 @@ class WebInvoiceService:
             created = data.get("records", [{}])[0]
             await _mirror_write_through(created.get("id"), created.get("fields"))
             if created.get("id"):
-                await self.touch_aging_for_record(
-                    created["id"],
-                    record_fields=created.get("fields") or {},
-                    attribute_system=False,
-                    allow_formula_touch=False,
+                # Same reasoning as update_invoice: a second external round
+                # trip the caller never reads, moved off the response.
+                spawn(
+                    self.touch_aging_for_record(
+                        created["id"],
+                        record_fields=created.get("fields") or {},
+                        attribute_system=False,
+                        allow_formula_touch=False,
+                    ),
+                    name="web-invoice-aging",
                 )
             return _apply_runtime_invoice_derivatives(created)
 
@@ -654,11 +660,20 @@ class WebInvoiceService:
             _bust_web_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
             await _mirror_write_through(record_id, updated.get("fields"))
-            await self.touch_aging_for_record(
-                record_id,
-                record_fields=updated.get("fields") or {},
-                attribute_system=False,
-                allow_formula_touch=False,
+            # Off the request path. This is a second round trip to Teable
+            # refreshing a derived aging field; its result was never returned
+            # to the caller and its failure was already only a log line, so
+            # every save was paying a full external round trip for something
+            # the user does not wait on. The value the client renders comes
+            # from _apply_runtime_invoice_derivatives, which is computed here.
+            spawn(
+                self.touch_aging_for_record(
+                    record_id,
+                    record_fields=updated.get("fields") or {},
+                    attribute_system=False,
+                    allow_formula_touch=False,
+                ),
+                name="web-invoice-aging",
             )
             return updated
 

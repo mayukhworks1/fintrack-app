@@ -44,7 +44,8 @@ from pydantic import BaseModel, Field
 from ..config import settings
 from ..db.postgres import get_pool
 from ..services.shared_views import SharedViewService
-from .deps import require_admin, require_auth, require_permission, require_superadmin
+from .deps import (invalidate_permission_cache, require_admin, require_auth,
+                   require_permission, require_superadmin)
 
 logger = logging.getLogger("fintrack.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -572,6 +573,7 @@ async def admin_approve_auth_user(
                 user_id,
                 role_id,
             )
+            invalidate_permission_cache(user_id)
             await _write_auth_admin_event(
                 conn,
                 request,
@@ -717,6 +719,7 @@ async def admin_reactivate_auth_user(
                     user_id,
                     role_id,
                 )
+                invalidate_permission_cache(user_id)
             await _write_auth_admin_event(
                 conn,
                 request,
@@ -765,6 +768,7 @@ async def admin_update_auth_user_role(
                 user_id,
                 role_id,
             )
+            invalidate_permission_cache(user_id)
             revoked = 0
             if body.revoke_sessions:
                 revoked = await conn.fetchval(
@@ -988,6 +992,7 @@ async def admin_delete_auth_user(
             await conn.execute("DELETE FROM auth_identities       WHERE user_id = $1::uuid", user_id)
             await conn.execute("DELETE FROM auth_password_resets  WHERE user_id = $1::uuid", user_id)
             await conn.execute("DELETE FROM auth_users            WHERE id = $1::uuid", user_id)
+    invalidate_permission_cache(user_id)
     return {"deleted": True, "email": user["email"]}
 
 
@@ -2928,6 +2933,7 @@ async def set_user_permission(
                 "DELETE FROM auth_user_permission_grants WHERE user_id = $1::uuid AND permission_id = $2",
                 user_id, perm["id"],
             )
+            invalidate_permission_cache(user_id)
             return {"status": "cleared", "user_id": user_id, "permission_key": permission_key}
 
         await conn.execute(
@@ -2938,6 +2944,7 @@ async def set_user_permission(
             """,
             user_id, perm["id"], body.granted,
         )
+        invalidate_permission_cache(user_id)
         return {"status": "granted" if body.granted else "denied", "user_id": user_id, "permission_key": permission_key}
 
 

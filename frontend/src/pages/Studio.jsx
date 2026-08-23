@@ -106,6 +106,12 @@ function DocRow({ doc, selected, onToggle, onDelete }) {
 function Answer({ turn }) {
   const [openSource, setOpenSource] = useState(null)
 
+  // Never trust the shape. A JSONB column read back without decoding arrives
+  // as a string, and `"[{...}]".find` is not a function — that TypeError took
+  // down the whole panel, not just the citation the reader clicked. The server
+  // decodes it properly now; this is what keeps a bad payload from being fatal.
+  const sources = Array.isArray(turn.sources) ? turn.sources : []
+
   // Turn [1] [2] markers into buttons that reveal the passage they point at.
   // The citation is only worth anything if the reader can check it.
   const parts = String(turn.answer || '').split(/(\[\d+\])/g)
@@ -120,7 +126,7 @@ function Answer({ turn }) {
           const m = part.match(/^\[(\d+)\]$/)
           if (!m) return <span key={i}>{part}</span>
           const n = Number(m[1])
-          const src = turn.sources?.find(s => s.n === n)
+          const src = sources.find(s => s.n === n)
           if (!src) return <span key={i}>{part}</span>
           return (
             <button
@@ -143,7 +149,7 @@ function Answer({ turn }) {
       </div>
 
       {openSource != null && (() => {
-        const src = turn.sources.find(s => s.n === openSource)
+        const src = sources.find(s => s.n === openSource)
         if (!src) return null
         return (
           <div style={{
@@ -177,7 +183,7 @@ function Answer({ turn }) {
         {turn.verdict === 'no-sources' && (
           <span style={{ color: '#b45309' }}>No matching passages found</span>
         )}
-        {turn.sources?.length > 0 && <span>{turn.sources.length} sources</span>}
+        {sources.length > 0 && <span>{sources.length} sources</span>}
         {turn.model && <span>{turn.model}</span>}
         {turn.latency_ms != null && <span>{(turn.latency_ms / 1000).toFixed(1)}s</span>}
       </div>
@@ -274,14 +280,21 @@ export default function Studio() {
       tone: 'danger',
     })
     if (!ok) return
+    // Drop it from the list first. The round trip to Aiven and back, plus the
+    // reload behind it, is long enough that a row you just confirmed deleting
+    // sits there looking like nothing happened. The list is restored if the
+    // server disagrees, so an optimistic removal never invents a success.
+    const before = threads
+    setThreads(list => list.filter(x => x.id !== t.id))
+    if (t.id === threadId) { setTurns([]); selectThread(null) }
     try {
       await api.studio.deleteThread(t.id)
-      if (t.id === threadId) { setTurns([]); selectThread(null) }
       loadThreads()
     } catch (err) {
+      setThreads(before)
       setError(err?.message || 'Could not delete that conversation.')
     }
-  }, [confirm, threadId, selectThread, loadThreads])
+  }, [confirm, threadId, threads, selectThread, loadThreads])
 
   const newConversation = useCallback(() => {
     setTurns([]); setError('')
@@ -391,11 +404,14 @@ export default function Studio() {
       tone: 'danger',
     })
     if (!ok) return
+    const before = docs
+    setDocs(list => list.filter(d => d.id !== doc.id))
+    setSelected(s => { const n = new Set(s); n.delete(doc.id); return n })
     try {
       await api.studio.deleteDocument(doc.id)
-      setSelected(s => { const n = new Set(s); n.delete(doc.id); return n })
       loadDocs()
     } catch (err) {
+      setDocs(before)
       setError(err?.message || 'Could not delete that document.')
     }
   }
