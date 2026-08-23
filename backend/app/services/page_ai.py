@@ -128,6 +128,13 @@ QUALITY BAR:
     their container open.
   - No fixed pixel widths on layout containers; use max-width with a
     percentage, or flex/grid.
+  - NEVER use width: min-content or max-width: min-content on a section, card
+    or block of text. It sizes the box to its narrowest possible width, so a
+    paragraph collapses into a one-word-per-line column. To constrain reading
+    width use max-width with a ch or rem value plus margin-inline: auto.
+  - A full-width section stays at its default block width. Centre its contents
+    with an inner wrapper that has max-width and margin-inline: auto — never by
+    shrinking the section itself.
 - Do not rely on the browser's default body margin — set your own spacing
   explicitly. The viewer resets body margin to zero.
 - Semantic HTML: header, nav, main, section, footer, h1-h6 in order.
@@ -278,6 +285,35 @@ _HIDDEN_RULE = re.compile(
 )
 
 
+# `width: min-content` on a text container sizes it to the narrowest possible
+# box — measured at 69px for a paragraph that should have been 512px. The viewer
+# resets `overflow-wrap: break-word`, so the text then breaks mid-word to fit,
+# and the result reads as a deliberate one-word-per-line column rather than as
+# the layout failure it is. Models reach for it when asked to make a page
+# "responsive"; it is almost never what a block of prose wants.
+_MIN_CONTENT_WIDTH = re.compile(
+    r"(?<![\w-])(max-width|width)\s*:\s*min-content\s*(?=[;}])", re.IGNORECASE
+)
+
+
+def repair_layout_collapse(html: str) -> tuple[str, int]:
+    """
+    Neutralise width declarations that collapse a container to nothing.
+
+    Generated output is ours to clean — the same licence under which fences are
+    stripped and truncation is caught. `width` becomes `auto` and `max-width`
+    becomes `100%`, both of which are what the rule was reaching for. Only
+    min-content is touched: `fit-content` is a legitimate way to shrink a button
+    to its label, and rewriting it would break working pages.
+    """
+    def swap(match: re.Match) -> str:
+        prop = match.group(1).lower()
+        return "max-width: 100%" if prop == "max-width" else "width: auto"
+
+    repaired, count = _MIN_CONTENT_WIDTH.subn(swap, html)
+    return repaired, count
+
+
 def find_fragile_patterns(html: str) -> list[str]:
     """
     Name the things that publish badly, without touching the document.
@@ -369,7 +405,14 @@ def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
     # Enrich assets: sanitize placeholder boxes/URLs and ensure real imagery/icons
     text = enrich_page_assets(text)
 
-    return text, find_fragile_patterns(text)
+    text, collapsed = repair_layout_collapse(text)
+    warnings = find_fragile_patterns(text)
+    if collapsed:
+        warnings.append(
+            f"{collapsed} width:min-content rule(s) that would have collapsed the "
+            "layout — replaced with a full-width equivalent"
+        )
+    return text, warnings
 
 
 # --- entry point -----------------------------------------------------------

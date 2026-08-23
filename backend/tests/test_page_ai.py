@@ -417,3 +417,76 @@ class TestInterviewQuestionValidation:
             {"text": "Also good?", "options": ["c", "d"]},
         ])
         assert [q["text"] for q in out] == ["Good?", "Also good?"]
+
+
+class TestLayoutCollapseRepair:
+    """
+    The reported failure: a generated page rendered as a ~70px column with the
+    prose broken one word per line, mid-word — "Sharm/a", "season/ed".
+
+    Measured in a real browser: `width: min-content` sized a paragraph that
+    should have been 512px to 69px. The viewer resets overflow-wrap:break-word,
+    so the text then breaks inside words to fit, and the collapse reads as a
+    deliberate narrow column rather than as the layout failure it is.
+
+    Measured alongside it and found innocent: `min-width: 0` on flex and grid
+    children, which the prompt recommends, left the paragraph at 630px.
+    """
+
+    def test_repairs_a_collapsing_width(self):
+        from app.services.page_ai import repair_layout_collapse
+        out, n = repair_layout_collapse("<style>.about p{width:min-content}</style>")
+        assert n == 1
+        assert "min-content" not in out
+        assert "width: auto" in out
+
+    def test_repairs_a_collapsing_max_width_to_full_width(self):
+        from app.services.page_ai import repair_layout_collapse
+        out, n = repair_layout_collapse("<style>.hero{max-width:min-content}</style>")
+        assert n == 1
+        assert "max-width: 100%" in out
+
+    def test_leaves_fit_content_alone(self):
+        """Shrinking a button to its label is legitimate; rewriting it would
+        break working pages."""
+        from app.services.page_ai import repair_layout_collapse
+        src = "<style>.btn{width:fit-content}</style>"
+        assert repair_layout_collapse(src) == (src, 0)
+
+    def test_leaves_min_width_alone(self):
+        """min-width:0 is what the prompt recommends and it measured harmless."""
+        from app.services.page_ai import repair_layout_collapse
+        src = "<style>.card{min-width:0}</style>"
+        assert repair_layout_collapse(src) == (src, 0)
+
+    def test_tolerates_whitespace_and_repairs_every_occurrence(self):
+        from app.services.page_ai import repair_layout_collapse
+        out, n = repair_layout_collapse(
+            "<style>a{width : min-content;color:red}b{width:min-content}</style>"
+        )
+        assert n == 2
+        assert "min-content" not in out
+        assert "color:red" in out
+
+    def test_generation_repairs_and_reports_it(self):
+        from app.services.page_ai import clean_output
+        out, warnings = clean_output(
+            "<!DOCTYPE html><html><head><style>.about p{width:min-content}</style>"
+            "</head><body><p>x</p></body></html>", "html")
+        assert "min-content" not in out
+        assert any("collapsed the layout" in w for w in warnings)
+
+    def test_a_healthy_page_is_untouched_and_unremarked(self):
+        from app.services.page_ai import clean_output
+        src = ("<!DOCTYPE html><html><head><style>.wrap{max-width:72ch;"
+               "margin-inline:auto}</style></head><body><p>x</p></body></html>")
+        out, warnings = clean_output(src, "html")
+        assert out == src
+        assert warnings == []
+
+
+class TestPromptForbidsTheCollapse:
+    def test_the_rule_that_was_missing_is_now_stated(self):
+        from app.services.page_ai import _HTML_RULES
+        assert "min-content" in _HTML_RULES
+        assert "margin-inline" in _HTML_RULES
