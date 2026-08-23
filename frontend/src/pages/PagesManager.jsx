@@ -1313,6 +1313,8 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   const [streamDraft, setStreamDraft] = useState('')     // live-streamed HTML
   const [thought, setThought]         = useState('')     // thought frame text
   const [plan, setPlan]               = useState(null)    // plan frame {sections: [...]}
+  const [edits, setEdits]             = useState([])      // applied edit frames
+  const [streamMode, setStreamMode]   = useState('create') // 'create' | 'edit'
   const [pageError, setPageError]     = useState(null)    // {message, lineno, ...}
   const [sectionEdit, setSectionEdit] = useState(null)    // {sectionId, prompt}
   const abortRef                      = useRef(null)
@@ -1385,7 +1387,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
       })
       if (!ok) return
     }
-    setBusy(true); setErr(''); setNote(null); setStreamDraft(''); setThought(''); setPlan(null)
+    setBusy(true); setErr(''); setNote(null); setStreamDraft(''); setThought(''); setPlan(null); setEdits([])
     setMode('streaming'); setInterview(null)
 
     const controller = new AbortController()
@@ -1422,6 +1424,11 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
             const frame = JSON.parse(data)
             if (frame.type === 'thought') {
               setThought(frame.text || '')
+              if (frame.mode) setStreamMode(frame.mode)
+            } else if (frame.type === 'edit') {
+              // A revision reports each change it applied, so the author sees
+              // what was touched rather than a wall of regenerated markup.
+              setEdits(e => [...e, frame])
             } else if (frame.type === 'plan') {
               setPlan(frame)
             } else if (frame.type === 'delta') {
@@ -1658,10 +1665,34 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
               ))}
             </div>
           )}
-          <StreamingDraft
-            content={streamDraft}
-            label={mode === 'section-edit' ? 'Rewriting the section' : 'Writing the page'}
-          />
+          {edits.length > 0 ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              {edits.map((e, i) => (
+                <div key={i} style={{
+                  display:'flex', alignItems:'baseline', gap:8, fontSize:11,
+                  padding:'5px 9px', borderRadius:6,
+                  background: e.ok ? 'var(--bg-base)' : 'color-mix(in srgb, #f59e0b 12%, transparent)',
+                  border:'1px solid var(--border)',
+                }}>
+                  <span style={{ color: e.ok ? '#16a34a' : '#b45309', fontWeight:700, flexShrink:0 }}>
+                    {e.ok ? '✓' : '⚠'}
+                  </span>
+                  <code style={{
+                    flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                    whiteSpace:'nowrap', color:'var(--text-2)', fontSize:10,
+                  }}>{e.search}</code>
+                  <span style={{ color:'var(--text-2)', flexShrink:0, fontVariantNumeric:'tabular-nums' }}>
+                    {e.ok ? `−${e.removed} +${e.added}` : 'not found'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <StreamingDraft
+              content={streamDraft}
+              label={streamMode === 'edit' ? 'Working out the edits' : 'Writing the page'}
+            />
+          )}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, height:3, borderRadius:2, background:'var(--border)', overflow:'hidden' }}>
               <div style={{ width:'100%', height:'100%', background:'var(--accent, #3b82f6)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />

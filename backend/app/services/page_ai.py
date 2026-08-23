@@ -15,7 +15,7 @@ import json
 import re
 from typing import Any, AsyncIterator
 
-from . import page_design
+from . import page_design, page_edit
 from .openrouter import (
     _try_chat,
     _stream_post_with_retries,
@@ -724,30 +724,34 @@ async def stream_generate_page(
         if extras:
             user_content = f"{prompt}\n\nDesign preferences:\n{extras}"
 
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": _rules_for(content_type)},
-    ]
+    # Revising is a different job from generating, and asking for the whole
+    # document back is what made it slow, lossy and prone to truncation. A
+    # revision returns search/replace blocks instead — see services/page_edit.py.
+    revising = bool(existing and existing.strip())
+    base = existing.strip() if revising else ""
+    if revising and len(base) > MAX_EXISTING_CHARS:
+        raise ValueError(
+            "This page is too large to revise with AI. Trim it, or generate a fresh page."
+        )
 
-    if existing and existing.strip():
-        base = existing.strip()
-        if len(base) > MAX_EXISTING_CHARS:
-            raise ValueError(
-                "This page is too large to revise with AI. Trim it, or generate a fresh page."
-            )
-        messages.append({
-            "role": "system",
-            "content": (
-                "The user has an existing document, below. Apply their request to it and "
-                "return the COMPLETE revised document. Preserve everything they did not "
-                "ask you to change — content, structure and styling alike.\n\n"
-                f"--- CURRENT DOCUMENT ---\n{base}\n--- END ---"
-            ),
-        })
-
-    messages.append({"role": "user", "content": user_content})
+    if revising:
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": page_edit.EDIT_RULES},
+            {"role": "user", "content": page_edit.revision_context(base, user_content)},
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": _rules_for(content_type, prompt)},
+            {"role": "user", "content": user_content},
+        ]
 
     # Emit a synthetic thought frame before streaming starts
-    yield {"type": "thought", "text": f"Designing {content_type} page: {prompt[:100]}"}
+    yield {
+        "type": "thought",
+        "text": (f"Editing the page: {prompt[:100]}" if revising
+                 else f"Designing {content_type} page: {prompt[:100]}"),
+        "mode": "edit" if revising else "create",
+    }
 
     errors: list[str] = []
 
@@ -812,6 +816,38 @@ async def stream_generate_page(
                         plan_emitted = True
 
             await resp.aclose()
+
+            if revising:
+                # The response is a set of edits, not a document. Applying them
+                # here means everything the request did not mention survives
+                # byte for byte, which is the whole reason for the format.
+                blocks = page_edit.parse_edit_blocks(full_raw)
+                if not blocks:
+                    errors.append(f"{_short(spec.id)}: returned no usable edits")
+                    continue
+                try:
+                    result = page_edit.apply_edit_blocks(base, blocks)
+                except page_edit.EditError as exc:
+                    errors.append(f"{_short(spec.id)}: {exc}")
+                    continue
+
+                content, warnings = clean_output(result["content"], content_type)
+                for detail in result["details"]:
+                    yield {"type": "edit", **detail}
+                if result["failed"]:
+                    warnings.append(
+                        f"{result['failed']} of {len(blocks)} edits did not match the "
+                        "current page and were skipped"
+                    )
+                yield {
+                    "type": "done",
+                    "content": content,
+                    "model": spec.id,
+                    "model_short": _short(spec.id),
+                    "warnings": warnings,
+                    "edits_applied": result["applied"],
+                }
+                return
 
             # Clean the final output using existing infrastructure
             content, warnings = clean_output(full_raw, content_type)
