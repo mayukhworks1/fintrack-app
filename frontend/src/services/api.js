@@ -735,6 +735,25 @@ export const api = {
     },
     deleteAvatar: () => request('/api/auth/profile/avatar', { method: 'DELETE' }),
   },
+  studio: {
+    documents:     ()          => request('/api/studio/documents'),
+    document:      (id)        => request(`/api/studio/documents/${id}`),
+    deleteDocument:(id)        => request(`/api/studio/documents/${id}`, { method: 'DELETE' }),
+    upload:        (fileObj)   => {
+      const fd = new FormData(); fd.append('file', fileObj)
+      return request('/api/studio/documents', { method: 'POST', body: fd, headers: null, timeout: 120000 }, 0)
+    },
+    // A question runs two model calls (answer + verification), so it gets the
+    // AI budget rather than the default request timeout, and no retries — a
+    // slow answer is not a failed one.
+    ask:           (data)      => request('/api/studio/ask', {
+      method: 'POST', body: JSON.stringify(data), timeout: 120000,
+    }, 0),
+    threads:       ()          => request('/api/studio/threads'),
+    thread:        (id)        => request(`/api/studio/threads/${id}`),
+    usage:         ()          => request('/api/studio/usage'),
+  },
+
   pages: {
     list:          (opts={})    => request('/api/pages/', opts),
     create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),

@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, FileSpreadsheet, Layers, Globe
+  Plus, Landmark, FileSpreadsheet, Layers, Globe, Sparkles
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -41,6 +41,7 @@ const NAV_ITEMS = [
   { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'],          perm: 'module.reports.view' },
   { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'], perm: 'module.status.view' },
   { to: '/pages',     label: 'Pages',        icon: Globe,                       roles: ['editor','viewer'], perm: null },
+  { to: '/studio',    label: 'Studio',       icon: Sparkles,                    roles: ['editor'],          perm: 'module.studio.view' },
 ]
 
 function OfflineBanner({ collapsed }) {

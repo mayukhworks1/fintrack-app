@@ -87,6 +87,7 @@ const TaxLedger     = lazyWithReload(() => import('./pages/TaxLedger'))
 const SharedView    = lazyWithReload(() => import('./pages/SharedView'))  // public — no auth
 const PageViewer    = lazyWithReload(() => import('./pages/PageViewer'))  // public — no auth
 const PagesManager  = lazyWithReload(() => import('./pages/PagesManager'))
+const Studio        = lazyWithReload(() => import('./pages/Studio'))
 const Profile       = lazyWithReload(() => import('./pages/Profile'))
 
 // Main-app pages to prefetch on idle for editor/viewer sessions only.
@@ -238,6 +239,7 @@ export default function App() {
               <Route path="/status"       element={<StatusBoard />} />
               <Route path="/admin"        element={isViewer ? <ViewerGuard /> : <AdminDashboard embedded={true} />} />
               <Route path="/pages"        element={<PagesManager />} />
+              <Route path="/studio"       element={isViewer ? <ViewerGuard /> : <Studio />} />
               <Route path="/profile"      element={<Profile />} />
               <Route path="*"             element={<NotFound />} />
             </Routes>

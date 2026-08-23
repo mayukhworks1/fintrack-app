@@ -787,6 +787,9 @@ INSERT INTO auth_permissions (permission_key, label, module_key, action_key) VAL
   ('module.admin.users.approve', 'Approve Users', 'admin', 'users.approve'),
   ('module.admin.users.manage', 'Manage Users', 'admin', 'users.manage'),
   ('module.admin.audit.view', 'View Audit Logs', 'admin', 'audit.view'),
+  ('module.studio.view', 'View Studio', 'studio', 'view'),
+  ('module.studio.ask', 'Ask Studio Questions', 'studio', 'ask'),
+  ('module.studio.docs.manage', 'Manage Studio Documents', 'studio', 'docs.manage'),
   ('system.sync.trigger', 'Trigger System Sync', 'system', 'sync.trigger'),
   ('system.roles.manage', 'Manage Roles and Permissions', 'system', 'roles.manage')
 ON CONFLICT (permission_key) DO UPDATE SET
@@ -809,7 +812,8 @@ JOIN auth_permissions p ON p.permission_key IN (
   'module.invoices.view', 'module.invoices.create', 'module.invoices.edit', 'module.invoices.payment',
   'module.tax.view', 'module.tax.export', 'module.analytics.view', 'module.reports.create',
   'module.reports.export', 'module.ai.use', 'module.status.view', 'module.status.edit',
-  'module.shared.manage', 'module.admin.view', 'module.admin.audit.view', 'system.sync.trigger'
+  'module.shared.manage', 'module.admin.view', 'module.admin.audit.view', 'system.sync.trigger',
+  'module.studio.view', 'module.studio.ask', 'module.studio.docs.manage'
 )
 WHERE r.role_key = 'admin'
 ON CONFLICT DO NOTHING;
@@ -821,7 +825,8 @@ JOIN auth_permissions p ON p.permission_key IN (
   'module.dashboard.view', 'module.projects.view', 'module.projects.edit',
   'module.invoices.view', 'module.invoices.edit', 'module.invoices.payment',
   'module.tax.view', 'module.analytics.view', 'module.reports.create',
-  'module.ai.use', 'module.status.view', 'module.status.edit'
+  'module.ai.use', 'module.status.view', 'module.status.edit',
+  'module.studio.view', 'module.studio.ask', 'module.studio.docs.manage'
 )
 WHERE r.role_key = 'manager'
 ON CONFLICT DO NOTHING;
@@ -998,6 +1003,84 @@ CREATE TABLE IF NOT EXISTS page_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_page_versions_page_id ON page_versions(page_id);
 CREATE INDEX IF NOT EXISTS idx_page_versions_saved_at ON page_versions(page_id, saved_at DESC);
+
+-- ── Studio: ask questions of your own documents ─────────────────────────────
+-- Source files an author uploads and then questions in plain language. Kept
+-- separate from record_embeddings on purpose: that table is keyed
+-- (record_id, table_name) and is owned by the Teable sync job, which would
+-- overwrite anything it did not put there.
+CREATE TABLE IF NOT EXISTS studio_documents (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    title         VARCHAR(500) NOT NULL DEFAULT '',
+    filename      VARCHAR(500) NOT NULL DEFAULT '',
+    storage_path  TEXT         NOT NULL DEFAULT '',
+    mime_type     VARCHAR(120) NOT NULL DEFAULT '',
+    byte_size     BIGINT       NOT NULL DEFAULT 0,
+    page_count    INTEGER      NOT NULL DEFAULT 0,
+    chunk_count   INTEGER      NOT NULL DEFAULT 0,
+    -- 'pending' → 'ready' | 'failed'. Ingestion runs in the background and the
+    -- Space can sleep mid-job, so state lives in the row rather than in memory.
+    status        VARCHAR(20)  NOT NULL DEFAULT 'pending',
+    error         TEXT,
+    owner_email   VARCHAR(320),
+    created_by    UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    ingested_at   TIMESTAMPTZ,
+    metadata      JSONB        NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS sd_created_idx ON studio_documents (created_at DESC);
+CREATE INDEX IF NOT EXISTS sd_owner_idx   ON studio_documents (owner_email);
+CREATE INDEX IF NOT EXISTS sd_status_idx  ON studio_documents (status, created_at DESC);
+
+-- Chunks carry their page number so a citation can point at somewhere real.
+-- The embedding column is added separately below, because pgvector may not be
+-- installed and the rest of the table must still work (lexical search only).
+CREATE TABLE IF NOT EXISTS studio_doc_chunks (
+    id           BIGSERIAL    PRIMARY KEY,
+    document_id  UUID         NOT NULL REFERENCES studio_documents(id) ON DELETE CASCADE,
+    chunk_index  INTEGER      NOT NULL DEFAULT 0,
+    page_number  INTEGER,
+    content      TEXT         NOT NULL DEFAULT '',
+    token_est    INTEGER      NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE(document_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS sdc_doc_idx ON studio_doc_chunks (document_id, chunk_index);
+
+DO $$
+BEGIN
+  ALTER TABLE studio_doc_chunks ADD COLUMN IF NOT EXISTS embedding vector(1536);
+  CREATE INDEX IF NOT EXISTS sdc_ivfflat_idx ON studio_doc_chunks
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 20);
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'studio_doc_chunks embedding column skipped (pgvector absent): %', SQLERRM;
+END
+$$;
+
+-- Threads keep the sources attached to the turn that used them, so an answer
+-- stays auditable after the fact.
+CREATE TABLE IF NOT EXISTS studio_threads (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    title       VARCHAR(500) NOT NULL DEFAULT '',
+    created_by  UUID         REFERENCES auth_users(id) ON DELETE SET NULL,
+    owner_email VARCHAR(320),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS st_owner_idx ON studio_threads (owner_email, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS studio_turns (
+    id         BIGSERIAL    PRIMARY KEY,
+    thread_id  UUID         NOT NULL REFERENCES studio_threads(id) ON DELETE CASCADE,
+    question   TEXT         NOT NULL DEFAULT '',
+    answer     TEXT         NOT NULL DEFAULT '',
+    model      VARCHAR(120),
+    verdict    VARCHAR(20),
+    sources    JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    latency_ms INTEGER,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS stt_thread_idx ON studio_turns (thread_id, created_at);
 
 """
 # ---------------------------------------------------------------------------
