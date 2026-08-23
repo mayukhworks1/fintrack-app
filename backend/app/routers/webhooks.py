@@ -45,7 +45,7 @@ from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..db.postgres import get_pool
-from ..db.sync import upsert_record, mark_deleted, _table_config
+from ..db.sync import upsert_record, mark_deleted, _table_config, cache_prefixes_for
 
 logger = logging.getLogger("fintrack.webhooks")
 
@@ -230,7 +230,8 @@ def _bust_source_caches(source: str) -> None:
     """
     try:
         from ..utils.cache import cache as _mem_cache
-        _mem_cache.bust(f"{source}:")
+        for prefix in cache_prefixes_for(source):
+            _mem_cache.bust(prefix)
     except Exception:
         pass
 
@@ -242,7 +243,10 @@ def _bust_source_caches(source: str) -> None:
             try:
                 vk = _vk_client()
                 if vk:
-                    await _vk_bust(f"{source}:")
+                    # Same mapping as the in-process bust above — Valkey mirrors
+                    # the same keys, so it had the same mismatch.
+                    for prefix in cache_prefixes_for(source):
+                        await _vk_bust(prefix)
                     if source == "status":
                         await vk.delete("chat:context")
                         await _vk_bust("report:")

@@ -77,15 +77,43 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
     run(false)
   }, [fetchFn, run])
 
-  // Set up polling interval + initial fetch on mount
+  // Set up polling interval + initial fetch on mount.
+  //
+  // Polling stops while the tab is hidden and catches up the moment it is
+  // shown again. A background tab cannot show anyone a fresher number, so
+  // every poll it makes is pure load — and that load is what the foreground
+  // tab's saves and deletes were queueing behind. Interval length is
+  // deliberately unchanged: this costs no freshness at all, because the
+  // catch-up fetch on becoming visible is immediate.
   useEffect(() => {
     mounted.current = true
     lastHash.current = null
+
+    const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden'
+
+    const start = () => {
+      if (timerRef.current) return
+      timerRef.current = setInterval(() => { if (!hidden()) run(true) }, intervalMs)
+    }
+    const stop = () => {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+
     run(false)
-    timerRef.current = setInterval(() => run(true), intervalMs)
+    if (!hidden()) start()
+
+    const onVisibility = () => {
+      if (hidden()) { stop(); return }
+      run(true)   // catch up on whatever changed while we were away
+      start()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       mounted.current = false
-      clearInterval(timerRef.current)
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs]) // run is stable; we intentionally omit it to avoid re-mounting interval

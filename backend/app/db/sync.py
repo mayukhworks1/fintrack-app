@@ -181,6 +181,31 @@ def _extract_status(fields: dict) -> dict:
     }
 
 
+# Read-cache key prefixes owned by each source.
+#
+# The source name and the cache namespace were never the same string for three
+# of the four tables — the services picked "invoice:", "project:" and "webinv:"
+# while the sources are "invoices", "projects" and "web_invoices" — so busting
+# by f"{source}:" cleared nothing at all. Only "status" happened to agree. This
+# maps them explicitly, because the convention is precisely what failed
+# silently.
+SOURCE_CACHE_PREFIXES: dict[str, tuple[str, ...]] = {
+    "projects":     ("project:",),
+    "invoices":     ("invoice:",),
+    "web_invoices": ("webinv:",),
+    "status":       ("status:",),
+}
+
+
+def cache_prefixes_for(source: str) -> tuple[str, ...]:
+    """Prefixes to clear for `source`, warning if a new source went unmapped."""
+    prefixes = SOURCE_CACHE_PREFIXES.get(source)
+    if prefixes is None:
+        logger.warning("no cache prefix mapped for sync source %r", source)
+        return (f"{source}:",)
+    return prefixes
+
+
 # Map table_id → (source name, mirror table, extractor)
 def _table_config(table_id: str) -> Optional[tuple]:
     if table_id == settings.teable_table_id:
@@ -677,7 +702,7 @@ async def run_sync(incremental: bool = False) -> None:
             await _write_sync_log(
                 pool, source,
                 stats["total"], stats["created"], stats["updated"],
-                stats["unchanged"], stats["duration_ms"], None,
+                stats["unchanged"], stats["duration_ms"], None, deleted,
             )
         except Exception as exc:
             logger.error("[%s] Upsert error for %s: %s", label, source, exc)
@@ -693,7 +718,7 @@ async def run_sync(incremental: bool = False) -> None:
 async def _write_sync_log(
     pool, source: str,
     total: int, created: int, updated: int, unchanged: int,
-    duration_ms: int, error: Optional[str],
+    duration_ms: int, error: Optional[str], deleted: int = 0,
 ) -> None:
     try:
         await pool.execute(
@@ -709,6 +734,18 @@ async def _write_sync_log(
     # Bust the AI chat context cache on any successful sync so the assistant
     # always sees fresh mirror data without making live Teable API calls.
     if error is None:
+        # The read caches for the source that just changed, in-process as well
+        # as in Valkey. Only "status:" was ever cleared here, so a sync that
+        # pulled in new invoices left the invoice and web-invoice caches serving
+        # the previous answer until their TTL ran out. Clearing them on the way
+        # in is what lets those caches be trusted at all.
+        if created or updated or deleted:
+            try:
+                from ..utils.cache import cache as _mem_cache
+                for prefix in cache_prefixes_for(source):
+                    _mem_cache.bust(prefix)
+            except Exception:
+                pass
         try:
             from .valkey import get_client as _vk, cache_bust as _cache_bust
             vk = _vk()
@@ -720,6 +757,12 @@ async def _write_sync_log(
                 await _cache_bust("report:")
                 await vk.delete("status:list:None:None")  # most common cache key
                 await _cache_bust("status:")
+                if created or updated or deleted:
+                    try:
+                        for prefix in cache_prefixes_for(source):
+                            await _cache_bust(prefix)
+                    except Exception:
+                        pass
         except Exception:
             pass  # Valkey unavailable — context will expire naturally
 

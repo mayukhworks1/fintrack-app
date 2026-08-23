@@ -456,10 +456,12 @@ class WebInvoiceService:
             total = len(records)
             return {"records": records[skip:skip + limit], "total": total}
 
-        # Owner-scoped views are security-sensitive and should reflect CRUD
-        # immediately. Keep cache only for legacy/full-workspace reads.
-        if raised_by:
-            return await _load()
+        # Scoped views are cached like any other. The key carries the scope, so
+        # one user can never be served another's rows, and every mutation calls
+        # _bust_web_cache() — which drops the whole webinv: prefix — so a scoped
+        # view still reflects CRUD immediately. Bypassing the cache here meant a
+        # scoped user got no caching at all on a list two pollers refetch every
+        # ten seconds. invoice.py caches the same scoped data the same way.
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
 
     # Teable field name -> web_invoices_mirror column, for ORDER BY. Fields not
@@ -559,7 +561,10 @@ class WebInvoiceService:
             return None
 
     async def get_all_invoices(self, raised_by: Optional[str] = None) -> list[dict]:
-        cache_key = "webinv:all" if not raised_by else f"webinv:all:raised_by:{raised_by}"
+        # Lower-cased so two spellings of one address share an entry rather than
+        # each paying for its own full fetch. The ownership filter below already
+        # compares case-insensitively, so this changes nothing about who sees what.
+        cache_key = "webinv:all" if not raised_by else f"webinv:all:raised_by:{raised_by.lower()}"
 
         async def _load():
             result = await self._fetch_records()
@@ -568,8 +573,11 @@ class WebInvoiceService:
                 email_lc = raised_by.lower()
                 result = [r for r in result if r.get("fields", {}).get("Raised By", "").lower() == email_lc]
             return result
-        if raised_by:
-            return await _load()
+
+        # _fetch_records downloads every record in the Teable table, a page at a
+        # time, and only then filters to this user's rows. Skipping the cache for
+        # scoped users meant the summary poller triggered that whole download
+        # every ten seconds. The key is scoped and mutations bust the prefix.
         return await cache.get_or_set(cache_key, ttl=_TTL_ALL, loader=_load)
 
     async def _fetch_records(
@@ -788,8 +796,12 @@ class WebInvoiceService:
         }
 
     async def get_summary(self, raised_by: Optional[str] = None) -> dict:
-        cache_key = "webinv:summary" if not raised_by else f"webinv:summary:raised_by:{raised_by}"
-        cached = cache.get(cache_key) if not raised_by else None
+        cache_key = ("webinv:summary" if not raised_by
+                     else f"webinv:summary:raised_by:{raised_by.lower()}")
+        # The scoped key was being computed and then never read from or written
+        # to, so a scoped user recomputed the whole summary — including the full
+        # record fetch behind it — on every poll.
+        cached = cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -965,8 +977,7 @@ class WebInvoiceService:
             "pending_invoices": pending_invoices[:10],
             "overdue_invoices": overdue_invoices[:5],
         }
-        if not raised_by:
-            cache.set(cache_key, summary, ttl=_TTL_SUMMARY)
+        cache.set(cache_key, summary, ttl=_TTL_SUMMARY)
         return summary
 
 
