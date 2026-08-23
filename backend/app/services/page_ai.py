@@ -556,10 +556,67 @@ async def analyze_prompt_needs(
     if not isinstance(parsed, dict):
         return {"needs_interview": False, "questions": []}
 
+    questions = normalise_questions(parsed.get("questions"))
     return {
-        "needs_interview": bool(parsed.get("needs_interview", False)),
-        "questions": parsed.get("questions", []),
+        # No usable questions means no interview, whatever the model claimed.
+        # Opening a question step with nothing to answer is a dead end.
+        "needs_interview": bool(parsed.get("needs_interview", False)) and bool(questions),
+        "questions": questions,
     }
+
+
+# Interview questions go straight into a React component that maps over them and
+# over each one's options. Anything malformed therefore crashes the editor
+# rather than degrading — which is exactly what happened: a model returned
+# `"questions": "none needed"`, a string passed the client's `?.length` check
+# because strings have a length, and the card then iterated characters and read
+# `.options` off one.
+MAX_INTERVIEW_QUESTIONS = 4
+MAX_INTERVIEW_OPTIONS = 6
+
+
+def normalise_questions(raw) -> list[dict]:
+    """
+    Coerce model output into questions the UI can render, dropping the rest.
+
+    Free models are the only source here and they are inconsistent about shape,
+    so this validates rather than trusts. A question that cannot be rendered is
+    discarded rather than repaired: a guessed option list would put words in the
+    user's mouth and steer the page they get.
+    """
+    if not isinstance(raw, list):
+        return []
+
+    out: list[dict] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+
+        # Options are sometimes handed back as a comma-separated string.
+        raw_options = item.get("options")
+        if isinstance(raw_options, str):
+            raw_options = [part.strip() for part in raw_options.split(",")]
+        if not isinstance(raw_options, list):
+            continue
+        options = [str(o).strip() for o in raw_options if str(o).strip()]
+        if len(options) < 2:
+            # One option is not a choice, and none is not a question.
+            continue
+
+        qid = str(item.get("id") or "").strip() or f"q{index + 1}"
+        qtype = str(item.get("type") or "single").strip().lower()
+        out.append({
+            "id": qid[:40],
+            "text": text[:300],
+            "type": qtype if qtype in ("single", "multi") else "single",
+            "options": options[:MAX_INTERVIEW_OPTIONS],
+        })
+        if len(out) >= MAX_INTERVIEW_QUESTIONS:
+            break
+    return out
 
 
 # --- SSE streaming page generator -------------------------------------------

@@ -343,3 +343,77 @@ class TestAgenticFeatures:
         assert "lucide.createIcons()" in out
 
 
+
+
+class TestInterviewQuestionValidation:
+    """
+    The reported crash: giving the agent a prompt took the whole Pages editor
+    down. `analyze_prompt_needs` returned the model's `questions` value
+    untouched, and a free model answered with the string "none needed". A string
+    has a length, so the client's `res.questions?.length` guard passed, and the
+    card then iterated its characters and read `.options` off one.
+    """
+
+    def test_a_string_instead_of_a_list_yields_no_questions(self):
+        from app.services.page_ai import normalise_questions
+        assert normalise_questions("none needed") == []
+
+    def test_other_wrong_shapes_yield_no_questions(self):
+        from app.services.page_ai import normalise_questions
+        for bad in (None, 42, {"q": 1}, True):
+            assert normalise_questions(bad) == []
+
+    def test_drops_entries_that_are_not_objects(self):
+        from app.services.page_ai import normalise_questions
+        assert normalise_questions(["theme?", None, 7]) == []
+
+    def test_splits_options_handed_back_as_a_string(self):
+        """Models return "a, b, c" about as often as a real list."""
+        from app.services.page_ai import normalise_questions
+        out = normalise_questions([{"text": "Which theme?", "options": "Modern, Bold, Minimal"}])
+        assert out[0]["options"] == ["Modern", "Bold", "Minimal"]
+
+    def test_drops_a_question_with_fewer_than_two_options(self):
+        """One option is not a choice, and none is not a question."""
+        from app.services.page_ai import normalise_questions
+        assert normalise_questions([{"text": "Theme?", "options": ["Only one"]}]) == []
+        assert normalise_questions([{"text": "Theme?", "options": []}]) == []
+
+    def test_drops_a_question_with_no_text(self):
+        from app.services.page_ai import normalise_questions
+        assert normalise_questions([{"options": ["a", "b"]}]) == []
+
+    def test_supplies_an_id_when_the_model_omits_one(self):
+        from app.services.page_ai import normalise_questions
+        out = normalise_questions([{"text": "Theme?", "options": ["a", "b"]}])
+        assert out[0]["id"]
+
+    def test_falls_back_to_single_for_an_unknown_type(self):
+        from app.services.page_ai import normalise_questions
+        out = normalise_questions([{"text": "T?", "type": "dropdown", "options": ["a", "b"]}])
+        assert out[0]["type"] == "single"
+
+    def test_keeps_a_valid_multi_select(self):
+        from app.services.page_ai import normalise_questions
+        out = normalise_questions([{"id": "s", "text": "Sections?", "type": "multi",
+                                    "options": ["Hero", "Pricing"]}])
+        assert out == [{"id": "s", "text": "Sections?", "type": "multi",
+                        "options": ["Hero", "Pricing"]}]
+
+    def test_caps_the_number_of_questions_and_options(self):
+        from app.services.page_ai import normalise_questions, MAX_INTERVIEW_QUESTIONS, MAX_INTERVIEW_OPTIONS
+        out = normalise_questions([
+            {"text": f"Q{i}?", "options": [f"o{j}" for j in range(20)]} for i in range(20)
+        ])
+        assert len(out) == MAX_INTERVIEW_QUESTIONS
+        assert all(len(q["options"]) == MAX_INTERVIEW_OPTIONS for q in out)
+
+    def test_a_mixed_batch_keeps_only_what_renders(self):
+        from app.services.page_ai import normalise_questions
+        out = normalise_questions([
+            {"text": "Good?", "options": ["a", "b"]},
+            "garbage",
+            {"text": "No options"},
+            {"text": "Also good?", "options": ["c", "d"]},
+        ])
+        assert [q["text"] for q in out] == ["Good?", "Also good?"]

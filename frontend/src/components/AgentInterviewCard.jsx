@@ -13,7 +13,16 @@
  */
 import { useState, useCallback } from 'react'
 
-export default function AgentInterviewCard({ questions = [], onSubmit, onSkip, disabled = false }) {
+export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSkip, disabled = false }) {
+  // The questions come from a free model. The server validates them, but this
+  // component crashed the whole editor once already when it did not — a model
+  // returned `"questions": "none needed"`, which passed the caller's
+  // `?.length` check because strings have a length, and the loop below then
+  // iterated characters. Two guards for one class of bug is the right number
+  // when the failure takes the page down.
+  const questions = Array.isArray(raw)
+    ? raw.filter(q => q && typeof q === 'object' && q.text && Array.isArray(q.options))
+    : []
   // Each answer is keyed by question id.
   // Single-select: string, Multi-select: string[]
   const [answers, setAnswers] = useState(() => {
