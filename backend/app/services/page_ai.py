@@ -21,8 +21,10 @@ from .openrouter import (
     _stream_post_with_retries,
     _make_headers,
     _ordered_models,
+    _build_payload,
+    _auth_or_quota_error,
+    _provider_label,
     _short,
-    OPENROUTER_API_URL,
 )
 
 # A full landing page with its own stylesheet runs longer than first assumed —
@@ -755,33 +757,36 @@ async def stream_generate_page(
 
     errors: list[str] = []
 
+    # Providers whose key is dead or out of quota — see _auth_or_quota_error.
+    dead_providers: set[str] = set()
+
     for spec in _ordered_models():
+        if spec.provider in dead_providers:
+            continue
         resp = None
         try:
-            payload: dict[str, Any] = {
-                "model": spec.id,
-                "messages": messages,
-                "max_tokens": MAX_TOKENS,
-                "temperature": TEMPERATURE,
-                "stream": True,
-            }
-            if spec.supports_reasoning_param:
-                payload["reasoning"] = {"exclude": True}
+            payload = _build_payload(
+                spec, messages, max_tokens=MAX_TOKENS,
+                temperature=TEMPERATURE, stream=True,
+            )
 
-            resp = await _stream_post_with_retries(payload)
+            resp = await _stream_post_with_retries(payload, provider=spec.provider)
 
-            if resp.status_code == 401:
-                raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
-            if resp.status_code == 402:
-                raise ValueError("OpenRouter quota exceeded — check free-tier limits")
+            provider_dead = _auth_or_quota_error(resp.status_code, spec.provider)
+            if provider_dead:
+                dead_providers.add(spec.provider)
+                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
+                await resp.aclose()
+                continue
             if resp.status_code >= 400:
                 body = await resp.aread()
                 text = body.decode("utf-8", errors="ignore")[:200]
-                if resp.status_code in (400, 404, 422, 429) or "model" in text.lower():
-                    errors.append(f"{_short(spec.id)}: {text or ('HTTP ' + str(resp.status_code))}")
-                    await resp.aclose()
-                    continue
-                raise ValueError(f"OpenRouter error ({resp.status_code}): {text}")
+                errors.append(
+                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
+                    f"{text or ('HTTP ' + str(resp.status_code))}"
+                )
+                await resp.aclose()
+                continue
 
             full_raw = ""
             plan_emitted = False

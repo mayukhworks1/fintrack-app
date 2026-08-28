@@ -39,6 +39,9 @@ from ..utils.http import shared_client
 from ..config import settings
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Groq speaks the OpenAI chat-completions shape, so the same request builder,
+# SSE parser and response handling serve both providers unchanged.
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 ANSWER_OPEN  = "===ANSWER==="
 ANSWER_CLOSE = "===END==="
 
@@ -56,6 +59,10 @@ class ModelSpec:
     leakage: int           # 0 = clean, 5 = leaks heavily
     supports_reasoning_param: bool = False
     notes: str = ""
+    # Which API serves this model. Both speak the OpenAI chat-completions
+    # shape, so only the URL, the key and a couple of vendor-only payload
+    # fields differ.
+    provider: str = "openrouter"
 
 
 # Ordered preference list — regularly pruned to only include models with
@@ -87,22 +94,63 @@ MODELS: list[ModelSpec] = [
 ]
 
 
+def _groq_models() -> list[ModelSpec]:
+    """
+    The Groq fallback tier, or empty when no key is configured.
+
+    Groq is not in MODELS because its availability is conditional: with no key
+    these specs must not appear in the cascade at all, or every request would
+    end by trying models it cannot authenticate against and reporting those
+    failures to the user.
+    """
+    if not settings.groq_api_key:
+        return []
+    ids = [m.strip() for m in (settings.groq_models or "").split(",") if m.strip()]
+    # leakage=0: Groq serves instruction-tuned models that answer directly.
+    # supports_reasoning_param stays False — `reasoning` is an OpenRouter
+    # extension and Groq rejects unknown fields.
+    return [ModelSpec(mid, leakage=0, provider="groq",
+                      notes="Groq fallback") for mid in ids]
+
+
 def _ordered_models() -> list[ModelSpec]:
-    """Primary (from settings) first, then registry, dedup by id."""
-    primary = settings.openrouter_model
+    """
+    Primary (from settings) first, then the registry, then the Groq fallback.
+
+    Groq goes last on purpose: OpenRouter's free tier is the intended path and
+    costs nothing, so Groq's quota is spent only once OpenRouter has actually
+    failed. The one exception is having no OpenRouter key at all, in which case
+    Groq is the only provider and leads.
+    """
     seen: set[str] = set()
     out: list[ModelSpec] = []
-    if primary:
-        # If user-configured primary is in registry, use its spec; else assume clean.
-        match = next((m for m in MODELS if m.id == primary), None)
-        if match:
-            out.append(match); seen.add(primary)
-        else:
-            out.append(ModelSpec(primary, leakage=2)); seen.add(primary)
-    for m in MODELS:
+
+    if settings.openrouter_api_key:
+        primary = settings.openrouter_model
+        if primary:
+            # If user-configured primary is in registry, use its spec; else assume clean.
+            match = next((m for m in MODELS if m.id == primary), None)
+            if match:
+                out.append(match); seen.add(primary)
+            else:
+                out.append(ModelSpec(primary, leakage=2)); seen.add(primary)
+        for m in MODELS:
+            if m.id not in seen:
+                out.append(m); seen.add(m.id)
+
+    for m in _groq_models():
         if m.id not in seen:
             out.append(m); seen.add(m.id)
     return out
+
+
+def _any_provider_configured() -> bool:
+    return bool(settings.openrouter_api_key or settings.groq_api_key)
+
+
+def _no_provider_message() -> str:
+    return ("No AI provider is configured. Set OPENROUTER_API_KEY (and "
+            "optionally GROQ_API_KEY as a fallback) in the Space secrets.")
 
 
 def _short(model_id: str) -> str:
@@ -303,13 +351,61 @@ def _meter(model: str, started: float, tokens: dict | None = None,
         pass
 
 
-def _make_headers() -> dict[str, str]:
+def _api_url(provider: str = "openrouter") -> str:
+    return GROQ_API_URL if provider == "groq" else OPENROUTER_API_URL
+
+
+def _make_headers(provider: str = "openrouter") -> dict[str, str]:
+    if provider == "groq":
+        # Groq wants only the bearer token; the HTTP-Referer/X-Title pair is an
+        # OpenRouter attribution convention and means nothing here.
+        return {
+            "Authorization": f"Bearer {settings.groq_api_key}",
+            "Content-Type": "application/json",
+        }
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://fintrack-app-beta.vercel.app",
         "X-Title": "FinTrack AI",
     }
+
+
+def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, Any]:
+    """
+    One payload builder for all three cascade loops.
+
+    The `reasoning` field is an OpenRouter extension. Groq validates its request
+    body strictly and rejects unknown fields, so sending it there would fail
+    every Groq call — which is the whole reason this is centralised rather than
+    repeated at each call site.
+    """
+    payload: dict[str, Any] = {"model": spec.id, "messages": messages, **extra}
+    if spec.supports_reasoning_param and spec.provider == "openrouter":
+        payload["reasoning"] = {"exclude": True}
+    return payload
+
+
+def _provider_label(provider: str) -> str:
+    return "Groq" if provider == "groq" else "OpenRouter"
+
+
+def _auth_or_quota_error(status: int, provider: str) -> str | None:
+    """
+    Describe a provider-level failure, or None if the status is model-specific.
+
+    401 and 402 condemn every model behind that key, not just the one that was
+    asked for. These used to raise, which aborted the whole cascade — so an
+    expired OpenRouter key meant the Groq fallback could never be reached, and
+    the fallback would have been decorative. The caller now uses this to skip
+    the rest of that provider and carry on with the next one.
+    """
+    key_name = "GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY"
+    if status == 401:
+        return f"invalid {key_name}"
+    if status in (402, 403):
+        return f"{_provider_label(provider)} quota or permission exhausted"
+    return None
 
 
 # Shared client — connection pool is reused across requests (faster than
@@ -327,12 +423,14 @@ def _client() -> httpx.AsyncClient:
     return _http_client
 
 
-async def _post_with_retries(payload: dict, retries: int = 2) -> httpx.Response:
+async def _post_with_retries(payload: dict, retries: int = 2,
+                             provider: str = "openrouter") -> httpx.Response:
     """POST with exponential back-off on transient failures only."""
     last_err: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            r = await _client().post(OPENROUTER_API_URL, headers=_make_headers(), json=payload)
+            r = await _client().post(_api_url(provider),
+                                     headers=_make_headers(provider), json=payload)
             # 5xx → retry; everything else → return for caller to inspect
             if r.status_code >= 500 and attempt < retries:
                 await asyncio.sleep(0.6 * (2 ** attempt))
@@ -349,12 +447,14 @@ async def _post_with_retries(payload: dict, retries: int = 2) -> httpx.Response:
     raise RuntimeError("Unreachable")
 
 
-async def _stream_post_with_retries(payload: dict, retries: int = 1) -> httpx.Response:
+async def _stream_post_with_retries(payload: dict, retries: int = 1,
+                                    provider: str = "openrouter") -> httpx.Response:
     """Open a streaming POST with one short retry on transient failures."""
     last_err: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            req = _client().build_request("POST", OPENROUTER_API_URL, headers=_make_headers(), json=payload)
+            req = _client().build_request("POST", _api_url(provider),
+                                          headers=_make_headers(provider), json=payload)
             resp = await _client().send(req, stream=True)
             if resp.status_code >= 500 and attempt < retries:
                 await resp.aclose()
@@ -386,33 +486,35 @@ async def _try_chat(
     Returns {"content": str, "model": str, "model_short": str}.
     Raises ValueError on hard failure (auth/quota) or after exhausting all models.
     """
-    if not settings.openrouter_api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured. Add it to HF Space secrets.")
+    if not _any_provider_configured():
+        raise ValueError(_no_provider_message())
 
     errors: list[str] = []
+    # Providers whose key is dead or out of quota. Every later model behind the
+    # same key is skipped rather than re-attempted — that is what lets the
+    # cascade fall through to a different provider instead of stopping.
+    dead_providers: set[str] = set()
 
     for spec in (models if models is not None else _ordered_models()):
+        if spec.provider in dead_providers:
+            continue
         attempt_started = time.time()
         try:
-            payload: dict[str, Any] = {
-                "model": spec.id,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-            }
-            if spec.supports_reasoning_param:
-                payload["reasoning"] = {"exclude": True}
+            payload = _build_payload(
+                spec, messages, max_tokens=max_tokens, temperature=temperature,
+            )
 
-            r = await _post_with_retries(payload)
+            r = await _post_with_retries(payload, provider=spec.provider)
 
-            if r.status_code == 401:
-                raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
-            if r.status_code == 402:
-                raise ValueError("OpenRouter quota exceeded — check free-tier limits")
+            provider_dead = _auth_or_quota_error(r.status_code, spec.provider)
+            if provider_dead:
+                dead_providers.add(spec.provider)
+                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
+                continue
             if r.status_code == 429:
                 # One short backoff retry before skipping to the next model
                 await asyncio.sleep(1.2)
-                r2 = await _post_with_retries(payload, retries=1)
+                r2 = await _post_with_retries(payload, retries=1, provider=spec.provider)
                 if r2.status_code == 429:
                     errors.append(f"{_short(spec.id)}: rate-limited")
                     continue
@@ -424,20 +526,24 @@ async def _try_chat(
                     err_msg = err.get("message", r.text) if isinstance(err, dict) else str(err)
                 except Exception:
                     err_msg = r.text[:200]
-                # Model-specific → try next
-                if r.status_code in (400, 404, 422) or "model" in err_msg.lower():
-                    errors.append(f"{_short(spec.id)}: {err_msg[:120]}")
-                    continue
-                raise ValueError(f"OpenRouter error ({r.status_code}): {err_msg}")
+                # Any error here condemns this model, not the run. Aborting
+                # would strand a healthy fallback provider behind a single bad
+                # response; the collected `errors` still name every failure in
+                # the final message, so nothing is hidden.
+                errors.append(
+                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
+                    f"{err_msg[:120] or 'HTTP ' + str(r.status_code)}"
+                )
+                continue
 
             data = r.json()
             if "error" in data:
                 err = data["error"]
                 err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                if "model" in err_msg.lower() or "not found" in err_msg.lower():
-                    errors.append(f"{_short(spec.id)}: {err_msg[:120]}")
-                    continue
-                raise ValueError(f"OpenRouter error: {err_msg}")
+                errors.append(
+                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): {err_msg[:120]}"
+                )
+                continue
 
             raw = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
             if not raw.strip():
@@ -482,8 +588,8 @@ async def stream_chat_with_ai(
     Stream chat deltas as {"type": "delta", "delta": "..."} events and finish
     with {"type": "done", "content": "...", "model": "...", "model_short": "..."}.
     """
-    if not settings.openrouter_api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured. Add it to HF Space secrets.")
+    if not _any_provider_configured():
+        raise ValueError(_no_provider_message())
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(response_mode or "brief")
@@ -496,34 +602,36 @@ async def stream_chat_with_ai(
     messages.append({"role": "user", "content": message})
 
     errors: list[str] = []
+    dead_providers: set[str] = set()
 
     for spec in _ordered_models():
+        if spec.provider in dead_providers:
+            continue
         resp: httpx.Response | None = None
         try:
-            payload: dict[str, Any] = {
-                "model": spec.id,
-                "messages": messages,
-                "max_tokens": 1024,
-                "temperature": 0.5 if temperature is None else temperature,
-                "stream": True,
-            }
-            if spec.supports_reasoning_param:
-                payload["reasoning"] = {"exclude": True}
+            payload = _build_payload(
+                spec, messages, max_tokens=1024,
+                temperature=0.5 if temperature is None else temperature,
+                stream=True,
+            )
 
-            resp = await _stream_post_with_retries(payload)
+            resp = await _stream_post_with_retries(payload, provider=spec.provider)
 
-            if resp.status_code == 401:
-                raise ValueError("Invalid OPENROUTER_API_KEY — check your HF Space secrets")
-            if resp.status_code == 402:
-                raise ValueError("OpenRouter quota exceeded — check free-tier limits")
+            provider_dead = _auth_or_quota_error(resp.status_code, spec.provider)
+            if provider_dead:
+                dead_providers.add(spec.provider)
+                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
+                await resp.aclose()
+                continue
             if resp.status_code >= 400:
                 body = await resp.aread()
                 text = body.decode("utf-8", errors="ignore")[:200]
-                if resp.status_code in (400, 404, 422, 429) or "model" in text.lower():
-                    errors.append(f"{_short(spec.id)}: {text or ('HTTP ' + str(resp.status_code))}")
-                    await resp.aclose()
-                    continue
-                raise ValueError(f"OpenRouter error ({resp.status_code}): {text}")
+                errors.append(
+                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
+                    f"{text or ('HTTP ' + str(resp.status_code))}"
+                )
+                await resp.aclose()
+                continue
 
             full_raw = ""
             emitted = ""

@@ -1417,6 +1417,17 @@ async def deployment_health(_: str = Depends(require_admin)):
         model=s.openrouter_model,
     )
 
+    # Whether the AI has a second provider to fall through to. Every OpenRouter
+    # model is on a free tier rate-limited per account, so without this every AI
+    # feature fails together during a busy hour.
+    groq_models = [m.strip() for m in (s.groq_models or "").split(",") if m.strip()]
+    results["groq_fallback"] = _health_item(
+        bool(s.groq_api_key),
+        (f"Armed — falls back to {', '.join(groq_models)}" if s.groq_api_key
+         else "GROQ_API_KEY not set — AI has no fallback if OpenRouter is rate-limited"),
+        model=groq_models[0] if groq_models else None,
+    )
+
     google_sso_ok = bool(s.google_client_id and s.google_client_secret and s.frontend_url and s.frontend_url != "*")
     results["google_sso"] = _health_item(
         google_sso_ok,
@@ -1524,6 +1535,7 @@ async def deployment_health(_: str = Depends(require_admin)):
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
         "OPENROUTER_API_KEY": bool(s.openrouter_api_key),
+        "GROQ_API_KEY":  bool(s.groq_api_key),
         "GOOGLE_CLIENT_ID": bool(s.google_client_id),
         "GOOGLE_CLIENT_SECRET": bool(s.google_client_secret),
     }

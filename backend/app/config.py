@@ -16,6 +16,19 @@ class Settings(BaseSettings):
     teable_invoice_table_id: str = "tblyWvNkprE1HnaVZIH"
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "meta-llama/llama-4-scout:free"
+
+    # ── Groq: the fallback provider ────────────────────────────────────────
+    # Every OpenRouter model in the cascade is on a free tier that is rate
+    # limited per ACCOUNT, so a busy hour can exhaust all of them at once and
+    # every AI feature in the app fails together. Groq is a second, independent
+    # provider tried after OpenRouter has been exhausted — different key,
+    # different quota, so the two do not fail at the same time.
+    #
+    # Set GROQ_API_KEY to switch it on; leave it unset and nothing changes.
+    # Model IDs are a comma-separated env value rather than code so a
+    # deprecated Groq model is a settings change and a restart, not a redeploy.
+    groq_api_key: Optional[str] = None
+    groq_models: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
     frontend_url: str = "*"
     # CORS fail-closed policy: when FRONTEND_URL is unset/"*" the API restricts
     # to localhost dev origins by default. Set CORS_ALLOW_ALL=true only if you
