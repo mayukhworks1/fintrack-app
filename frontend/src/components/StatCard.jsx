@@ -1,17 +1,20 @@
 import { formatPct } from '../utils/format'
+import { useTilt } from '../hooks/useTilt'
 
 /**
  * Neutral stat card. Accent is applied only to the value via semantic prop
  * ('positive' | 'warning' | 'negative') — icon container stays neutral.
  */
 export default function StatCard({ label, value, sub, icon: Icon, accent, trend }) {
+  // Depth on the tile, not on any figure it carries — see hooks/useTilt.
+  const tilt = useTilt({ max: 6 })
   const accentColor =
     accent === 'positive' ? '#22c55e'
     : accent === 'warning' ? '#fbbf24'
     : accent === 'negative' ? '#f87171'
     : 'var(--text-1)'
   return (
-    <div className="card animate-slide-up p-3 sm:p-5">
+    <div ref={tilt} className="card tilt tilt-sheen animate-slide-up p-3 sm:p-5">
       <div className="flex items-start gap-3">
         {Icon && (
           <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"

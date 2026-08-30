@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Filter, AlertOctagon, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, Receipt, Briefcase, Repeat2, Users, BookOpen, LayoutDashboard, Activity, ArrowRight, ShieldAlert, Download, WifiOff, Printer } from 'lucide-react'
 import { api } from '../services/api'
+import AgingRunway from '../components/AgingRunway'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
 import { useAuth } from '../context/AuthContext'
@@ -471,15 +472,39 @@ export default function WebInvoices() {
     }
     return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
   }, [allRecords])
+  // Counts AND amounts. The panel used to show counts alone, which answers the
+  // wrong question: ten small invoices at 90 days matter less than one large
+  // one, and a count cannot tell you which you have.
+  //
+  // Amount is Amount Raised, matching how the rest of the app defines
+  // outstanding for an unpaid invoice (_compute_summary adds `raised` for any
+  // non-Paid, non-Cancelled row). Deriving it from with-tax minus received here
+  // would repeat the mistake that makes Studio's outstanding disagree with the
+  // dashboard — it counts TDS on paid invoices as money still owed.
+  //
+  // Band keys are unchanged: agingBandFilter matches on these exact labels.
   const dashboardAgingBuckets = useMemo(() => {
-    const buckets = { '0-14d': 0, '15-30d': 0, '31-60d': 0, '60d+': 0 }
+    const buckets = {
+      '0-14d':  { count: 0, amount: 0 },
+      '15-30d': { count: 0, amount: 0 },
+      '31-60d': { count: 0, amount: 0 },
+      '60d+':   { count: 0, amount: 0 },
+    }
     for (const record of allRecords) {
       const f = record.fields || {}
       if (f['Payment Status'] !== 'Pending') continue
-      buckets[classifyAgingBand(effectiveAging(f))] += 1
+      const band = buckets[classifyAgingBand(effectiveAging(f))]
+      if (!band) continue
+      band.count += 1
+      band.amount += Number(f['Amount Raised'] || 0)
     }
     return buckets
   }, [allRecords])
+
+  const agingRunwayRows = useMemo(
+    () => Object.entries(dashboardAgingBuckets).map(([label, v]) => ({ label, ...v })),
+    [dashboardAgingBuckets]
+  )
   const applyDashboardMonthDrilldown = useCallback((field, key) => {
     setDateFieldFilter(field)
     setDateFrom(`${key}-01`)
@@ -1222,36 +1247,15 @@ export default function WebInvoices() {
                 </div>
               </div>
 
-              <div
-                className="rounded-[26px] p-4 sm:p-5"
-                style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Aging buckets</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Receivables heat map</h2>
-                  </div>
-                  <ShieldAlert size={18} style={{ color: 'var(--fin-warning)' }} />
-                </div>
-                <div className="space-y-2">
-                  {Object.entries(dashboardAgingBuckets).map(([label, value]) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => { setAgingBandFilter(agingBandFilter === label ? '' : label); switchWorkspace('invoices') }}
-                      className="w-full flex items-center justify-between gap-3 rounded-2xl px-3 py-2 text-left"
-                      style={{ background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)', border: `1px solid ${dashboardStyles.line}` }}
-                    >
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{label}</p>
-                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Pending invoices</p>
-                      </div>
-                      <span className="text-sm font-bold tabular-nums" style={{ color: label === '60d+' ? 'var(--fin-negative)' : label === '31-60d' ? 'var(--fin-warning)' : dark ? '#f8fafc' : 'var(--text-1)' }}>
-                        {value}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <AgingRunway
+                buckets={agingRunwayRows}
+                selected={agingBandFilter}
+                dark={dark}
+                onSelect={(label) => {
+                  setAgingBandFilter(label)
+                  if (label) switchWorkspace('invoices')
+                }}
+              />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)] gap-4">

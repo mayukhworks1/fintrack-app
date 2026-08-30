@@ -2471,3 +2471,63 @@ html.dark .web-invoices-shell {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   3D tilt — depth on chrome
+   ------------------------------------------------------------------
+   Driven by useTilt(), which writes --tilt-x/--tilt-y (degrees) and
+   --tilt-mx/--tilt-my (pointer position, for the sheen) and sets
+   data-tilting while the pointer is over the element.
+
+   Deliberately applied to cards and tiles, never to a plot: a bar
+   drawn in perspective is shorter than a front-facing bar carrying the
+   same value, so tilting a chart makes the data misread. Tilting the
+   card the chart sits in costs the reader nothing.
+
+   The hook writes nothing at all under prefers-reduced-motion or on a
+   coarse pointer, so both fall back to the flat default below without
+   needing an override here.
+══════════════════════════════════════════════════════════════════ */
+.tilt {
+  transform: perspective(900px)
+             rotateX(var(--tilt-x, 0deg))
+             rotateY(var(--tilt-y, 0deg));
+  /* Springs back when the pointer leaves; snaps while tracking it. */
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tilt[data-tilting] {
+  transition-duration: 70ms;
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* Content that should sit above the surface as it turns. Separate class
+   so a tile opts in per element — lifting everything flattens the effect
+   into a wobble instead of reading as depth. */
+.tilt-raise { transform: translateZ(22px); }
+.tilt > * { transform-style: preserve-3d; }
+
+/* Specular sheen tracking the pointer. Sits above the content but takes
+   no clicks, and inherits the radius so it never squares off a card. */
+.tilt-sheen { position: relative; }
+.tilt-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 320ms ease;
+  background: radial-gradient(
+    circle at var(--tilt-mx, 50%) var(--tilt-my, 50%),
+    rgba(255, 255, 255, 0.50),
+    rgba(255, 255, 255, 0) 55%);
+}
+.tilt-sheen[data-tilting]::after { opacity: 1; }
+/* On a dark surface a white sheen at light-mode strength reads as haze. */
+.dark .tilt-sheen::after {
+  background: radial-gradient(
+    circle at var(--tilt-mx, 50%) var(--tilt-my, 50%),
+    rgba(148, 190, 255, 0.14),
+    rgba(148, 190, 255, 0) 55%);
+}

@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { useTilt } from '../hooks/useTilt'
 
 export function ExecutiveShell({ children, className = '', flush = false }) {
   return (
@@ -65,8 +66,12 @@ export function ExecutiveStatCard({
   children,
   compact = false,
 }) {
+  const tilt = useTilt({ max: 6 })
   return (
-    <div className={clsx('executive-stat-card', compact && 'executive-stat-card-compact')}>
+    <div
+      ref={tilt}
+      className={clsx('executive-stat-card', 'tilt', 'tilt-sheen', compact && 'executive-stat-card-compact')}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="executive-stat-label">{label}</p>
