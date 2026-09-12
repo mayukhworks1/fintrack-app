@@ -1,0 +1,639 @@
+/**
+ * A working copy of the product, on the public page, with an invented ledger.
+ *
+ * The page used to show pictures of the app. Pictures are easy to disbelieve
+ * and impossible to interrogate, and the one claim this product actually
+ * rests on — that every screen reads the same rows, so two numbers cannot
+ * disagree — is exactly the claim a screenshot cannot make. So this is not a
+ * mockup or a recording: the filters filter, the columns sort, the ageing
+ * bands are real predicates over real rows, and the analyst's answer is
+ * computed by the same function that prints the SQL beside it. Add the
+ * columns up and they come out.
+ *
+ * It plays itself until someone touches it, then gets out of the way. An
+ * autoplaying demo that fights the person trying to click it is worse than no
+ * demo; a static one that waits to be discovered is worse than no demo too.
+ *
+ * Every figure is invented — see demoData.js. The component makes no network
+ * call of any kind, because a public page has no workspace to read.
+ */
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
+  Play, X, MousePointerClick,
+} from 'lucide-react'
+import {
+  INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
+  ask, bandOf, monthly, inr, inrShort, shortDate,
+} from './demoData'
+
+const TABS = [
+  { id: 'receivables', label: 'Receivables', icon: Receipt },
+  { id: 'ageing',      label: 'Ageing',      icon: Timer },
+  { id: 'projects',    label: 'Projects',    icon: FolderKanban },
+  { id: 'analytics',   label: 'Analytics',   icon: BarChart3 },
+  { id: 'analyst',     label: 'AI analyst',  icon: Sparkles },
+]
+
+const TONE = {
+  Paid:    { fg: '#15803d', bg: 'rgba(22,163,74,0.13)' },
+  Sent:    { fg: 'var(--accent)', bg: 'var(--accent-dim)' },
+  Overdue: { fg: '#b91c1c', bg: 'rgba(220,38,38,0.13)' },
+}
+
+// Monotone in lightness with adjacent steps far enough apart to separate,
+// and the lightest step still readable against the card.
+const RAMP = ['#104281', '#256abf', '#3987e5', '#86b6ef']
+
+/* ── Shared bits ─────────────────────────────────────────────────────── */
+
+function Stat({ label, value, tone = 'var(--text-1)', sub }) {
+  return (
+    <div className="rounded-xl px-3 py-2.5 min-w-0"
+         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+      {/* Wraps rather than truncates. At 390px a three-up row of tiles cut
+          these to "OUTST…", "COLLE…", "OVERD…" — three labels that no longer
+          say which figure is which, on the one screen size where guessing is
+          hardest. */}
+      <p className="text-[9.5px] sm:text-[10px] font-bold uppercase leading-tight"
+         style={{ color: 'var(--text-3)', letterSpacing: '0.08em', hyphens: 'auto' }}>{label}</p>
+      <p className="font-extrabold tabular-nums truncate"
+         style={{ fontSize: 'clamp(0.95rem, 2.6vw, 1.3rem)', color: tone, letterSpacing: '-0.02em' }}>
+        {value}
+      </p>
+      {sub && <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+    </div>
+  )
+}
+
+function Badge({ status }) {
+  const t = TONE[status]
+  return (
+    <span className="rounded-md font-bold shrink-0"
+          style={{ fontSize: 10, padding: '2px 7px', color: t.fg, background: t.bg }}>
+      {status}
+    </span>
+  )
+}
+
+/* ── Receivables ─────────────────────────────────────────────────────── */
+
+const COLUMNS = [
+  { key: 'client', label: 'Client',  align: 'left',  grow: '1 1 34%' },
+  { key: 'dueOn',  label: 'Due',     align: 'left',  grow: '0 0 64px', hideSm: true },
+  { key: 'amount', label: 'Amount',  align: 'right', grow: '0 0 92px' },
+]
+
+function Receivables({ state, set }) {
+  const { status, band, query, sort } = state
+
+  const rows = useMemo(() => {
+    let r = INVOICES
+    if (status !== 'all') r = r.filter(i => i.status === status)
+    if (band) r = r.filter(i => bandOf(i) === band)
+    if (query.trim()) {
+      const q = query.trim().toLowerCase()
+      r = r.filter(i => `${i.id} ${i.client} ${i.project} ${i.category}`.toLowerCase().includes(q))
+    }
+    const dir = sort.dir === 'asc' ? 1 : -1
+    return [...r].sort((a, b) => {
+      const x = a[sort.key], y = b[sort.key]
+      if (x == null) return 1
+      if (y == null) return -1
+      return (x > y ? 1 : x < y ? -1 : 0) * dir
+    })
+  }, [status, band, query, sort])
+
+  // Recomputed from whatever survived the filters — the point being that the
+  // total at the bottom is the rows above it, not a figure kept elsewhere.
+  const shown = rows.reduce((t, r) => t + r.amount, 0)
+
+  const toggleSort = (key) =>
+    set({ sort: { key, dir: sort.key === key && sort.dir === 'desc' ? 'asc' : 'desc' } })
+
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <div className="grid grid-cols-3 gap-2 mb-2.5">
+        <Stat label="Outstanding" value={inrShort(TOTALS.outstanding)} />
+        <Stat label="Collected"   value={inrShort(TOTALS.collected)} tone="#15803d" />
+        <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="#b91c1c" />
+      </div>
+
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <div className="relative flex-1" style={{ minWidth: 120 }}>
+          <Search size={13} aria-hidden="true"
+                  style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                           color: 'var(--text-3)' }} />
+          <input
+            value={query}
+            onChange={e => set({ query: e.target.value })}
+            placeholder="Search clients, projects…"
+            aria-label="Search the sample invoices"
+            className="w-full rounded-lg"
+            style={{ height: 32, padding: '0 8px 0 26px', fontSize: 12,
+                     background: 'var(--bg-input)', border: '1px solid var(--card-border)',
+                     color: 'var(--text-1)' }}
+          />
+        </div>
+        {['all', 'Overdue', 'Sent', 'Paid'].map(s => (
+          <button key={s} onClick={() => set({ status: s })}
+                  aria-pressed={status === s}
+                  className="rounded-lg font-semibold shrink-0"
+                  style={{
+                    height: 32, padding: '0 10px', fontSize: 11.5, cursor: 'pointer',
+                    background: status === s ? 'var(--accent)' : 'var(--card-bg)',
+                    border: `1px solid ${status === s ? 'var(--accent)' : 'var(--card-border)'}`,
+                    color: status === s ? '#fff' : 'var(--text-2)',
+                  }}>
+            {s === 'all' ? 'All' : s}
+          </button>
+        ))}
+      </div>
+
+      {band && (
+        <button onClick={() => set({ band: null })}
+                className="self-start flex items-center gap-1.5 rounded-lg font-bold mb-2"
+                style={{ height: 28, padding: '0 9px', fontSize: 11, cursor: 'pointer',
+                         background: 'var(--accent-dim)', color: 'var(--accent)',
+                         border: '1px solid var(--accent-soft)' }}>
+          Ageing: {BANDS.find(b => b.id === band)?.label}
+          <X size={12} aria-hidden="true" />
+        </button>
+      )}
+
+      <div className="rounded-xl overflow-hidden flex-1 min-h-0 flex flex-col"
+           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+        <div className="flex items-center gap-2 px-3 shrink-0"
+             style={{ height: 30, background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
+          {COLUMNS.map(c => (
+            <button key={c.key} onClick={() => toggleSort(c.key)}
+                    className={`flex items-center gap-1 font-bold uppercase tracking-[0.1em] ${c.hideSm ? 'hidden sm:flex' : 'flex'}`}
+                    style={{ fontSize: 9, color: sort.key === c.key ? 'var(--accent)' : 'var(--text-3)',
+                             flex: c.grow, cursor: 'pointer', background: 'none', border: 0,
+                             justifyContent: c.align === 'right' ? 'flex-end' : 'flex-start' }}>
+              {c.label}
+              <ArrowUpDown size={9} aria-hidden="true"
+                           style={{ opacity: sort.key === c.key ? 1 : 0.35 }} />
+            </button>
+          ))}
+          <span style={{ flex: '0 0 58px' }} />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {rows.length === 0 && (
+            <p className="px-3 py-6 text-center" style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              Nothing matches those filters.
+            </p>
+          )}
+          {rows.map(r => (
+            <div key={r.id} className="flex items-center gap-2 px-3"
+                 style={{ height: 34, borderBottom: '1px solid var(--card-border)' }}>
+              <span className="min-w-0" style={{ flex: '1 1 34%' }}>
+                <span className="block truncate font-semibold"
+                      style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{r.client}</span>
+                <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                  {r.id} · {r.project}
+                </span>
+              </span>
+              <span className="hidden sm:block tabular-nums"
+                    style={{ fontSize: 11, color: r.status === 'Overdue' ? '#b91c1c' : 'var(--text-3)', flex: '0 0 64px' }}>
+                {shortDate(r.dueOn)}
+              </span>
+              <span className="tabular-nums font-bold text-right"
+                    style={{ fontSize: 11.5, color: 'var(--text-1)', flex: '0 0 92px' }}>
+                {inr(r.amount)}
+              </span>
+              <span style={{ flex: '0 0 58px', textAlign: 'right' }}><Badge status={r.status} /></span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between px-3 shrink-0"
+             style={{ height: 30, background: 'var(--bg-input)', borderTop: '1px solid var(--card-border)' }}>
+          <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+            {rows.length} of {INVOICES.length} invoices
+          </span>
+          <span className="tabular-nums font-bold" style={{ fontSize: 11.5, color: 'var(--text-1)' }}>
+            {inr(shown)}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Ageing ──────────────────────────────────────────────────────────── */
+
+function Ageing({ state, set }) {
+  const max = Math.max(...AGEING.map(b => b.value), 1)
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <Stat label="Open" value={inrShort(TOTALS.outstanding)} sub={`${AGEING.reduce((t, b) => t + b.count, 0)} invoices`} />
+        <Stat label="Past due" value={inrShort(TOTALS.overdue)} tone="#b91c1c"
+              sub={`${AGEING.filter(b => b.id !== '0-30').reduce((t, b) => t + b.count, 0)} beyond 30 days`} />
+      </div>
+
+      <p className="font-semibold mb-2" style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
+        Pick a band — it filters the invoice list, it does not just colour a chart.
+      </p>
+
+      <div className="flex flex-col gap-2.5">
+        {AGEING.map((b, i) => (
+          <button key={b.id}
+                  onClick={() => set({ band: state.band === b.id ? null : b.id, tab: 'receivables', status: 'all' })}
+                  className="text-left w-full rounded-lg px-2 py-1.5"
+                  style={{ cursor: 'pointer', background: state.band === b.id ? 'var(--accent-dim)' : 'transparent',
+                           border: `1px solid ${state.band === b.id ? 'var(--accent-soft)' : 'transparent'}` }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-bold" style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{b.label}</span>
+              <span className="tabular-nums font-semibold" style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                {inr(b.value)} <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· {b.count}</span>
+              </span>
+            </div>
+            <span className="block" style={{ height: 10, borderRadius: 5, background: 'var(--bg-input)', overflow: 'hidden' }}>
+              <span style={{
+                display: 'block', height: '100%', borderRadius: 5,
+                width: `${Math.max((b.value / max) * 100, 2)}%`, background: RAMP[i],
+                transformOrigin: 'left center',
+                animation: `ft-grow-x 700ms cubic-bezier(0.22,1,0.36,1) ${i * 90}ms both`,
+              }} />
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-auto pt-3" style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+        Bands are days <em>past due</em>, not days since raised — an invoice still
+        inside its terms is not late, however old it is.
+      </p>
+    </div>
+  )
+}
+
+/* ── Projects ────────────────────────────────────────────────────────── */
+
+function Projects({ state, set }) {
+  const sel = PROJECT_ROLLUP.find(p => p.id === state.project) ?? PROJECT_ROLLUP[0]
+  return (
+    <div className="h-full grid gap-2 min-h-0" style={{ gridTemplateRows: 'auto minmax(0,1fr)' }}>
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {PROJECT_ROLLUP.map(p => (
+          <button key={p.id} onClick={() => set({ project: p.id })}
+                  aria-pressed={sel.id === p.id}
+                  className="rounded-lg font-semibold shrink-0"
+                  style={{
+                    height: 30, padding: '0 10px', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                    background: sel.id === p.id ? 'var(--accent-dim)' : 'var(--card-bg)',
+                    border: `1px solid ${sel.id === p.id ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                    color: sel.id === p.id ? 'var(--accent)' : 'var(--text-2)',
+                  }}>
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-xl p-3 min-h-0 overflow-y-auto"
+           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <p className="font-extrabold truncate" style={{ fontSize: 15, color: 'var(--text-1)' }}>{sel.name}</p>
+            <p className="truncate" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{sel.client} · {sel.status}</p>
+          </div>
+          <span className="rounded-md font-bold shrink-0"
+                style={{ fontSize: 10, padding: '3px 8px',
+                         color: sel.health === 'risk' ? '#b45309' : sel.health === 'watch' ? '#a16207' : '#15803d',
+                         background: sel.health === 'healthy' ? 'rgba(22,163,74,0.13)' : 'rgba(217,119,6,0.14)' }}>
+            {sel.health === 'risk' ? 'At risk' : sel.health === 'watch' ? 'Watch' : 'Healthy'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+          <Stat label="Billed"  value={inrShort(sel.billed)} />
+          <Stat label="Cost"    value={inrShort(sel.cost)} />
+          <Stat label="Profit"  value={inrShort(sel.profit)} tone={sel.profit > 0 ? '#15803d' : '#b91c1c'} />
+          <Stat label="Margin"  value={`${sel.margin}%`} tone={sel.health === 'healthy' ? '#15803d' : '#b45309'} />
+        </div>
+
+        <p className="font-bold uppercase tracking-[0.14em] mb-1.5"
+           style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+          The {sel.rows.length} invoices behind those figures
+        </p>
+        {sel.rows.map(r => (
+          <div key={r.id} className="flex items-center gap-2 py-1.5"
+               style={{ borderBottom: '1px solid var(--card-border)' }}>
+            <span className="font-semibold" style={{ fontSize: 11, color: 'var(--text-2)', flex: '0 0 74px' }}>{r.id}</span>
+            <span className="truncate" style={{ fontSize: 11, color: 'var(--text-3)', flex: 1 }}>{r.category}</span>
+            <span className="tabular-nums font-bold" style={{ fontSize: 11, color: 'var(--text-1)' }}>{inr(r.amount)}</span>
+            <Badge status={r.status} />
+          </div>
+        ))}
+        <p className="mt-2" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          Margin is billed less cost — a project cannot claim a margin its invoices do not support.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* ── Analytics ───────────────────────────────────────────────────────── */
+
+function Analytics({ state, set }) {
+  const series = useMemo(() => monthly(state.months), [state.months])
+  const max = Math.max(...series.map(m => Math.max(m.billed, m.collected)), 1)
+  const W = 260, H = 96
+  const x = (i) => (i / Math.max(series.length - 1, 1)) * (W - 16) + 8
+  const y = (v) => H - 10 - (v / max) * (H - 24)
+  const line = series.map((m, i) => `${x(i).toFixed(1)},${y(m.collected).toFixed(1)}`).join(' L ')
+
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex items-center gap-1.5 mb-2.5">
+        {[3, 6, 12].map(n => (
+          <button key={n} onClick={() => set({ months: n })}
+                  aria-pressed={state.months === n}
+                  className="rounded-lg font-semibold"
+                  style={{ height: 30, padding: '0 12px', fontSize: 11.5, cursor: 'pointer',
+                           background: state.months === n ? 'var(--accent)' : 'var(--card-bg)',
+                           border: `1px solid ${state.months === n ? 'var(--accent)' : 'var(--card-border)'}`,
+                           color: state.months === n ? '#fff' : 'var(--text-2)' }}>
+            {n}M
+          </button>
+        ))}
+        <span className="ml-auto" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+          bars billed · line collected
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-2.5">
+        <Stat label="Collection rate" value={`${TOTALS.collectionRate}%`} />
+        <Stat label="Days to collect" value={TOTALS.avgDaysToCollect} />
+        <Stat label="GST tracked"     value={inrShort(TOTALS.gst)} />
+      </div>
+
+      <div className="rounded-xl p-2 flex-1 min-h-0"
+           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+             style={{ width: '100%', height: '100%', display: 'block' }} aria-hidden="true">
+          {[0.25, 0.5, 0.75].map(f => (
+            <line key={f} x1="0" y1={H - 10 - f * (H - 24)} x2={W} y2={H - 10 - f * (H - 24)}
+                  stroke="var(--card-border)" strokeWidth="0.6" strokeDasharray="3 3" />
+          ))}
+          {series.map((m, i) => {
+            const w = Math.max((W - 16) / series.length - 6, 4)
+            return (
+              <rect key={m.key + i} x={x(i) - w / 2} y={y(m.billed)} width={w}
+                    height={Math.max(H - 10 - y(m.billed), 0)} rx="2"
+                    fill="var(--accent)" opacity="0.26"
+                    style={{ transformOrigin: `center ${H - 10}px`,
+                             animation: `ft-grow-y 520ms cubic-bezier(0.22,1,0.36,1) ${i * 45}ms both` }} />
+            )
+          })}
+          <path d={`M ${line}`} fill="none" stroke="var(--accent)" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" pathLength="1"
+                style={{ strokeDasharray: 1, strokeDashoffset: 1,
+                         animation: 'ft-draw 900ms cubic-bezier(0.4,0,0.2,1) forwards' }} />
+        </svg>
+        <div className="flex justify-between px-1 pt-1">
+          {series.map((m, i) => (
+            <span key={m.key + i} style={{ fontSize: 8.5, color: 'var(--text-3)' }}>{m.key}</span>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-2" style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+        Change the window and every tile above moves with it — the period is a
+        filter on the same rows, not a different report.
+      </p>
+    </div>
+  )
+}
+
+/* ── The analyst ─────────────────────────────────────────────────────── */
+
+function Analyst({ state, set }) {
+  const preset = QUESTIONS[state.question]
+  const result = useMemo(
+    () => ask({ measure: preset.measure, groupBy: preset.groupBy }),
+    [preset]
+  )
+
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <p className="font-semibold mb-2" style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
+        Ask something. The statement below is what produced the answer below it.
+      </p>
+
+      <div className="flex flex-wrap gap-1.5 mb-2.5">
+        {QUESTIONS.map((q, i) => (
+          <button key={q.q} onClick={() => set({ question: i })}
+                  aria-pressed={state.question === i}
+                  className="rounded-lg font-semibold text-left"
+                  style={{
+                    minHeight: 30, padding: '5px 10px', fontSize: 11.5, cursor: 'pointer',
+                    background: state.question === i ? 'var(--accent)' : 'var(--card-bg)',
+                    border: `1px solid ${state.question === i ? 'var(--accent)' : 'var(--card-border)'}`,
+                    color: state.question === i ? '#fff' : 'var(--text-2)',
+                  }}>
+            {q.q}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-xl overflow-hidden mb-2.5 shrink-0"
+           style={{ border: '1px solid var(--card-border)' }}>
+        <div className="flex items-center justify-between px-2.5 py-1"
+             style={{ background: 'var(--bg-input)' }}>
+          <span className="font-bold uppercase tracking-[0.16em]"
+                style={{ fontSize: 9, color: 'var(--text-3)' }}>Compiled query</span>
+          <span style={{ fontSize: 9, color: 'var(--text-3)' }}>generated, not written by the model</span>
+        </div>
+        <pre key={state.question} className="m-0 px-2.5 py-2 overflow-x-auto"
+             style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--text-2)', background: 'var(--bg-base)',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      animation: 'ft-fade-in 260ms ease both' }}>
+          {result.sql}
+        </pre>
+      </div>
+
+      <div className="rounded-xl p-2.5 flex-1 min-h-0 overflow-y-auto"
+           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+        <p className="font-bold uppercase tracking-[0.14em] mb-2"
+           style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+          {result.measureLabel} by {result.groupLabel}
+        </p>
+        {result.rows.map((r, i) => (
+          <div key={r.key} className="flex items-center gap-2 mb-1.5">
+            <span className="truncate" style={{ fontSize: 11, color: 'var(--text-2)', flex: '0 0 34%' }}>{r.key}</span>
+            <span className="flex-1" style={{ height: 9, borderRadius: 5, background: 'var(--bg-input)' }}>
+              <span key={state.question} style={{
+                display: 'block', height: '100%', borderRadius: 5,
+                width: `${Math.max((r.value / result.peak) * 100, 3)}%`,
+                background: RAMP[Math.min(i, RAMP.length - 1)],
+                transformOrigin: 'left center',
+                animation: `ft-grow-x 640ms cubic-bezier(0.22,1,0.36,1) ${i * 70}ms both`,
+              }} />
+            </span>
+            <span className="tabular-nums font-bold text-right shrink-0"
+                  style={{ fontSize: 11, color: 'var(--text-1)', minWidth: 76 }}>
+              {result.format(r.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const PANELS = {
+  receivables: Receivables,
+  ageing: Ageing,
+  projects: Projects,
+  analytics: Analytics,
+  analyst: Analyst,
+}
+
+/* ── The shell ───────────────────────────────────────────────────────── */
+
+const CAPTION = {
+  receivables: 'Filter, search and sort. The total at the bottom is whatever survived — it is the rows, not a number kept somewhere else.',
+  ageing:      'Bands are predicates, not colours. Pick one and it opens the invoice list already filtered to it.',
+  projects:    'Billed less cost, per project, with the invoices that produced it listed underneath.',
+  analytics:   'Move the window and every figure moves with it. One period filter over one set of rows.',
+  analyst:     'A question is a measure and a grouping. The model chooses those two; the code writes the SQL and runs it.',
+}
+
+export default function DemoWorkspace() {
+  const [state, setState] = useState({
+    tab: 'receivables',
+    status: 'all',
+    band: null,
+    query: '',
+    sort: { key: 'amount', dir: 'desc' },
+    project: PROJECT_ROLLUP[0].id,
+    months: 6,
+    question: 0,
+  })
+  // Autoplay stops for good at the first interaction. A demo that keeps
+  // advancing under someone's cursor is actively hostile.
+  const [driving, setDriving] = useState(false)
+  const [onScreen, setOnScreen] = useState(false)
+  const hostRef = useRef(null)
+
+  const set = (patch) => { setDriving(true); setState(s => ({ ...s, ...patch })) }
+
+  useEffect(() => {
+    const el = hostRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') { setOnScreen(true); return }
+    const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), { threshold: 0.25 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (driving || !onScreen) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const id = setInterval(() => {
+      setState(s => {
+        const i = TABS.findIndex(t => t.id === s.tab)
+        return { ...s, tab: TABS[(i + 1) % TABS.length].id }
+      })
+    }, 5200)
+    return () => clearInterval(id)
+  }, [driving, onScreen])
+
+  const Panel = PANELS[state.tab]
+
+  const restart = () => {
+    setDriving(false)
+    setState({
+      tab: 'receivables', status: 'all', band: null, query: '',
+      sort: { key: 'amount', dir: 'desc' }, project: PROJECT_ROLLUP[0].id,
+      months: 6, question: 0,
+    })
+  }
+
+  return (
+    <div ref={hostRef}>
+      <div className="ft-tour">
+        <div className="ft-tour-chrome">
+          {['#ef4444', '#fbbf24', '#22c55e'].map(c => (
+            <span key={c} className="ft-tour-dot" style={{ background: c }} />
+          ))}
+          <span className="ml-2 font-semibold truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            fintrack — {TABS.find(t => t.id === state.tab)?.label.toLowerCase()}
+          </span>
+          <span className="ml-auto rounded font-bold uppercase tracking-[0.14em] shrink-0"
+                style={{ fontSize: 8.5, padding: '3px 7px', background: 'var(--card-border)', color: 'var(--text-3)' }}>
+            Sample data
+          </span>
+        </div>
+
+        <div className="ft-tour-body">
+          <nav className="ft-tour-rail" aria-label="Sample workspace sections">
+            {TABS.map(t => {
+              const Icon = t.icon
+              const on = state.tab === t.id
+              return (
+                <button key={t.id} onClick={() => set({ tab: t.id })}
+                        aria-current={on ? 'page' : undefined}
+                        className="ft-tour-rail-item"
+                        data-on={on ? '' : undefined}
+                        style={{ cursor: 'pointer', background: on ? undefined : 'transparent',
+                                 border: 0, width: '100%', textAlign: 'left' }}>
+                  <Icon size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
+                  <span className="hidden sm:inline truncate">{t.label}</span>
+                  <span className="sm:hidden sr-only">{t.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="ft-tour-stage">
+            <div key={state.tab} className="h-full ft-tour-scene">
+              <Panel state={state} set={set} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-2"
+             style={{ borderTop: '1px solid var(--card-border)', background: 'var(--bg-input)' }}>
+          {driving ? (
+            <>
+              <MousePointerClick size={13} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
+              <span className="font-semibold" style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                You are driving.
+              </span>
+              <button onClick={restart}
+                      className="ml-auto flex items-center gap-1.5 rounded-md font-semibold shrink-0"
+                      style={{ height: 26, padding: '0 9px', fontSize: 11, cursor: 'pointer',
+                               background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                               color: 'var(--text-2)' }}>
+                <Play size={11} aria-hidden="true" /> Replay tour
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 font-semibold shrink-0"
+                    style={{ fontSize: 11, color: 'var(--accent)' }}>
+                <span style={{ width: 6, height: 6, borderRadius: 99, background: 'var(--accent)',
+                               animation: 'ft-pulse 1.8s ease-in-out infinite' }} />
+                Touring
+              </span>
+              <span className="truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                click anything to take over
+              </span>
+              <span className="ml-auto tabular-nums shrink-0" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+                {TABS.findIndex(t => t.id === state.tab) + 1}/{TABS.length}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--text-2)', minHeight: '3.2em' }}>
+        {CAPTION[state.tab]}
+      </p>
+    </div>
+  )
+}

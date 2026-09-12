@@ -30,27 +30,11 @@ export function Grain({ opacity = 0.045 }) {
   )
 }
 
-/* ── Brand mark ───────────────────────────────────────────────────────────
-   An "F" built from three ascending bars — the chart-bar mark the app already
-   uses, drawn rather than imported so it takes the accent colour. */
-export function BrandMark({ size = 30 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <defs>
-        <linearGradient id="ft-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent-bright)" />
-          <stop offset="100%" stopColor="var(--accent-btn)" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill="url(#ft-mark)" />
-      <g fill="#fff">
-        <rect x="8"  y="17" width="4" height="8"  rx="1.6" />
-        <rect x="14" y="12" width="4" height="13" rx="1.6" />
-        <rect x="20" y="7"  width="4" height="18" rx="1.6" opacity="0.62" />
-      </g>
-    </svg>
-  )
-}
+/* The brand mark used to be redrawn here — a rounded accent-blue tile with
+   three ascending vertical bars — while the app, the favicon and the touch
+   icon all used the navy tile with the chart-bar "F" in src/components/
+   BrandMark.jsx. Two marks for one product, and the public page was showing
+   the wrong one. Import that component; do not draw a second logo. */
 
 /* ── Mini visualisations ──────────────────────────────────────────────────
    One per bento cell. Small enough to read at a glance, specific enough that

@@ -13,7 +13,10 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ArrowRight, Menu, X, Moon, Sun } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
-import { BrandMark } from './LandingVisuals'
+// The app's own mark, not a second one drawn for this page. The public site
+// briefly shipped a different logo from the product and the favicon; there is
+// one mark, and this is it.
+import BrandMark from './BrandMark'
 
 const NAV = [
   { to: '/',          label: 'Overview' },
@@ -43,7 +46,12 @@ export default function PublicLayout({ children }) {
   }, [open])
 
   return (
-    <div className="login-bg min-h-screen flex flex-col" style={{ color: 'var(--text-1)' }}>
+    // `main-app-theme` is the product's palette. Without it the public pages
+    // render from the bare :root fallback — a different blue, a colder
+    // off-white, different text greys — so the site a visitor saw first did
+    // not match the app they signed in to.
+    <div className="main-app-theme login-bg min-h-screen flex flex-col"
+         style={{ color: 'var(--text-1)' }}>
       <header
         className="sticky top-0 z-40"
         style={{

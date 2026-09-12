@@ -50,8 +50,9 @@ describe('Landing', () => {
   it('describes every shipped module', () => {
     view()
     for (const title of [
-      'Receivables', 'Projects', 'Analytics', 'Studio — documents',
-      'Studio — finance data', 'Pages', 'Status board', 'Shared views',
+      'Receivables', 'Projects', 'Analytics', 'Tax ledger', 'AI reports',
+      'Studio — documents', 'Studio — finance data', 'Pages', 'Status board',
+      'Shared views', 'Admin & audit',
     ]) {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
@@ -62,26 +63,25 @@ describe('Landing', () => {
     expect(screen.getByText(/administrator approves each account/i)).toBeInTheDocument()
   })
 
-  it('hides the decorative mockup and aurora from assistive tech', () => {
+  it('hides the ambient decoration from assistive tech', () => {
     const { container } = view()
-    // The mockup repeats figures that are illustrative, not real — a screen
-    // reader announcing them as data would be actively misleading.
-    expect(container.querySelector('.ft-aurora')).toHaveAttribute('aria-hidden', 'true')
-    expect(container.querySelector('.ft-float')).toHaveAttribute('aria-hidden', 'true')
+    // Colour fields and texture carry no information; announcing them is noise.
+    for (const sel of ['.ft-aurora', '.ft-dotgrid']) {
+      expect(container.querySelector(sel)).toHaveAttribute('aria-hidden', 'true')
+    }
   })
 
-  it('keeps the illustrative figure out of the accessibility tree', () => {
+  it('labels the sandbox as invented before anyone reads a figure from it', () => {
     view()
-    // ₹2,16,000 appears only inside the aria-hidden mockup.
-    const shown = screen.queryByText('₹2,16,000')
-    if (shown) {
-      expect(shown.closest('[aria-hidden="true"]')).not.toBeNull()
-    }
+    // The demo is interactive, so unlike a still mockup it cannot be hidden
+    // from assistive tech — which makes saying so in the frame the only thing
+    // standing between a visitor and a rupee figure they take for real.
+    expect(screen.getByText(/Sample data/i)).toBeInTheDocument()
   })
 
   it('gives in-page nav real anchors', () => {
     const { container } = view()
-    for (const id of ['features', 'privacy', 'how']) {
+    for (const id of ['try', 'features', 'trust', 'how', 'privacy', 'faq']) {
       expect(container.querySelector(`#${id}`)).toBeInTheDocument()
     }
   })

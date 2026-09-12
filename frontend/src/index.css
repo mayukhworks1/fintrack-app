@@ -2581,7 +2581,9 @@ html.dark .web-invoices-shell {
 .ft-aurora span:nth-child(2) {
   width: 38vw; height: 38vw; min-width: 260px; min-height: 260px;
   right: 4%; top: 0%;
-  background: radial-gradient(circle, #7c3aed 0%, transparent 68%);
+  /* The mark's green, not a violet. The second blob is the only place the
+     page shows a second hue, so it has to be a brand one. */
+  background: radial-gradient(circle, #4ADE80 0%, transparent 68%);
   animation: ft-aurora-b 24s ease-in-out infinite;
 }
 .dark .ft-aurora span { opacity: 0.34; }
@@ -2681,10 +2683,13 @@ html.dark .web-invoices-shell {
   position: absolute; inset: 0;
   border-radius: inherit;
   padding: 1px;
+  /* Brand blue → brand green. These are the two stops in the logo's top bar
+     (#4F86FF → #4ADE80), so the edge light is the mark's own gradient rather
+     than the violet that was here, which appears nowhere else in the product. */
   background: linear-gradient(135deg,
-    color-mix(in srgb, var(--accent) 55%, transparent),
+    color-mix(in srgb, #4F86FF 55%, transparent),
     transparent 40%, transparent 60%,
-    color-mix(in srgb, #7c3aed 45%, transparent));
+    color-mix(in srgb, #4ADE80 48%, transparent));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
@@ -2701,3 +2706,202 @@ html.dark .web-invoices-shell {
   .ft-explorer { grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); gap: 1.75rem; align-items: start; }
 }
 @keyframes ft-panel-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+
+/* ══════════════════════════════════════════════════════════════════
+   SAMPLE WORKSPACE
+   ──────────────────────────────────────────────────────────────────
+   Chrome for the playable demo on the public page — title bar, module
+   rail and a fixed-ratio stage.
+
+   A screen recording was the obvious way to show the product and the
+   wrong one. A video of a light-mode app lands on a dark page as a
+   bright rectangle with the wrong corners, ships a megabyte before its
+   first frame, goes stale the day a screen changes, and cannot be
+   clicked. This is ordinary DOM: it takes the visitor's theme, stays
+   sharp at any density, and the thing inside it actually works.
+
+   The stage keeps a fixed aspect ratio so switching modules does not
+   reflow the page around it — layout shift in a hero is the most
+   expensive place to have it.
+══════════════════════════════════════════════════════════════════ */
+
+.ft-tour {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 30px 70px -20px rgba(15, 23, 42, 0.30),
+              0 10px 24px -12px rgba(15, 23, 42, 0.18);
+}
+.dark .ft-tour {
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.62),
+              0 10px 24px -12px rgba(0, 0, 0, 0.45);
+}
+/* A hairline of the mark's own gradient along the top edge. The demo is the
+   most important object on the page and was sitting in the same 1px grey
+   border as every card around it. One lit edge is enough to say which thing
+   to look at — a full gradient frame would read as a sticker. */
+.ft-tour::before {
+  content: '';
+  position: absolute; inset: 0 0 auto; height: 2px; z-index: 2;
+  background: linear-gradient(90deg, #4F86FF, #4ADE80 62%, transparent);
+  pointer-events: none;
+}
+
+/* Title bar. */
+.ft-tour-chrome {
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--card-border);
+}
+.ft-tour-dot { width: 9px; height: 9px; border-radius: 99px; opacity: 0.72; }
+
+/* Rail + stage. The rail collapses to icons only below 560px, where the
+   labels would take more of the frame than the content they label. */
+.ft-tour-body { display: grid; grid-template-columns: 52px minmax(0, 1fr); }
+@media (min-width: 560px) { .ft-tour-body { grid-template-columns: 148px minmax(0, 1fr); } }
+
+.ft-tour-rail {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 6px;
+  border-right: 1px solid var(--card-border);
+  background: color-mix(in srgb, var(--bg-input) 55%, transparent);
+}
+.ft-tour-rail-item {
+  display: flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 8px; border-radius: 7px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  color: var(--text-3);
+  transition: background 320ms ease, color 320ms ease;
+}
+.ft-tour-rail-item[data-on] {
+  background: var(--accent-dim); color: var(--accent); font-weight: 700;
+}
+
+/* The stage itself. A fixed aspect ratio so the page does not reflow as
+   scenes of different heights swap in — layout shift in a hero is the
+   one place it is most expensive. */
+.ft-tour-stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 12px;
+  overflow: hidden;
+}
+@media (min-width: 560px) { .ft-tour-stage { aspect-ratio: 16 / 10; padding: 16px; } }
+@media (min-width: 900px) { .ft-tour-stage { aspect-ratio: 16 / 9; } }
+
+@keyframes ft-scene-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.995) }
+  to   { opacity: 1; transform: none }
+}
+.ft-tour-scene { animation: ft-scene-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Scene-local motion. */
+@keyframes ft-row-in   { from { opacity: 0; transform: translateX(-6px) } to { opacity: 1; transform: none } }
+@keyframes ft-pop-in   { from { opacity: 0; transform: scale(0.92) }      to { opacity: 1; transform: none } }
+@keyframes ft-grow-y   { from { transform: scaleY(0) }                    to { transform: scaleY(1) } }
+@keyframes ft-grow-x   { from { transform: scaleX(0) }                    to { transform: scaleX(1) } }
+@keyframes ft-toast-in {
+  0%   { opacity: 0; transform: translateY(10px) }
+  12%  { opacity: 1; transform: none }
+  82%  { opacity: 1; transform: none }
+  100% { opacity: 0; transform: translateY(-4px) }
+}
+@keyframes ft-caret   { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
+@keyframes ft-ping    { 0% { opacity: 0.7; transform: scale(0.6) } 100% { opacity: 0; transform: scale(2.2) } }
+
+/* ── Ambient texture ───────────────────────────────────────────────
+   Two cheap layers that give a flat section something underneath it:
+   a ruled dot grid that fades out from the top, and a soft conic
+   spotlight. Both are painted by the compositor and neither animates,
+   so they cost a paint and nothing else. */
+.ft-dotgrid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px,
+    color-mix(in srgb, var(--text-3) 34%, transparent) 1px, transparent 0);
+  background-size: 26px 26px;
+  opacity: 0.4;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+          mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+}
+.ft-spotlight {
+  position: absolute; inset: -20% -10% auto; height: 70%; pointer-events: none;
+  background: radial-gradient(ellipse 50% 50% at 50% 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  filter: blur(28px);
+}
+
+/* A hairline that brightens toward the middle — a section break that is
+   not a flat 1px rule across the full width. */
+.ft-rule {
+  height: 1px; border: 0; margin: 0;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--accent) 45%, transparent), transparent);
+}
+
+/* ── Travelling pulse ──────────────────────────────────────────────
+   Rides the connector between the "how it works" steps, so the diagram
+   shows direction instead of asserting it in a caption. */
+@keyframes ft-travel {
+  0%   { offset-distance: 0%;   opacity: 0 }
+  10%  { opacity: 1 }
+  90%  { opacity: 1 }
+  100% { offset-distance: 100%; opacity: 0 }
+}
+@keyframes ft-travel-x {
+  0%   { transform: translateX(0);      opacity: 0 }
+  10%  { opacity: 1 }
+  90%  { opacity: 1 }
+  100% { transform: translateX(var(--ft-travel-to, 100px)); opacity: 0 }
+}
+.ft-travel {
+  animation: ft-travel-x 2600ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── Shine sweep ───────────────────────────────────────────────────
+   One pass of light across a surface on hover. */
+.ft-shine { position: relative; overflow: hidden; }
+.ft-shine::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 38%,
+    color-mix(in srgb, #fff 26%, transparent) 48%, transparent 58%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.ft-shine:hover::after { transition: transform 900ms ease; transform: translateX(120%); }
+
+/* ── FAQ ───────────────────────────────────────────────────────────
+   A details/summary accordion. Native disclosure, so it works with no
+   JavaScript, is keyboard-operable for free, and its answers are in the
+   document for a crawler whether or not anyone opens them. */
+.ft-faq { border-bottom: 1px solid var(--card-border); }
+.ft-faq > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 60px; padding: 14px 4px;
+  cursor: pointer; list-style: none;
+  font-weight: 700; font-size: 0.95rem; color: var(--text-1);
+}
+.ft-faq > summary::-webkit-details-marker { display: none; }
+.ft-faq > summary::after {
+  content: '+'; flex-shrink: 0;
+  font-size: 1.3rem; font-weight: 400; line-height: 1;
+  color: var(--accent);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ft-faq[open] > summary::after { transform: rotate(45deg); }
+.ft-faq > div {
+  padding: 0 4px 18px;
+  animation: ft-slide-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────
+   The global block collapses every duration, which would leave the tour
+   holding on scene one with a full progress bar. The component stops its
+   own timers in that case and shows the scene chips as a manual picker,
+   so the walkthrough is still walkable — it just waits to be asked. */
+@media (prefers-reduced-motion: reduce) {
+  .ft-travel { animation: none; opacity: 1; }
+  .ft-shine::after { display: none; }
+}

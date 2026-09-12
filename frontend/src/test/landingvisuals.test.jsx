@@ -7,7 +7,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { CountUp, AnalystDemo, BrandMark, MiniBars, Grain } from '../components/LandingVisuals'
+import { CountUp, AnalystDemo, MiniBars, Grain } from '../components/LandingVisuals'
+import BrandMark from '../components/BrandMark'
 
 let observers = []
 function mockIO({ intersecting = true } = {}) {

@@ -64,15 +64,18 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('App routing, signed out', () => {
   // The regression: this threw ReferenceError and rendered nothing at all.
+  // Anchored on the sandbox rather than on the headline — the headline is copy
+  // and gets rewritten, and a routing test that fails when marketing changes
+  // its mind reports nothing useful about routing.
   it('renders the landing page at the root without throwing', async () => {
     at('/')
-    expect(await screen.findByText(/Know what you are owed/)).toBeInTheDocument()
+    expect(await screen.findByRole('navigation', { name: /sample workspace/i })).toBeInTheDocument()
   })
 
   it('sends a deep link to sign-in rather than to marketing', async () => {
     at('/invoices')
     await waitFor(() => {
-      expect(screen.queryByText(/Know what you are owed/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
     })
   })
 
@@ -92,7 +95,7 @@ describe('App routing, signed out', () => {
   it('renders sign-in at /login', async () => {
     at('/login')
     await waitFor(() => {
-      expect(screen.queryByText(/Know what you are owed/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
     })
   })
 })
@@ -102,7 +105,7 @@ describe('App routing, signed in', () => {
     authState = { ...authState, status: 'authed' }
     at('/')
     await waitFor(() => {
-      expect(screen.queryByText(/Know what you are owed/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
     })
   })
 })
