@@ -2805,11 +2805,17 @@ html.dark .web-invoices-shell {
           mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
 }
 .ft-spotlight {
-  position: absolute; inset: -20% -10% auto; height: 70%; pointer-events: none;
-  background: radial-gradient(ellipse 50% 50% at 50% 0%,
-    color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
-  filter: blur(28px);
+  position: absolute; inset: 0; pointer-events: none;
+  /* Follows the pointer through --tilt-mx/--tilt-my, which useTilt already
+     writes on the hero: rAF-throttled, and not written at all on a coarse
+     pointer or under reduced motion. So this needs no hook of its own, and
+     it degrades to the resting position rather than to nothing. */
+  background: radial-gradient(560px circle at var(--tilt-mx, 50%) var(--tilt-my, 28%),
+    color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%);
+  opacity: 0;
+  transition: opacity 520ms ease;
 }
+[data-tilting] > .ft-spotlight { opacity: 1; }
 
 /* A hairline that brightens toward the middle — a section break that is
    not a flat 1px rule across the full width. */
@@ -2931,4 +2937,94 @@ html.dark .web-invoices-shell {
   .ft-3d > * { transform: none; opacity: 1; }
   .ft-plane, .ft-stack:hover .ft-plane { transition: none; transform: none; }
   .ft-spark { animation: none; opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PIPELINE
+   ──────────────────────────────────────────────────────────────────
+   Four stages with light running between them, on one 8-second loop.
+
+   Every stage shares the same duration and differs only by delay, so
+   they cannot drift apart the way four independently-timed animations
+   would. The travel is compressed into the first ~17% of each cycle
+   and the element rests for the remainder; a delay of N × 2s is what
+   puts stage N in its slot and keeps it there for ever.
+
+   Connectors are horizontal, so they are drawn only where the row is
+   a row. Below 768px the stages fall into a column and the arrows
+   would point across nothing; the numbered order carries the sequence
+   there instead.
+══════════════════════════════════════════════════════════════════ */
+
+.ft-pipe {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 768px) {
+  .ft-pipe {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2.25rem;
+  }
+}
+
+.ft-pipe-node {
+  position: relative;
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  transition: border-color 400ms ease, box-shadow 400ms ease;
+}
+
+/* Lights as the pulse arrives, then hands over. */
+@keyframes ft-pipe-lit {
+  0%             { border-color: var(--card-border); box-shadow: none }
+  3%             { border-color: var(--accent);
+                   box-shadow: 0 0 0 3px var(--accent-glow), 0 10px 26px -12px var(--accent-glow) }
+  20%            { border-color: var(--accent);
+                   box-shadow: 0 0 0 3px var(--accent-glow), 0 10px 26px -12px var(--accent-glow) }
+  32%, 100%      { border-color: var(--card-border); box-shadow: none }
+}
+.ft-pipe-node[data-run] { animation: ft-pipe-lit 8s ease-in-out infinite; }
+
+/* The connector, and the light that rides it. */
+.ft-pipe-link {
+  position: absolute; top: 50%; right: -2.25rem;
+  width: 2.25rem; height: 2px; margin-top: -1px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 45%, transparent),
+    color-mix(in srgb, var(--accent) 12%, transparent));
+  display: none;
+}
+@media (min-width: 768px) { .ft-pipe-link { display: block } }
+
+@keyframes ft-pipe-run {
+  0%     { transform: translateX(0);              opacity: 0 }
+  2%     { opacity: 1 }
+  15%    { opacity: 1 }
+  17.5%  { transform: translateX(var(--run, 36px)); opacity: 0 }
+  100%   { transform: translateX(var(--run, 36px)); opacity: 0 }
+}
+.ft-pipe-spark {
+  position: absolute; left: -3px; top: 50%;
+  width: 7px; height: 7px; margin-top: -3.5px;
+  border-radius: 99px; background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: ft-pipe-run 8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Glass. One frosted surface on the dark theme, where the renders that
+   set this direction get most of their depth — a flat card on a flat
+   near-black ground has no edge to catch. */
+.dark .ft-pipe-node {
+  background: color-mix(in srgb, var(--card-bg) 78%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Every stage lit at once: the diagram still reads as a sequence
+     left to right, it just does not perform one. */
+  .ft-pipe-node[data-run] { animation: none; border-color: var(--accent-soft); }
+  .ft-pipe-spark { animation: none; opacity: 0.9; }
 }

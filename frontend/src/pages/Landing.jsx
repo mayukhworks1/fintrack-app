@@ -25,6 +25,7 @@ import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
 import LayerStack from '../components/LayerStack'
+import AnalystPipeline from '../components/AnalystPipeline'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import {
@@ -353,6 +354,9 @@ export default function Landing() {
   // unstable. Only the cursor-following glow is wanted here, and that reads
   // --tilt-mx/--tilt-my, which the hook writes regardless of the angle.
   const heroCta = useTilt({ max: 0 })
+  // Rotation of 0 again: the hero must not tip. This is only here for the
+  // pointer position the hook writes, which the spotlight reads.
+  const heroLight = useTilt({ max: 0 })
   usePageMeta({
     title: 'FinTrack — receivables, project profit and an AI analyst that shows its working',
     description:
@@ -364,9 +368,10 @@ export default function Landing() {
   return (
     <PublicLayout>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden">
+      <section ref={heroLight} className="relative overflow-hidden">
         <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
         <div className="ft-dotgrid" aria-hidden="true" />
+        <div className="ft-spotlight" aria-hidden="true" />
         <Grain />
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
@@ -513,10 +518,22 @@ export default function Landing() {
         <hr className="ft-rule mb-14" />
         <Head eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
-          Plenty of tools promise not to make things up. These are the four
-          decisions that mean this one cannot — each of them is in the code, and
-          each of them is visible to you while you use it.
+          Plenty of tools promise not to make things up. This is where the
+          promise is replaced by a mechanism — you can see exactly where the
+          model's authority stops, and it stops two steps before the number.
         </Head>
+
+        <AnalystPipeline />
+
+        <p className="mt-5 mb-12 sm:mb-16 text-sm leading-relaxed"
+           style={{ color: 'var(--text-2)', maxWidth: 680 }}>
+          The model's entire output is those two values, each chosen from a
+          closed list. There is no route from a sentence to arbitrary SQL —
+          which is also why the analyst cannot be talked into reading rows your
+          account may not see. Scoping is applied when the statement is
+          assembled, below the point where anything the model said still counts.
+        </p>
+
         <div className="grid gap-5 sm:gap-6"
              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
           {TRUST.map(({ icon: Icon, title, body }, i) => (

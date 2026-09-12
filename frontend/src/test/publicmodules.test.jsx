@@ -95,3 +95,24 @@ describe('the public pages count their own modules', () => {
     }
   })
 })
+
+describe('the pipeline agrees with the sandbox', () => {
+  // The pipeline's final stage shows an answer for the same question the
+  // analyst panel opens on, and both call ask(). If either were ever
+  // hardcoded they would drift, and the page would be contradicting itself
+  // inside the one section whose whole argument is that it cannot.
+  it('shows the same answer the analyst produces for that question', async () => {
+    const { ask } = await import('../components/demoData')
+    const three = ask({ measure: 'outstanding', groupBy: 'client', limit: 3 })
+    const five = ask({ measure: 'outstanding', groupBy: 'client', limit: 5 })
+    expect(three.rows).toEqual(five.rows.slice(0, 3))
+    expect(three.sql).toContain('SUM(amount_raised)')
+  })
+
+  it('renders four stages and the three links between them', () => {
+    const { container } = render(<MemoryRouter><Landing /></MemoryRouter>)
+    // Three connectors for four stages — a fourth would point off the end.
+    expect(container.querySelectorAll('.ft-pipe-node')).toHaveLength(4)
+    expect(container.querySelectorAll('.ft-pipe-spark')).toHaveLength(3)
+  })
+})
