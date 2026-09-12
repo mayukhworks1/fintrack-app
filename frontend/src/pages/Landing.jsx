@@ -14,14 +14,14 @@
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, Receipt, FolderKanban, BarChart3, Sparkles, Globe, Activity,
-  ShieldCheck, Share2, Lock, Database, Zap, Check, Moon, Sun, FileSearch,
+  ShieldCheck, Share2, Lock, Database, Zap, Check, FileSearch,
 } from 'lucide-react'
-import { useTheme } from '../context/ThemeContext'
 import { usePageMeta } from '../hooks/usePageMeta'
+import PublicLayout from '../components/PublicLayout'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import {
-  Grain, BrandMark, MiniBars, MiniLine, MiniDonut, MiniDocs, AnalystDemo, CountUp,
+  Grain, MiniBars, MiniLine, MiniDonut, MiniDocs, AnalystDemo, CountUp,
 } from '../components/LandingVisuals'
 
 // Every entry names something that actually ships. A landing page that
@@ -268,7 +268,6 @@ function ModuleCard({ icon: Icon, title, body, points, visual }) {
 }
 
 export default function Landing() {
-  const { dark, toggle } = useTheme()
   // Rotation of 0: a primary button that tips as you approach it feels
   // unstable. Only the cursor-following glow is wanted here, and that reads
   // --tilt-mx/--tilt-my, which the hook writes regardless of the angle.
@@ -280,59 +279,7 @@ export default function Landing() {
   })
 
   return (
-    <div className="login-bg min-h-screen" style={{ color: 'var(--text-1)' }}>
-      {/* ── Nav ─────────────────────────────────────────────────────────── */}
-      <header
-        className="sticky top-0 z-30"
-        style={{
-          background: 'color-mix(in srgb, var(--bg-base) 88%, transparent)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid var(--card-border)',
-        }}
-      >
-        <nav className="mx-auto flex items-center gap-3 px-4 sm:px-6"
-             style={{ maxWidth: 1120, minHeight: 60 }}>
-          <span className="flex items-center gap-2 font-extrabold text-base tracking-tight">
-            <BrandMark size={30} />
-            FinTrack
-          </span>
-
-          <div className="hidden sm:flex items-center gap-1 ml-4">
-            {[['Features', '#features'], ['Privacy', '#privacy'], ['How it works', '#how']].map(([label, href]) => (
-              <a key={href} href={href}
-                 className="px-3 py-2 rounded-lg text-sm font-medium"
-                 style={{ color: 'var(--text-2)' }}>
-                {label}
-              </a>
-            ))}
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={toggle}
-              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="flex items-center justify-center rounded-lg"
-              style={{
-                width: 40, height: 40, background: 'transparent',
-                border: '1px solid var(--card-border)', color: 'var(--text-2)', cursor: 'pointer',
-              }}
-            >
-              {dark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <Link
-              to="/login"
-              className="flex items-center gap-1.5 rounded-lg font-semibold text-sm"
-              style={{
-                minHeight: 40, padding: '0 16px', background: 'var(--accent-btn)',
-                color: '#fff', textDecoration: 'none',
-              }}
-            >
-              Sign in <ArrowRight size={15} aria-hidden="true" />
-            </Link>
-          </div>
-        </nav>
-      </header>
-
+    <PublicLayout>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         {/* Drifting colour field. Purely decorative, so it is hidden from AT
@@ -569,24 +516,6 @@ export default function Landing() {
         </Reveal>
       </section>
 
-      <footer className="mx-auto px-4 sm:px-6 pb-10" style={{ maxWidth: 1120 }}>
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6"
-             style={{ borderTop: '1px solid var(--card-border)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-            FinTrack — AI finance manager
-          </p>
-          {/* Padded to a real touch target — as bare text this was 16px tall,
-              well under the ~44px a thumb can hit reliably. */}
-          <Link to="/login"
-                className="inline-flex items-center text-xs font-semibold rounded-lg"
-                style={{
-                  color: 'var(--accent)', textDecoration: 'none',
-                  minHeight: 44, padding: '0 12px',
-                }}>
-            Sign in
-          </Link>
-        </div>
-      </footer>
-    </div>
+    </PublicLayout>
   )
 }

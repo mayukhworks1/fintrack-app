@@ -6,7 +6,18 @@ import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'  // eager — landing route
 import Login from './pages/Login'          // eager — auth gate
-const Landing = lazy(() => import('./pages/Landing'))  // public — not in the app bundle
+const Landing  = lazy(() => import('./pages/Landing'))   // public — not in the app bundle
+const Features = lazy(() => import('./pages/Features'))
+const Security = lazy(() => import('./pages/Security'))
+
+// Public marketing routes. Anything not listed here still goes straight to the
+// sign-in form, because a deep link into the app is someone reaching for a
+// screen, not for marketing.
+const PUBLIC_ROUTES = {
+  '/': Landing,
+  '/features': Features,
+  '/security': Security,
+}
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
 import { isChunkLoadError } from './utils/chunkError'
@@ -202,11 +213,12 @@ export default function App() {
   // someone reaching for a specific screen, so it goes straight to the form
   // rather than dropping them on marketing and making them find the way in.
   if (status !== 'authed') {
-    if (location.pathname === '/') {
+    const PublicPage = PUBLIC_ROUTES[location.pathname]
+    if (PublicPage) {
       return (
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
-            <Landing />
+            <PublicPage />
           </Suspense>
           <VercelAnalytics />
         </ErrorBoundary>

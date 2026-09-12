@@ -76,6 +76,16 @@ describe('App routing, signed out', () => {
     })
   })
 
+  it('serves the features page publicly', async () => {
+    at('/features')
+    expect(await screen.findByText(/Eight modules, one set of rows/)).toBeInTheDocument()
+  })
+
+  it('serves the security page publicly', async () => {
+    at('/security')
+    expect(await screen.findByText(/Who can see what/)).toBeInTheDocument()
+  })
+
   it('renders sign-in at /login', async () => {
     at('/login')
     await waitFor(() => {
