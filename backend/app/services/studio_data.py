@@ -82,6 +82,24 @@ class Dataset:
 # amount_with_tax and amount_received, and deriving the difference keeps the
 # metric consistent with how the rest of the app reports it.
 
+# Row predicates shared by every invoice metric, so the definitions cannot drift
+# apart one metric at a time — which is how the analyst came to disagree with the
+# dashboard in the first place. They mirror app/services/invoice.py::
+# _compute_summary; change these together with it or the two will diverge again.
+#
+# IS DISTINCT FROM, never <>: a NULL payment_status must be *included*, matching
+# the Python where an absent status defaults to "Unknown" and `cancelled` is
+# False. `status <> 'Cancelled'` is NULL for a NULL status, and a NULL predicate
+# drops the row.
+_LIVE = "payment_status IS DISTINCT FROM 'Cancelled'"          # counts toward totals
+_PAID = "payment_status = 'Paid'"                              # collected
+_OPEN = (f"{_LIVE} AND payment_status IS DISTINCT FROM 'Paid'")  # still owed
+
+# A Paid row with no recorded receipt is treated as received in full.
+_RECEIVED = ("CASE WHEN COALESCE(amount_received, 0) > 0 "
+             "THEN amount_received ELSE COALESCE(amount_raised, 0) END")
+
+
 _INVOICES = Dataset(
     key="invoices",
     label="Invoices",
@@ -97,27 +115,66 @@ _INVOICES = Dataset(
     ),
     owner_sql="LOWER(COALESCE(fields->>'Raised By', '')) = LOWER({p})",
     metrics={
-        "total_raised": Metric("total_raised", "Total raised", "COALESCE(SUM(amount_raised), 0)"),
-        "total_with_tax": Metric("total_with_tax", "Total with tax", "COALESCE(SUM(amount_with_tax), 0)"),
-        "total_received": Metric("total_received", "Total received", "COALESCE(SUM(amount_received), 0)"),
+        "total_raised": Metric(
+            "total_raised", "Total raised",
+            f"COALESCE(SUM(amount_raised) FILTER (WHERE {_LIVE}), 0)",
+        ),
+        "total_with_tax": Metric(
+            "total_with_tax", "Total with tax",
+            f"COALESCE(SUM(amount_with_tax) FILTER (WHERE {_LIVE}), 0)",
+        ),
+        # A Paid invoice with no recorded receipt counts as received in full at
+        # the raised amount — the app has always read a blank Amount Received on
+        # a Paid row as "collected, just not keyed in".
+        "total_received": Metric(
+            "total_received", "Total received",
+            f"COALESCE(SUM({_RECEIVED}) FILTER (WHERE {_PAID}), 0)",
+        ),
+        # Pre-tax, and only rows that are neither Paid nor Cancelled.
+        #
+        # This was SUM(amount_with_tax - amount_received) over every row, which
+        # counts the shortfall on already-paid invoices as money still owed.
+        # That shortfall is TDS: deducted at source by the client and reclaimed
+        # from the tax authority, never collected from the client. On live data
+        # it reported Rs 5,86,656 where the dashboard showed Rs 2,16,000 — the
+        # Rs 3,70,656 gap being TDS on 23 paid invoices plus GST on the one
+        # pending. _compute_summary keeps TDS in its own bucket for exactly
+        # this reason; the analyst now agrees with it.
         "total_outstanding": Metric(
             "total_outstanding", "Outstanding",
-            "COALESCE(SUM(COALESCE(amount_with_tax, 0) - COALESCE(amount_received, 0)), 0)",
+            f"COALESCE(SUM(amount_raised) FILTER (WHERE {_OPEN}), 0)",
         ),
-        "invoice_count": Metric("invoice_count", "Number of invoices", "COUNT(*)", unit="number"),
+        # Surfaced so the figure that caused the confusion is directly askable
+        # rather than only reachable by subtracting two other metrics.
+        "total_tds": Metric(
+            "total_tds", "TDS deducted",
+            f"COALESCE(SUM(GREATEST(COALESCE(amount_with_tax, 0) - {_RECEIVED}, 0)) "
+            f"FILTER (WHERE {_PAID}), 0)",
+        ),
+        "total_gst": Metric(
+            "total_gst", "GST",
+            f"COALESCE(SUM(GREATEST(COALESCE(amount_with_tax, 0) - COALESCE(amount_raised, 0), 0)) "
+            f"FILTER (WHERE {_LIVE}), 0)",
+        ),
+        "invoice_count": Metric(
+            "invoice_count", "Number of invoices",
+            f"COUNT(*) FILTER (WHERE {_LIVE})", unit="number",
+        ),
         "avg_invoice_value": Metric(
             "avg_invoice_value", "Average invoice value",
-            "COALESCE(ROUND(AVG(amount_raised), 2), 0)",
+            f"COALESCE(ROUND(AVG(amount_raised) FILTER (WHERE {_LIVE}), 2), 0)",
         ),
         "collection_rate": Metric(
             "collection_rate", "Collection rate",
-            "CASE WHEN COALESCE(SUM(amount_with_tax), 0) = 0 THEN 0 "
-            "ELSE ROUND(100 * SUM(COALESCE(amount_received, 0)) / SUM(amount_with_tax), 1) END",
+            f"CASE WHEN COALESCE(SUM(amount_with_tax) FILTER (WHERE {_LIVE}), 0) = 0 THEN 0 "
+            f"ELSE ROUND(100 * COALESCE(SUM({_RECEIVED}) FILTER (WHERE {_PAID}), 0) "
+            f"/ SUM(amount_with_tax) FILTER (WHERE {_LIVE}), 1) END",
             unit="percent",
         ),
         "avg_days_to_payment": Metric(
             "avg_days_to_payment", "Average days to payment",
-            "COALESCE(ROUND(AVG(cleared_date - raised_date) FILTER (WHERE cleared_date IS NOT NULL)), 0)",
+            "COALESCE(ROUND(AVG(cleared_date - raised_date) "
+            f"FILTER (WHERE cleared_date IS NOT NULL AND {_LIVE})), 0)",
             unit="days",
         ),
     },

@@ -284,3 +284,92 @@ class TestSpecExtraction:
         assert compiled.columns == ["value"]
         assert "invoices_mirror" in compiled.sql
         assert compiled.metric.unit == "currency"
+
+
+class TestInvoiceMetricsMatchTheDashboard:
+    """
+    Studio reported Rs 5,86,656 outstanding where the Invoices dashboard showed
+    Rs 2,16,000. Both read invoices_mirror; they disagreed because they defined
+    the word differently.
+
+    The old metric was SUM(amount_with_tax - amount_received) over EVERY row.
+    On a paid invoice that difference is TDS — withheld by the client and
+    reclaimed from the tax authority, never collected from them — and
+    invoice.py::_compute_summary keeps it in its own bucket for exactly that
+    reason. No metric excluded Cancelled either, while the rest of the app
+    always does.
+
+    These pin the definitions against _compute_summary. Executed against a real
+    Postgres on the same synthetic rows, every metric below now agrees with the
+    dashboard to the paisa; what is asserted here is the shape that makes that
+    true, so a future edit cannot quietly reintroduce the old formula.
+    """
+
+    def _sql(self, metric):
+        return studio_data.build({
+            "dataset": "invoices", "metric": metric, "dimensions": [],
+            "period": "all_time", "sort": "metric_desc", "limit": 10, "chart": "table",
+        }, None).sql
+
+    def test_outstanding_is_pre_tax(self):
+        """The dashboard adds `raised`, not the with-tax amount."""
+        sql = self._sql("total_outstanding")
+        assert "SUM(amount_raised)" in sql
+        assert "amount_with_tax" not in sql
+
+    def test_outstanding_counts_only_unpaid_live_rows(self):
+        sql = self._sql("total_outstanding")
+        assert "payment_status IS DISTINCT FROM 'Cancelled'" in sql
+        assert "payment_status IS DISTINCT FROM 'Paid'" in sql
+
+    def test_outstanding_is_not_the_old_difference_formula(self):
+        """The exact regression: on real rows it read 5.7x the true figure."""
+        assert "amount_with_tax, 0) - COALESCE(amount_received" not in self._sql("total_outstanding")
+
+    def test_a_null_status_is_still_outstanding(self):
+        """
+        IS DISTINCT FROM, never <>. `status <> 'Cancelled'` is NULL for a NULL
+        status and a NULL predicate drops the row — so a blank status would
+        silently vanish from the totals, while _compute_summary counts it
+        (status defaults to "Unknown", cancelled is False).
+        """
+        for metric in ("total_outstanding", "total_raised", "total_with_tax", "invoice_count"):
+            sql = self._sql(metric)
+            assert "IS DISTINCT FROM" in sql, metric
+            assert "payment_status <>" not in sql, metric
+            assert "payment_status !=" not in sql, metric
+
+    def test_received_treats_a_paid_row_with_no_receipt_as_collected(self):
+        """_compute_summary: `received if received > 0 else raised`."""
+        sql = self._sql("total_received")
+        assert "CASE WHEN COALESCE(amount_received, 0) > 0" in sql
+        assert "ELSE COALESCE(amount_raised, 0)" in sql
+        assert "FILTER (WHERE payment_status = 'Paid')" in sql
+
+    def test_cancelled_rows_are_excluded_from_every_money_metric(self):
+        """Cancelled was counted everywhere, inflating all of them."""
+        for metric in ("total_raised", "total_with_tax", "total_gst",
+                       "invoice_count", "avg_invoice_value", "avg_days_to_payment"):
+            assert "IS DISTINCT FROM 'Cancelled'" in self._sql(metric), metric
+
+    def test_tds_is_askable_in_its_own_right(self):
+        """The figure that caused the confusion is now a metric, not a
+        subtraction the reader has to work out."""
+        sql = self._sql("total_tds")
+        assert "FILTER (WHERE payment_status = 'Paid')" in sql
+        assert "GREATEST" in sql          # never negative when overpaid
+
+    def test_gst_never_goes_negative(self):
+        assert "GREATEST" in self._sql("total_gst")
+
+    def test_collection_rate_divides_the_same_two_definitions(self):
+        """Received over with-tax, each carrying its own row filter — otherwise
+        the rate is computed from two different populations."""
+        sql = self._sql("collection_rate")
+        assert "FILTER (WHERE payment_status = 'Paid')" in sql
+        assert "FILTER (WHERE payment_status IS DISTINCT FROM 'Cancelled')" in sql
+
+    def test_the_new_metrics_are_offered_to_the_model(self):
+        described = studio_data.describe_for_model()
+        assert "total_tds" in described
+        assert "total_gst" in described
