@@ -14,7 +14,8 @@
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, Receipt, FolderKanban, BarChart3, Sparkles, Globe, Activity,
-  ShieldCheck, Share2, Lock, Database, Zap, Check, FileSearch,
+  ShieldCheck, Share2, Lock, Database, Zap, Check, FileSearch, Landmark,
+  FileText,
 } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
@@ -27,54 +28,72 @@ import {
 // Every entry names something that actually ships. A landing page that
 // describes features the product does not have is the fastest way to lose the
 // trust the rest of it is trying to earn.
-const MODULES = [
+export const MODULES = [
   {
     icon: Receipt, span: 'span-3', visual: 'bars',
     title: 'Receivables',
-    body: 'Invoices with aging bands, collection rate, and GST and TDS tracked separately — because tax withheld at source is not money a client still owes you.',
-    points: ['Aging buckets', 'Collection pressure', 'Follow-up tracking'],
+    body: 'Invoices with aging bands, collection rate and average days to collect. GST and TDS are tracked separately — tax withheld at source is not money a client still owes you.',
+    points: ['Aging bands you can filter by', 'Collection rate and follow-up load', 'Missing docs and retainer templates'],
   },
   {
     icon: FolderKanban, span: 'span-3', visual: 'donut',
     title: 'Projects',
     body: 'Billing, cost and realised profit per project, with margin and health surfaced before a job quietly goes underwater.',
-    points: ['Profit and margin', 'Health signals', 'Client rollups'],
+    points: ['Profit and margin per project', 'At-risk and critical health signals', 'Client rollups and invoice history'],
   },
   {
-    icon: BarChart3, span: 'span-2', visual: 'line',
+    icon: BarChart3, span: 'span-4', visual: 'line',
     title: 'Analytics',
-    body: 'Trends across clients, months and categories, with the underlying rows one click away rather than locked behind a chart.',
-    points: ['Monthly trends', 'Client breakdowns', 'CSV export'],
+    body: 'Cash position, revenue, collection rate and overdue pressure over any period — plus signals worth noticing, surfaced rather than left to be found. Every chart is one click from the rows behind it.',
+    points: ['Cash position and overdue pressure', 'Client, project and category breakdowns', 'Sync state, so you know how fresh it is'],
+  },
+  {
+    icon: Landmark, span: 'span-2',
+    title: 'Tax ledger',
+    body: 'Gross billed, GST collected and net receivable, month by month — kept apart from the cash view so a filing figure is never mistaken for a collections figure.',
+    points: ['Monthly GST and net receivable', 'GST collection rate', 'Filing checklist'],
+  },
+  {
+    icon: FileText, span: 'span-2',
+    title: 'AI reports',
+    body: 'A written period report over your own figures, kept in a history you can reopen — and an assistant that already has the current context loaded.',
+    points: ['Brief, detailed or board-style', 'Report history', 'Assistant with live context'],
   },
   {
     icon: FileSearch, span: 'span-4', visual: 'docs',
     title: 'Studio — documents',
-    body: 'Upload contracts and notes, then ask questions about them. Every answer carries numbered citations you can open to the exact page it came from.',
-    points: ['PDF, text, CSV, JSON', 'Page-level citations', 'Answers checked against sources'],
+    body: 'Upload contracts and notes, then ask questions about them. Every answer carries numbered citations you can open to the exact page it came from, and the answer is checked against those sources before you see it.',
+    points: ['PDF, text, Markdown, CSV, JSON', 'Page-level citations, opened inline', 'Answers checked against sources'],
   },
   {
     icon: Sparkles, span: 'span-6', visual: 'demo',
     title: 'Studio — finance data',
-    body: 'Ask your invoices and projects a question in plain words. The compiled SQL is shown with every answer, so a figure about money can always be checked.',
-    points: ['Plain-language questions', 'The query is always visible', 'Charts and tables'],
+    body: 'Ask your invoices and projects a question in plain words. The model picks measures and groupings; the code compiles the SQL. The statement is shown with every answer, so a figure about money can always be checked.',
+    points: ['Outstanding, collected, GST, TDS, collection rate', 'Group by project, client, category, month or quarter', 'Scoped to what your account may already see'],
   },
   {
     icon: Globe, span: 'span-3',
     title: 'Pages',
     body: 'Describe a page and watch it get written, then publish it on a slug — optionally password-protected, optionally set to expire.',
-    points: ['Streamed as it writes', 'Surgical revisions', 'Password and expiry'],
+    points: ['Streamed as it writes', 'Surgical revisions and version history', 'Password, expiry and view counts'],
   },
   {
     icon: Activity, span: 'span-3',
     title: 'Status board',
     body: 'A live view of where every client project stands, kept current by webhooks rather than by someone remembering to update a sheet.',
-    points: ['Per-client status', 'Attachments', 'Near-real-time'],
+    points: ['Board or list mode', 'Attachments and AI-drafted updates', 'Choose the columns, then share the view'],
   },
   {
-    icon: Share2, span: 'span-6',
+    icon: Share2, span: 'span-3',
     title: 'Shared views',
     body: 'Send a filtered, read-only view to a client on a link, and see what they actually opened.',
-    points: ['Read-only links', 'Column highlighting', 'View analytics'],
+    points: ['Read-only links with your filters', 'Column highlighting', 'Viewers, opens and an event timeline'],
+  },
+  {
+    icon: ShieldCheck, span: 'span-3',
+    title: 'Admin & audit',
+    body: 'Account approval, a permission matrix down to the individual action, live sessions, and a full request trail written asynchronously so it never slows the page it is recording.',
+    points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health'],
   },
 ]
 
@@ -185,6 +204,8 @@ const MARQUEE = [
   'Aging buckets', 'GST & TDS split', 'Cited answers', 'Natural-language queries',
   'Row-level scoping', 'Audit trail', 'Shared links', 'AI page builder',
   'Webhook sync', 'Permission matrix', 'CSV export', 'Collection rate',
+  'Tax ledger', 'Period reports', 'Project margin', 'Overdue pressure',
+  'Days to collect', 'Field-level history',
 ]
 
 function CapabilityMarquee() {
@@ -275,7 +296,7 @@ export default function Landing() {
   usePageMeta({
     title: 'FinTrack — AI finance manager for project businesses',
     description:
-      'Receivables, projects, analytics and an AI analyst that cites its sources. Ask your invoices and your contracts a question in plain words.',
+      'Receivables, projects, GST and TDS, analytics, reports and an AI analyst that shows the query it ran. Ask your invoices and your contracts a question in plain words.',
   })
 
   return (
@@ -364,7 +385,7 @@ export default function Landing() {
         <Reveal className="grid gap-4 sm:gap-5"
                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
           {[
-            ['Modules', 8, ''],
+            ['Modules', 11, ''],
             ['Permission roles', 8, ''],
             ['Sync latency', 30, 's'],
             ['Cited answers', 100, '%'],
@@ -390,7 +411,7 @@ export default function Landing() {
           </p>
           <h2 className="font-extrabold tracking-tight mb-3"
               style={{ fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', letterSpacing: '-0.02em' }}>
-            Eight modules, one source of truth
+            Eleven modules, one source of truth
           </h2>
           <p style={{ fontSize: '0.975rem', lineHeight: 1.65, color: 'var(--text-2)' }}>
             Records live in one place and every module reads the same rows, so a

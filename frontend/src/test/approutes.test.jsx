@@ -76,9 +76,12 @@ describe('App routing, signed out', () => {
     })
   })
 
+  // Asserted on the module picker rather than the heading: the heading carries
+  // a module count, so a route test written against it fails every time a
+  // module is added — which tells you nothing about routing.
   it('serves the features page publicly', async () => {
     at('/features')
-    expect(await screen.findByText(/Eight modules, one set of rows/)).toBeInTheDocument()
+    expect(await screen.findByRole('tablist', { name: /modules/i })).toBeInTheDocument()
   })
 
   it('serves the security page publicly', async () => {

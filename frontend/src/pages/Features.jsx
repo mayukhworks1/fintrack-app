@@ -18,7 +18,7 @@ import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Receipt, FolderKanban, BarChart3, FileSearch, Sparkles, Globe,
-  Activity, Share2, ArrowRight, Check,
+  Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck,
 } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
@@ -29,62 +29,160 @@ import {
 } from '../components/LandingVisuals'
 import AgingPreview from '../components/AgingPreview'
 
-const FEATURES = [
+export const FEATURES = [
   {
     id: 'receivables', icon: Receipt, label: 'Receivables',
-    headline: 'Know what is owed, and how old it is',
-    body: 'Invoices carry aging bands, a collection rate, and GST and TDS as separate figures. Tax withheld at source is not money a client still owes you, and counting it as outstanding overstates what you can actually collect.',
-    points: ['Aging bands you can filter by', 'Collection rate on one axis', 'GST and TDS kept apart', 'Follow-up dates and remarks'],
+    headline: 'Know what is owed, how old it is, and what is missing',
+    body: 'Invoices carry aging bands, a collection rate and average days to collect. GST and TDS are separate figures, because tax withheld at source is not money a client still owes you — counting it as outstanding overstates what you can actually collect.',
+    points: [
+      'Aging bands — 0-30, 31-60, 61-90, 90+ — clickable as filters',
+      'Outstanding, collected and GST totals side by side',
+      'Collection rate and average days to collect',
+      'Follow-up load: due today, overdue, next follow-up date',
+      'Missing docs — invoices with no PDF or payment reference',
+      'Retainer templates for recurring monthly billing',
+      'Filters on project, category, status and date; CSV export',
+    ],
     demo: 'aging',
   },
   {
     id: 'projects', icon: FolderKanban, label: 'Projects',
     headline: 'Catch a job going underwater before it lands',
     body: 'Billed, cost and realised profit per project, with margin and a health signal. The point is to see a project turning bad while there is still something to do about it.',
-    points: ['Profit and margin per project', 'Health signals', 'Client rollups', 'Status distribution'],
+    points: [
+      'Amount billed, actual profit and profit percentage',
+      'Health signals — at risk and critical surfaced first',
+      'Client rollups and status distribution',
+      'Per-project detail with its own invoice history',
+      'Top projects by value, and projects running at negative margin',
+    ],
     demo: 'donut',
   },
   {
     id: 'analytics', icon: BarChart3, label: 'Analytics',
-    headline: 'Trends you can open',
-    body: 'Months, clients and categories over time — and every chart is one click from the rows behind it, so a number you do not believe can be checked rather than argued about.',
-    points: ['Monthly and quarterly trends', 'Client and category breakdowns', 'Drill through to rows', 'CSV export'],
+    headline: 'Trends you can open, not just look at',
+    body: 'Cash position, revenue and overdue pressure over time — and every chart is one click from the rows behind it, so a number you do not believe can be checked rather than argued about.',
+    points: [
+      'Cash position, revenue and outstanding over any period',
+      'Collection rate and average days to collect as trends',
+      'Overdue pressure and invoices cleared per month',
+      'Signals worth noticing — outliers surfaced automatically',
+      'Client, project and category breakdowns',
+      'Live sync state, so you know how fresh the figures are',
+      'Drill through to the underlying rows; CSV export',
+    ],
     demo: 'line',
+  },
+  {
+    id: 'tax', icon: Landmark, label: 'Tax ledger',
+    headline: 'GST, month by month, with a filing checklist',
+    body: 'Gross billed, GST collected and net receivable per month and per client — kept separate from the collections view, so a filing figure is never confused with a cash figure.',
+    points: [
+      'Gross billed, GST amount and net received per month',
+      'GST collection rate',
+      'Monthly breakdown by client and project',
+      'Filing checklist for the period',
+      'Net receivable after tax',
+    ],
+    demo: 'bars',
   },
   {
     id: 'documents', icon: FileSearch, label: 'Studio — documents',
     headline: 'Ask your contracts a question',
     body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from. An answer you cannot check is barely better than a guess.',
-    points: ['PDF, text, Markdown, CSV, JSON', 'Page-level citations', 'Answers verified against sources', 'Says which retrieval is running'],
+    points: [
+      'PDF, text, Markdown, CSV, JSON and log files up to 15 MB',
+      'Page-level citations you can open inline',
+      'Answers verified against the sources before you see them',
+      'Full-text search with meaning-based re-ranking where available',
+      'States which retrieval is actually running, rather than implying one',
+      'Conversations saved with their sources, and replayable',
+    ],
     demo: 'docs',
   },
   {
     id: 'analyst', icon: Sparkles, label: 'Studio — finance data',
     headline: 'It shows you the query it ran',
     body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the code compiles the SQL — the model never writes SQL itself, and the statement is shown with every answer.',
-    points: ['Plain-language questions', 'The compiled query is always visible', 'Charts, tables and single figures', 'Scoped to what your account may see'],
+    points: [
+      'Plain-language questions over invoices and projects',
+      'The compiled query is shown with every answer',
+      'Measures include outstanding, collected, GST, TDS and collection rate',
+      'Group by project, category, client, status, month or quarter',
+      'Charts, tables or a single figure, chosen to fit the question',
+      'Scoped to what your account may already see — never a way around a permission',
+    ],
     demo: 'analyst',
+  },
+  {
+    id: 'reports', icon: FileText, label: 'AI reports & assistant',
+    headline: 'A written report, and someone to ask',
+    body: 'Generate a period report over your own figures, keep the history, and ask follow-up questions in a chat that already has the current context loaded.',
+    points: [
+      'Period reports generated over live figures',
+      'Report history kept and re-openable',
+      'Marked confidential for internal use',
+      'Assistant with your current data as context',
+      'Brief, detailed or board-style output',
+      'A daily AI budget per role, reported honestly rather than guessed',
+    ],
+    demo: 'bars',
   },
   {
     id: 'pages', icon: Globe, label: 'Pages',
     headline: 'Describe a page, watch it get written',
     body: 'The generator streams as it works, so you see the page appear rather than a spinner. Revisions edit the document in place instead of regenerating it, so the parts you did not mention stay exactly as they were.',
-    points: ['Streamed as it writes', 'Surgical revisions, not regeneration', 'Publish on a slug', 'Password and expiry'],
+    points: [
+      'Streamed token by token as it writes',
+      'Surgical revisions — edits the page rather than rebuilding it',
+      'Published on a slug, with version history',
+      'Optional password and expiry date',
+      'View counts per page',
+      'Served as its own document, sandboxed away from your session',
+    ],
     demo: 'bars',
   },
   {
     id: 'status', icon: Activity, label: 'Status board',
     headline: 'Where everything stands, without asking',
     body: 'A live view per client and project, kept current by webhooks rather than by someone remembering to update a sheet.',
-    points: ['Per-client status', 'Attachments', 'Near-real-time updates', 'Shareable'],
-    demo: 'bars',
+    points: [
+      'Board or list mode, grouped how you choose',
+      'Short and detailed status per project',
+      'Attachments on a status entry',
+      'AI-drafted status updates',
+      'Choose which columns are visible, then share the view',
+    ],
+    demo: 'line',
   },
   {
     id: 'shared', icon: Share2, label: 'Shared views',
     headline: 'Send a client a link, see what they opened',
     body: 'A filtered, read-only view on a link — with highlighting for the columns that matter, and analytics for what was actually looked at.',
-    points: ['Read-only links', 'Column highlighting', 'View and open analytics', 'Revocable'],
+    points: [
+      'Read-only links with your filters baked in',
+      'Highlight the columns you want read first',
+      'Unique viewers, page views, record opens, attachment opens',
+      'Location and device breakdown, and an event timeline',
+      'Revocable at any time',
+    ],
     demo: 'line',
+  },
+  {
+    id: 'admin', icon: ShieldCheck, label: 'Admin & audit',
+    headline: 'Every request recorded, every permission adjustable',
+    body: 'User approval, a permission matrix down to the individual action, live sessions, and an audit trail written asynchronously so it never becomes the reason a page is slow.',
+    points: [
+      'Approve, disable and delete accounts; assign roles',
+      'Grant or revoke any single permission per person',
+      'Live sessions with device, browser, country and ISP',
+      'Full request audit — method, path, status, duration, referer',
+      'Record-level change history with changed fields',
+      'Sync log and mirror health per source table',
+      'AI run history and per-user usage',
+      'Deployment health checks for every dependency',
+    ],
+    demo: 'bars',
   },
 ]
 
@@ -102,7 +200,7 @@ export default function Features() {
   const tabsRef = useRef([])
   usePageMeta({
     title: 'Features — FinTrack',
-    description: 'Receivables, projects, analytics, and an AI analyst that shows the query it ran. Explore every module.',
+    description: 'Eleven modules — receivables, projects, tax ledger, analytics, documents, an AI analyst that shows the query it ran, reports, pages, status, shared views and audit.',
   })
 
   // Roving focus: arrows move between tabs, Home and End jump to the ends.
@@ -134,7 +232,7 @@ export default function Features() {
              style={{ color: 'var(--accent)' }}>Features</p>
           <h1 className="font-extrabold tracking-tight mb-4"
               style={{ fontSize: 'clamp(1.9rem, 5.5vw, 3rem)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-            Eight modules, one set of rows
+            Eleven modules, one set of rows
           </h1>
           <p style={{ fontSize: 'clamp(0.95rem, 2vw, 1.125rem)', lineHeight: 1.6,
                       color: 'var(--text-2)', maxWidth: 620 }}>

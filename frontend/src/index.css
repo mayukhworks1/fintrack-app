@@ -2695,7 +2695,7 @@ html.dark .web-invoices-shell {
 .ft-edge[data-tilting]::before { opacity: 1; }
 
 /* Feature explorer: picker beside panel on a wide screen, stacked on a phone
-   where a vertical list of eight would push the panel off the fold. */
+   where a vertical list of eleven would push the panel off the fold. */
 .ft-explorer { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1024px) {
   .ft-explorer { grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); gap: 1.75rem; align-items: start; }
