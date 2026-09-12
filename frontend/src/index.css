@@ -2608,28 +2608,6 @@ html.dark .web-invoices-shell {
 }
 [data-shown] .ft-bar { transform: scaleX(1); }
 
-/* Gentle float for the hero mockup — enough to read as alive, small
-   enough not to distract from the copy beside it. */
-@keyframes ft-float {
-  0%, 100% { transform: translateY(0) }
-  50%      { transform: translateY(-10px) }
-}
-.ft-float { animation: ft-float 7s ease-in-out infinite; }
-
-/* Capability marquee. Duplicated track translated by exactly -50% so
-   the loop is seamless. */
-@keyframes ft-marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
-.ft-marquee-mask {
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-}
-.ft-marquee-track {
-  display: flex;
-  width: max-content;
-  animation: ft-marquee 34s linear infinite;
-}
-.ft-marquee-mask:hover .ft-marquee-track { animation-play-state: paused; }
 
 /* Cursor-following glow on the primary call to action. */
 .ft-cta { position: relative; overflow: hidden; }

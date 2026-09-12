@@ -293,39 +293,6 @@ function Head({ eyebrow, title, children, className = '' }) {
   )
 }
 
-const MARQUEE = [
-  'Ageing buckets', 'GST & TDS split', 'Cited answers', 'Natural-language queries',
-  'Row-level scoping', 'Audit trail', 'Shared links', 'AI page builder',
-  'Webhook sync', 'Permission matrix', 'CSV export', 'Collection rate',
-  'Tax ledger', 'Period reports', 'Project margin', 'Overdue pressure',
-  'Days to collect', 'Field-level history',
-]
-
-function CapabilityMarquee() {
-  return (
-    <div className="ft-marquee-mask py-3" aria-hidden="true">
-      <div className="ft-marquee-track">
-        {[0, 1].map(copy => (
-          <div key={copy} className="flex items-center gap-3 pr-3">
-            {MARQUEE.map(item => (
-              <span
-                key={item}
-                className="whitespace-nowrap rounded-full text-xs font-semibold"
-                style={{
-                  padding: '8px 15px', background: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)', color: 'var(--text-2)',
-                }}
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 const VISUALS = {
   bars:  <MiniBars />,
   line:  <MiniLine />,
@@ -461,7 +428,7 @@ export default function Landing() {
         </div>
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
-        <div id="try" className="relative mx-auto px-4 sm:px-6 pb-6" style={{ maxWidth: 1120, zIndex: 1 }}>
+        <div id="try" className="relative mx-auto px-4 sm:px-6 pb-12 sm:pb-16" style={{ maxWidth: 1120, zIndex: 1 }}>
           {/* ft-3d tilts the frame, not its contents — the panel inside stays
               square to the viewer because it is showing figures, and
               perspective makes a near bar taller than a far one at equal
@@ -471,9 +438,6 @@ export default function Landing() {
           </Tilted>
         </div>
 
-        <div className="relative mx-auto px-4 sm:px-6 pb-10" style={{ maxWidth: 1120, zIndex: 1 }}>
-          <CapabilityMarquee />
-        </div>
       </section>
 
       {/* ── Counts ──────────────────────────────────────────────────────
