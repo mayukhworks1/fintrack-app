@@ -74,14 +74,15 @@ export default function Security() {
         <Grain />
         <div ref={head} className="ft-reveal relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] mb-2"
-             style={{ color: 'var(--accent)' }}>Security &amp; access</p>
-          <h1 className="font-extrabold tracking-tight mb-4"
-              style={{ fontSize: 'clamp(1.9rem, 5.5vw, 3rem)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-            Who can see what, and how it is enforced
+          <p className="ft-eyebrow mb-3">Security &amp; access</p>
+          <h1 className="ft-display mb-4"
+              style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
+            <span className="ft-rise"><span>Who can see what,</span></span>
+            <span className="ft-rise">
+              <span style={{ transitionDelay: '110ms' }}><em>and how it is enforced</em></span>
+            </span>
           </h1>
-          <p style={{ fontSize: 'clamp(0.95rem, 2vw, 1.125rem)', lineHeight: 1.6,
-                      color: 'var(--text-2)', maxWidth: 620 }}>
+          <p className="ft-lede">
             Access is by invitation and every account is approved by an administrator.
             Below is the actual shape of the permission model — pick a role to see
             what it reaches by default.
@@ -166,7 +167,7 @@ export default function Security() {
                    style={{ width: 40, height: 40, background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                 <Icon size={19} aria-hidden="true" />
               </div>
-              <h2 className="text-[15px] font-bold mb-2" style={{ color: 'var(--text-1)' }}>{title}</h2>
+              <h2 className="ft-display mb-2" style={{ fontSize: '1.12rem', color: 'var(--text-1)' }}>{title}</h2>
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
             </div>
           ))}
@@ -177,8 +178,8 @@ export default function Security() {
         <div className="rounded-3xl px-6 py-12 sm:px-12 sm:py-14 text-center"
              style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <ShieldCheck size={26} className="mx-auto mb-3" aria-hidden="true" />
-          <h2 className="font-extrabold tracking-tight mb-3"
-              style={{ fontSize: 'clamp(1.4rem, 4vw, 2.2rem)', letterSpacing: '-0.02em' }}>
+          <h2 className="ft-display mb-3"
+              style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>
             Request access
           </h2>
           <p className="mx-auto mb-7" style={{ fontSize: '0.975rem', lineHeight: 1.6, opacity: 0.92, maxWidth: 440 }}>

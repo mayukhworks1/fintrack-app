@@ -3244,3 +3244,42 @@ html.dark .web-invoices-shell {
   background: var(--accent-dim) !important;
   box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent-soft);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   SEMANTIC TONES
+   ──────────────────────────────────────────────────────────────────
+   Paid, overdue and at-risk had no tokens — every component picked a
+   hex, and the hexes chosen were light-mode greens and reds used in
+   both themes. Measured on the dark card, the overdue red came out at
+   2.50:1 and the paid green at 3.22:1, so the two figures a
+   collections screen exists to separate were the two hardest to read
+   the moment the lights went out.
+
+   These are picked per theme against the worst surface each one lands
+   on — card, input and base — and every value below clears 4.5:1
+   there, so it clears it everywhere.
+
+     light  ok #15803d 4.52   bad #b91c1c 5.83   warn #b45309 4.53
+     dark   ok #22c55e 7.10   bad #f87171 5.85   warn #f59e0b 7.53
+
+   The tinted backgrounds are mixed from the tone itself, so they
+   follow it between themes instead of being a second thing to keep in
+   step with it.
+══════════════════════════════════════════════════════════════════ */
+:root,
+.main-app-theme {
+  --ok:   #15803d;
+  --bad:  #b91c1c;
+  --warn: #b45309;
+}
+.dark,
+html.dark .main-app-theme {
+  --ok:   #22c55e;
+  --bad:  #f87171;
+  --warn: #f59e0b;
+}
+:root, .main-app-theme, .dark, html.dark .main-app-theme {
+  --ok-dim:   color-mix(in srgb, var(--ok) 14%, transparent);
+  --bad-dim:  color-mix(in srgb, var(--bad) 14%, transparent);
+  --warn-dim: color-mix(in srgb, var(--warn) 15%, transparent);
+}

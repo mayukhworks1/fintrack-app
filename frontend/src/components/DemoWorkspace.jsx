@@ -36,9 +36,9 @@ const TABS = [
 ]
 
 const TONE = {
-  Paid:    { fg: '#15803d', bg: 'rgba(22,163,74,0.13)' },
+  Paid:    { fg: 'var(--ok)',  bg: 'var(--ok-dim)' },
   Sent:    { fg: 'var(--accent)', bg: 'var(--accent-dim)' },
-  Overdue: { fg: '#b91c1c', bg: 'rgba(220,38,38,0.13)' },
+  Overdue: { fg: 'var(--bad)', bg: 'var(--bad-dim)' },
 }
 
 // Monotone in lightness with adjacent steps far enough apart to separate,
@@ -276,8 +276,8 @@ function Receivables({ state, set, onOpen, searchRef }) {
     <div className="h-full flex flex-col min-h-0">
       <div className="ft-kpis mb-2.5">
         <Stat label="Outstanding" value={inrShort(TOTALS.outstanding)} />
-        <Stat label="Collected"   value={inrShort(TOTALS.collected)} tone="#15803d" />
-        <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="#b91c1c" />
+        <Stat label="Collected"   value={inrShort(TOTALS.collected)} tone="var(--ok)" />
+        <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="var(--bad)" />
       </div>
 
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -372,7 +372,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
                 </span>
               </span>
               <span className="hidden sm:block tabular-nums"
-                    style={{ fontSize: 11, color: r.status === 'Overdue' ? '#b91c1c' : 'var(--text-3)', flex: '0 0 64px' }}>
+                    style={{ fontSize: 11, color: r.status === 'Overdue' ? 'var(--bad)' : 'var(--text-3)', flex: '0 0 64px' }}>
                 {shortDate(r.dueOn)}
               </span>
               <span className="tabular-nums font-bold text-right"
@@ -406,7 +406,7 @@ function Ageing({ state, set }) {
     <div className="h-full flex flex-col min-h-0">
       <div className="ft-kpis mb-3" style={{ ['--kpi-cols']: 2 }}>
         <Stat label="Open" value={inrShort(TOTALS.outstanding)} sub={`${AGEING.reduce((t, b) => t + b.count, 0)} invoices`} />
-        <Stat label="Past due" value={inrShort(TOTALS.overdue)} tone="#b91c1c"
+        <Stat label="Past due" value={inrShort(TOTALS.overdue)} tone="var(--bad)"
               sub={`${AGEING.filter(b => b.id !== '0-30').reduce((t, b) => t + b.count, 0)} beyond 30 days`} />
       </div>
 
@@ -478,8 +478,8 @@ function Projects({ state, set }) {
           </div>
           <span className="rounded-md font-bold shrink-0"
                 style={{ fontSize: 10, padding: '3px 8px',
-                         color: sel.health === 'risk' ? '#b45309' : sel.health === 'watch' ? '#a16207' : '#15803d',
-                         background: sel.health === 'healthy' ? 'rgba(22,163,74,0.13)' : 'rgba(217,119,6,0.14)' }}>
+                         color: sel.health === 'risk' ? 'var(--warn)' : sel.health === 'watch' ? 'var(--warn)' : 'var(--ok)',
+                         background: sel.health === 'healthy' ? 'var(--ok-dim)' : 'var(--warn-dim)' }}>
             {sel.health === 'risk' ? 'At risk' : sel.health === 'watch' ? 'Watch' : 'Healthy'}
           </span>
         </div>
@@ -487,8 +487,8 @@ function Projects({ state, set }) {
         <div className="ft-kpis mb-3" style={{ ['--kpi-cols']: 4 }}>
           <Stat label="Billed"  value={inrShort(sel.billed)} />
           <Stat label="Cost"    value={inrShort(sel.cost)} />
-          <Stat label="Profit"  value={inrShort(sel.profit)} tone={sel.profit > 0 ? '#15803d' : '#b91c1c'} />
-          <Stat label="Margin"  value={`${sel.margin}%`} tone={sel.health === 'healthy' ? '#15803d' : '#b45309'} />
+          <Stat label="Profit"  value={inrShort(sel.profit)} tone={sel.profit > 0 ? 'var(--ok)' : 'var(--bad)'} />
+          <Stat label="Margin"  value={`${sel.margin}%`} tone={sel.health === 'healthy' ? 'var(--ok)' : 'var(--warn)'} />
         </div>
 
         <p className="font-bold uppercase tracking-[0.14em] mb-1.5"
