@@ -19,13 +19,14 @@ import { Link } from 'react-router-dom'
 import {
   ArrowRight, Receipt, FolderKanban, BarChart3, Sparkles, Globe, Activity,
   ShieldCheck, Share2, Lock, Database, Zap, Check, FileSearch, Landmark,
-  FileText, Gauge, GitBranch, ScrollText,
+  FileText, Gauge, GitBranch, ScrollText, SlidersHorizontal, Server, Blocks,
 } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
 import LayerStack from '../components/LayerStack'
 import AnalystPipeline from '../components/AnalystPipeline'
+import PermissionPlayground from '../components/PermissionPlayground'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import {
@@ -158,6 +159,33 @@ const TRUST = [
   },
 ]
 
+/*
+ * Three tiers, in the order a buyer meets them, and each one checked against
+ * what the repository actually supports before it was written down. "Fully
+ * customisable" on its own is the least believable sentence on a product page;
+ * these say who does the work and what it touches.
+ */
+const SHAPE = [
+  {
+    icon: SlidersHorizontal,
+    kicker: 'You, in the app',
+    title: 'Configured, not commissioned',
+    body: 'Permissions are records, not code — every one belongs to a module, roles map to them, and a single permission can be granted or revoked for one person without inventing a role for them. Views keep your filters, your columns and your grouping, and the same configuration travels into a shared link. Categories, clients and statuses come from your own records; there is no chart of accounts to adopt.',
+  },
+  {
+    icon: Server,
+    kicker: 'Your infrastructure',
+    title: 'Your database, your cloud',
+    body: 'An instance is a container and an environment file. Every endpoint, table, model, mail server and storage target is a setting rather than a constant, so a dedicated deployment on your own Postgres and your own private cloud is a configuration of the same build — not a fork that drifts from it and stops receiving fixes.',
+  },
+  {
+    icon: Blocks,
+    kicker: 'Built for you',
+    title: 'New modules for your case',
+    body: 'Each module is a self-contained router, and permissions are keyed by module in the database. A module built for how your business works therefore arrives inside the access model and the audit trail rather than beside them: it appears in the permission matrix on day one, and every request it serves is recorded like every other.',
+  },
+]
+
 const STEPS = [
   {
     icon: Database,
@@ -207,6 +235,22 @@ const FAQ = [
   {
     q: 'What can it do with documents?',
     a: 'Upload contracts, scopes and notes as PDF, text, Markdown, CSV, JSON or logs, then ask questions about them in plain words. Each answer carries numbered citations you can open to the exact passage and page, and answers are verified against those sources before you see them. The interface also states which retrieval is actually running rather than implying a capability it does not have.',
+  },
+  {
+    q: 'How much of this can we change ourselves?',
+    a: 'Most of what a finance team wants different is a setting rather than a request. Permissions are records grouped by module: roles carry defaults, and any single permission can be granted or revoked for one person without inventing a new role for them — a change takes effect on their next request, not their next sign-in. Views keep your own filters, columns and grouping, and that configuration travels into a shared link. Categories, clients, projects and statuses come from your own records, so there is no chart of accounts to adopt.',
+  },
+  {
+    q: 'Can we run it on our own database and our own cloud?',
+    a: 'Yes. The backend is a container and every endpoint, table, model, mail server and storage target is an environment setting rather than a constant, so a dedicated instance on your own Postgres inside your own private cloud is a configuration of the same build. That matters more than it sounds: it is not a fork, so it keeps receiving the same fixes and features as everything else rather than drifting into a version only you are running.',
+  },
+  {
+    q: 'Can you build a module for how our business works?',
+    a: 'Yes, and the architecture is why it is worth doing properly. Each module is a self-contained router, and permissions are keyed by module in the database — so a module built for your case arrives inside the access model and the audit trail rather than bolted beside them. It appears in the permission matrix from the first day, every request it serves is recorded like any other, and it reads the same mirrored rows as everything else, so its figures cannot disagree with the rest of the product.',
+  },
+  {
+    q: 'Is anything deliberately not configurable?',
+    a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the entire reason an answer here can be checked rather than trusted. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added to it deliberately and reviewed, the same way a new module is — never inferred in the moment someone asks.',
   },
   {
     q: 'Who can see what?',
@@ -531,10 +575,50 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Made yours ──────────────────────────────────────────────────── */}
+      <section id="shape" className="mx-auto px-4 sm:px-6 py-16 sm:py-24" style={{ maxWidth: 1120 }}>
+        <hr className="ft-rule mb-14" />
+        <Head n="03" eyebrow="Made yours"
+              title={<>Shaped to how you work — <em>except the one thing that must not move</em></>}>
+          Most of what a finance team wants changed is a setting here rather than
+          a request to us. Where it genuinely is not, the answer is a dedicated
+          instance or a module built for the case — both of which stay inside the
+          same build, the same permission model and the same audit trail.
+        </Head>
+
+        <div className="grid gap-5 sm:gap-6 mb-10"
+             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
+          {SHAPE.map(({ icon: Icon, kicker, title, body }, i) => (
+            <Reveal key={title} delay={Math.min(i, 3) * 70}
+                    className="rounded-2xl p-5 sm:p-6 h-full"
+                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                <span className="ft-eyebrow" style={{ fontSize: '0.62rem' }}>{kicker}</span>
+              </div>
+              <h3 className="ft-display mb-2" style={{ fontSize: '1.16rem', color: 'var(--text-1)' }}>
+                {title}
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
+            </Reveal>
+          ))}
+        </div>
+
+        <PermissionPlayground />
+
+        <p className="mt-6 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
+          One thing is deliberately not adjustable: the set of measures the
+          analyst may use. Open that up and an answer stops being checkable,
+          which is the only thing this product is really selling. New measures
+          get added to it on purpose, reviewed, the same way a new module does —
+          never inferred at the moment someone asks a question.
+        </p>
+      </section>
+
       {/* ── Verifiability ───────────────────────────────────────────────── */}
       <section id="trust" className="mx-auto px-4 sm:px-6 py-16 sm:py-24" style={{ maxWidth: 1120 }}>
         <hr className="ft-rule mb-14" />
-        <Head n="03" eyebrow="Why you can trust the answer"
+        <Head n="04" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
           Plenty of tools promise not to make things up. This is where the
           promise is replaced by a mechanism — you can see exactly where the
@@ -570,7 +654,7 @@ export default function Landing() {
 
       {/* ── How it works ────────────────────────────────────────────────── */}
       <section id="how" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head n="04" eyebrow="How it works" title="Nothing to migrate">
+        <Head n="05" eyebrow="How it works" title="Nothing to migrate">
           The fastest way to lose a finance team is to ask them to move their
           records somewhere new on day one. FinTrack sits on top of what they
           already keep.
@@ -622,7 +706,7 @@ export default function Landing() {
           className="rounded-3xl p-6 sm:p-10"
           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
         >
-          <Head n="05" eyebrow="Access" title="This page is public. Your data is not." className="mb-8">
+          <Head n="06" eyebrow="Access" title="This page is public. Your data is not." className="mb-8">
             Everything described here is capability, and the sandbox above is
             fiction computed in your browser. No figure on this page is read
             from a workspace, and nothing below the fold belongs to anyone.
@@ -645,7 +729,7 @@ export default function Landing() {
 
       {/* ── FAQ ─────────────────────────────────────────────────────────── */}
       <section id="faq" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 820 }}>
-        <Head n="06" eyebrow="Questions" title="Answers, at length" />
+        <Head n="07" eyebrow="Questions" title="Answers, at length" />
         <div>
           {FAQ.map(({ q, a }, i) => (
             <details key={q} className="ft-faq" open={i === 0}>
