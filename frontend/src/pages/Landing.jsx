@@ -254,6 +254,16 @@ const JSON_LD = {
   ],
 }
 
+/**
+ * The hero block. Carries [data-shown] so the headline's lines can rise, but
+ * no transform of its own — a block that slides up while the lines inside it
+ * also slide up is two motions fighting over the same pixels.
+ */
+function Hero({ children, ...rest }) {
+  const ref = useReveal({ threshold: 0.02 })
+  return <div ref={ref} {...rest}>{children}</div>
+}
+
 /** Wraps a block so it animates in the first time it is scrolled to. */
 function Reveal({ children, delay = 0, className = '', ...rest }) {
   const ref = useReveal()
@@ -277,19 +287,25 @@ function Tilted({ children }) {
   return <div ref={ref} className="ft-3d">{children}</div>
 }
 
-/** Section heading — one shape for all of them, so the page has a rhythm. */
-function Head({ eyebrow, title, children, className = '' }) {
+/**
+ * Section opening — one shape for all of them, so the page has a rhythm.
+ *
+ * The numeral hangs in the left margin above 1024px, the way a chapter
+ * opening carries one, and falls inline beside the eyebrow below that, where
+ * there is no margin to hang anything in.
+ */
+function Head({ n, eyebrow, title, children, className = '' }) {
   return (
-    <Reveal className={`mb-8 ${className}`} style={{ maxWidth: 680 }}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] mb-2"
-         style={{ color: 'var(--accent)' }}>{eyebrow}</p>
-      <h2 className="font-extrabold tracking-tight mb-3"
-          style={{ fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', letterSpacing: '-0.025em', lineHeight: 1.15 }}>
+    <Reveal className={`relative mb-9 ${className}`} style={{ maxWidth: 700 }}>
+      <div className="ft-marginal mb-3">
+        {n && <span className="n" aria-hidden="true">{n}</span>}
+        <p className="ft-eyebrow">{eyebrow}</p>
+      </div>
+      <h2 className="ft-display mb-4"
+          style={{ fontSize: 'clamp(1.7rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
         {title}
       </h2>
-      {children && (
-        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: 'var(--text-2)' }}>{children}</p>
-      )}
+      {children && <p className="ft-lede">{children}</p>}
     </Reveal>
   )
 }
@@ -323,7 +339,7 @@ function ModuleCard({ icon: Icon, title, body, points, visual }) {
       >
         <Icon size={21} aria-hidden="true" />
       </div>
-      <h3 className="text-base sm:text-lg font-bold mb-2" style={{ color: 'var(--text-1)' }}>
+      <h3 className="ft-display text-lg sm:text-xl mb-2" style={{ color: 'var(--text-1)' }}>
         {title}
       </h3>
       <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
@@ -376,28 +392,30 @@ export default function Landing() {
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <Reveal style={{ maxWidth: 800 }}>
+          <Hero style={{ maxWidth: 820 }}>
             <span
-              className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-4"
+              className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-5"
               style={{ padding: '6px 12px', background: 'var(--accent-dim)', color: 'var(--accent)' }}
             >
               <Sparkles size={13} aria-hidden="true" />
               Receivables, projects and an analyst that shows its working
             </span>
 
-            <h1
-              className="font-extrabold tracking-tight mb-5"
-              style={{ fontSize: 'clamp(1.95rem, 5.9vw, 3.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
-            >
-              Finance software that
-              <br />
-              <span style={{ color: 'var(--accent)' }}>shows its working</span>.
+            {/* Two lines, each rising out of its own mask on a stagger. A
+                headline that assembles reads as composed; the same words
+                fading in as one block read as loaded. */}
+            <h1 className="ft-display mb-5"
+                style={{ fontSize: 'clamp(2.05rem, 6.2vw, 3.9rem)', lineHeight: 1.04,
+                         letterSpacing: '-0.03em' }}>
+              <span className="ft-rise"><span>Finance software that</span></span>
+              <span className="ft-rise">
+                <span style={{ transitionDelay: '110ms', color: 'var(--accent)' }}>
+                  <em>shows its working</em>.
+                </span>
+              </span>
             </h1>
 
-            <p className="mb-6" style={{
-              fontSize: 'clamp(1rem, 2.1vw, 1.18rem)', lineHeight: 1.6,
-              color: 'var(--text-2)', maxWidth: 620,
-            }}>
+            <p className="ft-lede mb-7">
               Receivables, project profitability and GST for businesses that bill
               by project — and an analyst that answers in plain words while
               printing the query behind every figure. You never take a number on
@@ -407,7 +425,8 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-3">
               <a
                 href="#try"
-                className="ft-cta flex items-center justify-center gap-2 rounded-xl font-bold"
+                ref={heroCta}
+                className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold"
                 style={{
                   minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
                   color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
@@ -418,7 +437,6 @@ export default function Landing() {
               </a>
               <Link
                 to="/login"
-                ref={heroCta}
                 className="flex items-center justify-center gap-2 rounded-xl font-bold"
                 style={{
                   minHeight: 52, padding: '0 26px', background: 'var(--card-bg)',
@@ -429,7 +447,7 @@ export default function Landing() {
                 Sign in
               </Link>
             </div>
-          </Reveal>
+          </Hero>
         </div>
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
@@ -472,7 +490,7 @@ export default function Landing() {
 
       {/* ── The problem ─────────────────────────────────────────────────── */}
       <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
-        <Head eyebrow="Why this exists"
+        <Head n="01" eyebrow="Why this exists"
               title="Three things go wrong with money on projects">
           None of them are exotic. They are what happens when the ledger, the
           project plan and the tax position live in different places and nobody
@@ -485,7 +503,7 @@ export default function Landing() {
                     className="rounded-2xl p-5 sm:p-6 h-full"
                     style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <Icon size={20} aria-hidden="true" style={{ color: 'var(--accent)' }} />
-              <h3 className="font-bold mt-3 mb-2" style={{ fontSize: '1.02rem', color: 'var(--text-1)' }}>
+              <h3 className="ft-display mt-3 mb-2" style={{ fontSize: '1.16rem', color: 'var(--text-1)' }}>
                 {title}
               </h3>
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
@@ -496,7 +514,7 @@ export default function Landing() {
 
       {/* ── Modules ─────────────────────────────────────────────────────── */}
       <section id="features" className="mx-auto px-4 sm:px-6 pb-4" style={{ maxWidth: 1120 }}>
-        <Head eyebrow="What is inside" title="Eleven modules, one source of truth">
+        <Head n="02" eyebrow="What is inside" title="Eleven modules, one source of truth">
           Records live in one place and every module reads the same rows, so a
           number on the dashboard and a number in a report cannot disagree.
           Every total opens to the invoices underneath it.
@@ -516,7 +534,7 @@ export default function Landing() {
       {/* ── Verifiability ───────────────────────────────────────────────── */}
       <section id="trust" className="mx-auto px-4 sm:px-6 py-16 sm:py-24" style={{ maxWidth: 1120 }}>
         <hr className="ft-rule mb-14" />
-        <Head eyebrow="Why you can trust the answer"
+        <Head n="03" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
           Plenty of tools promise not to make things up. This is where the
           promise is replaced by a mechanism — you can see exactly where the
@@ -542,7 +560,7 @@ export default function Landing() {
                     style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <div className="flex items-center gap-2.5 mb-2.5">
                 <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                <h3 className="font-bold" style={{ fontSize: '1rem', color: 'var(--text-1)' }}>{title}</h3>
+                <h3 className="ft-display" style={{ fontSize: '1.12rem', color: 'var(--text-1)' }}>{title}</h3>
               </div>
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
             </Reveal>
@@ -552,7 +570,7 @@ export default function Landing() {
 
       {/* ── How it works ────────────────────────────────────────────────── */}
       <section id="how" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head eyebrow="How it works" title="Nothing to migrate">
+        <Head n="04" eyebrow="How it works" title="Nothing to migrate">
           The fastest way to lose a finance team is to ask them to move their
           records somewhere new on day one. FinTrack sits on top of what they
           already keep.
@@ -573,7 +591,7 @@ export default function Landing() {
                 </span>
                 <Icon size={17} aria-hidden="true" style={{ color: 'var(--text-3)' }} />
               </div>
-              <h3 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)' }}>{title}</h3>
+              <h3 className="ft-display text-lg mb-2" style={{ color: 'var(--text-1)' }}>{title}</h3>
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
 
               {/* Direction, shown rather than captioned. Hidden on the last
@@ -604,7 +622,7 @@ export default function Landing() {
           className="rounded-3xl p-6 sm:p-10"
           style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
         >
-          <Head eyebrow="Access" title="This page is public. Your data is not." className="mb-8">
+          <Head n="05" eyebrow="Access" title="This page is public. Your data is not." className="mb-8">
             Everything described here is capability, and the sandbox above is
             fiction computed in your browser. No figure on this page is read
             from a workspace, and nothing below the fold belongs to anyone.
@@ -627,7 +645,7 @@ export default function Landing() {
 
       {/* ── FAQ ─────────────────────────────────────────────────────────── */}
       <section id="faq" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 820 }}>
-        <Head eyebrow="Questions" title="Answers, at length" />
+        <Head n="06" eyebrow="Questions" title="Answers, at length" />
         <div>
           {FAQ.map(({ q, a }, i) => (
             <details key={q} className="ft-faq" open={i === 0}>
@@ -649,8 +667,8 @@ export default function Landing() {
             color: '#fff',
           }}
         >
-          <h2 className="font-extrabold tracking-tight mb-3"
-              style={{ fontSize: 'clamp(1.5rem, 4.5vw, 2.5rem)', letterSpacing: '-0.025em' }}>
+          <h2 className="ft-display mb-3"
+              style={{ fontSize: 'clamp(1.6rem, 4.6vw, 2.7rem)', lineHeight: 1.12 }}>
             Already have an account?
           </h2>
           <p className="mx-auto mb-7"

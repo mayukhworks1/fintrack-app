@@ -228,14 +228,15 @@ export default function Features() {
         <Grain />
         <div ref={headRef} className="ft-reveal relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] mb-2"
-             style={{ color: 'var(--accent)' }}>Features</p>
-          <h1 className="font-extrabold tracking-tight mb-4"
-              style={{ fontSize: 'clamp(1.9rem, 5.5vw, 3rem)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-            Eleven modules, one set of rows
+          <p className="ft-eyebrow mb-3">Features</p>
+          <h1 className="ft-display mb-4"
+              style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
+            <span className="ft-rise"><span>Eleven modules,</span></span>
+            <span className="ft-rise">
+              <span style={{ transitionDelay: '110ms' }}><em>one set of rows</em></span>
+            </span>
           </h1>
-          <p style={{ fontSize: 'clamp(0.95rem, 2vw, 1.125rem)', lineHeight: 1.6,
-                      color: 'var(--text-2)', maxWidth: 620 }}>
+          <p className="ft-lede">
             Pick one to see what it does. Every module reads the same records, so a
             figure on the dashboard and a figure in a report cannot disagree.
           </p>
@@ -300,8 +301,8 @@ export default function Features() {
                 animation: 'ft-panel-in 460ms cubic-bezier(0.22,1,0.36,1) both',
               }}
             >
-              <h2 className="font-extrabold tracking-tight mb-3"
-                  style={{ fontSize: 'clamp(1.25rem, 3vw, 1.75rem)', letterSpacing: '-0.02em' }}>
+              <h2 className="ft-display mb-3"
+                  style={{ fontSize: 'clamp(1.35rem, 3.1vw, 1.95rem)', lineHeight: 1.16 }}>
                 {f.headline}
               </h2>
               <p className="text-sm sm:text-[15px] leading-relaxed mb-5"
@@ -335,8 +336,8 @@ export default function Features() {
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <div className="rounded-3xl px-6 py-12 sm:px-12 sm:py-14 text-center"
              style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
-          <h2 className="font-extrabold tracking-tight mb-3"
-              style={{ fontSize: 'clamp(1.4rem, 4vw, 2.2rem)', letterSpacing: '-0.02em' }}>
+          <h2 className="ft-display mb-3"
+              style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>
             See it on your own numbers
           </h2>
           <p className="mx-auto mb-7" style={{ fontSize: '0.975rem', lineHeight: 1.6, opacity: 0.92, maxWidth: 440 }}>

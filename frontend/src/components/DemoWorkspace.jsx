@@ -47,21 +47,17 @@ const RAMP = ['#104281', '#256abf', '#3987e5', '#86b6ef']
 
 /* ── Shared bits ─────────────────────────────────────────────────────── */
 
+/**
+ * One figure. A label-left, figure-right row on a phone and a stacked tile
+ * from 560px up — see .ft-kpi. Three stacked tiles simply do not fit 390px,
+ * and the label is the half that must survive.
+ */
 function Stat({ label, value, tone = 'var(--text-1)', sub }) {
   return (
-    <div className="rounded-xl px-3 py-2.5 min-w-0"
-         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-      {/* Wraps rather than truncates. At 390px a three-up row of tiles cut
-          these to "OUTST…", "COLLE…", "OVERD…" — three labels that no longer
-          say which figure is which, on the one screen size where guessing is
-          hardest. */}
-      <p className="text-[9.5px] sm:text-[10px] font-bold uppercase leading-tight"
-         style={{ color: 'var(--text-3)', letterSpacing: '0.08em', hyphens: 'auto' }}>{label}</p>
-      <p className="font-extrabold tabular-nums truncate"
-         style={{ fontSize: 'clamp(0.95rem, 2.6vw, 1.3rem)', color: tone, letterSpacing: '-0.02em' }}>
-        {value}
-      </p>
-      {sub && <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+    <div className="ft-kpi min-w-0">
+      <span className="k">{label}</span>
+      <span className="v" style={{ color: tone }}>{value}</span>
+      {sub && <span className="s">{sub}</span>}
     </div>
   )
 }
@@ -113,7 +109,7 @@ function Receivables({ state, set }) {
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="grid grid-cols-3 gap-2 mb-2.5">
+      <div className="ft-kpis mb-2.5">
         <Stat label="Outstanding" value={inrShort(TOTALS.outstanding)} />
         <Stat label="Collected"   value={inrShort(TOTALS.collected)} tone="#15803d" />
         <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="#b91c1c" />
@@ -228,7 +224,7 @@ function Ageing({ state, set }) {
   const max = Math.max(...AGEING.map(b => b.value), 1)
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      <div className="ft-kpis mb-3" style={{ ['--kpi-cols']: 2 }}>
         <Stat label="Open" value={inrShort(TOTALS.outstanding)} sub={`${AGEING.reduce((t, b) => t + b.count, 0)} invoices`} />
         <Stat label="Past due" value={inrShort(TOTALS.overdue)} tone="#b91c1c"
               sub={`${AGEING.filter(b => b.id !== '0-30').reduce((t, b) => t + b.count, 0)} beyond 30 days`} />
@@ -308,7 +304,7 @@ function Projects({ state, set }) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <div className="ft-kpis mb-3" style={{ ['--kpi-cols']: 4 }}>
           <Stat label="Billed"  value={inrShort(sel.billed)} />
           <Stat label="Cost"    value={inrShort(sel.cost)} />
           <Stat label="Profit"  value={inrShort(sel.profit)} tone={sel.profit > 0 ? '#15803d' : '#b91c1c'} />
@@ -365,7 +361,7 @@ function Analytics({ state, set }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-2.5">
+      <div className="ft-kpis mb-2.5">
         <Stat label="Collection rate" value={`${TOTALS.collectionRate}%`} />
         <Stat label="Days to collect" value={TOTALS.avgDaysToCollect} />
         <Stat label="GST tracked"     value={inrShort(TOTALS.gst)} />

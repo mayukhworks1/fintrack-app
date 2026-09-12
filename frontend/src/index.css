@@ -44,6 +44,54 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   Display face — Fraunces (self-hosted variable, SIL OFL 1.1)
+
+   Outfit is a geometric sans: even, contemporary, right for a dense
+   table of figures and wrong for a page that has to feel considered.
+   Pairing it with a serif for display sizes is the oldest trick in
+   editorial typography and still the most effective — the headline
+   carries the voice, the interface stays neutral underneath it.
+
+   Fraunces is variable on two axes. `wght` is the usual one. `opsz`
+   is the reason to choose this face: the outlines are drawn
+   differently at 9pt and at 144pt, thinning the hairlines and
+   tightening the spacing as the size grows, the way metal type was
+   cut per size before phototypesetting flattened it to one master.
+   `font-optical-sizing: auto` on body already maps that axis to the
+   rendered size, so a 56px headline gets the display cut and a 15px
+   pull-quote gets the text cut, with nothing to set per element.
+
+   Self-hosted for the same reasons Outfit is: the CSP names no font
+   origin, so a Google Fonts link would be blocked outright, and a
+   third-party round trip on the critical path is a render delay we
+   own nothing of.
+
+   latin-ext is declared but not preloaded. unicode-range means the
+   browser fetches it only if a glyph in that block is actually set —
+   so it costs nothing until a ₹ lands in a heading.
+══════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/fraunces-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/fraunces-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ══════════════════════════════════════════════════════════════════
    FinTrack Design System — v4 — Blue & White
    Default: clean white backgrounds, vibrant blue accents
    Inspired by professional SaaS dashboards (Odoo, L'Inventaire, etc.)
@@ -3027,4 +3075,162 @@ html.dark .web-invoices-shell {
      left to right, it just does not perform one. */
   .ft-pipe-node[data-run] { animation: none; border-color: var(--accent-soft); }
   .ft-pipe-spark { animation: none; opacity: 0.9; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EDITORIAL
+   ──────────────────────────────────────────────────────────────────
+   The page was set entirely in one geometric sans at four sizes,
+   which is why it read as generic however good the content was.
+   Display sizes now go to Fraunces and the interface stays in Outfit,
+   so the voice and the machinery are visibly different things.
+══════════════════════════════════════════════════════════════════ */
+
+.ft-display {
+  font-family: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+               Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  /* Optical sizing does the per-size correction, so the tracking here is
+     a single value rather than a table of them. */
+  font-optical-sizing: auto;
+}
+.ft-display em {
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Numeral in the margin, the way a chapter opening carries one. Sits
+   inline above the eyebrow on narrow screens, where there is no margin
+   to put anything in. */
+.ft-marginal {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.ft-marginal > .n {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  flex-shrink: 0;
+  padding-top: 0.05em;
+}
+@media (min-width: 1024px) {
+  .ft-marginal > .n { position: absolute; margin-left: -3.25rem; }
+}
+
+/* Opening paragraph. Larger, set in the serif, on a shorter measure —
+   the one place on the page that asks to be read rather than scanned. */
+.ft-lede {
+  font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  font-size: clamp(1.08rem, 2.1vw, 1.3rem);
+  line-height: 1.62;
+  letter-spacing: -0.008em;
+  color: var(--text-2);
+  max-width: 34em;
+}
+
+/* Small caps for the section eyebrow. Real letterspacing on uppercase,
+   which needs more than the 0.22em a lowercase run wants. */
+.ft-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+
+/* ── Line reveal ───────────────────────────────────────────────────
+   Each line sits in its own overflow-hidden box and rises into it, so
+   the headline assembles rather than fading in as a block. The mask is
+   the box; nothing is clipped once the line has landed. */
+.ft-rise { display: block; overflow: hidden; padding-bottom: 0.06em; }
+.ft-rise > span {
+  display: block;
+  transform: translateY(108%);
+  transition: transform 1000ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-shown] > .ft-rise > span,
+[data-shown] .ft-rise > span { transform: none; }
+
+/* ── Reading progress ──────────────────────────────────────────────
+   A hairline under the header. Driven by a scroll-linked animation
+   where the browser supports one, which costs no JavaScript and never
+   runs on the main thread; browsers without it simply never see the
+   bar, which is the correct amount of missing for a decoration. */
+.ft-progress {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #4F86FF, #4ADE80);
+  pointer-events: none;
+}
+@supports (animation-timeline: scroll()) {
+  @keyframes ft-progress { to { transform: scaleX(1) } }
+  .ft-progress {
+    animation: ft-progress linear both;
+    animation-timeline: scroll(root block);
+  }
+}
+
+/* ── Magnetic ──────────────────────────────────────────────────────
+   The call to action leans a few pixels toward the pointer. useTilt
+   already reports pointer position, so this is a transform on the
+   variables it writes and inherits its guards: nothing happens on a
+   coarse pointer or under reduced motion. */
+.ft-magnet {
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ft-magnet[data-tilting] {
+  transform: translate(
+    calc((var(--tilt-mx, 50%) - 50%) * 0.06),
+    calc((var(--tilt-my, 50%) - 50%) * 0.10)
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-rise > span { transform: none; }
+  .ft-progress { display: none; }
+  .ft-magnet[data-tilting] { transform: none; }
+}
+
+/* ── Sandbox KPI tiles ─────────────────────────────────────────────
+   Three stacked tiles in a row do not fit a phone. Measured: at 390px
+   each tile is 88px wide and the word "OUTSTANDING" needs 128px on one
+   line even with the tracking removed — so the label wrapped mid-word
+   to "OUTSTAND / ING", and three labels that no longer say which figure
+   is which is the worst possible outcome on the narrowest screen.
+
+   Shrinking the type further would have taken it under 6px per
+   character. So the tile changes shape instead: a label-left,
+   figure-right row on a phone, where the full width is available and
+   nothing has to wrap, and the stacked tile from 560px up. */
+.ft-kpis { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+/* 640, not 560. At 560 the stage is just wide enough for three columns and
+   just too narrow for the word "Outstanding" inside one, so the label came
+   back ellipsised — the same failure in a different shape. */
+@media (min-width: 640px) {
+  .ft-kpis { gap: 8px; grid-template-columns: repeat(var(--kpi-cols, 3), minmax(0, 1fr)); }
+}
+
+.ft-kpi {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  border-radius: 10px; padding: 7px 11px;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+}
+.ft-kpi > .k { font-size: 10px; font-weight: 700; text-transform: uppercase;
+               letter-spacing: 0.1em; color: var(--text-3); white-space: nowrap; }
+.ft-kpi > .v { font-size: 1rem; font-weight: 800; letter-spacing: -0.02em;
+               font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ft-kpi > .s { display: none; }
+
+@media (min-width: 640px) {
+  .ft-kpi { display: block; border-radius: 12px; padding: 9px 12px; }
+  .ft-kpi > .k { display: block; font-size: 10px; letter-spacing: 0.12em;
+                 overflow: hidden; text-overflow: ellipsis; }
+  .ft-kpi > .v { display: block; font-size: clamp(0.95rem, 1.6vw, 1.25rem); }
+  .ft-kpi > .s { display: block; font-size: 10px; color: var(--text-3);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

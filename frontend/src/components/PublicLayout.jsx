@@ -124,6 +124,10 @@ export default function PublicLayout({ children }) {
             </button>
           </div>
         </nav>
+        {/* Reading progress. Scroll-linked in CSS where the browser has it,
+            absent where it does not — the right amount of missing for a
+            decoration that costs no JavaScript either way. */}
+        <span className="ft-progress" aria-hidden="true" />
 
         {open && (
           <div className="sm:hidden px-4 pb-4 flex flex-col gap-1"
