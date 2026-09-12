@@ -2531,3 +2531,113 @@ html.dark .web-invoices-shell {
     rgba(148, 190, 255, 0.14),
     rgba(148, 190, 255, 0) 55%);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Landing page motion
+   ------------------------------------------------------------------
+   All of it is CSS and inline SVG. The CSP allows no external script
+   origin, so a CDN animation library would be blocked outright; and a
+   hotlinked image is a broken front door the day the host reorganises.
+   Self-contained motion cannot break and needs no third party.
+
+   The global prefers-reduced-motion block near the top of this file
+   already collapses animation-duration and cuts looping animations, so
+   nothing here needs its own override.
+══════════════════════════════════════════════════════════════════ */
+
+/* Slow drifting colour field behind the hero. Two counter-rotating
+   blobs read as depth without ever resolving into a shape. */
+@keyframes ft-aurora-a {
+  0%, 100% { transform: translate3d(0,0,0) scale(1) }
+  33%      { transform: translate3d(6%, -8%, 0) scale(1.12) }
+  66%      { transform: translate3d(-5%, 5%, 0) scale(0.94) }
+}
+@keyframes ft-aurora-b {
+  0%, 100% { transform: translate3d(0,0,0) scale(1.05) }
+  50%      { transform: translate3d(-8%, 7%, 0) scale(0.9) }
+}
+.ft-aurora {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 620px;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.ft-aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.ft-aurora span:nth-child(1) {
+  width: 46vw; height: 46vw; min-width: 300px; min-height: 300px;
+  left: 2%; top: 10%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+  animation: ft-aurora-a 19s ease-in-out infinite;
+}
+.ft-aurora span:nth-child(2) {
+  width: 38vw; height: 38vw; min-width: 260px; min-height: 260px;
+  right: 4%; top: 0%;
+  background: radial-gradient(circle, #7c3aed 0%, transparent 68%);
+  animation: ft-aurora-b 24s ease-in-out infinite;
+}
+.dark .ft-aurora span { opacity: 0.34; }
+
+/* Scroll reveal. The element starts offset and is released by an
+   IntersectionObserver adding [data-shown] — so content below the fold
+   animates when it is reached rather than all at once on load. */
+.ft-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ft-reveal[data-shown] { opacity: 1; transform: none; }
+
+/* A bar that grows to its value once revealed. --to is set per bar. */
+@keyframes ft-grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.ft-bar {
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-shown] .ft-bar { transform: scaleX(1); }
+
+/* Gentle float for the hero mockup — enough to read as alive, small
+   enough not to distract from the copy beside it. */
+@keyframes ft-float {
+  0%, 100% { transform: translateY(0) }
+  50%      { transform: translateY(-10px) }
+}
+.ft-float { animation: ft-float 7s ease-in-out infinite; }
+
+/* Capability marquee. Duplicated track translated by exactly -50% so
+   the loop is seamless. */
+@keyframes ft-marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+.ft-marquee-mask {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.ft-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: ft-marquee 34s linear infinite;
+}
+.ft-marquee-mask:hover .ft-marquee-track { animation-play-state: paused; }
+
+/* Cursor-following glow on the primary call to action. */
+.ft-cta { position: relative; overflow: hidden; }
+.ft-cta::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(140px circle at var(--tilt-mx, 50%) var(--tilt-my, 50%),
+              rgba(255,255,255,0.30), transparent 70%);
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+.ft-cta[data-tilting]::after { opacity: 1; }

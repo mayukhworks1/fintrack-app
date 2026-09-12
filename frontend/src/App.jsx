@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'  // eager — landing route
 import Login from './pages/Login'          // eager — auth gate
+const Landing = lazy(() => import('./pages/Landing'))  // public — not in the app bundle
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
 import { isChunkLoadError } from './utils/chunkError'
@@ -153,6 +154,14 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [status, isAdmin, isWeb, isAll])
 
+  // Signing in leaves the browser on /login, which is not a route once authed —
+  // without this the first thing a successful login shows is Not Found.
+  useEffect(() => {
+    if (status === 'authed' && location.pathname === '/login') {
+      navigate('/', { replace: true })
+    }
+  }, [status, location.pathname, navigate])
+
   // ── Public routes — no authentication required ──────────────────────────
   if (location.pathname.startsWith('/view/')) {
     return (
@@ -188,7 +197,22 @@ export default function App() {
     )
   }
 
-  if (status !== 'authed') return <Login />
+  // Unauthenticated. The root is the public product page; every other path is
+  // someone reaching for a specific screen, so it goes straight to the form
+  // rather than dropping them on marketing and making them find the way in.
+  if (status !== 'authed') {
+    if (location.pathname === '/') {
+      return (
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Landing />
+          </Suspense>
+          <VercelAnalytics />
+        </ErrorBoundary>
+      )
+    }
+    return <Login />
+  }
 
   // Admin role: full PostgreSQL dashboard
   if (isAdmin) {
