@@ -102,4 +102,12 @@ describe('Landing without IntersectionObserver', () => {
     const hidden = container.querySelectorAll('.ft-reveal:not([data-shown])')
     expect(hidden).toHaveLength(0)
   })
+
+  // The 3D entrance holds the sandbox at opacity 0 until [data-shown] lands.
+  // It is released by the same observer, so without a fallback the single
+  // most important thing on the page would be the one thing missing from it.
+  it('still shows the sandbox when nothing can observe it', () => {
+    const { container } = view()
+    expect(container.querySelectorAll('.ft-3d:not([data-shown])')).toHaveLength(0)
+  })
 })

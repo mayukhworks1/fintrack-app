@@ -24,6 +24,7 @@ import {
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
+import LayerStack from '../components/LayerStack'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import {
@@ -263,6 +264,18 @@ function Reveal({ children, delay = 0, className = '', ...rest }) {
   )
 }
 
+/**
+ * Lies back until it is reached, then straightens.
+ *
+ * Shares useReveal's observer rather than adding a scroll listener: the
+ * hook already sets [data-shown] once, and `.ft-3d` hangs the transform off
+ * that attribute so the whole entrance is CSS.
+ */
+function Tilted({ children }) {
+  const ref = useReveal({ threshold: 0.08 })
+  return <div ref={ref} className="ft-3d">{children}</div>
+}
+
 /** Section heading — one shape for all of them, so the page has a rhythm. */
 function Head({ eyebrow, title, children, className = '' }) {
   return (
@@ -449,9 +462,13 @@ export default function Landing() {
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
         <div id="try" className="relative mx-auto px-4 sm:px-6 pb-6" style={{ maxWidth: 1120, zIndex: 1 }}>
-          <Reveal>
+          {/* ft-3d tilts the frame, not its contents — the panel inside stays
+              square to the viewer because it is showing figures, and
+              perspective makes a near bar taller than a far one at equal
+              value. Depth on chrome, never on a data mark. */}
+          <Tilted>
             <DemoWorkspace />
-          </Reveal>
+          </Tilted>
         </div>
 
         <div className="relative mx-auto px-4 sm:px-6 pb-10" style={{ maxWidth: 1120, zIndex: 1 }}>
@@ -594,6 +611,10 @@ export default function Landing() {
             </li>
           ))}
         </ol>
+
+        <div className="mt-12 sm:mt-16">
+          <LayerStack />
+        </div>
       </section>
 
       {/* ── Privacy ─────────────────────────────────────────────────────── */}

@@ -2905,3 +2905,52 @@ html.dark .web-invoices-shell {
   .ft-travel { animation: none; opacity: 1; }
   .ft-shine::after { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   DEPTH
+   ──────────────────────────────────────────────────────────────────
+   One rule governs all of this: perspective distorts magnitude, so
+   3D goes on chrome and never on a data mark. A bar chart drawn in
+   perspective makes the near bar taller than the far one at equal
+   value, which is a chart that lies. The window may tilt; what is
+   inside it may not, and the layer diagram below is a picture of the
+   architecture rather than of any quantity.
+══════════════════════════════════════════════════════════════════ */
+
+/* The sandbox arrives lying back slightly and straightens as it is
+   reached. Chrome only — the panel inside stays square to the viewer
+   the whole way, because it is showing figures. */
+.ft-3d { perspective: 1800px; perspective-origin: 50% -10%; }
+.ft-3d > * {
+  transform: rotateX(7deg) scale(0.972) translateY(16px);
+  transform-origin: 50% 0%;
+  opacity: 0;
+  transition: transform 1200ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 720ms ease;
+  will-change: transform;
+}
+.ft-3d[data-shown] > * { transform: none; opacity: 1; }
+
+/* ── Layer stack ───────────────────────────────────────────────────
+   The isometric planes are drawn in SVG rather than built from CSS
+   transforms. Rotating a div into the plane also rotates its text, and
+   counter-rotating that text back is a second transform to keep in sync
+   with the first — a diagram nobody can read is decoration. In SVG the
+   parallelograms are just paths and the labels are placed flat. */
+.ft-plane { transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1); }
+.ft-stack:hover .ft-plane { transform: translateY(var(--lift, 0px)); }
+
+/* Light travelling down the spine that joins the layers. */
+@keyframes ft-spark {
+  0%   { opacity: 0; transform: translateY(0) }
+  12%  { opacity: 1 }
+  88%  { opacity: 1 }
+  100% { opacity: 0; transform: translateY(var(--ft-spark-to, 120px)) }
+}
+.ft-spark { animation: ft-spark 2800ms cubic-bezier(0.5, 0, 0.5, 1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-3d > * { transform: none; opacity: 1; }
+  .ft-plane, .ft-stack:hover .ft-plane { transition: none; transform: none; }
+  .ft-spark { animation: none; opacity: 1; }
+}
