@@ -2641,3 +2641,55 @@ html.dark .web-invoices-shell {
   pointer-events: none;
 }
 .ft-cta[data-tilting]::after { opacity: 1; }
+
+/* Landing illustration keyframes — see components/LandingVisuals.jsx. */
+@keyframes ft-bar-rise { from { transform: scaleY(0) } to { transform: scaleY(1) } }
+@keyframes ft-draw     { to { stroke-dashoffset: 0 } }
+@keyframes ft-donut    { to { stroke-dashoffset: var(--ft-donut-to, 0) } }
+@keyframes ft-sheet    { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+/* The SVG pieces only animate once revealed, so the entrance is not spent
+   while the cell is still below the fold. */
+.ft-reveal:not([data-shown]) [style*="ft-bar-rise"],
+.ft-reveal:not([data-shown]) [style*="ft-draw"],
+.ft-reveal:not([data-shown]) [style*="ft-donut"],
+.ft-reveal:not([data-shown]) [style*="ft-sheet"] { animation-play-state: paused; }
+
+/* Bento: a varied grid that reads as designed rather than as eight identical
+   boxes. Single column on a phone; the spans only apply once there is room. */
+.ft-bento {
+  display: grid;
+  gap: 1rem;
+  /* minmax(0, 1fr), never 1fr. A bare 1fr is minmax(auto, 1fr), so a wide
+     child — the SQL block in the analyst demo — sets a min-content floor and
+     pushes the whole column past the viewport. This is what was causing
+     horizontal scroll on a phone. */
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 680px) {
+  .ft-bento { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1.1rem; }
+  .ft-bento > .span-3 { grid-column: span 3 }
+  .ft-bento > .span-2 { grid-column: span 2 }
+  .ft-bento > .span-4 { grid-column: span 4 }
+  .ft-bento > .span-6 { grid-column: span 6 }
+}
+
+/* Gradient hairline that turns with the pointer, on top of the card border. */
+.ft-edge { position: relative; }
+.ft-edge::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    transparent 40%, transparent 60%,
+    color-mix(in srgb, #7c3aed 45%, transparent));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 320ms ease;
+  pointer-events: none;
+}
+.ft-edge[data-tilting]::before { opacity: 1; }

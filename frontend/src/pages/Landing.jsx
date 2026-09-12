@@ -20,55 +20,58 @@ import { useTheme } from '../context/ThemeContext'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
+import {
+  Grain, BrandMark, MiniBars, MiniLine, MiniDonut, MiniDocs, AnalystDemo, CountUp,
+} from '../components/LandingVisuals'
 
 // Every entry names something that actually ships. A landing page that
 // describes features the product does not have is the fastest way to lose the
 // trust the rest of it is trying to earn.
 const MODULES = [
   {
-    icon: Receipt,
+    icon: Receipt, span: 'span-3', visual: 'bars',
     title: 'Receivables',
     body: 'Invoices with aging bands, collection rate, and GST and TDS tracked separately — because tax withheld at source is not money a client still owes you.',
     points: ['Aging buckets', 'Collection pressure', 'Follow-up tracking'],
   },
   {
-    icon: FolderKanban,
+    icon: FolderKanban, span: 'span-3', visual: 'donut',
     title: 'Projects',
     body: 'Billing, cost and realised profit per project, with margin and health surfaced before a job quietly goes underwater.',
     points: ['Profit and margin', 'Health signals', 'Client rollups'],
   },
   {
-    icon: BarChart3,
+    icon: BarChart3, span: 'span-2', visual: 'line',
     title: 'Analytics',
     body: 'Trends across clients, months and categories, with the underlying rows one click away rather than locked behind a chart.',
     points: ['Monthly trends', 'Client breakdowns', 'CSV export'],
   },
   {
-    icon: FileSearch,
+    icon: FileSearch, span: 'span-4', visual: 'docs',
     title: 'Studio — documents',
     body: 'Upload contracts and notes, then ask questions about them. Every answer carries numbered citations you can open to the exact page it came from.',
     points: ['PDF, text, CSV, JSON', 'Page-level citations', 'Answers checked against sources'],
   },
   {
-    icon: Sparkles,
+    icon: Sparkles, span: 'span-6', visual: 'demo',
     title: 'Studio — finance data',
     body: 'Ask your invoices and projects a question in plain words. The compiled SQL is shown with every answer, so a figure about money can always be checked.',
     points: ['Plain-language questions', 'The query is always visible', 'Charts and tables'],
   },
   {
-    icon: Globe,
+    icon: Globe, span: 'span-3',
     title: 'Pages',
     body: 'Describe a page and watch it get written, then publish it on a slug — optionally password-protected, optionally set to expire.',
     points: ['Streamed as it writes', 'Surgical revisions', 'Password and expiry'],
   },
   {
-    icon: Activity,
+    icon: Activity, span: 'span-3',
     title: 'Status board',
     body: 'A live view of where every client project stands, kept current by webhooks rather than by someone remembering to update a sheet.',
     points: ['Per-client status', 'Attachments', 'Near-real-time'],
   },
   {
-    icon: Share2,
+    icon: Share2, span: 'span-6',
     title: 'Shared views',
     body: 'Send a filtered, read-only view to a client on a link, and see what they actually opened.',
     points: ['Read-only links', 'Column highlighting', 'View analytics'],
@@ -209,12 +212,20 @@ function CapabilityMarquee() {
   )
 }
 
-function ModuleCard({ icon: Icon, title, body, points }) {
+const VISUALS = {
+  bars:  <MiniBars />,
+  line:  <MiniLine />,
+  donut: <MiniDonut pct={68} />,
+  docs:  <MiniDocs />,
+  demo:  <AnalystDemo />,
+}
+
+function ModuleCard({ icon: Icon, title, body, points, visual }) {
   const tilt = useTilt({ max: 5 })
   return (
     <article
       ref={tilt}
-      className="tilt tilt-sheen h-full flex flex-col rounded-2xl p-5 sm:p-6"
+      className="tilt tilt-sheen ft-edge h-full flex flex-col rounded-2xl p-5 sm:p-6"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -233,9 +244,17 @@ function ModuleCard({ icon: Icon, title, body, points }) {
       <h3 className="text-base sm:text-lg font-bold mb-2" style={{ color: 'var(--text-1)' }}>
         {title}
       </h3>
-      <p className="text-sm leading-relaxed mb-4 flex-1" style={{ color: 'var(--text-2)' }}>
+      <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
         {body}
       </p>
+      {/* Visual sits directly under the copy it illustrates. Pushing it to the
+          bottom with a spacer left a dead band across every cell. */}
+      {visual && (
+        <div className="mb-4">
+          {VISUALS[visual]}
+        </div>
+      )}
+      <div className="flex-1" />
       <ul className="flex flex-col gap-1.5 m-0 p-0" style={{ listStyle: 'none' }}>
         {points.map(p => (
           <li key={p} className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -274,13 +293,7 @@ export default function Landing() {
         <nav className="mx-auto flex items-center gap-3 px-4 sm:px-6"
              style={{ maxWidth: 1120, minHeight: 60 }}>
           <span className="flex items-center gap-2 font-extrabold text-base tracking-tight">
-            <span
-              className="flex items-center justify-center rounded-lg"
-              style={{ width: 30, height: 30, background: 'var(--accent)', color: '#fff' }}
-              aria-hidden="true"
-            >
-              <BarChart3 size={17} />
-            </span>
+            <BrandMark size={30} />
             FinTrack
           </span>
 
@@ -325,6 +338,7 @@ export default function Landing() {
         {/* Drifting colour field. Purely decorative, so it is hidden from AT
             and sits behind everything. */}
         <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
+        <Grain />
 
         <div className="relative mx-auto px-4 sm:px-6 pt-12 pb-14 sm:pt-20 sm:pb-20 grid gap-10 lg:gap-14 items-center"
              style={{ maxWidth: 1120, zIndex: 1,
@@ -396,6 +410,30 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Counts ──────────────────────────────────────────────────────
+          Product facts — how many modules, how many roles — not workspace
+          figures. They describe the software, so they are safe to show. */}
+      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+        <Reveal className="grid gap-4 sm:gap-5"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
+          {[
+            ['Modules', 8, ''],
+            ['Permission roles', 8, ''],
+            ['Sync latency', 30, 's'],
+            ['Cited answers', 100, '%'],
+          ].map(([label, value, suffix]) => (
+            <div key={label} className="rounded-2xl p-4 sm:p-5"
+                 style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+              <p className="font-extrabold tracking-tight"
+                 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.3rem)', color: 'var(--accent)', letterSpacing: '-0.02em' }}>
+                <CountUp to={value} suffix={suffix} />
+              </p>
+              <p className="text-xs font-semibold mt-1" style={{ color: 'var(--text-3)' }}>{label}</p>
+            </div>
+          ))}
+        </Reveal>
+      </section>
+
       {/* ── Modules ─────────────────────────────────────────────────────── */}
       <section id="features" className="mx-auto px-4 sm:px-6 pb-4" style={{ maxWidth: 1120 }}>
         <Reveal className="mb-8" style={{ maxWidth: 640 }}>
@@ -413,12 +451,11 @@ export default function Landing() {
           </p>
         </Reveal>
 
-        <div className="grid gap-4 sm:gap-5"
-             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))' }}>
+        <div className="ft-bento">
           {MODULES.map((m, i) => (
             // Staggered, but capped — past a handful the last card would wait
             // noticeably longer than the reader does.
-            <Reveal key={m.title} delay={Math.min(i, 3) * 70} className="h-full">
+            <Reveal key={m.title} delay={Math.min(i, 3) * 70} className={`${m.span} h-full`}>
               <ModuleCard {...m} />
             </Reveal>
           ))}
