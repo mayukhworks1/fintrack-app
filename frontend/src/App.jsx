@@ -120,6 +120,7 @@ function RouteFallback() {
 export default function App() {
   const { status, isWeb, isAll, isAdmin, isViewer, isImpersonating } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   // Baseline title and description for the current route. Pages whose title
   // depends on loaded data override this once that data arrives — the override
