@@ -3234,3 +3234,13 @@ html.dark .web-invoices-shell {
   .ft-kpi > .s { display: block; font-size: 10px; color: var(--text-3);
                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Sandbox rows are buttons, so they need a focus ring that reads on both
+   themes — the default one is drawn against the browser's idea of the page
+   colour, not ours, and disappears on the dark card. */
+.ft-row:hover { background: var(--accent-dim) !important; }
+.ft-row:focus-visible {
+  outline: none;
+  background: var(--accent-dim) !important;
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent-soft);
+}

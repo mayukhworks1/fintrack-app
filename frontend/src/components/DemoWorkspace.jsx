@@ -20,11 +20,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
-  Play, X, MousePointerClick,
+  Play, X, MousePointerClick, Keyboard,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
-  ask, bandOf, monthly, inr, inrShort, shortDate,
+  ask, bandOf, monthly, inr, inrShort, shortDate, GST_RATE, TDS_RATE,
 } from './demoData'
 
 const TABS = [
@@ -72,6 +72,156 @@ function Badge({ status }) {
   )
 }
 
+/* ── Invoice detail ──────────────────────────────────────────────────── */
+
+const KBD = {
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 9.5, padding: '1px 5px', borderRadius: 4,
+  background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+  color: 'var(--text-2)',
+}
+
+/**
+ * One invoice, opened.
+ *
+ * This is where the product's least intuitive claim gets shown instead of
+ * argued: an invoice carries three different amounts and only one of them is
+ * money a client still owes you. The line runs billed → GST added → what was
+ * invoiced → TDS withheld by the client → what actually lands, with the
+ * receivable marked against the pre-tax figure. Most receivables reports put
+ * the tax in the outstanding column, which overstates collectable cash and
+ * buries the invoices that are genuinely late.
+ *
+ * A real dialog: it takes focus on open, Escape closes it, and focus returns
+ * to the row that opened it. A drawer you cannot leave by keyboard is a trap.
+ */
+function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    const node = panelRef.current
+    node?.focus()
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+    node?.addEventListener('keydown', onKey)
+    return () => {
+      node?.removeEventListener('keydown', onKey)
+      // Focus goes back to the row, keeping the reading position. Without
+      // this it falls to the document and the next Tab restarts from the top.
+      returnFocusRef?.current?.focus?.()
+    }
+  }, [onClose, returnFocusRef])
+
+  const invoiced = invoice.amount + invoice.gst
+  const received = invoiced - invoice.tds
+  const band = BANDS.find(b => b.id === bandOf(invoice))
+
+  const money = [
+    { k: 'Billed (pre-tax)', v: inr(invoice.amount), note: 'the receivable', mark: true },
+    { k: `GST @ ${Math.round(GST_RATE * 100)}%`, v: `+ ${inr(invoice.gst)}`, note: "collected for the state" },
+    { k: 'Invoiced', v: inr(invoiced), note: 'what the document says', rule: true },
+    { k: `TDS @ ${Math.round(TDS_RATE * 100)}%`, v: `− ${inr(invoice.tds)}`, note: 'withheld by the client' },
+    { k: 'Lands in the bank', v: inr(received), note: 'if paid in full', strong: true },
+  ]
+
+  return (
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Invoice ${invoice.id} for ${invoice.client}`}
+      tabIndex={-1}
+      className="absolute inset-0 flex flex-col"
+      style={{ background: 'var(--card-bg)', zIndex: 8, outline: 'none',
+               animation: 'ft-scene-in 260ms cubic-bezier(0.22,1,0.36,1) both' }}
+    >
+      <div className="flex items-start gap-2 px-3 py-2.5 shrink-0"
+           style={{ borderBottom: '1px solid var(--card-border)', background: 'var(--bg-input)' }}>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold truncate" style={{ fontSize: 12.5, color: 'var(--text-1)' }}>
+            {invoice.client}
+          </p>
+          <p className="truncate" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+            {invoice.id} · {invoice.project} · {invoice.category}
+          </p>
+        </div>
+        <Badge status={invoice.status} />
+        <button onClick={onClose} aria-label="Close invoice detail"
+                className="flex items-center justify-center rounded-md shrink-0"
+                style={{ width: 26, height: 26, cursor: 'pointer',
+                         background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                         color: 'var(--text-2)' }}>
+          <X size={13} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        <p className="font-bold uppercase tracking-[0.14em] mb-2"
+           style={{ fontSize: 9.5, color: 'var(--text-3)' }}>Where the money goes</p>
+
+        <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid var(--card-border)' }}>
+          {money.map(row => (
+            <div key={row.k} className="flex items-baseline gap-2 px-2.5 py-1.5"
+                 style={{ borderTop: row.rule ? '1px solid var(--card-border)' : 'none',
+                          background: row.mark ? 'var(--accent-dim)'
+                                    : row.strong ? 'var(--bg-input)' : 'transparent' }}>
+              <span style={{ fontSize: 11, color: row.mark ? 'var(--accent)' : 'var(--text-2)',
+                             fontWeight: row.mark || row.strong ? 700 : 500, flex: '1 1 auto' }}>
+                {row.k}
+              </span>
+              <span className="tabular-nums shrink-0"
+                    style={{ fontSize: 11.5, fontWeight: row.mark || row.strong ? 800 : 600,
+                             color: row.mark ? 'var(--accent)' : 'var(--text-1)' }}>
+                {row.v}
+              </span>
+              <span className="hidden sm:block shrink-0"
+                    style={{ fontSize: 9.5, color: 'var(--text-3)', width: 118 }}>{row.note}</span>
+            </div>
+          ))}
+        </div>
+
+        <p className="rounded-lg px-2.5 py-2 mb-3"
+           style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--text-2)',
+                    background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          Outstanding counts <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.amount)}</strong> —
+          the pre-tax figure. GST is collected on the state's behalf and TDS is
+          withheld by the client before they pay, so neither is money this client
+          still owes. Counting them would overstate what you can collect by{' '}
+          <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.gst + invoice.tds)}</strong> on
+          this invoice alone.
+        </p>
+
+        <p className="font-bold uppercase tracking-[0.14em] mb-2"
+           style={{ fontSize: 9.5, color: 'var(--text-3)' }}>Timeline</p>
+        <div className="flex flex-col gap-1">
+          {[
+            ['Raised', shortDate(invoice.raisedOn), null],
+            ['Due', shortDate(invoice.dueOn),
+              invoice.status === 'Overdue' ? `${invoice.daysOverdue} days ago` : null],
+            invoice.paidOn
+              ? ['Paid', shortDate(invoice.paidOn), `${invoice.daysToCollect} days to collect`]
+              : ['Ageing band', band ? band.label : '—',
+                 invoice.status === 'Overdue' ? 'counts as past due' : 'still within terms'],
+          ].map(([k, v, note]) => (
+            <div key={k} className="flex items-baseline gap-2">
+              <span style={{ fontSize: 11, color: 'var(--text-3)', flex: '0 0 84px' }}>{k}</span>
+              <span className="font-semibold tabular-nums"
+                    style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{v}</span>
+              {note && <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{note}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="px-3 py-2 shrink-0"
+         style={{ fontSize: 10.5, color: 'var(--text-3)',
+                  borderTop: '1px solid var(--card-border)', background: 'var(--bg-input)' }}>
+        Press <kbd style={KBD}>Esc</kbd> to go back to the list.
+      </p>
+    </div>
+  )
+}
+
+
 /* ── Receivables ─────────────────────────────────────────────────────── */
 
 const COLUMNS = [
@@ -80,8 +230,23 @@ const COLUMNS = [
   { key: 'amount', label: 'Amount',  align: 'right', grow: '0 0 92px' },
 ]
 
-function Receivables({ state, set }) {
+function Receivables({ state, set, onOpen, searchRef }) {
   const { status, band, query, sort } = state
+
+  const onRowKeys = (e) => {
+    const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
+    if (!keys.includes(e.key)) return
+    const all = [...e.currentTarget.querySelectorAll('[data-row]')]
+    if (all.length === 0) return
+    const i = all.indexOf(document.activeElement)
+    const next =
+      e.key === 'Home' ? 0
+      : e.key === 'End' ? all.length - 1
+      : e.key === 'ArrowDown' ? Math.min(i + 1, all.length - 1)
+      : Math.max(i - 1, 0)
+    e.preventDefault()
+    all[next < 0 ? 0 : next]?.focus()
+  }
 
   const rows = useMemo(() => {
     let r = INVOICES
@@ -121,6 +286,7 @@ function Receivables({ state, set }) {
                   style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
                            color: 'var(--text-3)' }} />
           <input
+            ref={searchRef}
             value={query}
             onChange={e => set({ query: e.target.value })}
             placeholder="Search clients, projects…"
@@ -175,15 +341,29 @@ function Receivables({ state, set }) {
           <span style={{ flex: '0 0 58px' }} />
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Rows are buttons, not divs with a click handler. That buys the
+            whole keyboard and screen-reader story for free: they are in the
+            tab order, Enter and Space activate them natively, and the arrow
+            keys below only have to move focus rather than maintain a
+            parallel notion of which row is selected. */}
+        <div className="flex-1 overflow-y-auto" onKeyDown={onRowKeys}>
           {rows.length === 0 && (
             <p className="px-3 py-6 text-center" style={{ fontSize: 12, color: 'var(--text-3)' }}>
               Nothing matches those filters.
             </p>
           )}
           {rows.map(r => (
-            <div key={r.id} className="flex items-center gap-2 px-3"
-                 style={{ height: 34, borderBottom: '1px solid var(--card-border)' }}>
+            <button
+              key={r.id}
+              data-row=""
+              onClick={() => onOpen(r.id)}
+              aria-label={`${r.id}, ${r.client}, ${inr(r.amount)}, ${r.status}. Open detail.`}
+              className="w-full flex items-center gap-2 px-3 text-left ft-row"
+              style={{ height: 34, borderBottom: '1px solid var(--card-border)',
+                       background: 'transparent', border: 0,
+                       borderBottomWidth: 1, borderBottomStyle: 'solid',
+                       borderBottomColor: 'var(--card-border)', cursor: 'pointer' }}
+            >
               <span className="min-w-0" style={{ flex: '1 1 34%' }}>
                 <span className="block truncate font-semibold"
                       style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{r.client}</span>
@@ -200,7 +380,7 @@ function Receivables({ state, set }) {
                 {inr(r.amount)}
               </span>
               <span style={{ flex: '0 0 58px', textAlign: 'right' }}><Badge status={r.status} /></span>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -509,12 +689,18 @@ export default function DemoWorkspace() {
     project: PROJECT_ROLLUP[0].id,
     months: 6,
     question: 0,
+    detail: null,
   })
   // Autoplay stops for good at the first interaction. A demo that keeps
   // advancing under someone's cursor is actively hostile.
   const [driving, setDriving] = useState(false)
   const [onScreen, setOnScreen] = useState(false)
+  const [hints, setHints] = useState(false)
   const hostRef = useRef(null)
+  const frameRef = useRef(null)
+  const searchRef = useRef(null)
+  // The row that opened the drawer, so focus can go back to it on close.
+  const lastRowRef = useRef(null)
 
   const set = (patch) => { setDriving(true); setState(s => ({ ...s, ...patch })) }
 
@@ -539,19 +725,73 @@ export default function DemoWorkspace() {
   }, [driving, onScreen])
 
   const Panel = PANELS[state.tab]
+  const detail = state.detail ? INVOICES.find(i => i.id === state.detail) : null
+
+  const openDetail = (id) => {
+    lastRowRef.current = document.activeElement
+    set({ detail: id })
+  }
+
+  /**
+   * Shortcuts, scoped to the frame.
+   *
+   * Bound to the sandbox rather than the window: a landing page that
+   * swallows "/" while someone is reading it is hostile, and this is a
+   * demo inside a document, not an application that owns the keyboard.
+   *
+   * Events originating in the search box are left alone except for Escape,
+   * or typing a project name containing a digit would change module
+   * halfway through the word.
+   */
+  const onKeys = (e) => {
+    const typing = e.target instanceof HTMLInputElement
+    if (e.key === 'Escape') {
+      if (state.detail) { setState(s => ({ ...s, detail: null })); return }
+      if (typing) {
+        // Focus goes back to the frame, not to the document. Blurring to
+        // <body> left every other shortcut dead until something inside the
+        // sandbox was clicked again — so the second Escape, the one meant to
+        // clear the filters, did nothing at all.
+        e.target.blur()
+        frameRef.current?.focus()
+        return
+      }
+      if (state.band || state.query || state.status !== 'all') {
+        set({ band: null, query: '', status: 'all' })
+      }
+      return
+    }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return
+
+    if (e.key >= '1' && e.key <= String(TABS.length)) {
+      e.preventDefault()
+      set({ tab: TABS[Number(e.key) - 1].id, detail: null })
+      return
+    }
+    if (e.key === '/') {
+      e.preventDefault()
+      if (state.tab !== 'receivables') set({ tab: 'receivables' })
+      // After the panel has swapped, or there is no input yet to focus.
+      requestAnimationFrame(() => searchRef.current?.focus())
+      return
+    }
+    if (e.key === '?') { e.preventDefault(); setHints(h => !h) }
+  }
 
   const restart = () => {
     setDriving(false)
     setState({
       tab: 'receivables', status: 'all', band: null, query: '',
       sort: { key: 'amount', dir: 'desc' }, project: PROJECT_ROLLUP[0].id,
-      months: 6, question: 0,
+      months: 6, question: 0, detail: null,
     })
   }
 
   return (
     <div ref={hostRef}>
-      <div className="ft-tour">
+      {/* tabIndex -1 so the frame can hold focus without entering the tab
+          order itself; the controls inside are what a Tab lands on. */}
+      <div ref={frameRef} className="ft-tour" tabIndex={-1} onKeyDown={onKeys}>
         <div className="ft-tour-chrome">
           {['#ef4444', '#fbbf24', '#22c55e'].map(c => (
             <span key={c} className="ft-tour-dot" style={{ background: c }} />
@@ -571,15 +811,20 @@ export default function DemoWorkspace() {
               const Icon = t.icon
               const on = state.tab === t.id
               return (
+                // The label was rendered twice — once visible above 640px and
+                // once sr-only below it — which is display:none in one
+                // direction but only *visually* hidden in the other. So on a
+                // wide screen a screen reader announced "Ageing Ageing". One
+                // label now, named on the button, correct at every width.
                 <button key={t.id} onClick={() => set({ tab: t.id })}
                         aria-current={on ? 'page' : undefined}
+                        aria-label={t.label}
                         className="ft-tour-rail-item"
                         data-on={on ? '' : undefined}
                         style={{ cursor: 'pointer', background: on ? undefined : 'transparent',
                                  border: 0, width: '100%', textAlign: 'left' }}>
                   <Icon size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
-                  <span className="hidden sm:inline truncate">{t.label}</span>
-                  <span className="sm:hidden sr-only">{t.label}</span>
+                  <span className="hidden sm:inline truncate" aria-hidden="true">{t.label}</span>
                 </button>
               )
             })}
@@ -587,8 +832,16 @@ export default function DemoWorkspace() {
 
           <div className="ft-tour-stage">
             <div key={state.tab} className="h-full ft-tour-scene">
-              <Panel state={state} set={set} />
+              <Panel state={state} set={set} onOpen={openDetail} searchRef={searchRef} />
             </div>
+
+            {detail && (
+              <InvoiceDrawer
+                invoice={detail}
+                returnFocusRef={lastRowRef}
+                onClose={() => setState(s => ({ ...s, detail: null }))}
+              />
+            )}
           </div>
         </div>
 
@@ -600,8 +853,17 @@ export default function DemoWorkspace() {
               <span className="font-semibold" style={{ fontSize: 11, color: 'var(--text-2)' }}>
                 You are driving.
               </span>
-              <button onClick={restart}
+              <button onClick={() => setHints(h => !h)}
+                      aria-expanded={hints}
                       className="ml-auto flex items-center gap-1.5 rounded-md font-semibold shrink-0"
+                      style={{ height: 26, padding: '0 9px', fontSize: 11, cursor: 'pointer',
+                               background: hints ? 'var(--accent-dim)' : 'var(--card-bg)',
+                               border: `1px solid ${hints ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                               color: hints ? 'var(--accent)' : 'var(--text-2)' }}>
+                <Keyboard size={12} aria-hidden="true" /> Keys
+              </button>
+              <button onClick={restart}
+                      className="flex items-center gap-1.5 rounded-md font-semibold shrink-0"
                       style={{ height: 26, padding: '0 9px', fontSize: 11, cursor: 'pointer',
                                background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                                color: 'var(--text-2)' }}>
@@ -626,6 +888,26 @@ export default function DemoWorkspace() {
           )}
         </div>
       </div>
+
+      {hints && (
+        <div className="mt-3 rounded-xl p-3 flex flex-wrap gap-x-5 gap-y-2"
+             style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                      animation: 'ft-slide-up 240ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          {[
+            ['1 – 5', 'switch module'],
+            ['/', 'search invoices'],
+            ['↑ ↓', 'move through rows'],
+            ['Enter', 'open an invoice'],
+            ['Esc', 'close, or clear the filters'],
+            ['?', 'this list'],
+          ].map(([k, what]) => (
+            <span key={k} className="flex items-center gap-2">
+              <kbd style={KBD}>{k}</kbd>
+              <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{what}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--text-2)', minHeight: '3.2em' }}>
         {CAPTION[state.tab]}
