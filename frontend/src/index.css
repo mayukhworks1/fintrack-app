@@ -3283,3 +3283,71 @@ html.dark .main-app-theme {
   --bad-dim:  color-mix(in srgb, var(--bad) 14%, transparent);
   --warn-dim: color-mix(in srgb, var(--warn) 15%, transparent);
 }
+
+/* ── Mega menu ─────────────────────────────────────────────────────
+   The panel is positioned from its trigger and clamped to the
+   viewport, so the right-hand group cannot open off the edge of the
+   screen. Entrance is a short rise rather than a fade: a panel that
+   only fades in reads as having been there all along. */
+@keyframes ft-mega-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.99) }
+  to   { opacity: 1; transform: none }
+}
+.ft-mega {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  padding: 10px;
+  border-radius: 16px;
+  transform-origin: top left;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 24px 48px -18px rgba(15, 23, 42, 0.26),
+              0 6px 16px -8px rgba(15, 23, 42, 0.14);
+  animation: ft-mega-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* Clamped rather than flipped. The triggers sit near the left of a
+     1120px rail, so a panel anchored to one can never reach the right
+     edge — but the clamp costs nothing and removes the question. */
+  max-width: calc(100vw - 32px);
+}
+.dark .ft-mega {
+  box-shadow: 0 24px 48px -18px rgba(0, 0, 0, 0.7),
+              0 6px 16px -8px rgba(0, 0, 0, 0.5);
+}
+/* A lit top edge, the same hairline the sandbox frame carries, so the
+   two most prominent surfaces on the site are recognisably a set. */
+.ft-mega::before {
+  content: '';
+  position: absolute; inset: 0 0 auto; height: 2px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, #4F86FF, #4ADE80 62%, transparent);
+  pointer-events: none;
+}
+
+.ft-mega-item { transition: background 160ms ease; }
+.ft-mega-item:hover,
+.ft-mega-item:focus-visible {
+  background: var(--accent-dim);
+  outline: none;
+}
+.ft-mega-item:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-mega { animation: none; }
+}
+
+/* A card that is itself a link. Lifts a little and lights its edge, so the
+   whole tile reads as the target rather than the words inside it. */
+.ft-chip {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 220ms ease, box-shadow 260ms ease;
+}
+.ft-chip:hover, .ft-chip:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--accent-soft) !important;
+  box-shadow: 0 10px 26px -14px var(--accent-glow);
+  outline: none;
+}
+.ft-chip:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft), 0 10px 26px -14px var(--accent-glow); }
+@media (prefers-reduced-motion: reduce) { .ft-chip:hover, .ft-chip:focus-visible { transform: none } }

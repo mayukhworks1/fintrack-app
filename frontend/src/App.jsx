@@ -9,6 +9,9 @@ import Login from './pages/Login'          // eager — auth gate
 const Landing  = lazy(() => import('./pages/Landing'))   // public — not in the app bundle
 const Features = lazy(() => import('./pages/Features'))
 const Security = lazy(() => import('./pages/Security'))
+const HowItWorks = lazy(() => import('./pages/public/HowItWorks'))
+const Customise = lazy(() => import('./pages/public/Customise'))
+const Faq = lazy(() => import('./pages/public/Faq'))
 
 // Public marketing routes. Anything not listed here still goes straight to the
 // sign-in form, because a deep link into the app is someone reaching for a
@@ -17,6 +20,9 @@ const PUBLIC_ROUTES = {
   '/': Landing,
   '/features': Features,
   '/security': Security,
+  '/how-it-works': HowItWorks,
+  '/customise': Customise,
+  '/faq': Faq,
 }
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'

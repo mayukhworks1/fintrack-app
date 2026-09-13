@@ -12,17 +12,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ArrowRight, Menu, X, Moon, Sun } from 'lucide-react'
+import MegaNav, { NAV, ALL_PAGES } from './MegaNav'
 import { useTheme } from '../context/ThemeContext'
 // The app's own mark, not a second one drawn for this page. The public site
 // briefly shipped a different logo from the product and the favicon; there is
 // one mark, and this is it.
 import BrandMark from './BrandMark'
-
-const NAV = [
-  { to: '/',          label: 'Overview' },
-  { to: '/features',  label: 'Features' },
-  { to: '/security',  label: 'Security' },
-]
 
 export default function PublicLayout({ children }) {
   const { dark, toggle } = useTheme()
@@ -71,22 +66,7 @@ export default function PublicLayout({ children }) {
             FinTrack
           </Link>
 
-          <div className="hidden sm:flex items-center gap-1 ml-4">
-            {NAV.map(({ to, label }) => {
-              const active = pathname === to
-              return (
-                <Link key={to} to={to}
-                      className="px-3 py-2 rounded-lg text-sm font-medium"
-                      style={{
-                        color: active ? 'var(--accent)' : 'var(--text-2)',
-                        background: active ? 'var(--accent-dim)' : 'transparent',
-                        textDecoration: 'none',
-                      }}>
-                  {label}
-                </Link>
-              )
-            })}
-          </div>
+          <MegaNav />
 
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -102,7 +82,7 @@ export default function PublicLayout({ children }) {
             </button>
 
             <Link to="/login"
-                  className="hidden sm:flex items-center gap-1.5 rounded-lg font-semibold text-sm"
+                  className="hidden md:flex items-center gap-1.5 rounded-lg font-semibold text-sm"
                   style={{
                     minHeight: 40, padding: '0 16px', background: 'var(--accent-btn)',
                     color: '#fff', textDecoration: 'none',
@@ -114,7 +94,7 @@ export default function PublicLayout({ children }) {
               onClick={() => setOpen(o => !o)}
               aria-label={open ? 'Close menu' : 'Open menu'}
               aria-expanded={open}
-              className="sm:hidden flex items-center justify-center rounded-lg"
+              className="md:hidden flex items-center justify-center rounded-lg"
               style={{
                 width: 40, height: 40, background: 'transparent',
                 border: '1px solid var(--card-border)', color: 'var(--text-1)', cursor: 'pointer',
@@ -130,22 +110,34 @@ export default function PublicLayout({ children }) {
         <span className="ft-progress" aria-hidden="true" />
 
         {open && (
-          <div className="sm:hidden px-4 pb-4 flex flex-col gap-1"
-               style={{ borderTop: '1px solid var(--card-border)' }}>
-            {NAV.map(({ to, label }) => (
-              <Link key={to} to={to}
-                    className="flex items-center rounded-lg px-3 font-semibold text-sm"
-                    style={{
-                      minHeight: 48,
-                      color: pathname === to ? 'var(--accent)' : 'var(--text-1)',
-                      background: pathname === to ? 'var(--accent-dim)' : 'transparent',
-                      textDecoration: 'none',
-                    }}>
-                {label}
-              </Link>
+          /* Every destination, grouped and described. A phone sheet that
+             lists six bare nouns is the same problem the desktop nav had. */
+          <div className="md:hidden px-4 pb-4 overflow-y-auto"
+               style={{ borderTop: '1px solid var(--card-border)', maxHeight: 'calc(100vh - 60px)' }}>
+            {NAV.map(group => (
+              <div key={group.id} className="pt-3">
+                <p className="ft-eyebrow mb-1.5" style={{ fontSize: '0.6rem' }}>{group.label}</p>
+                {group.items.map(({ to, label, blurb }) => (
+                  <Link key={to} to={to}
+                        aria-current={pathname === to ? 'page' : undefined}
+                        className="block rounded-lg px-3 py-2.5"
+                        style={{
+                          background: pathname === to ? 'var(--accent-dim)' : 'transparent',
+                          textDecoration: 'none',
+                        }}>
+                    <span className="block font-bold text-sm"
+                          style={{ color: pathname === to ? 'var(--accent)' : 'var(--text-1)' }}>
+                      {label}
+                    </span>
+                    <span className="block" style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--text-3)' }}>
+                      {blurb}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             ))}
             <Link to="/login"
-                  className="flex items-center justify-center gap-2 rounded-lg font-bold text-sm mt-1"
+                  className="flex items-center justify-center gap-2 rounded-lg font-bold text-sm mt-4"
                   style={{
                     minHeight: 48, background: 'var(--accent-btn)', color: '#fff',
                     textDecoration: 'none',
@@ -164,8 +156,8 @@ export default function PublicLayout({ children }) {
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>
             FinTrack — AI finance manager
           </p>
-          <div className="flex items-center gap-1">
-            {NAV.map(({ to, label }) => (
+          <div className="flex items-center flex-wrap justify-center gap-1">
+            {ALL_PAGES.map(({ to, label }) => (
               <Link key={to} to={to} className="inline-flex items-center text-xs font-semibold rounded-lg"
                     style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)', textDecoration: 'none' }}>
                 {label}

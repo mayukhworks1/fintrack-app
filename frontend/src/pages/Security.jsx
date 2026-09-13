@@ -17,6 +17,8 @@ import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
 import PublicLayout from '../components/PublicLayout'
 import { Grain } from '../components/LandingVisuals'
+import { Head, Card, Grid } from '../components/PublicBits'
+import { SECURITY } from '../content/publicContent'
 
 const ROLES = [
   { key: 'superadmin', label: 'Super Admin', rank: 1,  note: 'Full auth, security and audit control.' },
@@ -157,6 +159,28 @@ export default function Security() {
       </section>
 
       {/* ── pillars ── */}
+      {/* ── What is and is not public ─────────────────────────────────
+          This lived at the bottom of the landing page. When that page was
+          split it stopped being rendered anywhere at all, which is a poor
+          fate for the one section that tells a visitor none of what they
+          are looking at belongs to anyone. */}
+      <section id="privacy" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <div className="rounded-3xl p-6 sm:p-10"
+             style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+          <Head eyebrow="Access" title="This page is public. Your data is not.">
+            Everything described here is capability, and the sandbox on the
+            overview is fiction computed in your browser. No figure on these
+            pages is read from a workspace, and nothing below the fold belongs
+            to anyone.
+          </Head>
+          <Grid min={250}>
+            {SECURITY.map(({ icon, title, body }, i) => (
+              <Card key={title} icon={icon} title={title} body={body} delay={Math.min(i, 3) * 70} />
+            ))}
+          </Grid>
+        </div>
+      </section>
+
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <div className="grid gap-4 sm:gap-5"
              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>

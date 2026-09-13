@@ -1,428 +1,53 @@
 /**
  * The public front door.
  *
- * Until this page existed an unauthenticated visitor hit the login form and
- * nothing else — there was no way to find out what the product does without
- * an account. It explains the modules, and it lets you use one: the sandbox
- * below the hero is a working copy of the app over an invented ledger.
+ * It used to be the whole site — seventeen screens on a phone, carrying the
+ * modules, the mechanism, the configuration story and the FAQ. Everything
+ * below the fold was competing with everything else below the fold, and the
+ * thing most worth reaching was the thing furthest from the top.
  *
- * The rule the whole page is built around is negative. Nothing here reads a
- * workspace. Every client, project and figure is fiction, computed in the
- * browser from src/components/demoData.js, and no part of this route makes an
- * API call. Real records live behind sign-in.
+ * It now does one job: say what this is, let you use it, and point at the page
+ * that answers whatever you wanted next. Depth lives on its own routes, and
+ * the navigation says what each of them holds.
  *
- * Built mobile-first because that is where it has most often been wrong: a
- * single column by default, grids that opt into more, no fixed widths, and
- * touch targets that clear 44px.
+ * The rule the whole site is built around is negative. Nothing here reads a
+ * workspace. Every client, project and figure is fiction computed in the
+ * browser from demoData.js, and no part of this route makes an API call.
  */
 import { Link } from 'react-router-dom'
-import {
-  ArrowRight, Receipt, FolderKanban, BarChart3, Sparkles, Globe, Activity,
-  ShieldCheck, Share2, Lock, Database, Zap, Check, FileSearch, Landmark,
-  FileText, Gauge, GitBranch, ScrollText, SlidersHorizontal, Server, Blocks,
-} from 'lucide-react'
+import { ArrowRight, Sparkles, Check } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
-import LayerStack from '../components/LayerStack'
-import AnalystPipeline from '../components/AnalystPipeline'
-import PermissionPlayground from '../components/PermissionPlayground'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
+import { Grain, CountUp } from '../components/LandingVisuals'
+import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
-  Grain, MiniBars, MiniLine, MiniDonut, MiniDocs, AnalystDemo, CountUp,
-} from '../components/LandingVisuals'
+  MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
+} from '../content/publicContent'
 
-export const MODULES = [
-  {
-    icon: Receipt, span: 'span-3', visual: 'bars',
-    title: 'Receivables',
-    body: 'Invoices with aging bands, collection rate and average days to collect. GST and TDS are tracked separately — tax withheld at source is not money a client still owes you.',
-    points: ['Aging bands you can filter by', 'Collection rate and follow-up load', 'Missing docs and retainer templates'],
-  },
-  {
-    icon: FolderKanban, span: 'span-3', visual: 'donut',
-    title: 'Projects',
-    body: 'Billing, cost and realised profit per project, with margin and health surfaced before a job quietly goes underwater.',
-    points: ['Profit and margin per project', 'At-risk and critical health signals', 'Client rollups and invoice history'],
-  },
-  {
-    icon: BarChart3, span: 'span-4', visual: 'line',
-    title: 'Analytics',
-    body: 'Cash position, revenue, collection rate and overdue pressure over any period — plus signals worth noticing, surfaced rather than left to be found. Every chart is one click from the rows behind it.',
-    points: ['Cash position and overdue pressure', 'Client, project and category breakdowns', 'Sync state, so you know how fresh it is'],
-  },
-  {
-    icon: Landmark, span: 'span-2',
-    title: 'Tax ledger',
-    body: 'Gross billed, GST collected and net receivable, month by month — kept apart from the cash view so a filing figure is never mistaken for a collections figure.',
-    points: ['Monthly GST and net receivable', 'GST collection rate', 'Filing checklist'],
-  },
-  {
-    icon: FileText, span: 'span-2',
-    title: 'AI reports',
-    body: 'A written period report over your own figures, kept in a history you can reopen — and an assistant that already has the current context loaded.',
-    points: ['Brief, detailed or board-style', 'Report history', 'Assistant with live context'],
-  },
-  {
-    icon: FileSearch, span: 'span-4', visual: 'docs',
-    title: 'Studio — documents',
-    body: 'Upload contracts and notes, then ask questions about them. Every answer carries numbered citations you can open to the exact page it came from, and the answer is checked against those sources before you see it.',
-    points: ['PDF, text, Markdown, CSV, JSON', 'Page-level citations, opened inline', 'Answers checked against sources'],
-  },
-  {
-    icon: Sparkles, span: 'span-6', visual: 'demo',
-    title: 'Studio — finance data',
-    body: 'Ask your invoices and projects a question in plain words. The model picks measures and groupings; the code compiles the SQL. The statement is shown with every answer, so a figure about money can always be checked.',
-    points: ['Outstanding, collected, GST, TDS, collection rate', 'Group by project, client, category, month or quarter', 'Scoped to what your account may already see'],
-  },
-  {
-    icon: Globe, span: 'span-3',
-    title: 'Pages',
-    body: 'Describe a page and watch it get written, then publish it on a slug — optionally password-protected, optionally set to expire.',
-    points: ['Streamed as it writes', 'Surgical revisions and version history', 'Password, expiry and view counts'],
-  },
-  {
-    icon: Activity, span: 'span-3',
-    title: 'Status board',
-    body: 'A live view of where every client project stands, kept current by webhooks rather than by someone remembering to update a sheet.',
-    points: ['Board or list mode', 'Attachments and AI-drafted updates', 'Choose the columns, then share the view'],
-  },
-  {
-    icon: Share2, span: 'span-3',
-    title: 'Shared views',
-    body: 'Send a filtered, read-only view to a client on a link, and see what they actually opened.',
-    points: ['Read-only links with your filters', 'Column highlighting', 'Viewers, opens and an event timeline'],
-  },
-  {
-    icon: ShieldCheck, span: 'span-3',
-    title: 'Admin & audit',
-    body: 'Account approval, a permission matrix down to the individual action, live sessions, and a full request trail written asynchronously so it never slows the page it is recording.',
-    points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health'],
-  },
-]
+const LD = graph(APP_LD, FAQ_LD)
 
-const SECURITY = [
-  { icon: Lock,        title: 'Nothing on this page is your data',
-    body: 'Everything above describes what the product does. Figures, clients, projects and documents live behind sign-in and are never rendered publicly.' },
-  { icon: ShieldCheck, title: 'Permissions down to the action',
-    body: 'Roles carry defaults and any individual permission can be granted or revoked per person. A change takes effect on the next request, not the next login.' },
-  { icon: Database,    title: 'Scoped at the query, not the screen',
-    body: 'Row scoping is applied when the query is built, from the session — so a narrower account cannot reach wider data by changing what it asks for.' },
-  { icon: Zap,         title: 'Every request is recorded',
-    body: 'Who, what, when and from where, written asynchronously so the audit trail never slows down the thing it is auditing.' },
-]
-
-/* Why the product exists, stated as the three things that are actually wrong
-   with how this work gets done today. Each one is a problem the modules above
-   answer directly — a grievance with no corresponding feature is marketing. */
-const PROBLEMS = [
-  {
-    icon: Gauge,
-    title: 'The total is right. Nobody can prove it.',
-    body: 'A figure arrives on a dashboard with no way back to the rows underneath. When two reports disagree — and they do — the argument is settled by whoever exported last, not by the data.',
-  },
-  {
-    icon: Landmark,
-    title: 'Tax withheld gets counted as money owed.',
-    body: 'TDS is deducted by the client before they pay. Most receivables reports quietly leave it in the outstanding column, which overstates what you can actually collect and hides the invoices that are genuinely late.',
-  },
-  {
-    icon: Sparkles,
-    title: 'An assistant that guesses is worse than none.',
-    body: 'Bolt a chat window onto a ledger and it will confidently invent a total. On money, an answer you cannot check is not a faster answer — it is a liability with better manners.',
-  },
-]
-
-/* The claim the rest of the product rests on. Every line here is a mechanism,
-   not an adjective: something that is either in the code or is not. */
-const TRUST = [
-  {
-    icon: ScrollText,
-    title: 'The model never writes SQL',
-    body: 'It chooses a measure and a grouping from a fixed set. The application compiles the statement, runs it, and shows it to you next to the answer. There is no path from a sentence to arbitrary SQL, which is the same reason the analyst cannot be talked into reading something it should not.',
-  },
-  {
-    icon: Lock,
-    title: 'Scoped where the query is built',
-    body: 'Row limits come from the session at the moment the statement is assembled, not from what the screen chose to render. A narrower account cannot widen its own results by changing what it asks for.',
-  },
-  {
-    icon: FileSearch,
-    title: 'Document answers carry citations',
-    body: 'Ask a contract a question and each claim in the reply is numbered to the passage and page it came from. The answer is checked against those sources before it reaches you, and you can open every one.',
-  },
-  {
-    icon: ScrollText,
-    title: 'Everything is written down',
-    body: 'Who did what, when, from where, and which fields changed — recorded asynchronously so the audit trail never becomes the reason a page is slow.',
-  },
-]
-
-/*
- * Three tiers, in the order a buyer meets them, and each one checked against
- * what the repository actually supports before it was written down. "Fully
- * customisable" on its own is the least believable sentence on a product page;
- * these say who does the work and what it touches.
- */
-const SHAPE = [
-  {
-    icon: SlidersHorizontal,
-    kicker: 'You, in the app',
-    title: 'Configured, not commissioned',
-    body: 'Permissions are records, not code — every one belongs to a module, roles map to them, and a single permission can be granted or revoked for one person without inventing a role for them. Views keep your filters, your columns and your grouping, and the same configuration travels into a shared link. Categories, clients and statuses come from your own records; there is no chart of accounts to adopt.',
-  },
-  {
-    icon: Server,
-    kicker: 'Your infrastructure',
-    title: 'Your database, your cloud',
-    body: 'An instance is a container and an environment file. Every endpoint, table, model, mail server and storage target is a setting rather than a constant, so a dedicated deployment on your own Postgres and your own private cloud is a configuration of the same build — not a fork that drifts from it and stops receiving fixes.',
-  },
-  {
-    icon: Blocks,
-    kicker: 'Built for you',
-    title: 'New modules for your case',
-    body: 'Each module is a self-contained router, and permissions are keyed by module in the database. A module built for how your business works therefore arrives inside the access model and the audit trail rather than beside them: it appears in the permission matrix on day one, and every request it serves is recorded like every other.',
-  },
-]
-
-const STEPS = [
-  {
-    icon: Database,
-    title: 'Your records stay where they are',
-    body: 'The base you already work in remains the system of record. FinTrack reads and writes it directly. There is no migration, no export, and no second place for someone to update instead.',
-  },
-  {
-    icon: GitBranch,
-    title: 'Mirrored into Postgres for speed',
-    body: 'A mirror is kept current by webhooks, a thirty-second incremental pass and a periodic full reconciliation. Lists filter and sort against the mirror, so a screen full of invoices is instant instead of a round trip per view.',
-  },
-  {
-    icon: Sparkles,
-    title: 'Ask it in plain words',
-    body: 'Questions are mapped onto a fixed set of measures and groupings and compiled to SQL by the application. You get the answer, the chart and the statement that produced them, every time.',
-  },
-]
-
-/* Written as questions someone actually types, and answered properly. These
-   are the page's most-read text after the hero — and, as a details/summary
-   list, they are in the document whether or not anyone opens them. */
-const FAQ = [
-  {
-    q: 'What does FinTrack actually do?',
-    a: 'It runs receivables, projects, GST and reporting for businesses that bill by project — agencies, studios, consultancies and firms working on retainers. Invoices carry ageing bands, collection rate and days-to-collect; projects carry billed, cost, realised profit and margin; tax sits in its own ledger; and an AI analyst answers questions across all of it while showing the query it ran.',
-  },
-  {
-    q: 'Is the demo on this page real data?',
-    a: 'No. Every client, project, invoice and figure in the sandbox is invented and computed in your browser — the page makes no API call at all. What is real is the behaviour: the filters filter, the columns sort, the ageing bands are genuine predicates over those rows, and the analyst answers are produced by the same function that prints the SQL beside them. Add the columns up and they agree, because there is only one set of rows.',
-  },
-  {
-    q: 'How is this different from a spreadsheet?',
-    a: 'A spreadsheet gives you a number with no way back to where it came from, and a second copy of that number the moment someone filters differently. Here every module reads the same records, so a figure on the dashboard and a figure in a report cannot disagree, and any total can be opened to the invoices behind it.',
-  },
-  {
-    q: 'Can the AI analyst invent a figure?',
-    a: 'It is not able to. The model never writes SQL — it selects a measure and a grouping from a fixed list, and the application compiles and runs the statement itself. The query is shown with every answer, so a figure about money can be checked rather than trusted. The same design is why the analyst cannot be prompted into reading data the signed-in account is not allowed to see: scoping is applied when the statement is built.',
-  },
-  {
-    q: 'How does it handle GST and TDS?',
-    a: 'Separately, and on purpose. GST collected is tracked month by month and per client in its own ledger with a filing checklist, kept apart from the cash view so a filing figure is never mistaken for a collections figure. TDS is tax the client withholds at source before paying — it is reported, but it is never counted as outstanding, because it is not money a client still owes you.',
-  },
-  {
-    q: 'Can I share something with a client without giving them an account?',
-    a: 'Yes. Any filtered view can be published as a read-only link, optionally password-protected and set to expire, with the columns you want read first highlighted. You then see unique viewers, page views, which records and attachments were opened, and a timeline of what happened — and you can revoke the link at any time.',
-  },
-  {
-    q: 'What can it do with documents?',
-    a: 'Upload contracts, scopes and notes as PDF, text, Markdown, CSV, JSON or logs, then ask questions about them in plain words. Each answer carries numbered citations you can open to the exact passage and page, and answers are verified against those sources before you see them. The interface also states which retrieval is actually running rather than implying a capability it does not have.',
-  },
-  {
-    q: 'How much of this can we change ourselves?',
-    a: 'Most of what a finance team wants different is a setting rather than a request. Permissions are records grouped by module: roles carry defaults, and any single permission can be granted or revoked for one person without inventing a new role for them — a change takes effect on their next request, not their next sign-in. Views keep your own filters, columns and grouping, and that configuration travels into a shared link. Categories, clients, projects and statuses come from your own records, so there is no chart of accounts to adopt.',
-  },
-  {
-    q: 'Can we run it on our own database and our own cloud?',
-    a: 'Yes. The backend is a container and every endpoint, table, model, mail server and storage target is an environment setting rather than a constant, so a dedicated instance on your own Postgres inside your own private cloud is a configuration of the same build. That matters more than it sounds: it is not a fork, so it keeps receiving the same fixes and features as everything else rather than drifting into a version only you are running.',
-  },
-  {
-    q: 'Can you build a module for how our business works?',
-    a: 'Yes, and the architecture is why it is worth doing properly. Each module is a self-contained router, and permissions are keyed by module in the database — so a module built for your case arrives inside the access model and the audit trail rather than bolted beside them. It appears in the permission matrix from the first day, every request it serves is recorded like any other, and it reads the same mirrored rows as everything else, so its figures cannot disagree with the rest of the product.',
-  },
-  {
-    q: 'Is anything deliberately not configurable?',
-    a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the entire reason an answer here can be checked rather than trusted. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added to it deliberately and reviewed, the same way a new module is — never inferred in the moment someone asks.',
-  },
-  {
-    q: 'Who can see what?',
-    a: 'Roles carry sensible defaults and any individual permission can be granted or revoked per person. A change takes effect on the next request rather than the next login. Every request is recorded with method, path, status, duration and origin, and record-level history keeps which fields changed and who changed them.',
-  },
-  {
-    q: 'How do I get an account?',
-    a: 'Access is by invitation and an administrator approves each account before it can see anything. You can sign in with email, Google or Zoho. Nothing on this public page is read from a workspace, so there is nothing to see until an account exists.',
-  },
-]
-
-/* Search engines read this; people read the page. Both should get the same
-   claims, which is why every answer below is lifted from the FAQ above
-   rather than written separately for a crawler. */
-const JSON_LD = {
-  '@context': 'https://schema.org',
-  '@graph': [
-    {
-      '@type': 'SoftwareApplication',
-      name: 'FinTrack',
-      applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Web',
-      description:
-        'Receivables, project profitability, GST and TDS tracking, analytics, document search and an AI analyst that shows the query behind every figure — for businesses that bill by project.',
-      url: 'https://twfintracker.worksmayukh.space/',
-      featureList: [
-        'Invoice ageing and collection tracking',
-        'Project profitability and margin',
-        'GST and TDS ledger',
-        'Analytics with drill-through to source rows',
-        'AI analyst with the compiled SQL shown',
-        'Document question answering with page-level citations',
-        'Read-only shared client links with view analytics',
-        'Role and per-action permissions with a full audit trail',
-      ],
-    },
-    {
-      '@type': 'FAQPage',
-      mainEntity: FAQ.map(({ q, a }) => ({
-        '@type': 'Question',
-        name: q,
-        acceptedAnswer: { '@type': 'Answer', text: a },
-      })),
-    },
-  ],
-}
-
-/**
- * The hero block. Carries [data-shown] so the headline's lines can rise, but
- * no transform of its own — a block that slides up while the lines inside it
- * also slide up is two motions fighting over the same pixels.
- */
-function Hero({ children, ...rest }) {
-  const ref = useReveal({ threshold: 0.02 })
-  return <div ref={ref} {...rest}>{children}</div>
-}
-
-/** Wraps a block so it animates in the first time it is scrolled to. */
-function Reveal({ children, delay = 0, className = '', ...rest }) {
-  const ref = useReveal()
-  return (
-    <div ref={ref} className={`ft-reveal ${className}`}
-         style={{ transitionDelay: `${delay}ms` }} {...rest}>
-      {children}
-    </div>
-  )
-}
-
-/**
- * Lies back until it is reached, then straightens.
- *
- * Shares useReveal's observer rather than adding a scroll listener: the
- * hook already sets [data-shown] once, and `.ft-3d` hangs the transform off
- * that attribute so the whole entrance is CSS.
- */
+/** Lies back until it is reached, then straightens. Chrome, never a data mark. */
 function Tilted({ children }) {
   const ref = useReveal({ threshold: 0.08 })
   return <div ref={ref} className="ft-3d">{children}</div>
 }
 
-/**
- * Section opening — one shape for all of them, so the page has a rhythm.
- *
- * The numeral hangs in the left margin above 1024px, the way a chapter
- * opening carries one, and falls inline beside the eyebrow below that, where
- * there is no margin to hang anything in.
- */
-function Head({ n, eyebrow, title, children, className = '' }) {
-  return (
-    <Reveal className={`relative mb-9 ${className}`} style={{ maxWidth: 700 }}>
-      <div className="ft-marginal mb-3">
-        {n && <span className="n" aria-hidden="true">{n}</span>}
-        <p className="ft-eyebrow">{eyebrow}</p>
-      </div>
-      <h2 className="ft-display mb-4"
-          style={{ fontSize: 'clamp(1.7rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
-        {title}
-      </h2>
-      {children && <p className="ft-lede">{children}</p>}
-    </Reveal>
-  )
-}
-
-const VISUALS = {
-  bars:  <MiniBars />,
-  line:  <MiniLine />,
-  donut: <MiniDonut pct={68} />,
-  docs:  <MiniDocs />,
-  demo:  <AnalystDemo />,
-}
-
-function ModuleCard({ icon: Icon, title, body, points, visual }) {
-  const tilt = useTilt({ max: 5 })
-  return (
-    <article
-      ref={tilt}
-      className="tilt tilt-sheen ft-edge h-full flex flex-col rounded-2xl p-5 sm:p-6"
-      style={{
-        background: 'var(--card-bg)',
-        border: '1px solid var(--card-border)',
-        boxShadow: 'var(--card-shadow)',
-      }}
-    >
-      <div
-        className="flex items-center justify-center rounded-xl mb-4"
-        style={{
-          width: 44, height: 44, flexShrink: 0,
-          background: 'var(--accent-dim)', color: 'var(--accent)',
-        }}
-      >
-        <Icon size={21} aria-hidden="true" />
-      </div>
-      <h3 className="ft-display text-lg sm:text-xl mb-2" style={{ color: 'var(--text-1)' }}>
-        {title}
-      </h3>
-      <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
-        {body}
-      </p>
-      {/* Visual sits directly under the copy it illustrates. Pushing it to the
-          bottom with a spacer left a dead band across every cell. */}
-      {visual && (
-        <div className="mb-4">
-          {VISUALS[visual]}
-        </div>
-      )}
-      <div className="flex-1" />
-      <ul className="flex flex-col gap-1.5 m-0 p-0" style={{ listStyle: 'none' }}>
-        {points.map(p => (
-          <li key={p} className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-3)' }}>
-            <Check size={13} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-            {p}
-          </li>
-        ))}
-      </ul>
-    </article>
-  )
-}
-
 export default function Landing() {
-  // Rotation of 0: a primary button that tips as you approach it feels
-  // unstable. Only the cursor-following glow is wanted here, and that reads
-  // --tilt-mx/--tilt-my, which the hook writes regardless of the angle.
+  // Rotation of 0 on both: a primary button that tips as you approach it
+  // feels unstable, and the hero must not lean. Only the pointer position
+  // these write is wanted — for the CTA's glow and the section's spotlight.
   const heroCta = useTilt({ max: 0 })
-  // Rotation of 0 again: the hero must not tip. This is only here for the
-  // pointer position the hook writes, which the spotlight reads.
   const heroLight = useTilt({ max: 0 })
+
   usePageMeta({
     title: 'FinTrack — receivables, project profit and an AI analyst that shows its working',
     description:
       'Finance software for businesses that bill by project. Invoice ageing, collection rate, project margin, GST and TDS kept separate, and an AI analyst that prints the query behind every figure. Try the live sandbox — no account needed.',
     path: '/',
-    jsonLd: JSON_LD,
+    jsonLd: LD,
   })
 
   return (
@@ -436,11 +61,9 @@ export default function Landing() {
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <Hero style={{ maxWidth: 820 }}>
-            <span
-              className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-5"
-              style={{ padding: '6px 12px', background: 'var(--accent-dim)', color: 'var(--accent)' }}
-            >
+          <Rising style={{ maxWidth: 820 }}>
+            <span className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-4"
+                  style={{ padding: '6px 12px', background: 'var(--accent-dim)', color: 'var(--accent)' }}>
               <Sparkles size={13} aria-hidden="true" />
               Receivables, projects and an analyst that shows its working
             </span>
@@ -467,44 +90,29 @@ export default function Landing() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <a
-                href="#try"
-                ref={heroCta}
-                className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold"
-                style={{
-                  minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
-                  color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
-                  boxShadow: '0 6px 20px var(--accent-glow)',
-                }}
-              >
+              <a href="#try" ref={heroCta}
+                 className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold"
+                 style={{ minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
+                          color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
+                          boxShadow: '0 6px 20px var(--accent-glow)' }}>
                 Try it — no account needed <ArrowRight size={17} aria-hidden="true" />
               </a>
-              <Link
-                to="/login"
-                className="flex items-center justify-center gap-2 rounded-xl font-bold"
-                style={{
-                  minHeight: 52, padding: '0 26px', background: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)', color: 'var(--text-1)',
-                  textDecoration: 'none', fontSize: '0.975rem',
-                }}
-              >
+              <Link to="/login"
+                    className="flex items-center justify-center gap-2 rounded-xl font-bold"
+                    style={{ minHeight: 52, padding: '0 26px', background: 'var(--card-bg)',
+                             border: '1px solid var(--card-border)', color: 'var(--text-1)',
+                             textDecoration: 'none', fontSize: '0.975rem' }}>
                 Sign in
               </Link>
             </div>
-          </Hero>
+          </Rising>
         </div>
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
-        <div id="try" className="relative mx-auto px-4 sm:px-6 pb-12 sm:pb-16" style={{ maxWidth: 1120, zIndex: 1 }}>
-          {/* ft-3d tilts the frame, not its contents — the panel inside stays
-              square to the viewer because it is showing figures, and
-              perspective makes a near bar taller than a far one at equal
-              value. Depth on chrome, never on a data mark. */}
-          <Tilted>
-            <DemoWorkspace />
-          </Tilted>
+        <div id="try" className="relative mx-auto px-4 sm:px-6 pb-12 sm:pb-16"
+             style={{ maxWidth: 1120, zIndex: 1 }}>
+          <Tilted><DemoWorkspace /></Tilted>
         </div>
-
       </section>
 
       {/* ── Counts ──────────────────────────────────────────────────────
@@ -522,7 +130,8 @@ export default function Landing() {
             <div key={label} className="rounded-2xl p-4 sm:p-5"
                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <p className="font-extrabold tracking-tight"
-                 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.3rem)', color: 'var(--accent)', letterSpacing: '-0.02em' }}>
+                 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.3rem)', color: 'var(--accent)',
+                          letterSpacing: '-0.02em' }}>
                 <CountUp to={value} suffix={suffix} />
               </p>
               <p className="text-xs font-semibold mt-1" style={{ color: 'var(--text-1)' }}>{label}</p>
@@ -540,239 +149,109 @@ export default function Landing() {
           project plan and the tax position live in different places and nobody
           owns the reconciliation.
         </Head>
-        <div className="grid gap-5"
-             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
-          {PROBLEMS.map(({ icon: Icon, title, body }, i) => (
-            <Reveal key={title} delay={Math.min(i, 3) * 70}
-                    className="rounded-2xl p-5 sm:p-6 h-full"
-                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <Icon size={20} aria-hidden="true" style={{ color: 'var(--accent)' }} />
-              <h3 className="ft-display mt-3 mb-2" style={{ fontSize: '1.16rem', color: 'var(--text-1)' }}>
-                {title}
-              </h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-            </Reveal>
+        <Grid min={280}>
+          {PROBLEMS.map(({ icon, title, body }, i) => (
+            <Card key={title} icon={icon} title={title} body={body} delay={Math.min(i, 3) * 70} />
           ))}
-        </div>
+        </Grid>
       </section>
 
-      {/* ── Modules ─────────────────────────────────────────────────────── */}
-      <section id="features" className="mx-auto px-4 sm:px-6 pb-4" style={{ maxWidth: 1120 }}>
+      {/* ── Modules, named and nothing more ──────────────────────────────
+          The full cards live on /features, where there is room to say what
+          each one does. Here they are a contents page: what ships, at a
+          glance, and one link to the detail. */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Head n="02" eyebrow="What is inside" title="Eleven modules, one source of truth">
           Records live in one place and every module reads the same rows, so a
           number on the dashboard and a number in a report cannot disagree.
           Every total opens to the invoices underneath it.
         </Head>
 
-        <div className="ft-bento">
-          {MODULES.map((m, i) => (
-            // Staggered, but capped — past a handful the last card would wait
-            // noticeably longer than the reader does.
-            <Reveal key={m.title} delay={Math.min(i, 3) * 70} className={`${m.span} h-full`}>
-              <ModuleCard {...m} />
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Made yours ──────────────────────────────────────────────────── */}
-      <section id="shape" className="mx-auto px-4 sm:px-6 py-16 sm:py-24" style={{ maxWidth: 1120 }}>
-        <hr className="ft-rule mb-14" />
-        <Head n="03" eyebrow="Made yours"
-              title={<>Shaped to how you work — <em>except the one thing that must not move</em></>}>
-          Most of what a finance team wants changed is a setting here rather than
-          a request to us. Where it genuinely is not, the answer is a dedicated
-          instance or a module built for the case — both of which stay inside the
-          same build, the same permission model and the same audit trail.
-        </Head>
-
-        <div className="grid gap-5 sm:gap-6 mb-10"
-             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
-          {SHAPE.map(({ icon: Icon, kicker, title, body }, i) => (
-            <Reveal key={title} delay={Math.min(i, 3) * 70}
-                    className="rounded-2xl p-5 sm:p-6 h-full"
-                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-center gap-2.5 mb-2">
-                <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                <span className="ft-eyebrow" style={{ fontSize: '0.62rem' }}>{kicker}</span>
-              </div>
-              <h3 className="ft-display mb-2" style={{ fontSize: '1.16rem', color: 'var(--text-1)' }}>
-                {title}
-              </h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-            </Reveal>
-          ))}
-        </div>
-
-        <PermissionPlayground />
-
-        <p className="mt-6 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
-          One thing is deliberately not adjustable: the set of measures the
-          analyst may use. Open that up and an answer stops being checkable,
-          which is the only thing this product is really selling. New measures
-          get added to it on purpose, reviewed, the same way a new module does —
-          never inferred at the moment someone asks a question.
-        </p>
-      </section>
-
-      {/* ── Verifiability ───────────────────────────────────────────────── */}
-      <section id="trust" className="mx-auto px-4 sm:px-6 py-16 sm:py-24" style={{ maxWidth: 1120 }}>
-        <hr className="ft-rule mb-14" />
-        <Head n="04" eyebrow="Why you can trust the answer"
-              title="Checkable by construction, not by policy">
-          Plenty of tools promise not to make things up. This is where the
-          promise is replaced by a mechanism — you can see exactly where the
-          model's authority stops, and it stops two steps before the number.
-        </Head>
-
-        <AnalystPipeline />
-
-        <p className="mt-5 mb-12 sm:mb-16 text-sm leading-relaxed"
-           style={{ color: 'var(--text-2)', maxWidth: 680 }}>
-          The model's entire output is those two values, each chosen from a
-          closed list. There is no route from a sentence to arbitrary SQL —
-          which is also why the analyst cannot be talked into reading rows your
-          account may not see. Scoping is applied when the statement is
-          assembled, below the point where anything the model said still counts.
-        </p>
-
-        <div className="grid gap-5 sm:gap-6"
-             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))' }}>
-          {TRUST.map(({ icon: Icon, title, body }, i) => (
-            <Reveal key={title} delay={Math.min(i, 3) * 70}
-                    className="rounded-2xl p-5 sm:p-6 h-full"
-                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-center gap-2.5 mb-2.5">
-                <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                <h3 className="ft-display" style={{ fontSize: '1.12rem', color: 'var(--text-1)' }}>{title}</h3>
-              </div>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── How it works ────────────────────────────────────────────────── */}
-      <section id="how" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head n="05" eyebrow="How it works" title="Nothing to migrate">
-          The fastest way to lose a finance team is to ask them to move their
-          records somewhere new on day one. FinTrack sits on top of what they
-          already keep.
-        </Head>
-
-        <ol className="relative grid gap-4 sm:gap-5 m-0 p-0"
-            style={{ listStyle: 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
-          {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className="relative rounded-2xl p-5 sm:p-6"
-                style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-center gap-3 mb-3">
-                <span
-                  className="flex items-center justify-center rounded-lg font-bold text-sm"
-                  style={{ width: 30, height: 30, background: 'var(--accent-dim)', color: 'var(--accent)' }}
-                  aria-hidden="true"
-                >
-                  {i + 1}
+        <Reveal className="grid gap-2 mb-7"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 216px), 1fr))' }}>
+          {MODULES.map(({ icon: Icon, title, points }) => (
+            <Link key={title} to="/features"
+                  className="ft-chip flex items-start gap-2.5 rounded-xl px-3 py-3"
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                           textDecoration: 'none' }}>
+              <Icon size={16} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+              <span className="min-w-0">
+                <span className="block font-bold" style={{ fontSize: 13.5, color: 'var(--text-1)' }}>
+                  {title}
                 </span>
-                <Icon size={17} aria-hidden="true" style={{ color: 'var(--text-3)' }} />
-              </div>
-              <h3 className="ft-display text-lg mb-2" style={{ color: 'var(--text-1)' }}>{title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-
-              {/* Direction, shown rather than captioned. Hidden on the last
-                  card and whenever the grid has wrapped to one column, where
-                  a rightward arrow would point at nothing. */}
-              {i < STEPS.length - 1 && (
-                <span aria-hidden="true" className="hidden lg:block"
-                      style={{ position: 'absolute', right: -14, top: '50%', width: 12, height: 6 }}>
-                  <span className="ft-travel" style={{
-                    display: 'block', width: 6, height: 6, borderRadius: 99,
-                    background: 'var(--accent)', ['--ft-travel-to']: '14px',
-                    animationDelay: `${i * 700}ms`,
-                  }} />
+                <span className="block truncate" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                  {points[0]}
                 </span>
-              )}
-            </li>
+              </span>
+            </Link>
           ))}
-        </ol>
+        </Reveal>
 
-        <div className="mt-12 sm:mt-16">
-          <LayerStack />
-        </div>
-      </section>
-
-      {/* ── Privacy ─────────────────────────────────────────────────────── */}
-      <section id="privacy" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div
-          className="rounded-3xl p-6 sm:p-10"
-          style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
-        >
-          <Head n="06" eyebrow="Access" title="This page is public. Your data is not." className="mb-8">
-            Everything described here is capability, and the sandbox above is
-            fiction computed in your browser. No figure on this page is read
-            from a workspace, and nothing below the fold belongs to anyone.
-          </Head>
-
-          <div className="grid gap-5 sm:gap-6"
-               style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))' }}>
-            {SECURITY.map(({ icon: Icon, title, body }, i) => (
-              <Reveal key={title} delay={Math.min(i, 3) * 70}>
-                <div className="flex items-center gap-2.5 mb-2">
-                  <Icon size={17} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{title}</h3>
-                </div>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ─────────────────────────────────────────────────────────── */}
-      <section id="faq" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 820 }}>
-        <Head n="07" eyebrow="Questions" title="Answers, at length" />
-        <div>
-          {FAQ.map(({ q, a }, i) => (
-            <details key={q} className="ft-faq" open={i === 0}>
-              <summary>{q}</summary>
-              <div>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{a}</p>
-              </div>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Close ───────────────────────────────────────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Reveal
-          className="ft-shine rounded-3xl px-6 py-12 sm:px-12 sm:py-16 text-center"
-          style={{
-            background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))',
-            color: '#fff',
-          }}
-        >
-          <h2 className="ft-display mb-3"
-              style={{ fontSize: 'clamp(1.6rem, 4.6vw, 2.7rem)', lineHeight: 1.12 }}>
-            Already have an account?
-          </h2>
-          <p className="mx-auto mb-7"
-             style={{ fontSize: '1rem', lineHeight: 1.6, opacity: 0.92, maxWidth: 480 }}>
-            Sign in with email, Google or Zoho. New accounts are approved by an
-            administrator before they can see anything.
-          </p>
-          <Link
-            to="/login"
-            className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
-            style={{
-              minHeight: 52, padding: '0 30px', background: '#fff',
-              color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem',
-            }}
-          >
-            Sign in <ArrowRight size={17} aria-hidden="true" />
+        <Reveal>
+          <Link to="/features"
+                className="inline-flex items-center gap-2 rounded-xl font-bold"
+                style={{ minHeight: 46, padding: '0 20px', background: 'var(--card-bg)',
+                         border: '1px solid var(--card-border)', color: 'var(--text-1)',
+                         textDecoration: 'none', fontSize: '0.93rem' }}>
+            Take each one in turn <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </Reveal>
       </section>
 
+      {/* ── Where to go next ─────────────────────────────────────────────
+          A short page only works if it hands you somewhere. */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <hr className="ft-rule mb-14" />
+        <Head n="03" eyebrow="Read on" title="The rest of it, in three pages">
+          Split up rather than stacked, because a page that takes seventeen
+          screens on a phone is a page nobody finishes.
+        </Head>
+        <Grid min={260}>
+          {[
+            ['/how-it-works', 'How it works',
+             'Your records stay where they are. Then: why an answer here can be checked, stage by stage.'],
+            ['/customise', 'Made yours',
+             'What you change yourself, what runs on your own cloud, and what gets built for your case.'],
+            ['/security', 'Security & access',
+             'Who can see what, scoped at the query rather than the screen, with every request recorded.'],
+          ].map(([to, title, blurb], i) => (
+            <Reveal key={to} delay={Math.min(i, 3) * 70} className="h-full">
+              <Link to={to} className="ft-chip flex flex-col h-full rounded-2xl p-5 sm:p-6"
+                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                             textDecoration: 'none' }}>
+                <h3 className="ft-display mb-2" style={{ fontSize: '1.14rem', color: 'var(--text-1)' }}>
+                  {title}
+                </h3>
+                <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>{blurb}</p>
+                <span className="mt-auto inline-flex items-center gap-1.5 font-bold"
+                      style={{ fontSize: 13, color: 'var(--accent)' }}>
+                  Read it <ArrowRight size={14} aria-hidden="true" />
+                </span>
+              </Link>
+            </Reveal>
+          ))}
+        </Grid>
+      </section>
+
+      {/* ── Close ───────────────────────────────────────────────────────── */}
+      <Closing title="Already have an account?"
+               cta={<Link to="/login"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                          style={{ minHeight: 52, padding: '0 30px', background: '#fff',
+                                   color: 'var(--accent-btn)', textDecoration: 'none',
+                                   fontSize: '0.975rem' }}>
+                      Sign in <ArrowRight size={17} aria-hidden="true" />
+                    </Link>}
+               next={<Link to="/faq"
+                           className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                           style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
+                                    border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
+                                    textDecoration: 'none', fontSize: '0.95rem' }}>
+                       Questions <ArrowRight size={15} aria-hidden="true" />
+                     </Link>}>
+        Sign in with email, Google or Zoho. New accounts are approved by an
+        administrator before they can see anything.
+      </Closing>
     </PublicLayout>
   )
 }
