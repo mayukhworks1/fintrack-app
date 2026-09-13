@@ -28,7 +28,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { MiniBars, MiniLine, MiniDonut, MiniDocs } from './LandingVisuals'
+import {
+  GlyphOneRecord, GlyphModules, GlyphLayers,
+  GlyphPermissions, GlyphSwitches, GlyphQA,
+} from './Glyphs'
 
 /* Each entry names a page that exists and says what is on it. A menu that
    promises something the page does not deliver is worse than no menu. */
@@ -41,17 +44,17 @@ export const NAV = [
       {
         to: '/', label: 'Overview',
         blurb: 'Delivery and the money for it — and a working copy you can drive.',
-        visual: 'bars',
+        visual: 'oneRecord',
       },
       {
         to: '/features', label: 'Features',
         blurb: 'Eleven modules — delivery, receivables, tax, audit — one at a time.',
-        visual: 'donut',
+        visual: 'modules',
       },
       {
         to: '/how-it-works', label: 'How it works',
         blurb: 'Nothing to migrate, and why an answer here can be checked.',
-        visual: 'line',
+        visual: 'layers',
       },
     ],
   },
@@ -63,17 +66,17 @@ export const NAV = [
       {
         to: '/security', label: 'Security & access',
         blurb: 'Who can see what, and how the permission model enforces it.',
-        visual: 'docs',
+        visual: 'permissions',
       },
       {
         to: '/customise', label: 'Made yours',
         blurb: 'Configured, deployed on your own cloud, or extended for your case.',
-        visual: 'bars',
+        visual: 'switches',
       },
       {
         to: '/faq', label: 'Questions',
         blurb: 'The ones buyers actually ask, answered at length.',
-        visual: 'line',
+        visual: 'qa',
       },
     ],
   },
@@ -82,38 +85,38 @@ export const NAV = [
 /** Every page in the nav, flattened — the mobile sheet and the footer use it. */
 export const ALL_PAGES = NAV.flatMap(g => g.items)
 
+/* Keyed by subject, not by shape. The previous map had four entries for six
+   destinations, so two of them were always showing another page's picture. */
 const VISUALS = {
-  bars: <MiniBars />,
-  line: <MiniLine />,
-  donut: <MiniDonut pct={68} />,
-  docs: <MiniDocs />,
+  oneRecord: <GlyphOneRecord />,
+  modules: <GlyphModules />,
+  layers: <GlyphLayers />,
+  permissions: <GlyphPermissions />,
+  switches: <GlyphSwitches />,
+  qa: <GlyphQA />,
 }
 
 /**
  * The panel's right half: a glance at the page being pointed at.
  *
- * It captions with the page name rather than repeating the sentence already
- * shown two inches to the left — the same words twice in one panel reads as a
- * templating mistake, and the preview is there to add something the list
- * cannot.
+ * The caption is gone. It printed the page name, which is already set in bold
+ * in the row the pointer is resting on — the same word twice in one panel,
+ * and a rule drawn under a picture to hold it. If the drawing needs a label
+ * naming the thing it is next to, the drawing is not doing its job; the fix
+ * was to make the drawing say something, not to caption it.
  */
 function Preview({ item }) {
   return (
-    <div key={item.to} className="hidden lg:flex flex-col rounded-xl p-4"
+    <div key={item.to} className="hidden lg:flex items-center justify-center rounded-xl p-5"
          style={{
            width: 244, flexShrink: 0,
            background: 'var(--bg-input)', border: '1px solid var(--card-border)',
            animation: 'ft-fade-in 220ms ease both',
          }}>
-      <div aria-hidden="true" className="flex-1 flex items-center justify-center px-1"
-           style={{ minHeight: 128 }}>
+      <div aria-hidden="true" className="w-full flex items-center justify-center"
+           style={{ minHeight: 116 }}>
         {VISUALS[item.visual]}
       </div>
-      <p className="mt-3 pt-3 font-bold"
-         style={{ fontSize: 12, color: 'var(--text-2)',
-                  borderTop: '1px solid var(--card-border)' }}>
-        {item.label}
-      </p>
     </div>
   )
 }

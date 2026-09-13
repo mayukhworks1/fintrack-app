@@ -62,52 +62,15 @@ export function MiniBars({ values = [38, 62, 44, 80, 56, 95], tone = 'var(--acce
   )
 }
 
-export function MiniLine({ points = [30, 44, 38, 58, 52, 72, 66, 88] }) {
-  const ref = useReveal()
-  const d = points
-    .map((p, i) => `${(i / (points.length - 1)) * 118 + 1},${44 - (p / 100) * 38}`)
-    .join(' L ')
-  return (
-    <svg ref={ref} className="ft-reveal w-full" viewBox="0 0 120 46" aria-hidden="true"
-         preserveAspectRatio="none" style={{ height: 52, display: 'block' }}>
-      <defs>
-        <linearGradient id="ft-line-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`M ${d} L 119,46 L 1,46 Z`} fill="url(#ft-line-fill)" />
-      <path
-        d={`M ${d}`} fill="none" stroke="var(--accent)" strokeWidth="2"
-        strokeLinecap="round" strokeLinejoin="round"
-        pathLength="1"
-        style={{ strokeDasharray: 1, strokeDashoffset: 1, animation: 'ft-draw 1400ms ease forwards 160ms' }}
-      />
-    </svg>
-  )
-}
-
-export function MiniDonut({ pct = 68 }) {
-  const ref = useReveal()
-  const C = 2 * Math.PI * 17
-  return (
-    <svg ref={ref} className="ft-reveal" viewBox="0 0 46 46" width="72" height="72" aria-hidden="true">
-      <circle cx="23" cy="23" r="17" fill="none" stroke="var(--bg-input)" strokeWidth="6" />
-      <circle
-        cx="23" cy="23" r="17" fill="none" stroke="var(--accent)" strokeWidth="6"
-        strokeLinecap="round" transform="rotate(-90 23 23)"
-        style={{
-          strokeDasharray: C,
-          strokeDashoffset: C,
-          animation: `ft-donut 1200ms cubic-bezier(0.22,1,0.36,1) 200ms forwards`,
-          ['--ft-donut-to']: C * (1 - pct / 100),
-        }}
-      />
-      <text x="23" y="26" textAnchor="middle" fontSize="10" fontWeight="800"
-            fill="var(--text-1)">{pct}%</text>
-    </svg>
-  )
-}
+/* MiniLine and MiniDonut were here. Both are gone, and the donut is the
+   reason: it printed "68%" — 68% of nothing, an invented statistic sitting
+   where a reader expects a fact, next to whichever module the modulo landed
+   on. MiniLine was the same problem with less nerve: a trend line for
+   subjects that have no trend, including "Questions".
+   Deleted rather than left unused, because an unused generic chart is a
+   thing the next person reaches for when a cell looks empty. Subjects that
+   genuinely are a trend keep MiniBars; everything else is drawn for itself
+   in Glyphs.jsx. */
 
 /* Stacked document sheets — the Studio documents cell. */
 export function MiniDocs() {

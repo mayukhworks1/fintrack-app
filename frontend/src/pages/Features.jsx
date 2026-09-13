@@ -24,9 +24,10 @@ import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
 import { useTilt } from '../hooks/useTilt'
 import PublicLayout from '../components/PublicLayout'
+import { AnalystDemo, MiniBars, MiniDocs, Grain } from '../components/LandingVisuals'
 import {
-  AnalystDemo, MiniBars, MiniLine, MiniDonut, MiniDocs, Grain,
-} from '../components/LandingVisuals'
+  GlyphMargin, GlyphTaxSplit, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
+} from '../components/Glyphs'
 import AgingPreview from '../components/AgingPreview'
 
 export const FEATURES = [
@@ -56,7 +57,7 @@ export const FEATURES = [
       'Per-project detail with its own invoice history',
       'Top projects by value, and projects running at negative margin',
     ],
-    demo: 'donut',
+    demo: 'margin',
   },
   {
     id: 'analytics', icon: BarChart3, label: 'Analytics',
@@ -71,7 +72,7 @@ export const FEATURES = [
       'Live sync state, so you know how fresh the figures are',
       'Drill through to the underlying rows; CSV export',
     ],
-    demo: 'line',
+    demo: 'bars',
   },
   {
     id: 'tax', icon: Landmark, label: 'Tax ledger',
@@ -84,7 +85,7 @@ export const FEATURES = [
       'Filing checklist for the period',
       'Net receivable after tax',
     ],
-    demo: 'bars',
+    demo: 'tax',
   },
   {
     id: 'documents', icon: FileSearch, label: 'Studio — documents',
@@ -112,7 +113,7 @@ export const FEATURES = [
       'Charts, tables or a single figure, chosen to fit the question',
       'Scoped to what your account may already see — never a way around a permission',
     ],
-    demo: 'analyst',
+    demo: 'table',
   },
   {
     id: 'reports', icon: FileText, label: 'AI reports & assistant',
@@ -126,7 +127,7 @@ export const FEATURES = [
       'Brief, detailed or board-style output',
       'A daily AI budget per role, reported honestly rather than guessed',
     ],
-    demo: 'bars',
+    demo: 'analyst',
   },
   {
     id: 'pages', icon: Globe, label: 'Pages',
@@ -140,7 +141,7 @@ export const FEATURES = [
       'View counts per page',
       'Served as its own document, sandboxed away from your session',
     ],
-    demo: 'bars',
+    demo: 'pages',
   },
   {
     id: 'status', icon: Activity, label: 'Delivery & status',
@@ -155,7 +156,7 @@ export const FEATURES = [
       'Attachments on a status entry',
       'Bulk select, advanced filters, and share the view read-only',
     ],
-    demo: 'line',
+    demo: 'board',
   },
   {
     id: 'shared', icon: Share2, label: 'Shared views',
@@ -168,7 +169,7 @@ export const FEATURES = [
       'Location and device breakdown, and an event timeline',
       'Revocable at any time',
     ],
-    demo: 'line',
+    demo: 'share',
   },
   {
     id: 'admin', icon: ShieldCheck, label: 'Admin & audit',
@@ -184,17 +185,27 @@ export const FEATURES = [
       'AI run history and per-user usage',
       'Deployment health checks for every dependency',
     ],
-    demo: 'bars',
+    demo: 'audit',
   },
 ]
 
+/* One entry per module, chosen for what the module does. The map used to have
+   six entries for eleven modules, four of them generic charts, so seven
+   modules were illustrated with another module's picture — bars appeared
+   against Tax, Pages and Audit alike, and a donut reading 68% against
+   Projects. A drawing beside a claim is read as part of the claim. */
 const DEMOS = {
   aging:   <AgingPreview />,
-  analyst: <AnalystDemo />,
+  margin:  <div className="px-4 py-6"><GlyphMargin /></div>,
   bars:    <div className="px-2 py-6"><MiniBars /></div>,
-  line:    <div className="px-2 py-6"><MiniLine /></div>,
-  donut:   <div className="flex justify-center py-6"><MiniDonut pct={68} /></div>,
+  tax:     <div className="px-4 py-6"><GlyphTaxSplit /></div>,
   docs:    <div className="flex justify-center py-6"><MiniDocs /></div>,
+  table:   <div className="px-4 py-6"><GlyphTable /></div>,
+  analyst: <AnalystDemo />,
+  pages:   <div className="px-4 py-6"><GlyphShare mode="stream" /></div>,
+  board:   <div className="px-4 py-6"><GlyphBoard /></div>,
+  share:   <div className="px-4 py-6"><GlyphShare mode="link" /></div>,
+  audit:   <div className="px-4 py-6"><GlyphAudit /></div>,
 }
 
 export default function Features() {

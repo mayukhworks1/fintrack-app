@@ -21,7 +21,11 @@ import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
-import { Grain, CountUp, MiniBars, MiniLine, MiniDonut, MiniDocs } from '../components/LandingVisuals'
+import { Grain, CountUp, MiniBars, MiniDocs } from '../components/LandingVisuals'
+import {
+  GlyphLedger, GlyphMargin, GlyphTaxSplit, GlyphAnalyst,
+  GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
+} from '../components/Glyphs'
 import Overstatement from '../components/Overstatement'
 import ScrollLit from '../components/ScrollLit'
 import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
@@ -31,12 +35,21 @@ import {
 
 const LD = graph(APP_LD, FAQ_LD)
 
-/* One mark per module chip, cycled. Drawn marks rather than screenshots:
-   a preview that has to be recaptured whenever a screen changes is a
-   preview that is wrong within a month. */
-const CHIP_PEEK = [
-  <MiniBars key="a" />, <MiniDonut key="b" pct={68} />, <MiniLine key="c" />, <MiniDocs key="d" />,
-]
+/* One mark per module, keyed by the module.
+   This was `CHIP_PEEK[i % 4]` — four generic charts handed to eleven modules
+   by list position, so Tax got a bar chart and Projects got a donut reading
+   68%. The comment below the grid claimed each chip showed "the mark that
+   module carries elsewhere on the site", which the modulo made false.
+   MODULES has carried a `visual` key the whole time; now it is filled for
+   all eleven and this reads it.
+   Drawn marks rather than screenshots: a preview that has to be recaptured
+   whenever a screen changes is a preview that is wrong within a month. */
+const CHIP_PEEK = {
+  ledger: <GlyphLedger />, margin: <GlyphMargin />, bars: <MiniBars />,
+  tax: <GlyphTaxSplit />, analyst: <GlyphAnalyst />, docs: <MiniDocs />,
+  table: <GlyphTable />, pages: <GlyphShare mode="stream" />,
+  board: <GlyphBoard />, share: <GlyphShare mode="link" />, audit: <GlyphAudit />,
+}
 
 /** Lies back until it is reached, then straightens. Chrome, never a data mark. */
 function Tilted({ children }) {
@@ -183,7 +196,7 @@ export default function Landing() {
 
         <Reveal className="grid gap-2 mb-7"
                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 216px), 1fr))' }}>
-          {MODULES.map(({ icon: Icon, title, points }, i) => (
+          {MODULES.map(({ icon: Icon, title, points, visual }) => (
             <Link key={title} to="/features"
                   className="ft-chip ft-chip-peek flex items-start gap-2.5 rounded-xl px-3 py-3"
                   style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
@@ -193,7 +206,7 @@ export default function Landing() {
                   flattest block on the page. */}
               <span className="peek" aria-hidden="true">
                 <span className="flex items-center justify-center" style={{ minHeight: 56 }}>
-                  {CHIP_PEEK[i % CHIP_PEEK.length]}
+                  {CHIP_PEEK[visual]}
                 </span>
                 <span className="block mt-1.5 pt-1.5 font-bold"
                       style={{ fontSize: 11, color: 'var(--text-3)',

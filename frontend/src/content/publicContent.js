@@ -19,31 +19,31 @@ import {
 
 export const MODULES = [
   {
-    icon: Receipt, span: 'span-3', visual: 'bars',
+    icon: Receipt, span: 'span-3', visual: 'ledger',
     title: 'Receivables',
     body: 'Invoices with aging bands, collection rate and average days to collect. GST and TDS are tracked separately — tax withheld at source is not money a client still owes you.',
     points: ['Aging bands you can filter by', 'Collection rate and follow-up load', 'Missing docs and retainer templates'],
   },
   {
-    icon: FolderKanban, span: 'span-3', visual: 'donut',
+    icon: FolderKanban, span: 'span-3', visual: 'margin',
     title: 'Projects',
     body: 'Billing, cost and realised profit per project, with margin and health surfaced before a job quietly goes underwater.',
     points: ['Profit and margin per project', 'At-risk and critical health signals', 'Client rollups and invoice history'],
   },
   {
-    icon: BarChart3, span: 'span-4', visual: 'line',
+    icon: BarChart3, span: 'span-4', visual: 'bars',
     title: 'Analytics',
     body: 'Cash position, revenue, collection rate and overdue pressure over any period — plus signals worth noticing, surfaced rather than left to be found. Every chart is one click from the rows behind it.',
     points: ['Cash position and overdue pressure', 'Client, project and category breakdowns', 'Sync state, so you know how fresh it is'],
   },
   {
-    icon: Landmark, span: 'span-2',
+    icon: Landmark, span: 'span-2', visual: 'tax',
     title: 'Tax ledger',
     body: 'Gross billed, GST collected and net receivable, month by month — kept apart from the cash view so a filing figure is never mistaken for a collections figure.',
     points: ['Monthly GST and net receivable', 'GST collection rate', 'Filing checklist'],
   },
   {
-    icon: FileText, span: 'span-2',
+    icon: FileText, span: 'span-2', visual: 'analyst',
     title: 'AI reports & assistant',
     body: 'A written period report over your own figures, kept in a history you can reopen — and an assistant that already has the current context loaded.',
     points: ['Brief, detailed or board-style', 'Report history', 'Assistant with live context'],
@@ -55,31 +55,31 @@ export const MODULES = [
     points: ['PDF, text, Markdown, CSV, JSON', 'Page-level citations, opened inline', 'Answers checked against sources'],
   },
   {
-    icon: Sparkles, span: 'span-6', visual: 'demo',
+    icon: Sparkles, span: 'span-6', visual: 'table',
     title: 'Studio — finance data',
     body: 'Ask your invoices and projects a question in plain words. The model picks measures and groupings; the code compiles the SQL. The statement is shown with every answer, so a figure about money can always be checked.',
     points: ['Outstanding, collected, GST, TDS, collection rate', 'Group by project, client, category, month or quarter', 'Scoped to what your account may already see'],
   },
   {
-    icon: Globe, span: 'span-3',
+    icon: Globe, span: 'span-3', visual: 'pages',
     title: 'Pages',
     body: 'Describe a page and watch it get written, then publish it on a slug — optionally password-protected, optionally set to expire.',
     points: ['Streamed as it writes', 'Surgical revisions and version history', 'Password, expiry and view counts'],
   },
   {
-    icon: Activity, span: 'span-3',
+    icon: Activity, span: 'span-3', visual: 'board',
     title: 'Delivery & status',
     body: 'Where every project actually stands — a kanban board or an operational list, grouped by client, project or state, updating live as anyone edits. Delivery sits on the same records as the money, so a card knows what its project is owed.',
     points: ['Kanban board or operational list', 'Live over an event stream, app or table', 'Extendable status options, AI-drafted updates'],
   },
   {
-    icon: Share2, span: 'span-3',
+    icon: Share2, span: 'span-3', visual: 'share',
     title: 'Shared views',
     body: 'Send a filtered, read-only view to a client on a link, and see what they actually opened.',
     points: ['Read-only links with your filters', 'Column highlighting', 'Viewers, opens and an event timeline'],
   },
   {
-    icon: ShieldCheck, span: 'span-3',
+    icon: ShieldCheck, span: 'span-3', visual: 'audit',
     title: 'Admin & audit',
     body: 'Account approval, a permission matrix down to the individual action, live sessions, and a full request trail written asynchronously so it never slows the page it is recording.',
     points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health'],
