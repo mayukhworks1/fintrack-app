@@ -21,14 +21,22 @@ import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
-import { Grain, CountUp } from '../components/LandingVisuals'
+import { Grain, CountUp, MiniBars, MiniLine, MiniDonut, MiniDocs } from '../components/LandingVisuals'
 import Overstatement from '../components/Overstatement'
+import ScrollLit from '../components/ScrollLit'
 import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
 } from '../content/publicContent'
 
 const LD = graph(APP_LD, FAQ_LD)
+
+/* One mark per module chip, cycled. Drawn marks rather than screenshots:
+   a preview that has to be recaptured whenever a screen changes is a
+   preview that is wrong within a month. */
+const CHIP_PEEK = [
+  <MiniBars key="a" />, <MiniDonut key="b" pct={68} />, <MiniLine key="c" />, <MiniDocs key="d" />,
+]
 
 /** Lies back until it is reached, then straightens. Chrome, never a data mark. */
 function Tilted({ children }) {
@@ -175,11 +183,24 @@ export default function Landing() {
 
         <Reveal className="grid gap-2 mb-7"
                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 216px), 1fr))' }}>
-          {MODULES.map(({ icon: Icon, title, points }) => (
+          {MODULES.map(({ icon: Icon, title, points }, i) => (
             <Link key={title} to="/features"
-                  className="ft-chip flex items-start gap-2.5 rounded-xl px-3 py-3"
+                  className="ft-chip ft-chip-peek flex items-start gap-2.5 rounded-xl px-3 py-3"
                   style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                            textDecoration: 'none' }}>
+              {/* Pointing at a name shows the mark that module carries
+                  elsewhere on the site. Eleven names in a grid was the
+                  flattest block on the page. */}
+              <span className="peek" aria-hidden="true">
+                <span className="flex items-center justify-center" style={{ minHeight: 56 }}>
+                  {CHIP_PEEK[i % CHIP_PEEK.length]}
+                </span>
+                <span className="block mt-1.5 pt-1.5 font-bold"
+                      style={{ fontSize: 11, color: 'var(--text-3)',
+                               borderTop: '1px solid var(--card-border)' }}>
+                  {title}
+                </span>
+              </span>
               <Icon size={16} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
               <span className="min-w-0">
                 <span className="block font-bold" style={{ fontSize: 13.5, color: 'var(--text-1)' }}>

@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ArrowRight, Menu, X, Moon, Sun } from 'lucide-react'
 import MegaNav, { NAV, ALL_PAGES } from './MegaNav'
+import CommandPalette from './CommandPalette'
 import { useTheme } from '../context/ThemeContext'
 // The app's own mark, not a second one drawn for this page. The public site
 // briefly shipped a different logo from the product and the favicon; there is
@@ -148,13 +149,22 @@ export default function PublicLayout({ children }) {
         )}
       </header>
 
+      <CommandPalette />
+
       <main className="flex-1">{children}</main>
 
       <footer className="mx-auto w-full px-4 sm:px-6 pb-10" style={{ maxWidth: 1120 }}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6"
              style={{ borderTop: '1px solid var(--card-border)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          <p className="text-xs flex items-center gap-2 flex-wrap justify-center sm:justify-start"
+             style={{ color: 'var(--text-3)' }}>
             FinTrack — AI finance manager
+            <span className="hidden sm:inline">·</span>
+            {/* Otherwise nobody finds it. A shortcut with no affordance is a
+                shortcut for the person who wrote it. */}
+            <span className="hidden sm:flex items-center gap-1.5">
+              press <kbd className="ft-kbd">⌘K</kbd> to search
+            </span>
           </p>
           <div className="flex items-center flex-wrap justify-center gap-1">
             {ALL_PAGES.map(({ to, label }) => (

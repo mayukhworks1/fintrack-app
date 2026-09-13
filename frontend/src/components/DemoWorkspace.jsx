@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
-  Play, X, MousePointerClick, Keyboard,
+  Play, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
@@ -587,6 +587,38 @@ function Analytics({ state, set }) {
 
 /* ── The analyst ─────────────────────────────────────────────────────── */
 
+/**
+ * Take the query away with you.
+ *
+ * The claim is that every answer can be checked. Being able to paste the
+ * statement into your own client is the practical form of that, and it is two
+ * lines — navigator.clipboard, with the confirmation living on the button so
+ * nothing has to move to tell you it worked.
+ */
+function CopySql({ sql }) {
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    if (!done) return
+    const t = setTimeout(() => setDone(false), 1600)
+    return () => clearTimeout(t)
+  }, [done])
+  return (
+    <button
+      onClick={() => { navigator.clipboard?.writeText(sql).then(() => setDone(true)).catch(() => {}) }}
+      aria-label="Copy the compiled query"
+      className="ml-auto flex items-center gap-1 rounded shrink-0"
+      style={{ height: 20, padding: '0 6px', fontSize: 9.5, cursor: 'pointer',
+               background: done ? 'var(--ok-dim)' : 'var(--card-bg)',
+               border: `1px solid ${done ? 'var(--ok)' : 'var(--card-border)'}`,
+               color: done ? 'var(--ok)' : 'var(--text-2)',
+               transition: 'background 200ms ease, border-color 200ms ease, color 200ms ease' }}
+    >
+      {done ? <CheckIcon size={10} aria-hidden="true" /> : <Copy size={10} aria-hidden="true" />}
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
 function Analyst({ state, set }) {
   const preset = QUESTIONS[state.question]
   const result = useMemo(
@@ -618,11 +650,14 @@ function Analyst({ state, set }) {
 
       <div className="rounded-xl overflow-hidden mb-2.5 shrink-0"
            style={{ border: '1px solid var(--card-border)' }}>
-        <div className="flex items-center justify-between px-2.5 py-1"
+        <div className="flex items-center gap-2 px-2.5 py-1"
              style={{ background: 'var(--bg-input)' }}>
           <span className="font-bold uppercase tracking-[0.16em]"
                 style={{ fontSize: 9, color: 'var(--text-3)' }}>Compiled query</span>
-          <span style={{ fontSize: 9, color: 'var(--text-3)' }}>generated, not written by the model</span>
+          <span className="hidden sm:inline" style={{ fontSize: 9, color: 'var(--text-3)' }}>
+            generated, not written by the model
+          </span>
+          <CopySql sql={result.sql} />
         </div>
         <pre key={state.question} className="m-0 px-2.5 py-2 overflow-x-auto"
              style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--text-2)', background: 'var(--bg-base)',

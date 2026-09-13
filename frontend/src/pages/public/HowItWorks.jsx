@@ -16,6 +16,7 @@ import StackStory from '../../components/StackStory'
 import { Grain } from '../../components/LandingVisuals'
 import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
 import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
+import ScrollLit from '../../components/ScrollLit'
 import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
 
 const LD = graph(APP_LD, crumbs([{ name: 'How it works', path: '/how-it-works' }]))
@@ -114,14 +115,15 @@ export default function HowItWorks() {
 
         <AnalystPipeline />
 
-        <p className="mt-5 mb-12 sm:mb-16 text-sm leading-relaxed"
-           style={{ color: 'var(--text-2)', maxWidth: 680 }}>
-          The model's entire output is those two values, each chosen from a
-          closed list. There is no route from a sentence to arbitrary SQL —
-          which is also why the analyst cannot be talked into reading rows your
-          account may not see. Scoping is applied when the statement is
-          assembled, below the point where anything the model said still counts.
-        </p>
+        {/* The one sentence on the site that lights word by word. It works
+            because it is the only one — a page where every paragraph does
+            this is a page you have to wait to read. */}
+        <ScrollLit className="mt-6 mb-12 sm:mb-16"
+                   style={{ fontSize: 'clamp(1.05rem, 2.1vw, 1.32rem)', lineHeight: 1.62,
+                            maxWidth: 760, fontFamily: "'Fraunces', Georgia, serif",
+                            letterSpacing: '-0.008em' }}>
+          The model's entire output is two values, each chosen from a closed list. There is no route from a sentence to arbitrary SQL — which is also why the analyst cannot be talked into reading rows your account may not see. Scoping is applied when the statement is assembled, below the point where anything the model said still counts.
+        </ScrollLit>
 
         <Grid>
           {TRUST.map(({ icon, title, body }, i) => (

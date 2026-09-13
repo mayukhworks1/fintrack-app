@@ -3526,3 +3526,85 @@ html.dark .main-app-theme {
 }
 .ft-route { animation: ft-route-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @media (prefers-reduced-motion: reduce) { .ft-route { animation: none } }
+
+/* ── Command palette ───────────────────────────────────────────────
+   Anchored near the top rather than centred: a dialog that opens in
+   the middle of a tall screen puts the first result under the
+   pointer's resting position and the rest below the fold. */
+.ft-cmd-veil {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: clamp(56px, 12vh, 140px) 16px 16px;
+  background: color-mix(in srgb, var(--bg-base) 62%, transparent);
+  backdrop-filter: blur(6px);
+  animation: ft-fade-in 160ms ease both;
+}
+.ft-cmd {
+  width: min(100%, 580px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 32px 64px -24px rgba(15, 23, 42, 0.4);
+  animation: ft-mega-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dark .ft-cmd { box-shadow: 0 32px 64px -24px rgba(0, 0, 0, 0.8); }
+.ft-kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; padding: 2px 6px; border-radius: 5px;
+  background: var(--bg-input); border: 1px solid var(--card-border);
+  color: var(--text-3);
+}
+
+/* ── Word-by-word ──────────────────────────────────────────────────
+   Each word dims until the sentence has been scrolled through. Driven
+   by a scroll timeline where there is one; elsewhere the words simply
+   arrive lit, which is the right amount of missing for emphasis. */
+.ft-lit { color: var(--text-2); }
+.ft-lit-w { color: var(--text-1); opacity: 1; }
+@supports (animation-timeline: view()) {
+  .ft-lit-w {
+    opacity: 0.26;
+    animation: ft-lit-up linear both;
+    animation-timeline: view();
+    /* Each word takes its turn across the middle of the pass. */
+    animation-range: entry 28% cover calc(52% + (var(--i) / var(--n)) * 26%);
+  }
+  @keyframes ft-lit-up { to { opacity: 1 } }
+}
+@media (prefers-reduced-motion: reduce) { .ft-lit-w { opacity: 1; animation: none } }
+
+/* ── Module chip preview ───────────────────────────────────────────
+   The overview's flattest block: eleven names in a grid. Pointing at
+   one now shows the mark that module uses elsewhere on the site. */
+.ft-chip-peek { position: relative; }
+.ft-chip-peek > .peek {
+  position: absolute; left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  width: 172px; padding: 10px;
+  border-radius: 12px; pointer-events: none;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  box-shadow: 0 16px 32px -16px rgba(15, 23, 42, 0.34);
+  opacity: 0; transition: opacity 200ms ease, transform 240ms cubic-bezier(0.22,1,0.36,1);
+  z-index: 20;
+}
+.dark .ft-chip-peek > .peek { box-shadow: 0 16px 32px -14px rgba(0,0,0,0.7); }
+.ft-chip-peek:hover > .peek,
+.ft-chip-peek:focus-visible > .peek { opacity: 1; transform: translateX(-50%); }
+/* No hover on a touch screen, so the preview would only ever appear
+   stuck open after a tap. */
+@media (hover: none), (prefers-reduced-motion: reduce) { .ft-chip-peek > .peek { display: none } }
+
+/* ── Theme change ──────────────────────────────────────────────────
+   Where the browser has view transitions, the new theme wipes in as a
+   circle from the button that asked for it, rather than the whole page
+   flipping colour at once. Everywhere else the existing 0.3s
+   background transition still does its job. */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation: none; mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1 }
+::view-transition-new(root) { z-index: 2 }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root) { animation-duration: 0.01ms !important }
+}
