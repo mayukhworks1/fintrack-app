@@ -30,6 +30,8 @@ import {
   GlyphMargin, GlyphTaxSplit, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
 } from '../components/Glyphs'
 import AgingPreview from '../components/AgingPreview'
+import TaxFlowSimulator from '../components/TaxFlowSimulator'
+import ContractCitationInspector from '../components/ContractCitationInspector'
 
 export const FEATURES = [
   {
@@ -199,8 +201,8 @@ const DEMOS = {
   aging:   <AgingPreview />,
   margin:  <div className="px-4 py-6"><GlyphMargin /></div>,
   bars:    <div className="px-2 py-6"><MiniBars /></div>,
-  tax:     <div className="px-4 py-6"><GlyphTaxSplit /></div>,
-  docs:    <div className="flex justify-center py-6"><MiniDocs /></div>,
+  tax:     <TaxFlowSimulator />,
+  docs:    <ContractCitationInspector />,
   table:   <div className="px-4 py-6"><GlyphTable /></div>,
   analyst: <AnalystDemo />,
   pages:   <div className="px-4 py-6"><GlyphShare mode="stream" /></div>,
