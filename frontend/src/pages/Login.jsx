@@ -115,7 +115,7 @@ export default function Login() {
         <div className="w-full max-w-sm animate-fade-in">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} />
-            <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
+            <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
               FinTrack
             </span>
           </div>
@@ -249,7 +249,7 @@ export default function Login() {
         <div className="w-full max-w-sm animate-fade-in">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} />
-            <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
+            <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
               FinTrack
             </span>
           </div>
@@ -296,7 +296,7 @@ export default function Login() {
         {/* Brand wordmark above card */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <BrandMark size={36} />
-          <span className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.03em' }}>
+          <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
             FinTrack
           </span>
         </div>

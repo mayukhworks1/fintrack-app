@@ -53,6 +53,12 @@
          the block is actually set. -->
     <link rel="preload" href="/fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/outfit-latin-ext.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The wordmark. It is the first thing on every page — header, sidebar,
+         login — so a swap would be the logo visibly changing shape after
+         paint, which is the one place a swap is not acceptable. It costs
+         2.1 KB because it is cut to the eight letters of "FinTrack" and
+         nothing else, so preloading it is cheaper than the flash. -->
+    <link rel="preload" href="/fonts/jost-wordmark.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- Cloudflare Web Analytics -->
     <script defer src="https://static.cloudflareinsights.com/beacon.min.js"

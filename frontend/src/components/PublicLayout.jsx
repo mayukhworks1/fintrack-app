@@ -60,11 +60,11 @@ export default function PublicLayout({ children }) {
              style={{ maxWidth: 1120, minHeight: 60 }}>
           {/* Padded to a real target — as a bare 30px mark plus text this was
               under the ~44px a thumb can hit. */}
-          <Link to="/" className="flex items-center gap-2 font-extrabold text-base tracking-tight"
+          <Link to="/" className="flex items-center gap-2"
                 style={{ color: 'var(--text-1)', textDecoration: 'none',
                          minHeight: 44, paddingRight: 4 }}>
             <BrandMark size={30} />
-            FinTrack
+            <span className="ft-wordmark" style={{ fontSize: '1.16rem' }}>FinTrack</span>
           </Link>
 
           <MegaNav />

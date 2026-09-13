@@ -107,7 +107,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           </span>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="runey-brand-title">FinTrack</p>
+              <p className="runey-brand-title ft-wordmark">FinTrack</p>
               <p className="runey-brand-subtitle">AI Finance Manager</p>
             </div>
           )}
@@ -371,8 +371,13 @@ export default function Layout({ children, style }) {
       {/* ── Mobile drawer panel ── */}
       <aside
         id="mobile-nav-drawer"
-        className="runey-app-sidebar lg:hidden fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300"
+        className="runey-app-sidebar lg:hidden fixed top-0 left-0 w-64 z-50 flex flex-col transition-transform duration-300"
         style={{
+          // Height comes from .runey-app-sidebar, which cascades
+          // 100vh → -webkit-fill-available → 100dvh. Tailwind's h-full was
+          // also on this element and lost on source order, so the height was
+          // being decided by whichever rule happened to come last rather
+          // than by anyone's intent.
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
           boxShadow: drawerOpen ? '8px 0 28px rgba(15,23,42,0.10)' : 'none',
         }}
@@ -407,8 +412,8 @@ export default function Layout({ children, style }) {
           >
             <BrandMark size={28} />
             <span
-              className="font-bold text-sm tracking-tight"
-              style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}
+              className="ft-wordmark"
+              style={{ color: 'var(--text-1)', fontSize: '1.02rem' }}
             >
               FinTrack
             </span>

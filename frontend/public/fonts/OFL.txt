@@ -1,4 +1,4 @@
-Two typefaces are bundled in this directory, both under the licence below.
+Three typefaces are bundled in this directory, all under the licence below.
 
   outfit-*.woff2
   Copyright 2021 The Outfit Project Authors
@@ -7,6 +7,14 @@ Two typefaces are bundled in this directory, both under the licence below.
   fraunces-*.woff2
   Copyright 2020 The Fraunces Project Authors
   https://github.com/undercasetype/Fraunces
+
+  jost-wordmark.woff2
+  Copyright 2020 The Jost Project Authors
+  https://github.com/indestructible-type/Jost
+  Subset to the eight letters of the wordmark (F i n T r a c k) — 26 KB of
+  variable font reduced to 2.1 KB. Subsetting is a modification, which the
+  licence permits; the name "Jost Wordmark" marks it as one so it is not
+  mistaken for the full family.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

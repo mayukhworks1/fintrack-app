@@ -92,6 +92,40 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   Wordmark — Jost (self-hosted, subset, SIL OFL 1.1)
+
+   "FinTrack" was set in the UI face, which is why it read as a heading
+   that happened to say the product's name rather than as a logo. A
+   wordmark wants its own letterforms: geometric, single-storey 'a',
+   tight, closer to the genus of the marks it sits beside in a browser
+   tab than to the interface underneath it.
+
+   Subset to the eight characters the word actually contains — F, i, n,
+   T, r, a, c and k. 26 KB of Latin became 2.1 KB, because a logo does
+   not need an alphabet. The weight axis survives the subsetting, so
+   the mark can be tuned without shipping a second file.
+
+   Only ever applied to the word itself. A geometric display face is
+   the wrong thing for a table of figures, which is what Outfit is for.
+══════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: 'Jost Wordmark';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/jost-wordmark.woff2') format('woff2');
+}
+
+.ft-wordmark {
+  font-family: 'Jost Wordmark', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  /* Jost runs wide at a logo's size; the mark wants to read as one
+     object rather than eight letters standing near each other. */
+  letter-spacing: -0.012em;
+  font-feature-settings: "kern";
+}
+
+/* ══════════════════════════════════════════════════════════════════
    FinTrack Design System — v4 — Blue & White
    Default: clean white backgrounds, vibrant blue accents
    Inspired by professional SaaS dashboards (Odoo, L'Inventaire, etc.)
@@ -2158,7 +2192,16 @@ html.dark .web-invoices-shell {
 
 .runey-app-sidebar {
   margin: 0.65rem;
+  /* The same three-value cascade .app-shell uses, and for the same reason:
+     on iOS 100vh is the *large* viewport, measured with the browser chrome
+     hidden. With the toolbar showing, an element that tall runs off the
+     bottom of what you can see — which is where the sidebar keeps its theme
+     toggle, its sign-out and the profile link. They were not missing on
+     mobile; they were underneath Safari. */
   height: calc(100vh - 1.3rem);
+  /* stylelint-disable-next-line value-no-vendor-prefix */
+  height: -webkit-fill-available;
+  height: calc(100dvh - 1.3rem);
   border-radius: 1.55rem;
   border: 1px solid rgba(255,255,255,0.08);
   background:
@@ -2223,10 +2266,17 @@ html.dark .web-invoices-shell {
 
 .runey-brand-title {
   color: #ffffff;
-  font-size: 0.86rem;
-  font-weight: 800;
+  /* Jost is a geometric with a small x-height, so it reads a size down from
+     Outfit at the same rem. Bumped so the rail mark matches the header one
+     optically rather than numerically. */
+  font-size: 0.92rem;
+  /* 800 was right for Outfit. A geometric at 800 closes its own counters at
+     14px and turns the mark into a blob, so the wordmark carries weight
+     through width instead. 600 rather than the header's 500 because this one
+     sits reversed on #171717, where light strokes thin out. */
+  font-weight: 600;
   line-height: 1.05;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.012em;
 }
 
 .runey-brand-subtitle {
@@ -2427,6 +2477,9 @@ html.dark .web-invoices-shell {
   .runey-app-sidebar {
     margin: 0;
     height: 100vh;
+    /* stylelint-disable-next-line value-no-vendor-prefix */
+    height: -webkit-fill-available;
+    height: 100dvh;
     border-radius: 0 1.35rem 1.35rem 0;
   }
 }
