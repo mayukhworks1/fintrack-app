@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
   Play, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
-  KanbanSquare, Rows3, Radio,
+  KanbanSquare, Rows3, Radio, Mail, FileText, SlidersHorizontal,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
@@ -100,6 +100,10 @@ const KBD = {
  */
 function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
   const panelRef = useRef(null)
+  const [tdsRate, setTdsRate] = useState(TDS_RATE)
+  const [showAiReminder, setShowAiReminder] = useState(false)
+  const [reminderCopied, setReminderCopied] = useState(false)
+  const [showEInvoice, setShowEInvoice] = useState(false)
 
   useEffect(() => {
     const node = panelRef.current
@@ -114,15 +118,17 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
     }
   }, [onClose, returnFocusRef])
 
-  const invoiced = invoice.amount + invoice.gst
-  const received = invoiced - invoice.tds
+  const calculatedGst = invoice.gst
+  const calculatedTds = Math.round(invoice.amount * tdsRate)
+  const invoiced = invoice.amount + calculatedGst
+  const received = invoiced - calculatedTds
   const band = BANDS.find(b => b.id === bandOf(invoice))
 
   const money = [
     { k: 'Billed (pre-tax)', v: inr(invoice.amount), note: 'the receivable', mark: true },
-    { k: `GST @ ${Math.round(GST_RATE * 100)}%`, v: `+ ${inr(invoice.gst)}`, note: "collected for the state" },
+    { k: `GST @ ${Math.round(GST_RATE * 100)}%`, v: `+ ${inr(calculatedGst)}`, note: "collected for the state" },
     { k: 'Invoiced', v: inr(invoiced), note: 'what the document says', rule: true },
-    { k: `TDS @ ${Math.round(TDS_RATE * 100)}%`, v: `− ${inr(invoice.tds)}`, note: 'withheld by the client' },
+    { k: `TDS @ ${Math.round(tdsRate * 100)}%`, v: `− ${inr(calculatedTds)}`, note: 'withheld by the client' },
     { k: 'Lands in the bank', v: inr(received), note: 'if paid in full', strong: true },
   ]
 
@@ -158,8 +164,31 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <p className="font-bold uppercase tracking-[0.14em] mb-2"
-           style={{ fontSize: 9.5, color: 'var(--text-3)' }}>Where the money goes</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-bold uppercase tracking-[0.14em]"
+             style={{ fontSize: 9.5, color: 'var(--text-3)' }}>Where the money goes</p>
+          <div className="flex items-center gap-1">
+            {[
+              { r: 0.10, lbl: '10% (194J)' },
+              { r: 0.02, lbl: '2% (194C)' },
+              { r: 0.00, lbl: '0% (SEZ)' },
+            ].map(t => (
+              <button
+                key={t.r}
+                onClick={() => setTdsRate(t.r)}
+                className="px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all"
+                style={{
+                  background: tdsRate === t.r ? 'var(--accent-dim)' : 'transparent',
+                  border: `1px solid ${tdsRate === t.r ? 'var(--accent)' : 'var(--card-border)'}`,
+                  color: tdsRate === t.r ? 'var(--accent)' : 'var(--text-3)',
+                }}
+                title={`Switch simulated TDS rate to ${t.lbl}`}
+              >
+                {t.lbl}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="rounded-xl overflow-hidden mb-3" style={{ border: '1px solid var(--card-border)' }}>
           {money.map(row => (
@@ -189,9 +218,91 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
           the pre-tax figure. GST is collected on the state's behalf and TDS is
           withheld by the client before they pay, so neither is money this client
           still owes. Counting them would overstate what you can collect by{' '}
-          <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.gst + invoice.tds)}</strong> on
+          <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.gst + calculatedTds)}</strong> on
           this invoice alone.
         </p>
+
+        {/* ── Interactive Actions Bar ── */}
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => {
+              setShowAiReminder(!showAiReminder)
+              setShowEInvoice(false)
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all"
+            style={{
+              background: showAiReminder ? 'var(--accent-dim)' : 'var(--bg-input)',
+              border: `1px solid ${showAiReminder ? 'var(--accent)' : 'var(--card-border)'}`,
+              color: showAiReminder ? 'var(--accent)' : 'var(--text-2)',
+              cursor: 'pointer',
+            }}
+          >
+            <Sparkles size={12} />
+            AI Payment Follow-up
+          </button>
+          <button
+            onClick={() => {
+              setShowEInvoice(!showEInvoice)
+              setShowAiReminder(false)
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all"
+            style={{
+              background: showEInvoice ? 'var(--accent-dim)' : 'var(--bg-input)',
+              border: `1px solid ${showEInvoice ? 'var(--accent)' : 'var(--card-border)'}`,
+              color: showEInvoice ? 'var(--accent)' : 'var(--text-2)',
+              cursor: 'pointer',
+            }}
+          >
+            <FileText size={12} />
+            GST IRN Verification
+          </button>
+        </div>
+
+        {/* AI Reminder Preview Box */}
+        {showAiReminder && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--accent-soft)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold" style={{ color: 'var(--text-1)' }}>
+                AI Follow-up Draft
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(`Subject: Payment Follow-up: Invoice ${invoice.id} (${invoice.client})\n\nDear ${invoice.client} Finance Team,\n\nWe would like to gently follow up on Invoice ${invoice.id} for ${inr(received)} (Net after ${Math.round(tdsRate * 100)}% TDS), which was due on ${shortDate(invoice.dueOn)}.\n\nKindly confirm when remittance is processed.`)
+                  setReminderCopied(true)
+                  setTimeout(() => setReminderCopied(false), 2000)
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold"
+                style={{
+                  background: reminderCopied ? 'var(--ok-dim)' : 'var(--accent)',
+                  color: reminderCopied ? 'var(--ok)' : '#fff',
+                }}
+              >
+                {reminderCopied ? <CheckIcon size={10} /> : <Copy size={10} />}
+                {reminderCopied ? 'Copied' : 'Copy Email'}
+              </button>
+            </div>
+            <p className="text-[10.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              <strong>Subject:</strong> Follow-up on Invoice {invoice.id} ({invoice.client})<br/>
+              <strong>Body:</strong> Hi team, checking in on invoice {invoice.id} ({inr(received)} net). Please share the UTR reference once credited.
+            </p>
+          </div>
+        )}
+
+        {/* GST IRN Verification Box */}
+        {showEInvoice && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+            <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-1)' }}>
+              GST e-Invoice IRN Cryptographic Hash
+            </p>
+            <p className="text-[9.5px] font-mono break-all mb-1" style={{ color: 'var(--text-3)' }}>
+              IRN: 8a93b49c12df71e3609a89c74512e039487b92134098ef1a72bc
+            </p>
+            <div className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--ok)' }}>
+              <CheckIcon size={12} />
+              <span>Signed by IRP · Form 26AS matching valid</span>
+            </div>
+          </div>
+        )}
 
         <p className="font-bold uppercase tracking-[0.14em] mb-2"
            style={{ fontSize: 9.5, color: 'var(--text-3)' }}>Timeline</p>
@@ -581,12 +692,19 @@ function Delivery({ state, set }) {
 /* ── Projects ────────────────────────────────────────────────────────── */
 
 function Projects({ state, set }) {
+  const [costOffset, setCostOffset] = useState(0)
   const sel = PROJECT_ROLLUP.find(p => p.id === state.project) ?? PROJECT_ROLLUP[0]
+
+  const effectiveCost = Math.round(sel.cost * (1 + costOffset))
+  const effectiveProfit = sel.billed - effectiveCost
+  const effectiveMargin = sel.billed > 0 ? Math.round((effectiveProfit / sel.billed) * 100) : 0
+  const effectiveHealth = effectiveMargin >= 35 ? 'healthy' : effectiveMargin >= 15 ? 'watch' : 'risk'
+
   return (
     <div className="h-full grid gap-2 min-h-0" style={{ gridTemplateRows: 'auto minmax(0,1fr)' }}>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {PROJECT_ROLLUP.map(p => (
-          <button key={p.id} onClick={() => set({ project: p.id })}
+          <button key={p.id} onClick={() => { set({ project: p.id }); setCostOffset(0); }}
                   aria-pressed={sel.id === p.id}
                   className="rounded-lg font-semibold shrink-0"
                   style={{
@@ -602,24 +720,53 @@ function Projects({ state, set }) {
 
       <div className="rounded-xl p-3 min-h-0 overflow-y-auto"
            style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start justify-between gap-3 mb-2">
           <div className="min-w-0">
             <p className="font-extrabold truncate" style={{ fontSize: 15, color: 'var(--text-1)' }}>{sel.name}</p>
             <p className="truncate" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{sel.client} · {sel.status}</p>
           </div>
           <span className="rounded-md font-bold shrink-0"
                 style={{ fontSize: 10, padding: '3px 8px',
-                         color: sel.health === 'risk' ? 'var(--warn)' : sel.health === 'watch' ? 'var(--warn)' : 'var(--ok)',
-                         background: sel.health === 'healthy' ? 'var(--ok-dim)' : 'var(--warn-dim)' }}>
-            {sel.health === 'risk' ? 'At risk' : sel.health === 'watch' ? 'Watch' : 'Healthy'}
+                         color: effectiveHealth === 'risk' ? 'var(--warn)' : effectiveHealth === 'watch' ? 'var(--warn)' : 'var(--ok)',
+                         background: effectiveHealth === 'healthy' ? 'var(--ok-dim)' : 'var(--warn-dim)' }}>
+            {effectiveHealth === 'risk' ? 'At risk' : effectiveHealth === 'watch' ? 'Watch' : 'Healthy'}
           </span>
+        </div>
+
+        {/* Cost Burn Simulator Pill Bar */}
+        <div className="flex items-center justify-between p-1.5 rounded-lg mb-2.5"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          <span className="text-[10.5px] font-semibold" style={{ color: 'var(--text-3)' }}>
+            Margin Simulator:
+          </span>
+          <div className="flex gap-1">
+            {[
+              { val: -0.15, lbl: '-15% Cost' },
+              { val: 0.00,  lbl: 'Base' },
+              { val: 0.20,  lbl: '+20% Burn' },
+            ].map(b => (
+              <button
+                key={b.val}
+                onClick={() => setCostOffset(b.val)}
+                className="px-2 py-0.5 rounded text-[10px] font-bold transition-all"
+                style={{
+                  background: costOffset === b.val ? 'var(--accent)' : 'transparent',
+                  color: costOffset === b.val ? '#fff' : 'var(--text-2)',
+                  border: `1px solid ${costOffset === b.val ? 'var(--accent)' : 'transparent'}`,
+                  cursor: 'pointer',
+                }}
+              >
+                {b.lbl}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="ft-kpis mb-3" style={{ ['--kpi-cols']: 4 }}>
           <Stat label="Billed"  value={inrShort(sel.billed)} />
-          <Stat label="Cost"    value={inrShort(sel.cost)} />
-          <Stat label="Profit"  value={inrShort(sel.profit)} tone={sel.profit > 0 ? 'var(--ok)' : 'var(--bad)'} />
-          <Stat label="Margin"  value={`${sel.margin}%`} tone={sel.health === 'healthy' ? 'var(--ok)' : 'var(--warn)'} />
+          <Stat label="Cost"    value={inrShort(effectiveCost)} />
+          <Stat label="Profit"  value={inrShort(effectiveProfit)} tone={effectiveProfit > 0 ? 'var(--ok)' : 'var(--bad)'} />
+          <Stat label="Margin"  value={`${effectiveMargin}%`} tone={effectiveHealth === 'healthy' ? 'var(--ok)' : 'var(--warn)'} />
         </div>
 
         <p className="font-bold uppercase tracking-[0.14em] mb-1.5"
