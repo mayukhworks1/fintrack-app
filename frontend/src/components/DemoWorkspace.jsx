@@ -756,6 +756,26 @@ function Analyst({ state, set }) {
     () => ask({ measure: preset.measure, groupBy: preset.groupBy }),
     [preset]
   )
+  const [displayedSql, setDisplayedSql] = useState(result.sql)
+  const [typing, setTyping] = useState(false)
+
+  useEffect(() => {
+    const full = result.sql
+    setTyping(true)
+    let idx = 0
+    const step = Math.max(1, Math.floor(full.length / 20))
+    const timer = setInterval(() => {
+      idx += step
+      if (idx >= full.length) {
+        setDisplayedSql(full)
+        setTyping(false)
+        clearInterval(timer)
+      } else {
+        setDisplayedSql(full.slice(0, idx))
+      }
+    }, 10)
+    return () => clearInterval(timer)
+  }, [result.sql])
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -794,7 +814,8 @@ function Analyst({ state, set }) {
              style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--text-2)', background: 'var(--bg-base)',
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                       animation: 'ft-fade-in 260ms ease both' }}>
-          {result.sql}
+          {displayedSql}
+          {typing && <span className="ml-0.5 inline-block animate-pulse" style={{ color: 'var(--accent)' }}>▍</span>}
         </pre>
       </div>
 

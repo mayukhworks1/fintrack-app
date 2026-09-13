@@ -41,6 +41,10 @@ function score(needle, hay) {
   return i === n.length ? hits : -1
 }
 
+export function openCommandPalette() {
+  window.dispatchEvent(new CustomEvent('ft-open-command-palette'))
+}
+
 export default function CommandPalette() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -100,8 +104,16 @@ export default function CommandPalette() {
         setOpen(true)
       }
     }
+    const onCustomOpen = () => {
+      restoreRef.current = document.activeElement
+      setOpen(true)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('ft-open-command-palette', onCustomOpen)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('ft-open-command-palette', onCustomOpen)
+    }
   }, [open])
 
   useEffect(() => {

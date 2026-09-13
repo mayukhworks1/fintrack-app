@@ -52,40 +52,48 @@ export default function AgingPreview() {
         {BANDS.map((b, i) => {
           const on = sel === i
           const dim = sel !== null && !on
+          const pct = Math.round((b.amount / TOTAL) * 100)
           return (
             <button
               key={b.label}
               onClick={() => setSel(on ? null : i)}
-              className="w-full text-left rounded-lg px-2 py-1.5"
+              className="w-full text-left rounded-lg px-2.5 py-2"
               style={{
-                background: on ? 'var(--row-selected)' : 'transparent',
-                border: 'none', cursor: 'pointer',
+                background: on ? 'var(--row-selected)' : 'var(--bg-input)',
+                border: `1px solid ${on ? 'var(--accent)' : 'transparent'}`,
+                cursor: 'pointer',
                 opacity: dim ? 0.45 : 1,
-                transition: 'opacity 220ms ease, background 220ms ease',
+                transition: 'all 200ms ease',
               }}
             >
               <div className="flex items-baseline justify-between mb-1">
-                <span className="text-[11px] font-semibold" style={{ color: 'var(--text-1)' }}>{b.label}</span>
-                <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-2)' }}>{inr(b.amount)}</span>
+                <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>
+                  {b.label} <span className="font-normal text-[11px]" style={{ color: 'var(--text-3)' }}>({pct}%)</span>
+                </span>
+                <span className="text-[12px] font-bold tabular-nums" style={{ color: on ? 'var(--accent)' : 'var(--text-1)' }}>
+                  {inr(b.amount)}
+                </span>
               </div>
-              <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-input)', overflow: 'hidden' }}>
+              <div style={{ height: 8, borderRadius: 4, background: 'var(--card-border)', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', borderRadius: 4, background: b.tone,
                   width: `${(b.amount / peak) * 100}%`,
                   transition: 'width 620ms cubic-bezier(0.22,1,0.36,1), filter 200ms ease',
-                  filter: on ? 'brightness(1.12)' : 'none',
+                  filter: on ? 'brightness(1.15)' : 'none',
                 }} />
               </div>
-              <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
-                {b.count} invoice{b.count === 1 ? '' : 's'}
-              </p>
+              <div className="flex items-center justify-between mt-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                <span>{b.count} invoice{b.count === 1 ? '' : 's'}</span>
+                {i === 3 && <span style={{ color: 'var(--bad)', fontWeight: 600 }}>High collection priority</span>}
+                {i === 0 && <span style={{ color: 'var(--ok)', fontWeight: 600 }}>Within normal terms</span>}
+              </div>
             </button>
           )
         })}
       </div>
 
       <p className="text-[10px] mt-3" style={{ color: 'var(--text-3)' }}>
-        Illustrative figures — pick a band to filter.
+        Illustrative figures — click any aging band to isolate its risk profile.
       </p>
     </div>
   )

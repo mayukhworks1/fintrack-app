@@ -11,9 +11,9 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ArrowRight, Menu, X, Moon, Sun } from 'lucide-react'
+import { ArrowRight, Menu, X, Moon, Sun, Search } from 'lucide-react'
 import MegaNav, { NAV, ALL_PAGES } from './MegaNav'
-import CommandPalette from './CommandPalette'
+import CommandPalette, { openCommandPalette } from './CommandPalette'
 import { useTheme } from '../context/ThemeContext'
 // The app's own mark, not a second one drawn for this page. The public site
 // briefly shipped a different logo from the product and the favicon; there is
@@ -56,7 +56,7 @@ export default function PublicLayout({ children }) {
           borderBottom: '1px solid var(--card-border)',
         }}
       >
-        <nav className="mx-auto flex items-center gap-3 px-4 sm:px-6"
+        <nav className="mx-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-6"
              style={{ maxWidth: 1120, minHeight: 60 }}>
           {/* Padded to a real target — as a bare 30px mark plus text this was
               under the ~44px a thumb can hit. */}
@@ -69,7 +69,48 @@ export default function PublicLayout({ children }) {
 
           <MegaNav />
 
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            aria-label="Search or jump to (⌘K)"
+            className="hidden sm:flex items-center gap-2 rounded-lg text-xs font-medium ml-1 md:ml-2"
+            style={{
+              height: 36,
+              padding: '0 10px',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--card-border)',
+              color: 'var(--text-3)',
+              cursor: 'pointer',
+              transition: 'border-color 150ms ease, color 150ms ease',
+            }}
+          >
+            <Search size={13} aria-hidden="true" style={{ color: 'var(--text-3)' }} />
+            <span className="hidden lg:inline">Search docs, questions…</span>
+            <span className="lg:hidden">Search…</span>
+            <kbd className="font-mono rounded px-1.5 py-0.5"
+                 style={{
+                   fontSize: 10,
+                   background: 'var(--card-bg)',
+                   border: '1px solid var(--card-border)',
+                   color: 'var(--text-2)',
+                 }}>
+              ⌘K
+            </kbd>
+          </button>
+
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={openCommandPalette}
+              aria-label="Search site"
+              className="sm:hidden flex items-center justify-center rounded-lg"
+              style={{
+                width: 40, height: 40, background: 'transparent',
+                border: '1px solid var(--card-border)', color: 'var(--text-2)', cursor: 'pointer',
+              }}
+            >
+              <Search size={16} />
+            </button>
+
             <button
               onClick={toggle}
               aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -115,6 +156,22 @@ export default function PublicLayout({ children }) {
              lists six bare nouns is the same problem the desktop nav had. */
           <div className="md:hidden px-4 pb-4 overflow-y-auto"
                style={{ borderTop: '1px solid var(--card-border)', maxHeight: 'calc(100vh - 60px)' }}>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); openCommandPalette() }}
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 mt-3 text-left font-medium text-xs"
+              style={{
+                background: 'var(--bg-input)', border: '1px solid var(--card-border)',
+                color: 'var(--text-2)', cursor: 'pointer',
+              }}
+            >
+              <Search size={14} style={{ color: 'var(--text-3)' }} />
+              <span className="flex-1">Search or jump to…</span>
+              <kbd className="font-mono rounded px-1.5 py-0.5 text-[10px]"
+                   style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                ⌘K
+              </kbd>
+            </button>
             {NAV.map(group => (
               <div key={group.id} className="pt-3">
                 <p className="ft-eyebrow mb-1.5" style={{ fontSize: '0.6rem' }}>{group.label}</p>
