@@ -410,16 +410,21 @@ export default function Features() {
                 )}
 
                 {viewMode === 'isometric' && (
-                  <div className="relative p-4 sm:p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[300px]">
-                    <img
-                      src={media.img}
-                      alt={media.label}
-                      className="max-h-[360px] w-full object-contain rounded-lg drop-shadow-xl"
-                    />
+                  <div className="relative p-6 flex flex-col items-center justify-center min-h-[340px]"
+                       style={{ background: 'var(--bg-base)' }}>
+                    <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
+                         style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                      <img
+                        src={media.img}
+                        alt={media.label}
+                        className="w-full h-auto object-cover"
+                      />
+                    </div>
                     <div className="absolute top-3 right-3 flex items-center gap-2">
                       <button
                         onClick={() => setLightboxOpen(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900/90 text-slate-200 border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all hover:border-[var(--accent)]"
+                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
                       >
                         <Maximize2 size={12} /> Fullscreen
                       </button>
@@ -428,23 +433,27 @@ export default function Features() {
                 )}
 
                 {viewMode === 'video' && (
-                  <div className="relative p-2 bg-slate-950 flex items-center justify-center min-h-[300px]">
-                    <video
-                      ref={videoRef}
-                      src={media.video}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      className="max-h-[360px] w-full object-contain rounded-lg shadow-xl"
-                    />
-                    <button
-                      onClick={toggleVideo}
-                      className="absolute bottom-4 right-4 flex items-center justify-center w-8 h-8 rounded-full bg-slate-900/90 text-white border border-slate-700 shadow-md backdrop-blur transition-all"
-                      aria-label="Toggle motion video"
-                    >
-                      {isVideoPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-                    </button>
+                  <div className="relative p-6 flex items-center justify-center min-h-[340px]"
+                       style={{ background: 'var(--bg-base)' }}>
+                    <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
+                         style={{ borderColor: 'var(--card-border)' }}>
+                      <video
+                        ref={videoRef}
+                        src={media.video}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-auto object-cover"
+                      />
+                      <button
+                        onClick={toggleVideo}
+                        className="absolute bottom-3 right-3 flex items-center justify-center w-8 h-8 rounded-full bg-black/70 text-white border border-white/20 shadow-md backdrop-blur transition-all"
+                        aria-label="Toggle motion video"
+                      >
+                        {isVideoPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
