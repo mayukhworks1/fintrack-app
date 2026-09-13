@@ -11,6 +11,7 @@ import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import PermissionPlayground from '../../components/PermissionPlayground'
+import BrandCustomizerSandbox from '../../components/BrandCustomizerSandbox'
 import { Grain } from '../../components/LandingVisuals'
 import { PageHead, Card, Grid, Closing, Head } from '../../components/PublicBits'
 import { PermissionRows, OneBuildTwoHomes, ModuleSlotsIn } from '../../components/SceneDiagrams'
@@ -69,13 +70,22 @@ export default function Customise() {
 
         <PermissionPlayground />
 
-        <p className="mt-6 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
+        <p className="mt-6 mb-14 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
           One thing is deliberately not adjustable: the set of measures the
           analyst may use. Open that up and an answer stops being checkable,
           which is the only thing this product is really selling. New measures
           get added to it on purpose, reviewed, the same way a new module does —
           never inferred at the moment someone asks a question.
         </p>
+
+        <Head n="03" eyebrow="White-label & themes"
+              title="Custom brand identities, domains, and invoice numbering">
+          Give external clients and internal teams an instance that matches your
+          firm's identity. Pick primary color accents, define dedicated CNAME domains,
+          and customize your invoice taxonomy.
+        </Head>
+
+        <BrandCustomizerSandbox />
       </section>
 
       <Closing title="Tell us how you work"

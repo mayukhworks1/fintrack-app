@@ -32,6 +32,7 @@ import {
 import AgingPreview from '../components/AgingPreview'
 import TaxFlowSimulator from '../components/TaxFlowSimulator'
 import ContractCitationInspector from '../components/ContractCitationInspector'
+import RunwayStressTester from '../components/RunwayStressTester'
 
 export const FEATURES = [
   {
@@ -200,7 +201,7 @@ export const FEATURES = [
 const DEMOS = {
   aging:   <AgingPreview />,
   margin:  <div className="px-4 py-6"><GlyphMargin /></div>,
-  bars:    <div className="px-2 py-6"><MiniBars /></div>,
+  bars:    <RunwayStressTester />,
   tax:     <TaxFlowSimulator />,
   docs:    <ContractCitationInspector />,
   table:   <div className="px-4 py-6"><GlyphTable /></div>,

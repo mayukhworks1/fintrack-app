@@ -748,29 +748,86 @@ const LANE_TONE = {
 
 function Delivery({ state, set }) {
   const { board, card } = state
-  const columns = useMemo(() => boardBy(board), [board])
-  const open = card ? DELIVERY.find(d => d.id === card) : null
+  const [laneOverrides, setLaneOverrides] = useState({})
+  const [recentAction, setRecentAction] = useState(null)
+
+  // Merge default delivery data with user stage transitions
+  const activeDelivery = useMemo(() => {
+    return DELIVERY.map(d => ({
+      ...d,
+      lane: laneOverrides[d.id] ?? d.lane,
+    }))
+  }, [laneOverrides])
+
+  const columns = useMemo(() => {
+    const keys = board === 'lane' ? LANES : [...new Set(activeDelivery.map(d => d[board]))]
+    return keys
+      .map(name => ({ name, cards: activeDelivery.filter(d => d[board] === name) }))
+      .filter(col => col.cards.length > 0 || board === 'lane')
+  }, [board, activeDelivery])
+
+  const open = card ? activeDelivery.find(d => d.id === card) : null
+
+  const deliveredTotal = useMemo(() => {
+    return activeDelivery
+      .filter(d => d.lane === 'Delivered')
+      .reduce((sum, d) => sum + (d.outstanding || 180000), 0)
+  }, [activeDelivery])
+
+  const moveLane = (id, newLane, projectName) => {
+    setLaneOverrides(prev => ({ ...prev, [id]: newLane }))
+    if (newLane === 'Delivered') {
+      setRecentAction({
+        type: 'billing_trigger',
+        text: `⚡ Delivered "${projectName}" — ₹${(1.8).toFixed(1)}L milestone unlocked for automatic invoicing.`,
+        time: 'Just now',
+      })
+    } else {
+      setRecentAction({
+        type: 'stage_move',
+        text: `Stage moved: "${projectName}" is now marked "${newLane}".`,
+        time: 'Just now',
+      })
+    }
+  }
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         {[['lane', 'By status', KanbanSquare], ['client', 'By client', Rows3]].map(([k, label, Icon]) => (
           <button key={k} onClick={() => set({ board: k, card: null })}
                   aria-pressed={board === k}
                   className="flex items-center gap-1.5 rounded-lg font-semibold"
-                  style={{ height: 30, padding: '0 10px', fontSize: 11.5, cursor: 'pointer',
+                  style={{ height: 28, padding: '0 10px', fontSize: 11, cursor: 'pointer',
                            background: board === k ? 'var(--accent)' : 'var(--card-bg)',
                            border: `1px solid ${board === k ? 'var(--accent)' : 'var(--card-border)'}`,
                            color: board === k ? '#fff' : 'var(--text-2)' }}>
             <Icon size={12} aria-hidden="true" /> {label}
           </button>
         ))}
-        <span className="ml-auto flex items-center gap-1.5 shrink-0"
-              style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
-          <Radio size={11} aria-hidden="true" style={{ color: 'var(--ok)' }} />
-          live — updates when anyone edits, app or table
-        </span>
+
+        {/* Live Delivery-to-Billing Counter */}
+        <div className="ml-auto flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] font-bold"
+             style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+          <span style={{ color: 'var(--text-3)' }}>Delivered & Incurred:</span>
+          <span className="font-mono text-emerald-500 font-extrabold">{inr(deliveredTotal)}</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        </div>
       </div>
+
+      {/* Live Action Stream Ticker */}
+      {recentAction && (
+        <div className="mb-2 px-2.5 py-1.5 rounded-lg text-[10.5px] flex items-center justify-between border"
+             style={{
+               background: recentAction.type === 'billing_trigger' ? 'rgba(16, 185, 129, 0.12)' : 'var(--accent-dim)',
+               borderColor: recentAction.type === 'billing_trigger' ? 'rgba(16, 185, 129, 0.3)' : 'var(--accent-soft)',
+               color: recentAction.type === 'billing_trigger' ? 'var(--ok)' : 'var(--accent)',
+               animation: 'ft-slide-up 200ms ease-out',
+             }}>
+          <span className="font-medium truncate">{recentAction.text}</span>
+          <span className="text-[9.5px] opacity-75 shrink-0 ml-2 font-mono">{recentAction.time}</span>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-x-auto">
         <div className="flex gap-2 h-full" style={{ minWidth: 'min-content' }}>
@@ -790,35 +847,39 @@ function Delivery({ state, set }) {
                 </span>
               </div>
               <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
-                {col.cards.map(d => (
-                  <button key={d.id} onClick={() => set({ card: d.id })}
-                          aria-label={`${d.project} for ${d.client} — ${d.lane}. Open the status note.`}
-                          className="ft-card text-left rounded-lg p-2"
-                          style={{ background: 'var(--card-bg)', cursor: 'pointer',
-                                   border: `1px solid ${card === d.id ? 'var(--accent)' : 'var(--card-border)'}` }}>
-                    <span className="block font-bold truncate"
-                          style={{ fontSize: 11, color: 'var(--text-1)' }}>{d.project}</span>
-                    <span className="block truncate mb-1.5"
-                          style={{ fontSize: 9.5, color: 'var(--text-3)' }}>{d.client}</span>
-                    <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-2)' }}>
-                      {d.short}
-                    </span>
-                    {d.outstanding > 0 && (
-                      /* The join. A delivery board that cannot tell you what
-                         the project is owed is half an answer. */
-                      <span className="flex items-center gap-1 mt-1.5 pt-1.5"
-                            style={{ borderTop: '1px solid var(--card-border)' }}>
-                        <span className="tabular-nums font-bold"
-                              style={{ fontSize: 9.5, color: 'var(--text-1)' }}>
-                          {inrShort(d.outstanding)}
-                        </span>
-                        <span style={{ fontSize: 9, color: 'var(--text-3)' }}>
-                          open · {d.openCount}
-                        </span>
+                {col.cards.map(d => {
+                  const isDelivered = d.lane === 'Delivered'
+                  return (
+                    <button key={d.id} onClick={() => set({ card: d.id })}
+                            aria-label={`${d.project} for ${d.client} — ${d.lane}. Open the status note.`}
+                            className="ft-card text-left rounded-lg p-2 transition-all relative overflow-hidden"
+                            style={{
+                              background: 'var(--card-bg)', cursor: 'pointer',
+                              border: `1px solid ${card === d.id ? 'var(--accent)' : isDelivered ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)'}`,
+                              boxShadow: isDelivered ? '0 0 10px rgba(16, 185, 129, 0.08)' : 'none',
+                            }}>
+                      <span className="block font-bold truncate"
+                            style={{ fontSize: 11, color: 'var(--text-1)' }}>{d.project}</span>
+                      <span className="block truncate mb-1.5"
+                            style={{ fontSize: 9.5, color: 'var(--text-3)' }}>{d.client}</span>
+                      <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-2)' }}>
+                        {d.short}
                       </span>
-                    )}
-                  </button>
-                ))}
+                      {d.outstanding > 0 && (
+                        <span className="flex items-center gap-1 mt-1.5 pt-1.5"
+                              style={{ borderTop: '1px solid var(--card-border)' }}>
+                          <span className="tabular-nums font-bold"
+                                style={{ fontSize: 9.5, color: 'var(--text-1)' }}>
+                            {inrShort(d.outstanding)}
+                          </span>
+                          <span style={{ fontSize: 9, color: 'var(--text-3)' }}>
+                            open · {d.openCount}
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
                 {col.cards.length === 0 && (
                   <span className="px-2 py-3 text-center" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
                     nothing here
@@ -834,11 +895,11 @@ function Delivery({ state, set }) {
         <div className="mt-2.5 rounded-lg p-2.5 shrink-0"
              style={{ background: 'var(--card-bg)', border: '1px solid var(--accent-soft)',
                       animation: 'ft-slide-up 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-bold" style={{ fontSize: 11, color: 'var(--text-1)' }}>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-bold text-xs" style={{ color: 'var(--text-1)' }}>
               {open.project}
             </span>
-            <span className="rounded font-bold" style={{ fontSize: 8.5, padding: '1px 5px',
+            <span className="rounded font-bold" style={{ fontSize: 9, padding: '1px 6px',
                      color: LANE_TONE[open.lane], background: 'var(--bg-input)' }}>
               {open.lane}
             </span>
@@ -848,7 +909,29 @@ function Delivery({ state, set }) {
               <X size={12} aria-hidden="true" />
             </button>
           </div>
-          <p style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-2)' }}>{open.detail}</p>
+          <p className="mb-2.5" style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-2)' }}>{open.detail}</p>
+
+          {/* Interactive Lane Mover & Delivery Trigger */}
+          <div className="flex items-center gap-1 pt-2 border-t border-[var(--card-border)]">
+            <span className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--text-3)] mr-1">
+              Advance Stage:
+            </span>
+            {LANES.map(lane => (
+              <button
+                key={lane}
+                onClick={() => moveLane(open.id, lane, open.project)}
+                className="px-2 py-0.5 rounded text-[9.5px] font-bold transition-all"
+                style={{
+                  background: open.lane === lane ? (lane === 'Delivered' ? 'var(--ok-dim)' : 'var(--accent-dim)') : 'var(--bg-input)',
+                  border: `1px solid ${open.lane === lane ? (lane === 'Delivered' ? 'var(--ok)' : 'var(--accent)') : 'var(--card-border)'}`,
+                  color: open.lane === lane ? (lane === 'Delivered' ? 'var(--ok)' : 'var(--accent)') : 'var(--text-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                {lane === 'Delivered' ? '✓ Delivered & Bill' : lane}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
