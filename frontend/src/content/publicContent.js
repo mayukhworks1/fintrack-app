@@ -198,54 +198,67 @@ export const STEPS = [
 export const FAQ = [
   {
     q: 'What does FinTrack actually do?',
+    group: 'The product',
     a: 'It runs receivables, projects, GST and reporting for businesses that bill by project — agencies, studios, consultancies and firms working on retainers. Invoices carry ageing bands, collection rate and days-to-collect; projects carry billed, cost, realised profit and margin; tax sits in its own ledger; and an AI analyst answers questions across all of it while showing the query it ran.',
   },
   {
     q: 'Is the demo on this page real data?',
+    group: 'The product',
     a: 'No. Every client, project, invoice and figure in the sandbox is invented and computed in your browser — the page makes no API call at all. What is real is the behaviour: the filters filter, the columns sort, the ageing bands are genuine predicates over those rows, and the analyst answers are produced by the same function that prints the SQL beside them. Add the columns up and they agree, because there is only one set of rows.',
   },
   {
     q: 'How is this different from a spreadsheet?',
+    group: 'The product',
     a: 'A spreadsheet gives you a number with no way back to where it came from, and a second copy of that number the moment someone filters differently. Here every module reads the same records, so a figure on the dashboard and a figure in a report cannot disagree, and any total can be opened to the invoices behind it.',
   },
   {
     q: 'Can the AI analyst invent a figure?',
+    group: 'Data & AI',
     a: 'It is not able to. The model never writes SQL — it selects a measure and a grouping from a fixed list, and the application compiles and runs the statement itself. The query is shown with every answer, so a figure about money can be checked rather than trusted. The same design is why the analyst cannot be prompted into reading data the signed-in account is not allowed to see: scoping is applied when the statement is built.',
   },
   {
     q: 'How does it handle GST and TDS?',
+    group: 'The product',
     a: 'Separately, and on purpose. GST collected is tracked month by month and per client in its own ledger with a filing checklist, kept apart from the cash view so a filing figure is never mistaken for a collections figure. TDS is tax the client withholds at source before paying — it is reported, but it is never counted as outstanding, because it is not money a client still owes you.',
   },
   {
     q: 'Can I share something with a client without giving them an account?',
+    group: 'The product',
     a: 'Yes. Any filtered view can be published as a read-only link, optionally password-protected and set to expire, with the columns you want read first highlighted. You then see unique viewers, page views, which records and attachments were opened, and a timeline of what happened — and you can revoke the link at any time.',
   },
   {
     q: 'What can it do with documents?',
+    group: 'Data & AI',
     a: 'Upload contracts, scopes and notes as PDF, text, Markdown, CSV, JSON or logs, then ask questions about them in plain words. Each answer carries numbered citations you can open to the exact passage and page, and answers are verified against those sources before you see them. The interface also states which retrieval is actually running rather than implying a capability it does not have.',
   },
   {
     q: 'How much of this can we change ourselves?',
+    group: 'Fit & deployment',
     a: 'Most of what a finance team wants different is a setting rather than a request. Permissions are records grouped by module: roles carry defaults, and any single permission can be granted or revoked for one person without inventing a new role for them — a change takes effect on their next request, not their next sign-in. Views keep your own filters, columns and grouping, and that configuration travels into a shared link. Categories, clients, projects and statuses come from your own records, so there is no chart of accounts to adopt.',
   },
   {
     q: 'Can we run it on our own database and our own cloud?',
+    group: 'Fit & deployment',
     a: 'Yes. The backend is a container and every endpoint, table, model, mail server and storage target is an environment setting rather than a constant, so a dedicated instance on your own Postgres inside your own private cloud is a configuration of the same build. That matters more than it sounds: it is not a fork, so it keeps receiving the same fixes and features as everything else rather than drifting into a version only you are running.',
   },
   {
     q: 'Can you build a module for how our business works?',
+    group: 'Fit & deployment',
     a: 'Yes, and the architecture is why it is worth doing properly. Each module is a self-contained router, and permissions are keyed by module in the database — so a module built for your case arrives inside the access model and the audit trail rather than bolted beside them. It appears in the permission matrix from the first day, every request it serves is recorded like any other, and it reads the same mirrored rows as everything else, so its figures cannot disagree with the rest of the product.',
   },
   {
     q: 'Is anything deliberately not configurable?',
+    group: 'Data & AI',
     a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the entire reason an answer here can be checked rather than trusted. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added to it deliberately and reviewed, the same way a new module is — never inferred in the moment someone asks.',
   },
   {
     q: 'Who can see what?',
+    group: 'Access',
     a: 'Roles carry sensible defaults and any individual permission can be granted or revoked per person. A change takes effect on the next request rather than the next login. Every request is recorded with method, path, status, duration and origin, and record-level history keeps which fields changed and who changed them.',
   },
   {
     q: 'How do I get an account?',
+    group: 'Access',
     a: 'Access is by invitation and an administrator approves each account before it can see anything. You can sign in with email, Google or Zoho. Nothing on this public page is read from a workspace, so there is nothing to see until an account exists.',
   },
 ]
@@ -259,6 +272,10 @@ export const FAQ = [
    which is why the FAQ answers below are the array above rather than a
    second set written for a crawler. */
 export const SITE = 'https://twfintracker.worksmayukh.space'
+
+/** The FAQ, in the order the groups should be read. */
+export const FAQ_GROUPS = [...new Set(FAQ.map(f => f.group))]
+  .map(name => ({ name, items: FAQ.filter(f => f.group === name) }))
 
 export const APP_LD = {
   '@type': 'SoftwareApplication',

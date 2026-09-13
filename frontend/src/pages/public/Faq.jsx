@@ -16,7 +16,9 @@ import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import { Grain } from '../../components/LandingVisuals'
 import { PageHead, Closing, Reveal } from '../../components/PublicBits'
-import { FAQ, FAQ_LD, APP_LD, crumbs, graph } from '../../content/publicContent'
+import { FAQ, FAQ_GROUPS, FAQ_LD, APP_LD, crumbs, graph } from '../../content/publicContent'
+
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
 const LD = graph(APP_LD, FAQ_LD, crumbs([{ name: 'Questions', path: '/faq' }]))
 
@@ -42,17 +44,51 @@ export default function Faq() {
         </PageHead>
       </section>
 
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 820 }}>
-        <Reveal>
-          {FAQ.map(({ q, a }, i) => (
-            <details key={q} className="ft-faq" open={i === 0}>
-              <summary>{q}</summary>
-              <div>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{a}</p>
-              </div>
-            </details>
+      {/* Two columns above 900px: a standing index on the left and the
+          answers on the right. Thirteen questions in one flat list, centred in
+          a 1120px rail, floated in the middle of the page with nothing either
+          side of it — grouping them is what turns a list into a document. */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24 ft-faq-layout"
+               style={{ maxWidth: 1120 }}>
+        <nav className="ft-faq-index" aria-label="Question groups">
+          <p className="ft-eyebrow mb-3" style={{ fontSize: '0.6rem' }}>On this page</p>
+          <ul className="m-0 p-0 flex flex-col gap-0.5" style={{ listStyle: 'none' }}>
+            {FAQ_GROUPS.map(g => (
+              <li key={g.name}>
+                <a href={`#${slug(g.name)}`}
+                   className="ft-faq-jump flex items-baseline justify-between gap-3 rounded-lg px-3 py-2"
+                   style={{ textDecoration: 'none' }}>
+                  <span className="font-bold" style={{ fontSize: 13, color: 'var(--text-1)' }}>
+                    {g.name}
+                  </span>
+                  <span className="tabular-nums shrink-0" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                    {g.items.length}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="min-w-0">
+          {FAQ_GROUPS.map((g, gi) => (
+            <Reveal key={g.name} className={gi ? 'mt-12' : ''}>
+              <h2 id={slug(g.name)} className="ft-display mb-1 scroll-mt-24"
+                  style={{ fontSize: '1.35rem', color: 'var(--text-1)' }}>
+                {g.name}
+              </h2>
+              <hr className="ft-rule mb-2" style={{ marginLeft: 0, maxWidth: 180 }} />
+              {g.items.map(({ q, a }, i) => (
+                <details key={q} className="ft-faq" open={gi === 0 && i === 0}>
+                  <summary>{q}</summary>
+                  <div>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{a}</p>
+                  </div>
+                </details>
+              ))}
+            </Reveal>
           ))}
-        </Reveal>
+        </div>
       </section>
 
       <Closing title="Something not answered here?"

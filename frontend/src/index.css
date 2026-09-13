@@ -3351,3 +3351,91 @@ html.dark .main-app-theme {
 }
 .ft-chip:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft), 0 10px 26px -14px var(--accent-glow); }
 @media (prefers-reduced-motion: reduce) { .ft-chip:hover, .ft-chip:focus-visible { transform: none } }
+
+/* ══════════════════════════════════════════════════════════════════
+   DIAGRAM MOTION
+   ──────────────────────────────────────────────────────────────────
+   Each loop shows the thing its diagram is about: a permission being
+   switched on, a module arriving in a rail, a citation landing on its
+   page. Slow, and paused until the drawing has been scrolled to — a
+   page of animations all running at once is a page nobody can read.
+══════════════════════════════════════════════════════════════════ */
+@keyframes ft-switch-on   { 0%, 30% { opacity: 0.35 } 45%, 100% { opacity: 1 } }
+@keyframes ft-switch-knob { 0%, 30% { transform: translateX(-14px) } 45%, 100% { transform: none } }
+@keyframes ft-slot-in     { 0%, 12% { opacity: 0; transform: translateY(10px) }
+                            30%, 88% { opacity: 1; transform: none }
+                            100% { opacity: 1; transform: none } }
+@keyframes ft-pop-cite    { 0%, 20% { opacity: 0; transform: scale(0.6) }
+                            34%, 90% { opacity: 1; transform: none }
+                            100% { opacity: 1; transform: none } }
+@keyframes ft-dash-run    { to { stroke-dashoffset: -16 } }
+
+.ft-dash { animation: ft-dash-run 1.4s linear infinite; }
+
+/* Nothing runs until the drawing has been reached. Without this a page
+   with five diagrams is animating all five before one is on screen. */
+.ft-draw-host:not([data-shown]) svg * { animation-play-state: paused !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-draw-host svg * { animation: none !important; }
+  .ft-dash { animation: none; }
+}
+
+/* ── The closing slab ──────────────────────────────────────────────
+   It was one flat blue rectangle at the bottom of every page. At that
+   size a single colour reads as a placeholder, and a gradient that
+   wide bands visibly on an 8-bit display. So: two drifting radial
+   fields over the base gradient, the mark's hairline along the top
+   edge, and a few percent of grain to break the banding up. */
+.ft-closing {
+  position: relative;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 12% 0%, color-mix(in srgb, #4F86FF 92%, #fff) 0%, transparent 55%),
+    linear-gradient(135deg, var(--accent-btn), var(--accent-bright));
+  box-shadow: 0 24px 60px -26px var(--accent-glow);
+}
+.ft-closing::before {
+  content: '';
+  position: absolute; inset: 0 0 auto; height: 2px;
+  background: linear-gradient(90deg, transparent, #4ADE80 38%, #fff 70%, transparent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+@keyframes ft-mesh-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1) }
+  50%      { transform: translate3d(6%, -8%, 0) scale(1.12) }
+}
+.ft-closing-mesh {
+  position: absolute; inset: -30%;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side, rgba(74, 222, 128, 0.42), transparent 70%) 18% 78% / 46% 62% no-repeat,
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.30), transparent 70%) 82% 18% / 42% 58% no-repeat;
+  animation: ft-mesh-drift 17s ease-in-out infinite;
+}
+
+/* Cards lift a little as they are pointed at. Small enough that a grid
+   of them does not jump about, large enough to say they are objects. */
+.ft-lift { transition: transform 320ms cubic-bezier(0.22,1,0.36,1), box-shadow 320ms ease; }
+.ft-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 34px -20px rgba(15,23,42,0.3); }
+.dark .ft-lift:hover { box-shadow: 0 16px 34px -18px rgba(0,0,0,0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-closing-mesh { animation: none; }
+  .ft-lift:hover { transform: none; }
+}
+
+/* ── FAQ layout ────────────────────────────────────────────────────
+   A standing index beside the answers above 900px. Below that the
+   index would be a second list of the same words directly above the
+   first, so it is simply not rendered — a table of contents you have
+   to scroll past to reach the contents is worse than none. */
+.ft-faq-layout { display: grid; gap: 2rem; grid-template-columns: minmax(0, 1fr); }
+.ft-faq-index { display: none; }
+@media (min-width: 900px) {
+  .ft-faq-layout { grid-template-columns: 232px minmax(0, 1fr); gap: 3.5rem; align-items: start; }
+  .ft-faq-index { display: block; position: sticky; top: 84px; }
+}
+.ft-faq-jump { transition: background 160ms ease; }
+.ft-faq-jump:hover, .ft-faq-jump:focus-visible { background: var(--accent-dim); outline: none; }

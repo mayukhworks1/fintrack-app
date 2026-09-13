@@ -14,6 +14,7 @@ import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
 import LayerStack from '../../components/LayerStack'
 import { Grain } from '../../components/LandingVisuals'
+import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
 import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
 import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
 
@@ -77,6 +78,23 @@ export default function HowItWorks() {
           ))}
         </ol>
 
+        <div className="grid gap-8 lg:gap-12 items-center mb-14"
+             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+          <div><StaysPut /></div>
+          <div>
+            <h3 className="ft-display mb-2" style={{ fontSize: '1.3rem', color: 'var(--text-1)' }}>
+              One direction, on purpose
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              The base your team already works in stays the system of record, and
+              the mirror is fed from it. Nothing is moved out, nothing is
+              migrated, and there is no second place for someone to update
+              instead — which is the failure mode of every finance tool that
+              asks you to import first and reconcile later.
+            </p>
+          </div>
+        </div>
+
         <LayerStack />
       </section>
 
@@ -102,7 +120,9 @@ export default function HowItWorks() {
 
         <Grid>
           {TRUST.map(({ icon, title, body }, i) => (
-            <Card key={title} icon={icon} title={title} body={body} delay={Math.min(i, 3) * 70} />
+            <Card key={title} icon={icon} title={title} body={body}
+                  visual={[undefined, PermissionRows, CitedAnswer, undefined][i]}
+                  delay={Math.min(i, 3) * 70} />
           ))}
         </Grid>
       </section>

@@ -6,6 +6,7 @@
  * rhythm is different on every route. One set of parts, imported everywhere.
  */
 import { useReveal } from '../hooks/useReveal'
+import { Grain } from './LandingVisuals'
 
 /** Wraps a block so it animates in the first time it is scrolled to. */
 export function Reveal({ children, delay = 0, className = '', ...rest }) {
@@ -74,10 +75,13 @@ export function Head({ n, eyebrow, title, children, className = '' }) {
 }
 
 /** A card in a row of them. One shape, so a grid of three reads as a set. */
-export function Card({ icon: Icon, kicker, title, body, delay = 0, children }) {
+export function Card({ icon: Icon, kicker, title, body, delay = 0, visual: Visual, children }) {
   return (
-    <Reveal delay={delay} className="rounded-2xl p-5 sm:p-6 h-full"
+    <Reveal delay={delay} className="ft-lift rounded-2xl p-5 sm:p-6 h-full flex flex-col"
             style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+      {/* The drawing goes above the words, not below them. A card whose
+          picture is at the bottom is a card whose picture nobody sees. */}
+      {Visual && <Visual />}
       {(Icon || kicker) && (
         <div className="flex items-center gap-2.5 mb-2.5">
           {Icon && <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />}
@@ -114,17 +118,24 @@ export function Grid({ min = 300, children, className = '', ...rest }) {
 export function Closing({ title, children, cta, to, next }) {
   return (
     <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-      <Reveal className="ft-shine rounded-3xl px-6 py-12 sm:px-12 sm:py-14 text-center"
-              style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))',
-                       color: '#fff' }}>
-        <h2 className="ft-display mb-3"
-            style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>
+      {/* It was a flat blue rectangle. A slab that size is the last thing on
+          every page, so it is worth more than one colour: a drifting mesh
+          behind it, the mark's hairline along the top, and grain over the
+          whole thing to stop the gradient banding. */}
+      <Reveal className="ft-closing ft-shine relative overflow-hidden rounded-3xl
+                         px-6 py-14 sm:px-12 sm:py-16 text-center">
+        <span className="ft-closing-mesh" aria-hidden="true" />
+        <Grain opacity={0.05} />
+        <h2 className="relative ft-display mb-3" style={{ zIndex: 1 }}
+            style={{ fontSize: 'clamp(1.6rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
           {title}
         </h2>
-        <p className="mx-auto mb-7" style={{ fontSize: '1rem', lineHeight: 1.6, opacity: 0.92, maxWidth: 480 }}>
+        <p className="relative mx-auto mb-8"
+           style={{ zIndex: 1, fontSize: '1.02rem', lineHeight: 1.65, opacity: 0.94, maxWidth: 500 }}>
           {children}
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3"
+             style={{ zIndex: 1 }}>
           {cta}
           {next}
         </div>

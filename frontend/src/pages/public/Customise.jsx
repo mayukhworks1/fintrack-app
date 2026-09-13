@@ -12,7 +12,8 @@ import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import PermissionPlayground from '../../components/PermissionPlayground'
 import { Grain } from '../../components/LandingVisuals'
-import { PageHead, Card, Grid, Closing } from '../../components/PublicBits'
+import { PageHead, Card, Grid, Closing, Head } from '../../components/PublicBits'
+import { PermissionRows, OneBuildTwoHomes, ModuleSlotsIn } from '../../components/SceneDiagrams'
 import { SHAPE, APP_LD, crumbs, graph } from '../../content/publicContent'
 
 const LD = graph(APP_LD, crumbs([{ name: 'Made yours', path: '/customise' }]))
@@ -44,12 +45,27 @@ export default function Customise() {
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
-        <Grid className="mb-12">
+        <Head n="01" eyebrow="Three tiers"
+              title="Who does the work, and what it touches">
+          In the order a buyer meets them: what you change in the app without
+          telling anyone, what runs on infrastructure you own, and what gets
+          built because your business does something ours does not.
+        </Head>
+
+        <Grid className="mb-14">
           {SHAPE.map(({ icon, kicker, title, body }, i) => (
             <Card key={title} icon={icon} kicker={kicker} title={title} body={body}
+                  visual={[PermissionRows, OneBuildTwoHomes, ModuleSlotsIn][i]}
                   delay={Math.min(i, 3) * 70} />
           ))}
         </Grid>
+
+        <Head n="02" eyebrow="Try the first one"
+              title="A role carries defaults. One person can differ.">
+          This is the real shape of the permission model, small enough to fit in
+          a card. Pick somebody, change what they reach, and the line underneath
+          says what they would actually sign in to.
+        </Head>
 
         <PermissionPlayground />
 
