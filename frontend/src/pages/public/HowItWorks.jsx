@@ -7,8 +7,9 @@
  * the people who want it can be sent straight here, and the people who do not
  * are no longer scrolling past it to reach the price of admission.
  */
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Maximize2, X, Sparkles } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
@@ -22,6 +23,8 @@ import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent
 const LD = graph(APP_LD, crumbs([{ name: 'How it works', path: '/how-it-works' }]))
 
 export default function HowItWorks() {
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+
   usePageMeta({
     title: 'How FinTrack works — nothing to migrate, and every answer checkable',
     description:
@@ -96,6 +99,43 @@ export default function HowItWorks() {
           </div>
         </div>
 
+        {/* ── 3D Isometric Architecture Callout ──────────────────────────── */}
+        <Reveal className="mb-14">
+          <div className="relative rounded-3xl overflow-hidden p-6 sm:p-8 ft-glow-border bg-slate-950 text-white border border-slate-800 shadow-2xl">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div className="lg:w-1/2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 mb-3">
+                  <Sparkles size={12} />
+                  3D Single-Ledger Pipeline
+                </span>
+                <h3 className="ft-display text-xl sm:text-2xl text-white mb-2">
+                  Zero database drift by construction
+                </h3>
+                <p className="text-sm text-slate-300 leading-relaxed mb-4">
+                  Every query executed by the AI Analyst or the reporting engine touches the exact same Postgres mirror rows. Tax liabilities, TDS certificates, and milestone statuses remain cryptographically synchronized.
+                </p>
+                <button
+                  onClick={() => setLightboxOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition-all shadow-lg"
+                >
+                  <Maximize2 size={13} /> Inspect 3D Blueprint
+                </button>
+              </div>
+
+              <div
+                className="lg:w-1/2 w-full flex items-center justify-center cursor-pointer group"
+                onClick={() => setLightboxOpen(true)}
+              >
+                <img
+                  src="/media/pomelli_photoshoot-1.png"
+                  alt="3D Architecture Pipeline"
+                  className="max-h-[260px] w-full object-contain rounded-xl drop-shadow-2xl transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+            </div>
+          </div>
+        </Reveal>
+
         <hr className="ft-rule mb-14" />
         <Head n="02" eyebrow="One set of rows" title="Walk up the stack">
           Four layers, bottom to top, in the order the data actually moves.
@@ -103,6 +143,39 @@ export default function HowItWorks() {
         </Head>
         <StackStory />
       </section>
+
+      {lightboxOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
+              <span className="text-xs font-bold text-slate-200">
+                FinTrack Single-Ledger 3D Architecture Blueprint
+              </span>
+              <button
+                onClick={() => setLightboxOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex items-center justify-center">
+              <img
+                src="/media/pomelli_photoshoot-1.png"
+                alt="3D Architecture Pipeline"
+                className="max-h-[75vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <section id="trust" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <hr className="ft-rule mb-14" />

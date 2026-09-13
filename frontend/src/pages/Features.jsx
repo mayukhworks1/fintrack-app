@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import {
   Receipt, FolderKanban, BarChart3, FileSearch, Sparkles, Globe,
   Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck,
+  Play, Pause, Maximize2, Layers, X, Eye,
 } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
@@ -208,8 +209,26 @@ const DEMOS = {
   audit:   <div className="px-4 py-6"><GlyphAudit /></div>,
 }
 
+const FEATURE_MEDIA = {
+  receivables: { img: '/media/pomelli_photoshoot-1.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D Receivables & Tax Blueprint' },
+  projects:    { img: '/media/pomelli_photoshoot-2.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D Margin & Project Health Matrix' },
+  analytics:   { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Realtime Telemetry' },
+  tax:         { img: '/media/pomelli_photoshoot-1.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D GST & TDS Filing Pipeline' },
+  documents:   { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Document & Citation System' },
+  analyst:     { img: '/media/pomelli_photoshoot-2.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D SQL Transpiler Engine' },
+  reports:     { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Executive Briefing Output' },
+  pages:       { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Streamed Web Document' },
+  status:      { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Live Delivery Kanban' },
+  shared:      { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Sandboxed Share Portal' },
+  admin:       { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D RBAC & Session Telemetry' },
+}
+
 export default function Features() {
   const [active, setActive] = useState(0)
+  const [viewMode, setViewMode] = useState('demo') // 'demo' | 'isometric' | 'video'
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true)
+  const videoRef = useRef(null)
   const tabsRef = useRef([])
   usePageMeta({
     title: 'Features — FinTrack',
@@ -231,8 +250,20 @@ export default function Features() {
   }, [active])
 
   const f = FEATURES[active]
-  const panelTilt = useTilt({ max: 3 })
+  const media = FEATURE_MEDIA[f.id] || FEATURE_MEDIA.receivables
+  const panelTilt = useTilt({ max: 2.5 })
   const headRef = useReveal()
+
+  const toggleVideo = () => {
+    if (!videoRef.current) return
+    if (isVideoPlaying) {
+      videoRef.current.pause()
+      setIsVideoPlaying(false)
+    } else {
+      videoRef.current.play().catch(() => {})
+      setIsVideoPlaying(true)
+    }
+  }
 
   return (
     <PublicLayout>
@@ -276,7 +307,10 @@ export default function Features() {
                     aria-selected={on}
                     aria-controls={`panel-${item.id}`}
                     tabIndex={on ? 0 : -1}
-                    onClick={() => setActive(i)}
+                    onClick={() => {
+                      setActive(i)
+                      setViewMode('demo')
+                    }}
                     className="flex items-center gap-2.5 rounded-xl text-left shrink-0"
                     style={{
                       minHeight: 48, padding: '0 14px',
@@ -303,8 +337,6 @@ export default function Features() {
               role="tabpanel"
               id={`panel-${f.id}`}
               aria-labelledby={`tab-${f.id}`}
-              // Re-keyed on the active id so React remounts it and the entrance
-              // animation plays on every switch, not just the first.
               key={f.id}
               className="tilt tilt-sheen rounded-2xl p-5 sm:p-7"
               style={{
@@ -314,18 +346,107 @@ export default function Features() {
                 animation: 'ft-panel-in 460ms cubic-bezier(0.22,1,0.36,1) both',
               }}
             >
-              <h2 className="ft-display mb-3"
-                  style={{ fontSize: 'clamp(1.35rem, 3.1vw, 1.95rem)', lineHeight: 1.16 }}>
-                {f.headline}
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h2 className="ft-display"
+                    style={{ fontSize: 'clamp(1.35rem, 3.1vw, 1.95rem)', lineHeight: 1.16 }}>
+                  {f.headline}
+                </h2>
+
+                {/* Perspective Mode Switcher */}
+                <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+                     style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <button
+                    onClick={() => setViewMode('demo')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                    style={{
+                      background: viewMode === 'demo' ? 'var(--card-bg)' : 'transparent',
+                      color: viewMode === 'demo' ? 'var(--accent)' : 'var(--text-3)',
+                      boxShadow: viewMode === 'demo' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    Interactive Demo
+                  </button>
+                  <button
+                    onClick={() => setViewMode('isometric')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                    style={{
+                      background: viewMode === 'isometric' ? 'var(--card-bg)' : 'transparent',
+                      color: viewMode === 'isometric' ? 'var(--accent)' : 'var(--text-3)',
+                      boxShadow: viewMode === 'isometric' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    <Layers size={13} />
+                    3D View
+                  </button>
+                  {media.video && (
+                    <button
+                      onClick={() => setViewMode('video')}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                      style={{
+                        background: viewMode === 'video' ? 'var(--card-bg)' : 'transparent',
+                        color: viewMode === 'video' ? 'var(--accent)' : 'var(--text-3)',
+                        boxShadow: viewMode === 'video' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                      }}
+                    >
+                      <Play size={13} />
+                      Motion
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <p className="text-sm sm:text-[15px] leading-relaxed mb-5"
                  style={{ color: 'var(--text-2)' }}>
                 {f.body}
               </p>
 
-              <div className="rounded-xl overflow-hidden mb-5" aria-hidden="true"
+              {/* Dynamic Visual Stage */}
+              <div className="rounded-xl overflow-hidden mb-5 relative"
                    style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
-                {DEMOS[f.demo]}
+                {viewMode === 'demo' && (
+                  <div aria-hidden="true">
+                    {DEMOS[f.demo]}
+                  </div>
+                )}
+
+                {viewMode === 'isometric' && (
+                  <div className="relative p-4 sm:p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[300px]">
+                    <img
+                      src={media.img}
+                      alt={media.label}
+                      className="max-h-[360px] w-full object-contain rounded-lg drop-shadow-xl"
+                    />
+                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                      <button
+                        onClick={() => setLightboxOpen(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900/90 text-slate-200 border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
+                      >
+                        <Maximize2 size={12} /> Fullscreen
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'video' && (
+                  <div className="relative p-2 bg-slate-950 flex items-center justify-center min-h-[300px]">
+                    <video
+                      ref={videoRef}
+                      src={media.video}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="max-h-[360px] w-full object-contain rounded-lg shadow-xl"
+                    />
+                    <button
+                      onClick={toggleVideo}
+                      className="absolute bottom-4 right-4 flex items-center justify-center w-8 h-8 rounded-full bg-slate-900/90 text-white border border-slate-700 shadow-md backdrop-blur transition-all"
+                      aria-label="Toggle motion video"
+                    >
+                      {isVideoPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <ul className="grid gap-2 m-0 p-0" style={{
@@ -344,6 +465,38 @@ export default function Features() {
             </div>
           </div>
         </div>
+
+        {/* Lightbox Modal */}
+        {lightboxOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <div
+              className="relative max-w-5xl w-full max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
+                <span className="text-xs font-bold text-slate-200">{media.label}</span>
+                <button
+                  onClick={() => setLightboxOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-4 overflow-auto flex items-center justify-center">
+                <img
+                  src={media.img}
+                  alt={media.label}
+                  className="max-h-[75vh] object-contain rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
