@@ -22,6 +22,7 @@ import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
   Play, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
   KanbanSquare, Rows3, Radio, Mail, FileText, SlidersHorizontal,
+  Download, CheckSquare, Square,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
@@ -346,6 +347,9 @@ const COLUMNS = [
 
 function Receivables({ state, set, onOpen, searchRef }) {
   const { status, band, query, sort } = state
+  const [category, setCategory] = useState('all')
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [batchCopied, setBatchCopied] = useState(false)
 
   const onRowKeys = (e) => {
     const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
@@ -365,6 +369,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
   const rows = useMemo(() => {
     let r = INVOICES
     if (status !== 'all') r = r.filter(i => i.status === status)
+    if (category !== 'all') r = r.filter(i => i.category === category)
     if (band) r = r.filter(i => bandOf(i) === band)
     if (query.trim()) {
       const q = query.trim().toLowerCase()
@@ -377,7 +382,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
       if (y == null) return -1
       return (x > y ? 1 : x < y ? -1 : 0) * dir
     })
-  }, [status, band, query, sort])
+  }, [status, category, band, query, sort])
 
   // Recomputed from whatever survived the filters — the point being that the
   // total at the bottom is the rows above it, not a figure kept elsewhere.
@@ -385,6 +390,49 @@ function Receivables({ state, set, onOpen, searchRef }) {
 
   const toggleSort = (key) =>
     set({ sort: { key, dir: sort.key === key && sort.dir === 'desc' ? 'asc' : 'desc' } })
+
+  const toggleSelectRow = (e, id) => {
+    e.stopPropagation()
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedIds(next)
+  }
+
+  const selectAllRows = () => {
+    if (selectedIds.size === rows.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(rows.map(r => r.id)))
+  }
+
+  const exportLedgerCsv = (exportRows = rows) => {
+    const headers = ['Invoice ID', 'Client', 'Project', 'Category', 'Billed (pre-tax)', 'GST (18%)', 'TDS (10%)', 'Net Receivable', 'Due Date', 'Status']
+    const csvLines = [headers.join(',')]
+    exportRows.forEach(r => {
+      csvLines.push([
+        r.id,
+        `"${r.client}"`,
+        `"${r.project}"`,
+        r.category,
+        r.amount,
+        r.gst,
+        r.tds,
+        r.amount + r.gst - r.tds,
+        shortDate(r.dueOn),
+        r.status
+      ].join(','))
+    })
+    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `fintrack_sample_ledger_${status}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const selectedRowsList = rows.filter(r => selectedIds.has(r.id))
+  const selectedSum = selectedRowsList.reduce((t, r) => t + r.amount, 0)
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -394,7 +442,8 @@ function Receivables({ state, set, onOpen, searchRef }) {
         <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="var(--bad)" />
       </div>
 
-      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+      {/* ── Search & Status Filters ── */}
+      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
         <div className="relative flex-1" style={{ minWidth: 120 }}>
           <Search size={13} aria-hidden="true"
                   style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
@@ -406,17 +455,18 @@ function Receivables({ state, set, onOpen, searchRef }) {
             placeholder="Search clients, projects…"
             aria-label="Search the sample invoices"
             className="w-full rounded-lg"
-            style={{ height: 32, padding: '0 8px 0 26px', fontSize: 12,
+            style={{ height: 30, padding: '0 8px 0 26px', fontSize: 11.5,
                      background: 'var(--bg-input)', border: '1px solid var(--card-border)',
                      color: 'var(--text-1)' }}
           />
         </div>
+
         {['all', 'Overdue', 'Sent', 'Paid'].map(s => (
           <button key={s} onClick={() => set({ status: s })}
                   aria-pressed={status === s}
                   className="rounded-lg font-semibold shrink-0"
                   style={{
-                    height: 32, padding: '0 10px', fontSize: 11.5, cursor: 'pointer',
+                    height: 30, padding: '0 9px', fontSize: 11, cursor: 'pointer',
                     background: status === s ? 'var(--accent)' : 'var(--card-bg)',
                     border: `1px solid ${status === s ? 'var(--accent)' : 'var(--card-border)'}`,
                     color: status === s ? '#fff' : 'var(--text-2)',
@@ -424,12 +474,45 @@ function Receivables({ state, set, onOpen, searchRef }) {
             {s === 'all' ? 'All' : s}
           </button>
         ))}
+
+        <button
+          onClick={() => exportLedgerCsv(rows)}
+          title="Export current view to CSV"
+          className="flex items-center gap-1 rounded-lg px-2 shrink-0 font-semibold"
+          style={{
+            height: 30, fontSize: 11, cursor: 'pointer',
+            background: 'var(--bg-input)', border: '1px solid var(--card-border)',
+            color: 'var(--text-2)',
+          }}
+        >
+          <Download size={12} />
+          <span className="hidden sm:inline">CSV</span>
+        </button>
+      </div>
+
+      {/* ── Category Filter Pills ── */}
+      <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-0.5">
+        {['all', 'Design', 'Build', 'Retainer', 'Film', 'Editorial'].map(cat => (
+          <button
+            key={cat}
+            onClick={() => setCategory(cat)}
+            className="px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 transition-all"
+            style={{
+              background: category === cat ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${category === cat ? 'var(--accent)' : 'var(--card-border)'}`,
+              color: category === cat ? 'var(--accent)' : 'var(--text-3)',
+              cursor: 'pointer',
+            }}
+          >
+            {cat === 'all' ? 'All categories' : cat}
+          </button>
+        ))}
       </div>
 
       {band && (
         <button onClick={() => set({ band: null })}
                 className="self-start flex items-center gap-1.5 rounded-lg font-bold mb-2"
-                style={{ height: 28, padding: '0 9px', fontSize: 11, cursor: 'pointer',
+                style={{ height: 26, padding: '0 8px', fontSize: 10.5, cursor: 'pointer',
                          background: 'var(--accent-dim)', color: 'var(--accent)',
                          border: '1px solid var(--accent-soft)' }}>
           Ageing: {BANDS.find(b => b.id === band)?.label}
@@ -437,10 +520,26 @@ function Receivables({ state, set, onOpen, searchRef }) {
         </button>
       )}
 
-      <div className="rounded-xl overflow-hidden flex-1 min-h-0 flex flex-col"
+      {/* ── Main Table Frame ── */}
+      <div className="rounded-xl overflow-hidden flex-1 min-h-0 flex flex-col relative"
            style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+        
+        {/* Table Header */}
         <div className="flex items-center gap-2 px-3 shrink-0"
              style={{ height: 30, background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
+          <button
+            onClick={selectAllRows}
+            title={selectedIds.size === rows.length ? 'Deselect all' : 'Select all'}
+            className="p-0.5 rounded hover:text-[var(--accent)] transition-colors"
+            style={{ color: selectedIds.size > 0 ? 'var(--accent)' : 'var(--text-3)' }}
+          >
+            {selectedIds.size === rows.length && rows.length > 0 ? (
+              <CheckSquare size={13} />
+            ) : (
+              <Square size={13} />
+            )}
+          </button>
+
           {COLUMNS.map(c => (
             <button key={c.key} onClick={() => toggleSort(c.key)}
                     className={`flex items-center gap-1 font-bold uppercase tracking-[0.1em] ${c.hideSm ? 'hidden sm:flex' : 'flex'}`}
@@ -455,49 +554,116 @@ function Receivables({ state, set, onOpen, searchRef }) {
           <span style={{ flex: '0 0 58px' }} />
         </div>
 
-        {/* Rows are buttons, not divs with a click handler. That buys the
-            whole keyboard and screen-reader story for free: they are in the
-            tab order, Enter and Space activate them natively, and the arrow
-            keys below only have to move focus rather than maintain a
-            parallel notion of which row is selected. */}
+        {/* Table Body */}
         <div className="flex-1 overflow-y-auto" onKeyDown={onRowKeys}>
           {rows.length === 0 && (
             <p className="px-3 py-6 text-center" style={{ fontSize: 12, color: 'var(--text-3)' }}>
               Nothing matches those filters.
             </p>
           )}
-          {rows.map(r => (
-            <button
-              key={r.id}
-              data-row=""
-              onClick={() => onOpen(r.id)}
-              aria-label={`${r.id}, ${r.client}, ${inr(r.amount)}, ${r.status}. Open detail.`}
-              className="w-full flex items-center gap-2 px-3 text-left ft-row"
-              style={{ height: 34, borderBottom: '1px solid var(--card-border)',
-                       background: 'transparent', border: 0,
-                       borderBottomWidth: 1, borderBottomStyle: 'solid',
-                       borderBottomColor: 'var(--card-border)', cursor: 'pointer' }}
-            >
-              <span className="min-w-0" style={{ flex: '1 1 34%' }}>
-                <span className="block truncate font-semibold"
-                      style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{r.client}</span>
-                <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
-                  {r.id} · {r.project}
+          {rows.map(r => {
+            const isSelected = selectedIds.has(r.id)
+            return (
+              <button
+                key={r.id}
+                data-row=""
+                onClick={() => onOpen(r.id)}
+                aria-label={`${r.id}, ${r.client}, ${inr(r.amount)}, ${r.status}. Open detail.`}
+                className="w-full flex items-center gap-2 px-3 text-left ft-row group"
+                style={{
+                  height: 34,
+                  border: 0,
+                  borderBottomWidth: 1,
+                  borderBottomStyle: 'solid',
+                  borderBottomColor: 'var(--card-border)',
+                  background: isSelected ? 'var(--accent-dim)' : 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  onClick={(e) => toggleSelectRow(e, r.id)}
+                  className="p-0.5 rounded text-[var(--text-3)] group-hover:text-[var(--accent)] transition-colors"
+                  style={{ color: isSelected ? 'var(--accent)' : undefined }}
+                >
+                  {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
                 </span>
-              </span>
-              <span className="hidden sm:block tabular-nums"
-                    style={{ fontSize: 11, color: r.status === 'Overdue' ? 'var(--bad)' : 'var(--text-3)', flex: '0 0 64px' }}>
-                {shortDate(r.dueOn)}
-              </span>
-              <span className="tabular-nums font-bold text-right"
-                    style={{ fontSize: 11.5, color: 'var(--text-1)', flex: '0 0 92px' }}>
-                {inr(r.amount)}
-              </span>
-              <span style={{ flex: '0 0 58px', textAlign: 'right' }}><Badge status={r.status} /></span>
-            </button>
-          ))}
+
+                <span className="min-w-0" style={{ flex: '1 1 34%' }}>
+                  <span className="block truncate font-semibold"
+                        style={{ fontSize: 11.5, color: 'var(--text-1)' }}>{r.client}</span>
+                  <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                    {r.id} · {r.project} · <span className="opacity-80 font-medium">{r.category}</span>
+                  </span>
+                </span>
+                <span className="hidden sm:block tabular-nums"
+                      style={{ fontSize: 11, color: r.status === 'Overdue' ? 'var(--bad)' : 'var(--text-3)', flex: '0 0 64px' }}>
+                  {shortDate(r.dueOn)}
+                </span>
+                <span className="tabular-nums font-bold text-right"
+                      style={{ fontSize: 11.5, color: 'var(--text-1)', flex: '0 0 92px' }}>
+                  {inr(r.amount)}
+                </span>
+                <span style={{ flex: '0 0 58px', textAlign: 'right' }}><Badge status={r.status} /></span>
+              </button>
+            )
+          })}
         </div>
 
+        {/* ── Bulk Actions Floating Drawer ── */}
+        {selectedIds.size > 0 && (
+          <div
+            className="absolute bottom-8 left-3 right-3 rounded-xl p-2 flex items-center justify-between gap-2 shadow-2xl backdrop-blur-md"
+            style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--accent)',
+              boxShadow: '0 12px 32px -8px var(--accent-glow)',
+              animation: 'ft-pop-in 200ms cubic-bezier(0.22,1,0.36,1) both',
+              zIndex: 10,
+            }}
+          >
+            <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--text-1)' }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
+              <span>{selectedIds.size} selected ({inr(selectedSum)})</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  const clientNames = selectedRowsList.map(r => r.client).join(', ')
+                  navigator.clipboard?.writeText(`Batch Payment Reminders generated for: ${clientNames} (Total ₹${inr(selectedSum)})`)
+                  setBatchCopied(true)
+                  setTimeout(() => setBatchCopied(false), 2000)
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold"
+                style={{
+                  background: batchCopied ? 'var(--ok-dim)' : 'var(--accent)',
+                  color: batchCopied ? 'var(--ok)' : '#fff',
+                }}
+              >
+                {batchCopied ? <CheckIcon size={11} /> : <Mail size={11} />}
+                {batchCopied ? 'Copied' : 'AI Batch Follow-up'}
+              </button>
+
+              <button
+                onClick={() => exportLedgerCsv(selectedRowsList)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold border"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
+              >
+                <Download size={11} />
+                Export
+              </button>
+
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="p-1 text-[var(--text-3)] hover:text-[var(--text-1)]"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Table Footer Total */}
         <div className="flex items-center justify-between px-3 shrink-0"
              style={{ height: 30, background: 'var(--bg-input)', borderTop: '1px solid var(--card-border)' }}>
           <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
