@@ -318,3 +318,57 @@ export const QUESTIONS = [
   { q: 'Which projects have collected the most?',    measure: 'collected',   groupBy: 'project' },
   { q: 'How much GST by work category?',             measure: 'gst',         groupBy: 'category' },
 ]
+
+/* ── Delivery status ─────────────────────────────────────────────────────
+   The product is not only a finance tracker, and the public site had been
+   describing it as one. Every project also carries a delivery state, a short
+   status and a longer note — the same records the money side reads, which is
+   the whole point: the board and the receivables list are two views of one
+   project, not two systems somebody has to reconcile on a Friday.
+
+   Lanes are the picklist the real board uses. It is extendable in the
+   product, so this is a starting set rather than an enum. */
+export const LANES = ['Not started', 'In progress', 'Blocked', 'In review', 'Delivered']
+
+const STATUS_NOTES = {
+  p1: ['In review', 'Third round with the client',
+       'Identity system signed off; applying it across the templates. Waiting on their legal read of the usage terms before we ship the guidelines.'],
+  p2: ['In progress', 'August retainer running',
+       'Two of four deliverables out. Nothing blocking — next check-in Thursday.'],
+  p3: ['Blocked', 'Waiting on their API keys',
+       'Front end is done to the staging cut. Cannot integrate payments until their team issues sandbox credentials; chased twice this week.'],
+  p4: ['Delivered', 'Shipped and invoiced',
+       'Final artwork delivered to the printer. Invoice raised; nothing outstanding on our side.'],
+  p5: ['In progress', 'Copy with the editor',
+       'Data pulled and charts drafted. Editorial pass runs to the end of the month, design follows.'],
+  p6: ['In progress', 'Shooting next week',
+       'Scripts approved, crew booked, two locations confirmed. Third location still being negotiated.'],
+  p7: ['Delivered', 'Closed out',
+       'Audit delivered with the recommendations deck. Client has asked about a follow-on engagement.'],
+}
+
+export const DELIVERY = PROJECT_ROLLUP.map(p => {
+  const [lane, short, detail] = STATUS_NOTES[p.id]
+  const openRows = p.rows.filter(r => r.status !== 'Paid')
+  return {
+    id: p.id,
+    project: p.name,
+    client: p.client,
+    lane,
+    short,
+    detail,
+    // The join that matters: what this project is owed, on its own card.
+    outstanding: openRows.reduce((t, r) => t + r.amount, 0),
+    openCount: openRows.length,
+    margin: p.margin,
+    health: p.health,
+  }
+})
+
+/** The board, grouped the way the real one groups. */
+export const boardBy = (key) => {
+  const keys = key === 'lane' ? LANES : [...new Set(DELIVERY.map(d => d[key]))]
+  return keys
+    .map(name => ({ name, cards: DELIVERY.filter(d => d[key] === name) }))
+    .filter(col => col.cards.length > 0 || key === 'lane')
+}

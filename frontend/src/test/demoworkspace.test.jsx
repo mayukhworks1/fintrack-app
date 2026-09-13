@@ -15,8 +15,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
-import DemoWorkspace from '../components/DemoWorkspace'
-import { INVOICES, TOTALS, inr, GST_RATE, TDS_RATE } from '../components/demoData'
+import DemoWorkspace, { TABS } from '../components/DemoWorkspace'
+import { INVOICES, TOTALS, inr, inrShort, GST_RATE, TDS_RATE, DELIVERY, LANES } from '../components/demoData'
 
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', class {
@@ -97,11 +97,15 @@ describe('the sandbox', () => {
   })
 
   it('switches module on a number key', () => {
+    // Derived from TABS rather than hardcoded: adding a module shifts every
+    // digit after it, and a test that asserts "4 is analytics" then fails for
+    // a reason that has nothing to do with the keyboard.
     const { container } = render(<DemoWorkspace />)
-    fireEvent.keyDown(frame(container), { key: '4' })
-    expect(screen.getByText(/fintrack — analytics/)).toBeInTheDocument()
-    fireEvent.keyDown(frame(container), { key: '1' })
-    expect(screen.getByText(/fintrack — receivables/)).toBeInTheDocument()
+    TABS.forEach((tab, i) => {
+      fireEvent.keyDown(frame(container), { key: String(i + 1) })
+      expect(screen.getByText(new RegExp(`fintrack — ${tab.label.toLowerCase()}`)))
+        .toBeInTheDocument()
+    })
   })
 
   it('leaves the number keys alone while someone is typing', () => {
@@ -145,7 +149,7 @@ describe('the sandbox', () => {
     // Each panel renders only when selected, so a fault in one hides until
     // it is picked — exactly how the drawer's crash stayed hidden.
     const { container } = render(<DemoWorkspace />)
-    for (const label of ['Ageing', 'Projects', 'Analytics', 'AI analyst', 'Receivables']) {
+    for (const { label } of [...TABS].reverse()) {
       fireEvent.click(within(container.querySelector('.ft-tour-rail')).getByRole('button', { name: label }))
       expect(frame(container)).toBeInTheDocument()
     }
@@ -160,6 +164,41 @@ describe('the sandbox', () => {
     expect(screen.getByText(/fintrack — receivables/)).toBeInTheDocument()
     expect(screen.getByText(/Ageing: 61–90 days/)).toBeInTheDocument()
     expect(rows(container).length).toBeGreaterThan(0)
+  })
+
+  it('shows delivery state and what each project is owed, on one card', () => {
+    // The half of the product the public site used to leave out. The card
+    // carrying an outstanding figure is the join the page is claiming: one
+    // set of records, so the board knows the money without a reconciliation.
+    const { container } = render(<DemoWorkspace />)
+    const rail = within(container.querySelector('.ft-tour-rail'))
+    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+
+    for (const lane of LANES) expect(screen.getAllByText(lane).length).toBeGreaterThan(0)
+    const withMoney = DELIVERY.filter(d => d.outstanding > 0)
+    expect(withMoney.length).toBeGreaterThan(0)
+    for (const d of withMoney) {
+      expect(screen.getByText(inrShort(d.outstanding))).toBeInTheDocument()
+    }
+  })
+
+  it('opens a status note when a board card is clicked', () => {
+    const { container } = render(<DemoWorkspace />)
+    const rail = within(container.querySelector('.ft-tour-rail'))
+    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+    const card = DELIVERY[0]
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(card.project) }))
+    expect(screen.getByText(card.detail)).toBeInTheDocument()
+  })
+
+  it('regroups the board by client', () => {
+    const { container } = render(<DemoWorkspace />)
+    const rail = within(container.querySelector('.ft-tour-rail'))
+    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+    fireEvent.click(screen.getByRole('button', { name: /by client/i }))
+    for (const client of new Set(DELIVERY.map(d => d.client))) {
+      expect(screen.getAllByText(client).length).toBeGreaterThan(0)
+    }
   })
 
   it('never calls the API — it has no workspace to read', () => {

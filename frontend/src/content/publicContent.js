@@ -68,9 +68,9 @@ export const MODULES = [
   },
   {
     icon: Activity, span: 'span-3',
-    title: 'Status board',
-    body: 'A live view of where every client project stands, kept current by webhooks rather than by someone remembering to update a sheet.',
-    points: ['Board or list mode', 'Attachments and AI-drafted updates', 'Choose the columns, then share the view'],
+    title: 'Delivery & status',
+    body: 'Where every project actually stands — a kanban board or an operational list, grouped by client, project or state, updating live as anyone edits. Delivery sits on the same records as the money, so a card knows what its project is owed.',
+    points: ['Kanban board or operational list', 'Live over an event stream, app or table', 'Extendable status options, AI-drafted updates'],
   },
   {
     icon: Share2, span: 'span-3',
@@ -283,7 +283,7 @@ export const APP_LD = {
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
   description:
-    'Receivables, project profitability, GST and TDS tracking, analytics, document search and an AI analyst that shows the query behind every figure — for businesses that bill by project.',
+    'Delivery and the money for it, in one place. A live project status board, receivables with GST and TDS kept separate, project profitability, document search, and an AI analyst that shows the query behind every figure — for businesses that bill by project.',
   url: SITE + '/',
   featureList: MODULES.map(m => m.title),
 }

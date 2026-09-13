@@ -52,9 +52,9 @@ export default function Landing() {
   const heroLight = useTilt({ max: 0 })
 
   usePageMeta({
-    title: 'FinTrack — receivables, project profit and an AI analyst that shows its working',
+    title: 'FinTrack — project delivery and project finance on one set of records',
     description:
-      'Finance software for businesses that bill by project. Invoice ageing, collection rate, project margin, GST and TDS kept separate, and an AI analyst that prints the query behind every figure. Try the live sandbox — no account needed.',
+      'A live delivery board and the money for the same work, in one place. Kanban or list status per project, invoice ageing and collection rate, project margin, GST and TDS kept separate, and an AI analyst that prints the query behind every figure. Try the live sandbox — no account needed.',
     path: '/',
     jsonLd: LD,
   })
@@ -74,7 +74,7 @@ export default function Landing() {
             <span className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-4"
                   style={{ padding: '6px 12px', background: 'var(--accent-dim)', color: 'var(--accent)' }}>
               <Sparkles size={13} aria-hidden="true" />
-              Receivables, projects and an analyst that shows its working
+              Delivery, receivables and an analyst that shows its working
             </span>
 
             {/* Two lines, each rising out of its own mask on a stagger. A
@@ -83,19 +83,19 @@ export default function Landing() {
             <h1 className="ft-display mb-5"
                 style={{ fontSize: 'clamp(2.05rem, 6.2vw, 3.9rem)', lineHeight: 1.04,
                          letterSpacing: '-0.03em' }}>
-              <span className="ft-rise"><span>Finance software that</span></span>
+              <span className="ft-rise"><span>The delivery and the money,</span></span>
               <span className="ft-rise">
                 <span style={{ transitionDelay: '110ms', color: 'var(--accent)' }}>
-                  <em>shows its working</em>.
+                  <em>on one set of records</em>.
                 </span>
               </span>
             </h1>
 
             <p className="ft-lede mb-7">
-              Receivables, project profitability and GST for businesses that bill
-              by project — and an analyst that answers in plain words while
-              printing the query behind every figure. You never take a number on
-              faith.
+              A live board of where every project stands, and the receivables,
+              margin and GST for the same work — not two systems somebody
+              reconciles on a Friday. Ask it anything in plain words and it
+              prints the query behind the answer.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -153,10 +153,10 @@ export default function Landing() {
       {/* ── The problem ─────────────────────────────────────────────────── */}
       <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
         <Head n="01" eyebrow="Why this exists"
-              title="Three things go wrong with money on projects">
-          None of them are exotic. They are what happens when the ledger, the
-          project plan and the tax position live in different places and nobody
-          owns the reconciliation.
+              title="Three things go wrong when delivery and money live apart">
+          None of them are exotic. They are what happens when the board, the
+          ledger and the tax position live in different places and nobody owns
+          the reconciliation between them.
         </Head>
         <Grid min={280} className="mb-10">
           {PROBLEMS.map(({ icon, title, body }, i) => (

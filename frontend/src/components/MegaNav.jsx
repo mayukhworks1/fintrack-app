@@ -40,12 +40,12 @@ export const NAV = [
     items: [
       {
         to: '/', label: 'Overview',
-        blurb: 'What it does, and a working copy of it you can drive.',
+        blurb: 'Delivery and the money for it — and a working copy you can drive.',
         visual: 'bars',
       },
       {
         to: '/features', label: 'Features',
-        blurb: 'Eleven modules — receivables through to audit — one at a time.',
+        blurb: 'Eleven modules — delivery, receivables, tax, audit — one at a time.',
         visual: 'donut',
       },
       {

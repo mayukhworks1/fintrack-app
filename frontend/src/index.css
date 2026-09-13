@@ -3608,3 +3608,10 @@ html.dark .main-app-theme {
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(root) { animation-duration: 0.01ms !important }
 }
+
+/* Board cards lift under the pointer, the way a card you can pick up should. */
+.ft-card { transition: transform 200ms cubic-bezier(0.22,1,0.36,1), border-color 200ms ease; }
+.ft-card:hover { transform: translateY(-2px); border-color: var(--accent-soft) !important; }
+.ft-card:focus-visible { outline: none; border-color: var(--accent) !important;
+                         box-shadow: 0 0 0 2px var(--accent-glow); }
+@media (prefers-reduced-motion: reduce) { .ft-card:hover { transform: none } }

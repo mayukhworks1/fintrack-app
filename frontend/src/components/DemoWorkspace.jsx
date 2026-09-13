@@ -21,15 +21,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
   Play, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
+  KanbanSquare, Rows3, Radio,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
   ask, bandOf, monthly, inr, inrShort, shortDate, GST_RATE, TDS_RATE,
+  DELIVERY, LANES, boardBy,
 } from './demoData'
 
-const TABS = [
+export const TABS = [
   { id: 'receivables', label: 'Receivables', icon: Receipt },
   { id: 'ageing',      label: 'Ageing',      icon: Timer },
+  { id: 'delivery',    label: 'Delivery',    icon: KanbanSquare },
   { id: 'projects',    label: 'Projects',    icon: FolderKanban },
   { id: 'analytics',   label: 'Analytics',   icon: BarChart3 },
   { id: 'analyst',     label: 'AI analyst',  icon: Sparkles },
@@ -447,6 +450,134 @@ function Ageing({ state, set }) {
   )
 }
 
+/* ── Delivery ─────────────────────────────────────────────────────────────
+   The half of the product the public site had been leaving out.
+
+   This is not a finance tool with a projects column bolted on. Delivery state
+   lives on the same records the money does, which is why each card can carry
+   what that project is owed without anybody joining two systems together on a
+   Friday afternoon. In the product the board also updates live over an
+   event stream — including when somebody edits the underlying table directly
+   rather than through the app — and the lanes are a picklist you extend
+   rather than an enum somebody has to ship a release to change. */
+
+const LANE_TONE = {
+  'Not started': 'var(--text-3)',
+  'In progress': 'var(--accent)',
+  'Blocked':     'var(--bad)',
+  'In review':   'var(--warn)',
+  'Delivered':   'var(--ok)',
+}
+
+function Delivery({ state, set }) {
+  const { board, card } = state
+  const columns = useMemo(() => boardBy(board), [board])
+  const open = card ? DELIVERY.find(d => d.id === card) : null
+
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+        {[['lane', 'By status', KanbanSquare], ['client', 'By client', Rows3]].map(([k, label, Icon]) => (
+          <button key={k} onClick={() => set({ board: k, card: null })}
+                  aria-pressed={board === k}
+                  className="flex items-center gap-1.5 rounded-lg font-semibold"
+                  style={{ height: 30, padding: '0 10px', fontSize: 11.5, cursor: 'pointer',
+                           background: board === k ? 'var(--accent)' : 'var(--card-bg)',
+                           border: `1px solid ${board === k ? 'var(--accent)' : 'var(--card-border)'}`,
+                           color: board === k ? '#fff' : 'var(--text-2)' }}>
+            <Icon size={12} aria-hidden="true" /> {label}
+          </button>
+        ))}
+        <span className="ml-auto flex items-center gap-1.5 shrink-0"
+              style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+          <Radio size={11} aria-hidden="true" style={{ color: 'var(--ok)' }} />
+          live — updates when anyone edits, app or table
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-x-auto">
+        <div className="flex gap-2 h-full" style={{ minWidth: 'min-content' }}>
+          {columns.map(col => (
+            <div key={col.name} className="flex flex-col rounded-lg shrink-0"
+                 style={{ width: 168, background: 'var(--bg-input)',
+                          border: '1px solid var(--card-border)' }}>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
+                   style={{ borderBottom: '1px solid var(--card-border)' }}>
+                <span style={{ width: 6, height: 6, borderRadius: 99, flexShrink: 0,
+                               background: LANE_TONE[col.name] ?? 'var(--accent)' }} />
+                <span className="font-bold truncate" style={{ fontSize: 10.5, color: 'var(--text-1)' }}>
+                  {col.name}
+                </span>
+                <span className="ml-auto tabular-nums" style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                  {col.cards.length}
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
+                {col.cards.map(d => (
+                  <button key={d.id} onClick={() => set({ card: d.id })}
+                          aria-label={`${d.project} for ${d.client} — ${d.lane}. Open the status note.`}
+                          className="ft-card text-left rounded-lg p-2"
+                          style={{ background: 'var(--card-bg)', cursor: 'pointer',
+                                   border: `1px solid ${card === d.id ? 'var(--accent)' : 'var(--card-border)'}` }}>
+                    <span className="block font-bold truncate"
+                          style={{ fontSize: 11, color: 'var(--text-1)' }}>{d.project}</span>
+                    <span className="block truncate mb-1.5"
+                          style={{ fontSize: 9.5, color: 'var(--text-3)' }}>{d.client}</span>
+                    <span className="block truncate" style={{ fontSize: 9.5, color: 'var(--text-2)' }}>
+                      {d.short}
+                    </span>
+                    {d.outstanding > 0 && (
+                      /* The join. A delivery board that cannot tell you what
+                         the project is owed is half an answer. */
+                      <span className="flex items-center gap-1 mt-1.5 pt-1.5"
+                            style={{ borderTop: '1px solid var(--card-border)' }}>
+                        <span className="tabular-nums font-bold"
+                              style={{ fontSize: 9.5, color: 'var(--text-1)' }}>
+                          {inrShort(d.outstanding)}
+                        </span>
+                        <span style={{ fontSize: 9, color: 'var(--text-3)' }}>
+                          open · {d.openCount}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                ))}
+                {col.cards.length === 0 && (
+                  <span className="px-2 py-3 text-center" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                    nothing here
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-2.5 rounded-lg p-2.5 shrink-0"
+             style={{ background: 'var(--card-bg)', border: '1px solid var(--accent-soft)',
+                      animation: 'ft-slide-up 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-bold" style={{ fontSize: 11, color: 'var(--text-1)' }}>
+              {open.project}
+            </span>
+            <span className="rounded font-bold" style={{ fontSize: 8.5, padding: '1px 5px',
+                     color: LANE_TONE[open.lane], background: 'var(--bg-input)' }}>
+              {open.lane}
+            </span>
+            <button onClick={() => set({ card: null })} aria-label="Close the status note"
+                    className="ml-auto" style={{ background: 'none', border: 0, cursor: 'pointer',
+                                                 color: 'var(--text-3)' }}>
+              <X size={12} aria-hidden="true" />
+            </button>
+          </div>
+          <p style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-2)' }}>{open.detail}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Projects ────────────────────────────────────────────────────────── */
 
 function Projects({ state, set }) {
@@ -698,6 +829,7 @@ function Analyst({ state, set }) {
 
 const PANELS = {
   receivables: Receivables,
+  delivery: Delivery,
   ageing: Ageing,
   projects: Projects,
   analytics: Analytics,
@@ -709,6 +841,7 @@ const PANELS = {
 const CAPTION = {
   receivables: 'Filter, search and sort. The total at the bottom is whatever survived — it is the rows, not a number kept somewhere else.',
   ageing:      'Bands are predicates, not colours. Pick one and it opens the invoice list already filtered to it.',
+  delivery:    'Delivery state on the same records as the money — so a card can tell you what the project is owed without joining two systems together.',
   projects:    'Billed less cost, per project, with the invoices that produced it listed underneath.',
   analytics:   'Move the window and every figure moves with it. One period filter over one set of rows.',
   analyst:     'A question is a measure and a grouping. The model chooses those two; the code writes the SQL and runs it.',
@@ -725,6 +858,8 @@ export default function DemoWorkspace() {
     months: 6,
     question: 0,
     detail: null,
+    board: 'lane',
+    card: null,
   })
   // Autoplay stops for good at the first interaction. A demo that keeps
   // advancing under someone's cursor is actively hostile.
@@ -818,7 +953,7 @@ export default function DemoWorkspace() {
     setState({
       tab: 'receivables', status: 'all', band: null, query: '',
       sort: { key: 'amount', dir: 'desc' }, project: PROJECT_ROLLUP[0].id,
-      months: 6, question: 0, detail: null,
+      months: 6, question: 0, detail: null, board: 'lane', card: null,
     })
   }
 
