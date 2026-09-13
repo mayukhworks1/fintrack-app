@@ -18,6 +18,7 @@ import { useReveal } from '../hooks/useReveal'
 import PublicLayout from '../components/PublicLayout'
 import { Grain } from '../components/LandingVisuals'
 import { Head, Card, Grid } from '../components/PublicBits'
+import AuditTrailSandbox from '../components/AuditTrailSandbox'
 import { SECURITY } from '../content/publicContent'
 
 const ROLES = [
@@ -179,6 +180,14 @@ export default function Security() {
             ))}
           </Grid>
         </div>
+      </section>
+
+      {/* ── Tamper-Evident Audit & Session Sandbox ──────────────────────── */}
+      <section className="mx-auto px-4 sm:px-6 pb-14" style={{ maxWidth: 1120 }}>
+        <Head n="02" eyebrow="Tamper-proof trail" title="Every state change is cryptographically attributed">
+          Inspect how role overrides, invoice updates, and query executions produce verifiable SHA-256 event checksums, and test immediate server-side session termination across active devices.
+        </Head>
+        <AuditTrailSandbox />
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>

@@ -339,6 +339,29 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef }) {
 
 /* ── Receivables ─────────────────────────────────────────────────────── */
 
+const CURRENCY_RATES = {
+  INR: { label: '₹ INR', rate: 1.0, sym: '₹' },
+  USD: { label: '$ USD', rate: 0.012, sym: '$' },
+  EUR: { label: '€ EUR', rate: 0.011, sym: '€' },
+  GBP: { label: '£ GBP', rate: 0.0094, sym: '£' },
+}
+
+const fmtCurrency = (val, cur = 'INR') => {
+  const c = CURRENCY_RATES[cur] || CURRENCY_RATES.INR
+  if (cur === 'INR') return inr(val)
+  const converted = Math.round(val * c.rate)
+  return `${c.sym}${converted.toLocaleString('en-US')}`
+}
+
+const fmtCurrencyShort = (val, cur = 'INR') => {
+  const c = CURRENCY_RATES[cur] || CURRENCY_RATES.INR
+  if (cur === 'INR') return inrShort(val)
+  const converted = Math.round(val * c.rate)
+  if (Math.abs(converted) >= 1e6) return `${c.sym}${(converted / 1e6).toFixed(2)}M`
+  if (Math.abs(converted) >= 1e3) return `${c.sym}${Math.round(converted / 1e3)}K`
+  return `${c.sym}${converted.toLocaleString('en-US')}`
+}
+
 const COLUMNS = [
   { key: 'client', label: 'Client',  align: 'left',  grow: '1 1 34%' },
   { key: 'dueOn',  label: 'Due',     align: 'left',  grow: '0 0 64px', hideSm: true },
@@ -348,6 +371,7 @@ const COLUMNS = [
 function Receivables({ state, set, onOpen, searchRef }) {
   const { status, band, query, sort } = state
   const [category, setCategory] = useState('all')
+  const [currency, setCurrency] = useState('INR')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchCopied, setBatchCopied] = useState(false)
 
@@ -437,12 +461,12 @@ function Receivables({ state, set, onOpen, searchRef }) {
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="ft-kpis mb-2.5">
-        <Stat label="Outstanding" value={inrShort(TOTALS.outstanding)} />
-        <Stat label="Collected"   value={inrShort(TOTALS.collected)} tone="var(--ok)" />
-        <Stat label="Overdue"     value={inrShort(TOTALS.overdue)}   tone="var(--bad)" />
+        <Stat label="Outstanding" value={fmtCurrencyShort(TOTALS.outstanding, currency)} />
+        <Stat label="Collected"   value={fmtCurrencyShort(TOTALS.collected, currency)} tone="var(--ok)" />
+        <Stat label="Overdue"     value={fmtCurrencyShort(TOTALS.overdue, currency)}   tone="var(--bad)" />
       </div>
 
-      {/* ── Search & Status Filters ── */}
+      {/* ── Search & Status Filters & Currency Toggles ── */}
       <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
         <div className="relative flex-1" style={{ minWidth: 120 }}>
           <Search size={13} aria-hidden="true"
@@ -474,6 +498,25 @@ function Receivables({ state, set, onOpen, searchRef }) {
             {s === 'all' ? 'All' : s}
           </button>
         ))}
+
+        {/* Currency Switcher */}
+        <div className="flex items-center rounded-lg border p-0.5" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+          {Object.keys(CURRENCY_RATES).map(cKey => (
+            <button
+              key={cKey}
+              onClick={() => setCurrency(cKey)}
+              className="px-1.5 py-0.5 rounded text-[10px] font-bold transition-all"
+              style={{
+                background: currency === cKey ? 'var(--accent)' : 'transparent',
+                color: currency === cKey ? '#fff' : 'var(--text-3)',
+                cursor: 'pointer',
+              }}
+              title={`Switch display currency to ${CURRENCY_RATES[cKey].label}`}
+            >
+              {cKey}
+            </button>
+          ))}
+        </div>
 
         <button
           onClick={() => exportLedgerCsv(rows)}
@@ -601,7 +644,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
                 </span>
                 <span className="tabular-nums font-bold text-right"
                       style={{ fontSize: 11.5, color: 'var(--text-1)', flex: '0 0 92px' }}>
-                  {inr(r.amount)}
+                  {fmtCurrency(r.amount, currency)}
                 </span>
                 <span style={{ flex: '0 0 58px', textAlign: 'right' }}><Badge status={r.status} /></span>
               </button>
@@ -623,14 +666,14 @@ function Receivables({ state, set, onOpen, searchRef }) {
           >
             <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--text-1)' }}>
               <span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
-              <span>{selectedIds.size} selected ({inr(selectedSum)})</span>
+              <span>{selectedIds.size} selected ({fmtCurrency(selectedSum, currency)})</span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
                   const clientNames = selectedRowsList.map(r => r.client).join(', ')
-                  navigator.clipboard?.writeText(`Batch Payment Reminders generated for: ${clientNames} (Total ₹${inr(selectedSum)})`)
+                  navigator.clipboard?.writeText(`Batch Payment Reminders generated for: ${clientNames} (Total ${fmtCurrency(selectedSum, currency)})`)
                   setBatchCopied(true)
                   setTimeout(() => setBatchCopied(false), 2000)
                 }}
@@ -670,7 +713,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
             {rows.length} of {INVOICES.length} invoices
           </span>
           <span className="tabular-nums font-bold" style={{ fontSize: 11.5, color: 'var(--text-1)' }}>
-            {inr(shown)}
+            {fmtCurrency(shown, currency)}
           </span>
         </div>
       </div>

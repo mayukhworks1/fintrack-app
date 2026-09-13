@@ -14,6 +14,7 @@ import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
 import StackStory from '../../components/StackStory'
+import SyncPipelineSimulator from '../../components/SyncPipelineSimulator'
 import { Grain } from '../../components/LandingVisuals'
 import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
 import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
@@ -99,47 +100,9 @@ export default function HowItWorks() {
           </div>
         </div>
 
-        {/* ── 3D Isometric Architecture Callout ──────────────────────────── */}
+        {/* ── Realtime Ingest & Database Pipeline Simulator ─────────────── */}
         <Reveal className="mb-14">
-          <div className="relative rounded-3xl overflow-hidden p-6 sm:p-8 lg:p-10 border transition-all"
-               style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
-            <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
-              <div className="lg:w-7/12">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-3"
-                      style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                  <Sparkles size={12} />
-                  3D Single-Ledger Pipeline
-                </span>
-                <h3 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
-                  Zero database drift by construction
-                </h3>
-                <p className="text-sm leading-relaxed mb-6" style={{ color: 'var(--text-2)' }}>
-                  Every query executed by the AI Analyst or the reporting engine touches the exact same Postgres mirror rows. Tax liabilities, TDS certificates, and milestone statuses remain synchronized without manual reconciliation.
-                </p>
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
-                  style={{ background: 'var(--accent)', color: '#fff' }}
-                >
-                  <Maximize2 size={13} /> Inspect 3D Blueprint
-                </button>
-              </div>
-
-              <div
-                className="lg:w-5/12 w-full flex items-center justify-center cursor-pointer group"
-                onClick={() => setLightboxOpen(true)}
-              >
-                <div className="relative max-w-[260px] sm:max-w-[280px] rounded-2xl overflow-hidden shadow-xl border transition-transform duration-300 group-hover:scale-105"
-                     style={{ borderColor: 'var(--card-border)', background: 'var(--bg-base)' }}>
-                  <img
-                    src="/media/pomelli_photoshoot-1.png"
-                    alt="3D Architecture Pipeline"
-                    className="w-full h-auto object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <SyncPipelineSimulator />
         </Reveal>
 
         <hr className="ft-rule mb-14" />
