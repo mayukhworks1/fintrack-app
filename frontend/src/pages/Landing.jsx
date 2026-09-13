@@ -22,6 +22,7 @@ import DemoWorkspace from '../components/DemoWorkspace'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import { Grain, CountUp } from '../components/LandingVisuals'
+import Overstatement from '../components/Overstatement'
 import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
@@ -149,11 +150,16 @@ export default function Landing() {
           project plan and the tax position live in different places and nobody
           owns the reconciliation.
         </Head>
-        <Grid min={280}>
+        <Grid min={280} className="mb-10">
           {PROBLEMS.map(({ icon, title, body }, i) => (
             <Card key={title} icon={icon} title={title} body={body} delay={Math.min(i, 3) * 70} />
           ))}
         </Grid>
+
+        {/* The second of those three, at the reader's own numbers. Stated in
+            prose it lands as a technicality; with a figure they chose
+            themselves it lands as money. */}
+        <Overstatement />
       </section>
 
       {/* ── Modules, named and nothing more ──────────────────────────────

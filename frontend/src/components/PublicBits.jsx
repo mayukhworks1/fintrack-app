@@ -126,8 +126,8 @@ export function Closing({ title, children, cta, to, next }) {
                          px-6 py-14 sm:px-12 sm:py-16 text-center">
         <span className="ft-closing-mesh" aria-hidden="true" />
         <Grain opacity={0.05} />
-        <h2 className="relative ft-display mb-3" style={{ zIndex: 1 }}
-            style={{ fontSize: 'clamp(1.6rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
+        <h2 className="relative ft-display mb-3"
+            style={{ zIndex: 1, fontSize: 'clamp(1.6rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
           {title}
         </h2>
         <p className="relative mx-auto mb-8"

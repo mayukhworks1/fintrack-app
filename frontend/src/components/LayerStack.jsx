@@ -58,7 +58,7 @@ function frontPath(cx, cy, h) {
 
 /* Bottom to top, which is also the order the data moves in. Tints step
    monotonically lighter so the stack reads as ascending even in greyscale. */
-const LAYERS = [
+export const LAYERS = [
   {
     id: 'base',
     title: 'Your records',
@@ -87,6 +87,53 @@ const LAYERS = [
 
 const GAP = 74      // vertical distance between planes
 const THICK = 13    // slab thickness
+
+/**
+ * The stack on its own, with an optional layer singled out.
+ *
+ * `active` is an index or null. When set, that slab keeps its colour and lifts
+ * clear while the rest fall back and desaturate — which is what lets the
+ * scroll story point at one layer without redrawing the diagram.
+ */
+export function StackDrawing({ active = null, className = '' }) {
+  const height = GAP * (LAYERS.length - 1) + D * SKEW_X + THICK + 80
+  const originX = 16
+  const originY = 46
+  return (
+    <svg viewBox={`-16 0 ${W + D + 48} ${height}`} aria-hidden="true"
+         className={className}
+         style={{ width: '100%', maxWidth: 420, display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="ft-spine-2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#4ADE80" />
+          <stop offset="100%" stopColor="#4F86FF" />
+        </linearGradient>
+      </defs>
+      {[...LAYERS].reverse().map((layer, ri) => {
+        const i = LAYERS.length - 1 - ri
+        const y = originY + (LAYERS.length - 1 - i) * GAP
+        const on = active === null || active === i
+        const lift = active === i ? -10 : 0
+        return (
+          <g key={layer.id}
+             style={{ transform: `translateY(${lift}px)`,
+                      opacity: on ? 1 : 0.28,
+                      filter: on ? 'none' : 'saturate(0.25)',
+                      transition: 'transform 520ms cubic-bezier(0.22,1,0.36,1), opacity 420ms ease, filter 420ms ease' }}>
+            <path d={sidePath(originX, y, THICK)} fill={layer.side} />
+            <path d={frontPath(originX, y, THICK)} fill={layer.front} />
+            <path d={facePath(originX, y)} fill={layer.top} />
+            <path d={facePath(originX, y)} fill="none"
+                  stroke="rgba(255,255,255,0.22)" strokeWidth="0.8" />
+          </g>
+        )
+      })}
+      <line x1={originX - 9} y1={originY + THICK}
+            x2={originX - 9} y2={originY + THICK + GAP * (LAYERS.length - 1)}
+            stroke="url(#ft-spine-2)" strokeWidth="1.6" opacity="0.5" />
+    </svg>
+  )
+}
 
 export default function LayerStack() {
   const ref = useReveal({ threshold: 0.2 })

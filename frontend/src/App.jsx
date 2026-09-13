@@ -223,8 +223,14 @@ export default function App() {
     if (PublicPage) {
       return (
         <ErrorBoundary>
+          {/* Keyed on the path so React remounts on navigation and the
+              entrance animation plays. Without the key the six public pages
+              swap their contents in place and the site reads as six reloads
+              rather than one thing moving. */}
           <Suspense fallback={<RouteFallback />}>
-            <PublicPage />
+            <div key={location.pathname} className="ft-route">
+              <PublicPage />
+            </div>
           </Suspense>
           <VercelAnalytics />
         </ErrorBoundary>

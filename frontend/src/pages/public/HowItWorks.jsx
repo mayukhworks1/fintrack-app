@@ -12,7 +12,7 @@ import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
-import LayerStack from '../../components/LayerStack'
+import StackStory from '../../components/StackStory'
 import { Grain } from '../../components/LandingVisuals'
 import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
 import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
@@ -95,12 +95,17 @@ export default function HowItWorks() {
           </div>
         </div>
 
-        <LayerStack />
+        <hr className="ft-rule mb-14" />
+        <Head n="02" eyebrow="One set of rows" title="Walk up the stack">
+          Four layers, bottom to top, in the order the data actually moves.
+          Scroll the column and the drawing follows.
+        </Head>
+        <StackStory />
       </section>
 
       <section id="trust" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <hr className="ft-rule mb-14" />
-        <Head n="02" eyebrow="Why you can trust the answer"
+        <Head n="03" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
           Plenty of tools promise not to make things up. This is where the
           promise is replaced by a mechanism — you can see exactly where the
