@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Landmark, ArrowRight, ShieldCheck, Sparkles, RefreshCw, Layers, Play, Pause, Maximize2, X } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 export default function TaxFlowSimulator() {
   const [billed, setBilled] = useState(2500000) // ₹25 Lakhs
@@ -9,7 +10,6 @@ export default function TaxFlowSimulator() {
   const [tdsRate, setTdsRate] = useState(0.10)   // 10%
   const [clientType, setClientType] = useState('domestic_tech') // domestic_tech | contractor | sez_export
   const [activeMedia, setActiveMedia] = useState('flow') // 'flow' | 'blueprint' | 'motion'
-  const [lightboxOpen, setLightboxOpen] = useState(false)
   const cardTilt = useTilt({ max: 3 })
 
   const gstAmount = Math.round(billed * gstRate)
@@ -71,18 +71,6 @@ export default function TaxFlowSimulator() {
             }}
           >
             Interactive Flow
-          </button>
-          <button
-            onClick={() => setActiveMedia('blueprint')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Layers size={13} />
-            3D Ledger
           </button>
           <button
             onClick={() => setActiveMedia('motion')}
@@ -283,62 +271,9 @@ export default function TaxFlowSimulator() {
             </div>
           </div>
         </div>
-      ) : activeMedia === 'blueprint' ? (
-        <div className="relative rounded-2xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
-          <img
-            src="/media/pomelli_photoshoot-1.png"
-            alt="3D Single-Ledger Blueprint"
-            className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl"
-          />
-          <button
-            onClick={() => setLightboxOpen(true)}
-            className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900/90 text-white border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
-          >
-            <Maximize2 size={13} /> Inspect High-Res
-          </button>
-        </div>
       ) : (
         <div className="relative rounded-2xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
-          <video
-            src="/media/pomelli_photoshoot-5.mp4"
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl"
-          />
-        </div>
-      )}
-
-      {/* Lightbox Modal */}
-      {lightboxOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <div
-            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-              <span className="text-xs font-bold text-slate-200">Tax Ledger & Working Capital 3D Architecture</span>
-              <button
-                onClick={() => setLightboxOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 overflow-auto flex items-center justify-center">
-              <img
-                src="/media/pomelli_photoshoot-1.png"
-                alt="Tax Architecture"
-                className="max-h-[78vh] object-contain rounded-lg"
-              />
-            </div>
-          </div>
+          <LoopVideo src="/media/pomelli_photoshoot-5.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
         </div>
       )}
     </div>

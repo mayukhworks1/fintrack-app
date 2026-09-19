@@ -5,6 +5,7 @@ import {
   Fingerprint, Laptop, Smartphone, Monitor
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 const INITIAL_LOGS = [
   {
@@ -308,11 +309,7 @@ export default function AuditTrailSandbox() {
         </div>
       ) : (
         <div className="relative rounded-2xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
-          <img
-            src="/media/pomelli_photoshoot-4.png"
-            alt="3D Security and RBAC Architecture"
-            className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl"
-          />
+          <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl" />
           <button
             onClick={() => setLightboxOpen(true)}
             className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900/90 text-white border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
@@ -334,7 +331,7 @@ export default function AuditTrailSandbox() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-              <span className="text-xs font-bold text-slate-200">Security Architecture & Audit Verification 3D Blueprint</span>
+              <span className="text-xs font-bold text-slate-200">Security Architecture & Audit Verification Motion Loop</span>
               <button
                 onClick={() => setLightboxOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-white"
@@ -343,11 +340,7 @@ export default function AuditTrailSandbox() {
               </button>
             </div>
             <div className="p-4 overflow-auto flex items-center justify-center">
-              <img
-                src="/media/pomelli_photoshoot-4.png"
-                alt="Security Architecture Blueprint"
-                className="max-h-[78vh] object-contain rounded-lg"
-              />
+              <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[78vh] object-contain rounded-lg" />
             </div>
           </div>
         </div>

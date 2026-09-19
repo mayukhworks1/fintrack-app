@@ -33,6 +33,7 @@ import AgingPreview from '../components/AgingPreview'
 import TaxFlowSimulator from '../components/TaxFlowSimulator'
 import ContractCitationInspector from '../components/ContractCitationInspector'
 import RunwayStressTester from '../components/RunwayStressTester'
+import LoopVideo from '../components/LoopVideo'
 
 export const FEATURES = [
   {
@@ -213,23 +214,22 @@ const DEMOS = {
 }
 
 const FEATURE_MEDIA = {
-  receivables: { img: '/media/pomelli_photoshoot-1.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D Receivables & Tax Blueprint' },
-  projects:    { img: '/media/pomelli_photoshoot-2.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D Margin & Project Health Matrix' },
-  analytics:   { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Realtime Telemetry' },
-  tax:         { img: '/media/pomelli_photoshoot-1.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D GST & TDS Filing Pipeline' },
-  documents:   { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Document & Citation System' },
-  analyst:     { img: '/media/pomelli_photoshoot-2.png', video: '/media/pomelli_photoshoot-5.mp4', label: '3D SQL Transpiler Engine' },
-  reports:     { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Executive Briefing Output' },
-  pages:       { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Streamed Web Document' },
-  status:      { img: '/media/pomelli_photoshoot-3.png', video: '/media/pomelli_photoshoot-6.mp4', label: '3D Live Delivery Kanban' },
-  shared:      { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D Sandboxed Share Portal' },
-  admin:       { img: '/media/pomelli_photoshoot-4.png', video: '/media/pomelli_photoshoot-7.mp4', label: '3D RBAC & Session Telemetry' },
+  receivables: { video: '/media/pomelli_photoshoot-5.mp4', label: '3D Receivables & Tax Blueprint' },
+  projects:    { video: '/media/pomelli_photoshoot-5.mp4', label: '3D Margin & Project Health Matrix' },
+  analytics:   { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Realtime Telemetry' },
+  tax:         { video: '/media/pomelli_photoshoot-5.mp4', label: '3D GST & TDS Filing Pipeline' },
+  documents:   { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Document & Citation System' },
+  analyst:     { video: '/media/pomelli_photoshoot-5.mp4', label: '3D SQL Transpiler Engine' },
+  reports:     { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Executive Briefing Output' },
+  pages:       { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Streamed Web Document' },
+  status:      { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Live Delivery Kanban' },
+  shared:      { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Sandboxed Share Portal' },
+  admin:       { video: '/media/pomelli_photoshoot-7.mp4', label: '3D RBAC & Session Telemetry' },
 }
 
 export default function Features() {
   const [active, setActive] = useState(0)
   const [viewMode, setViewMode] = useState('demo') // 'demo' | 'isometric' | 'video'
-  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [isVideoPlaying, setIsVideoPlaying] = useState(true)
   const videoRef = useRef(null)
   const tabsRef = useRef([])
@@ -369,18 +369,6 @@ export default function Features() {
                   >
                     Interactive Demo
                   </button>
-                  <button
-                    onClick={() => setViewMode('isometric')}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
-                    style={{
-                      background: viewMode === 'isometric' ? 'var(--card-bg)' : 'transparent',
-                      color: viewMode === 'isometric' ? 'var(--accent)' : 'var(--text-3)',
-                      boxShadow: viewMode === 'isometric' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                    }}
-                  >
-                    <Layers size={13} />
-                    3D View
-                  </button>
                   {media.video && (
                     <button
                       onClick={() => setViewMode('video')}
@@ -412,50 +400,12 @@ export default function Features() {
                   </div>
                 )}
 
-                {viewMode === 'isometric' && (
-                  <div className="relative p-6 flex flex-col items-center justify-center min-h-[340px]"
-                       style={{ background: 'var(--bg-base)' }}>
-                    <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
-                         style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
-                      <img
-                        src={media.img}
-                        alt={media.label}
-                        className="w-full h-auto object-cover"
-                      />
-                    </div>
-                    <div className="absolute top-3 right-3 flex items-center gap-2">
-                      <button
-                        onClick={() => setLightboxOpen(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all hover:border-[var(--accent)]"
-                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
-                      >
-                        <Maximize2 size={12} /> Fullscreen
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {viewMode === 'video' && (
                   <div className="relative p-6 flex items-center justify-center min-h-[340px]"
                        style={{ background: 'var(--bg-base)' }}>
                     <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
                          style={{ borderColor: 'var(--card-border)' }}>
-                      <video
-                        ref={videoRef}
-                        src={media.video}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="w-full h-auto object-cover"
-                      />
-                      <button
-                        onClick={toggleVideo}
-                        className="absolute bottom-3 right-3 flex items-center justify-center w-8 h-8 rounded-full bg-black/70 text-white border border-white/20 shadow-md backdrop-blur transition-all"
-                        aria-label="Toggle motion video"
-                      >
-                        {isVideoPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-                      </button>
+                      <LoopVideo ref={videoRef} src={media.video} className="w-full h-auto object-cover" />
                     </div>
                   </div>
                 )}
@@ -477,38 +427,6 @@ export default function Features() {
             </div>
           </div>
         </div>
-
-        {/* Lightbox Modal */}
-        {lightboxOpen && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
-            onClick={() => setLightboxOpen(false)}
-          >
-            <div
-              className="relative max-w-5xl w-full max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-                <span className="text-xs font-bold text-slate-200">{media.label}</span>
-                <button
-                  onClick={() => setLightboxOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 overflow-auto flex items-center justify-center">
-                <img
-                  src={media.img}
-                  alt={media.label}
-                  className="max-h-[75vh] object-contain rounded-lg"
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Sparkles, Play, Pause, Maximize2, Layers,
+  Sparkles,
   Receipt, FolderKanban, ShieldCheck, Check, X,
   ArrowRight, Activity
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 const SHOWCASE_ITEMS = [
   {
@@ -14,7 +15,6 @@ const SHOWCASE_ITEMS = [
     icon: Receipt,
     title: 'Single-ledger architecture for delivery & tax compliance',
     desc: 'Binds milestone delivery status directly to GST, TDS, and invoice aging. Eliminates end-of-month reconciliation discrepancies between project managers and accounting.',
-    image: '/media/pomelli_photoshoot-1.png',
     video: '/media/pomelli_photoshoot-5.mp4',
     highlights: [
       'Automatic GST & TDS segregation at source',
@@ -31,7 +31,6 @@ const SHOWCASE_ITEMS = [
     icon: Sparkles,
     title: 'Natural language queries compiled into verifiable SQL',
     desc: 'Ask complex financial questions and get exact answers accompanied by the exact parameterized SQL statement. Zero hallucination by mathematical construction.',
-    image: '/media/pomelli_photoshoot-2.png',
     video: '/media/pomelli_photoshoot-5.mp4',
     highlights: [
       'AST-compiled parameterized Postgres queries',
@@ -48,7 +47,6 @@ const SHOWCASE_ITEMS = [
     icon: FolderKanban,
     title: 'Operations and cashflow unified on the same records',
     desc: 'Kanban status board updating via Server-Sent Events in real time. Project health, burn rate, and billing readiness visible to every stakeholder.',
-    image: '/media/pomelli_photoshoot-3.png',
     video: '/media/pomelli_photoshoot-6.mp4',
     highlights: [
       'Live SSE streaming — zero manual refresh',
@@ -65,7 +63,6 @@ const SHOWCASE_ITEMS = [
     icon: ShieldCheck,
     title: 'Cryptographic permissions & asynchronous audit trails',
     desc: 'Eight built-in roles with per-action overrides. Every API request and query is recorded asynchronously with IP, device, and timing telemetry.',
-    image: '/media/pomelli_photoshoot-4.png',
     video: '/media/pomelli_photoshoot-7.mp4',
     highlights: [
       'Granular 8-role matrix with custom overrides',
@@ -79,33 +76,23 @@ const SHOWCASE_ITEMS = [
 
 export default function ProductMediaShowcase() {
   const [activeIdx, setActiveIdx] = useState(0)
-  const [viewType, setViewType] = useState('image') // 'image' | 'video'
-  const [isPlaying, setIsPlaying] = useState(true)
-  const [lightboxOpen, setLightboxOpen] = useState(false)
+  // One view only: the loop. The still blueprint and the switcher between
+  // them are gone — a toggle whose two sides show the same subject is a
+  // decision handed to the reader for no reason, and on a phone the three
+  // controls broke onto their own rows.
   const videoRef = useRef(null)
   const frameTilt = useTilt({ max: 4 })
 
   const current = SHOWCASE_ITEMS[activeIdx]
 
+  // Switching tab restarts the loop from the top, so the new subject is not
+  // joined halfway through someone else's motion.
   useEffect(() => {
-    setViewType('image')
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0
-      videoRef.current.play().catch(() => {})
-      setIsPlaying(true)
-    }
+    const v = videoRef.current
+    if (!v) return
+    v.currentTime = 0
+    v.play().catch(() => {})
   }, [activeIdx])
-
-  const togglePlay = () => {
-    if (!videoRef.current) return
-    if (isPlaying) {
-      videoRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      videoRef.current.play().catch(() => {})
-      setIsPlaying(true)
-    }
-  }
 
   return (
     <div className="w-full">
@@ -178,7 +165,8 @@ export default function ProductMediaShowcase() {
                   <span className="font-extrabold text-base tracking-tight" style={{ color: 'var(--accent)' }}>{current.metric.value}</span>
                 </div>
                 <div className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                  Click the 3D preview on the right to inspect high-definition details.
+                  A rendered illustration, not a screenshot &mdash; its figures are
+                  artwork. The working numbers are in the sandbox above.
                 </div>
               </div>
             </div>
@@ -186,141 +174,23 @@ export default function ProductMediaShowcase() {
 
           {/* ── Right Column: Clean 3D Framed Device / Visualizer ─────── */}
           <div className="lg:col-span-6 flex flex-col items-center justify-center">
-            {/* View Switcher Controls */}
-            {/* flex-wrap, not nowrap: the segmented switcher plus the Fullscreen
-                button need 304px, and at a 320px viewport this row is 238px —
-                so the button ran 25px past the right edge and gave the whole
-                landing page a horizontal scrollbar. Wrapping costs a line on
-                the narrowest phones and nothing anywhere else. */}
-            <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
-              <div className="inline-flex p-1 rounded-xl"
-                   style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <button
-                  onClick={() => setViewType('image')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
-                  style={{
-                    background: viewType === 'image' ? 'var(--card-bg)' : 'transparent',
-                    color: viewType === 'image' ? 'var(--accent)' : 'var(--text-3)',
-                    boxShadow: viewType === 'image' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                  }}
-                >
-                  <Layers size={13} />
-                  3D Blueprint
-                </button>
-                <button
-                  onClick={() => setViewType('video')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
-                  style={{
-                    background: viewType === 'video' ? 'var(--card-bg)' : 'transparent',
-                    color: viewType === 'video' ? 'var(--accent)' : 'var(--text-3)',
-                    boxShadow: viewType === 'video' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                  }}
-                >
-                  <Play size={13} />
-                  Motion Loop
-                </button>
-              </div>
-
-              <button
-                onClick={() => setLightboxOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:border-[var(--accent)]"
-                style={{
-                  background: 'var(--bg-input)',
-                  border: '1px solid var(--card-border)',
-                  color: 'var(--text-2)',
-                }}
-              >
-                <Maximize2 size={13} />
-                <span className="hidden min-[360px]:inline">Fullscreen</span>
-              </button>
-            </div>
-
             {/* Framed Graphic Frame */}
             <div
               ref={frameTilt}
-              className="relative w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.01]"
+              className="relative w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden transition-transform duration-300"
               style={{
                 background: 'var(--bg-base)',
                 border: '1px solid var(--card-border)',
                 boxShadow: '0 20px 40px -15px rgba(0,0,0,0.1), 0 0 0 1px var(--card-border)',
                 aspectRatio: '768 / 1376',
               }}
-              onClick={() => viewType === 'image' && setLightboxOpen(true)}
             >
-              {viewType === 'image' ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <img
-                    src={current.image}
-                    alt={current.title}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
-                    <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/90 text-slate-900 shadow-md backdrop-blur">
-                      Click to inspect full resolution
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative w-full h-full bg-slate-950 flex items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    src={current.video}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); togglePlay() }}
-                    className="absolute bottom-4 right-4 flex items-center justify-center w-8 h-8 rounded-full bg-slate-900/90 text-white border border-slate-700 shadow-md backdrop-blur transition-all"
-                    aria-label="Toggle motion video"
-                  >
-                    {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-                  </button>
-                </div>
-              )}
+              <LoopVideo ref={videoRef} src={current.video} className="w-full h-full object-cover pointer-events-none select-none" />
             </div>
           </div>
 
         </div>
       </div>
-
-      {/* ── High-Res Lightbox Modal ─────────────────────────────────── */}
-      {lightboxOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <div
-            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-              <span className="text-xs font-bold text-slate-200">
-                {current.label} — 3D High-Fidelity Blueprint
-              </span>
-              <button
-                onClick={() => setLightboxOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white"
-                aria-label="Close lightbox"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 overflow-auto flex items-center justify-center bg-slate-950/40">
-              <img
-                src={current.image}
-                alt={current.title}
-                className="max-h-[80vh] w-auto object-contain rounded-lg shadow-2xl"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

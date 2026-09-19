@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import { inr, inrShort } from './demoData'
+import LoopVideo from './LoopVideo'
 
 export default function RoiCalculator() {
   // Sliders
@@ -268,11 +269,7 @@ export default function RoiCalculator() {
         </div>
       ) : (
         <div className="relative rounded-2xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
-          <img
-            src="/media/pomelli_photoshoot-3.png"
-            alt="3D Analytics and Runway Architecture"
-            className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl"
-          />
+          <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl" />
           <button
             onClick={() => setLightboxOpen(true)}
             className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900/90 text-white border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
@@ -303,11 +300,7 @@ export default function RoiCalculator() {
               </button>
             </div>
             <div className="p-4 overflow-auto flex items-center justify-center">
-              <img
-                src="/media/pomelli_photoshoot-3.png"
-                alt="Architecture Blueprint"
-                className="max-h-[78vh] object-contain rounded-lg"
-              />
+              <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[78vh] object-contain rounded-lg" />
             </div>
           </div>
         </div>

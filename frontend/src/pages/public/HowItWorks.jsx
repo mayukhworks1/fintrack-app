@@ -20,6 +20,7 @@ import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../c
 import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
 import ScrollLit from '../../components/ScrollLit'
 import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
+import LoopVideo from '../../components/LoopVideo'
 
 const LD = graph(APP_LD, crumbs([{ name: 'How it works', path: '/how-it-works' }]))
 
@@ -136,11 +137,7 @@ export default function HowItWorks() {
               </button>
             </div>
             <div className="p-4 overflow-auto flex items-center justify-center">
-              <img
-                src="/media/pomelli_photoshoot-1.png"
-                alt="3D Architecture Pipeline"
-                className="max-h-[75vh] object-contain rounded-lg"
-              />
+              <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[75vh] object-contain rounded-lg" />
             </div>
           </div>
         </div>
