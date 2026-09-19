@@ -27,6 +27,7 @@ import {
   GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
 } from '../components/Glyphs'
 import Overstatement from '../components/Overstatement'
+import ProductFilm from '../components/ProductFilm'
 import ProductMediaShowcase from '../components/ProductMediaShowcase'
 import RoiCalculator from '../components/RoiCalculator'
 import ScrollLit from '../components/ScrollLit'
@@ -137,6 +138,17 @@ export default function Landing() {
              style={{ maxWidth: 1120, zIndex: 1 }}>
           <Tilted><DemoWorkspace /></Tilted>
         </div>
+      </section>
+
+      {/* ── The film ────────────────────────────────────────────────────
+          Directly under the sandbox, because the two answer different
+          questions: the sandbox proves the thing works by letting you drive
+          it, and the film says what it is for in the time someone will
+          actually give a page they have just landed on. */}
+      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 940 }}>
+        <Reveal>
+          <ProductFilm />
+        </Reveal>
       </section>
 
       {/* ── Counts ──────────────────────────────────────────────────────
