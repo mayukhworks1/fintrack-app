@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <!-- Vendored: this project's CSP-equivalent sandbox has no CDN egress, and a
+         render that depends on a CDN is a render that breaks silently later. -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      /* The product's own faces. A launch video set in Inter while the product
+         is set in Outfit/Fraunces is a video about a different product. */
+      @font-face { font-family:'Outfit'; src:url('./assets/fonts/outfit-latin.woff2') format('woff2');
+                   font-weight:100 900; font-display:block; }
+      @font-face { font-family:'Outfit'; src:url('./assets/fonts/outfit-latin-ext.woff2') format('woff2');
+                   font-weight:100 900; font-display:block; unicode-range:U+0100-024F,U+20A0-20BF; }
+      @font-face { font-family:'Fraunces'; src:url('./assets/fonts/fraunces-latin.woff2') format('woff2');
+                   font-weight:300 700; font-display:block; }
+      @font-face { font-family:'Jost Wordmark'; src:url('./assets/fonts/jost-wordmark.woff2') format('woff2');
+                   font-weight:100 900; font-display:block; }
+
+      *{margin:0;padding:0;box-sizing:border-box}
+      html,body{width:1920px;height:1080px;overflow:hidden;background:#090a09}
+      #root{width:100%;height:100%;position:relative;
+            font-family:'Outfit',ui-sans-serif,system-ui,sans-serif;color:#f2f2ee}
+
+      .clip{position:absolute;inset:0;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;will-change:transform,opacity}
+
+      .eyebrow{font-size:26px;font-weight:600;letter-spacing:.34em;text-transform:uppercase;
+               color:#8a8f8a}
+      .figure{font-family:'Fraunces',Georgia,serif;font-weight:600;letter-spacing:-.03em;
+              font-variant-numeric:tabular-nums;line-height:1}
+      .lede{font-family:'Fraunces',Georgia,serif;font-weight:500;letter-spacing:-.022em;
+            line-height:1.1;text-align:center}
+      .sub{font-size:34px;font-weight:400;color:#a9aea9;letter-spacing:-.01em}
+      .wordmark{font-family:'Jost Wordmark','Outfit',sans-serif;font-weight:500;
+                letter-spacing:-.012em}
+
+      /* Product frames float as cards on the dark ground — the screenshots are
+         light, so they carry their own light and need no panel behind them. */
+      .shot{border-radius:20px;box-shadow:0 60px 140px rgba(0,0,0,.55);
+            outline:1px solid rgba(255,255,255,.09);outline-offset:-1px;display:block}
+      .caption{position:absolute;left:120px;bottom:96px;text-align:left}
+      .caption .k{font-size:25px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;
+                  color:#82a1ff}
+      .caption .v{font-family:'Fraunces',Georgia,serif;font-size:60px;font-weight:500;
+                  letter-spacing:-.02em;margin-top:14px;max-width:1180px;line-height:1.14}
+
+      .rule{height:3px;background:#5c84ff;border-radius:2px}
+      .badge{font-size:22px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;
+             color:#9aa09a;border:1px solid #2a2c2a;border-radius:999px;padding:11px 22px}
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.4"
+         data-width="1920" data-height="1080">
+
+      <!-- 1 · HOOK — the number, then the correction -->
+      <div class="clip" id="s1" data-start="0" data-duration="6.4" data-track-index="0">
+        <p class="eyebrow" id="s1-eyebrow">Outstanding this quarter</p>
+        <p class="figure" id="s1-num" style="font-size:210px;margin-top:34px">&#8377;0</p>
+        <div id="s1-fix" style="margin-top:56px;text-align:center;opacity:0">
+          <p class="lede" style="font-size:66px">
+            <span style="color:#f87171">&#8377;5,47,850</span> of that was deducted
+          </p>
+          <p class="lede" style="font-size:66px;margin-top:10px">before the client paid.</p>
+          <p class="sub" style="margin-top:30px">TDS. Nobody owes it to you &mdash; and most reports still count it.</p>
+        </div>
+      </div>
+
+      <!-- 2 · REVEAL -->
+      <div class="clip" id="s2" data-start="6.4" data-duration="3.6" data-track-index="0">
+        <p class="wordmark" id="s2-mark" style="font-size:132px">FinTrack</p>
+        <div class="rule" id="s2-rule" style="width:0;margin:34px 0 30px"></div>
+        <p class="lede" id="s2-line" style="font-size:56px;color:#d9dcd9">
+          The delivery and the money, on one set of records.
+        </p>
+      </div>
+
+      <!-- 3 · DELIVERY — the differentiator -->
+      <div class="clip" id="s3" data-start="10" data-duration="4" data-track-index="0">
+        <img class="shot" id="s3-img" src="./assets/shots/tab-2-delivery.png"
+             width="1160" style="margin-bottom:196px" alt="" />
+        <div class="caption" id="s3-cap">
+          <p class="k">Delivery</p>
+          <p class="v">A project&rsquo;s lane and what it is owed,<br/>because they are the same record.</p>
+        </div>
+      </div>
+
+      <!-- 4 · AGEING — the mechanism from the hook, in the product -->
+      <div class="clip" id="s4" data-start="14" data-duration="3.8" data-track-index="0">
+        <img class="shot" id="s4-img" src="./assets/shots/tab-1-ageing.png"
+             width="1160" style="margin-bottom:196px" alt="" />
+        <div class="caption" id="s4-cap">
+          <p class="k">Receivables</p>
+          <p class="v">TDS reported on its own,<br/>never inside outstanding.</p>
+        </div>
+      </div>
+
+      <!-- 5 · THE ANALYST — the trust claim, shown rather than asserted -->
+      <div class="clip" id="s5" data-start="17.8" data-duration="3.6" data-track-index="0">
+        <img class="shot" id="s5-img" src="./assets/shots/tab-5-ai-analyst.png"
+             width="1160" style="margin-bottom:196px" alt="" />
+        <div class="caption" id="s5-cap">
+          <p class="k">AI analyst</p>
+          <p class="v">Every answer arrives with the query<br/>that produced it.</p>
+        </div>
+      </div>
+
+      <!-- 6 · OUTRO -->
+      <div class="clip" id="s6" data-start="21.4" data-duration="3" data-track-index="0">
+        <p class="wordmark" id="s6-mark" style="font-size:118px">FinTrack</p>
+        <p class="lede" id="s6-line" style="font-size:52px;color:#d9dcd9;margin-top:28px">
+          Drive the real thing. No signup, no demo call.
+        </p>
+        <p class="badge" id="s6-badge" style="margin-top:40px">Sample data &middot; real interface</p>
+      </div>
+
+      <audio id="bgm" src="./assets/audio/music.mp3" data-start="0" data-duration="24.4"
+             data-volume="0.34"></audio>
+    </div>
+
+    <script>
+      /* Deterministic only: no Date.now, no Math.random, no fetch. Every value
+         below is a constant or derived from one. */
+      const INR = 3299500;                    // TOTALS.outstanding from the sandbox ledger
+      const fmtINR = (n) => {                 // Indian digit grouping, 2-2-3
+        const s = Math.round(n).toString();
+        if (s.length <= 3) return '₹' + s;
+        const tail = s.slice(-3), head = s.slice(0, -3);
+        return '₹' + head.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + tail;
+      };
+
+      const tl = gsap.timeline({ paused: true });
+
+      /* 1 — the count. Fast-in, then HOLD: the number must be readable for a
+         beat at its final value before the correction arrives. */
+      tl.fromTo('#s1-eyebrow', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .5 }, 0.15);
+      const counter = { v: 0 };
+      tl.to(counter, {
+        v: INR, duration: 1.5, ease: 'power2.out',
+        onUpdate: () => { document.getElementById('s1-num').textContent = fmtINR(counter.v); },
+      }, 0.5);
+      tl.fromTo('#s1-num', { opacity: 0, scale: .96 }, { opacity: 1, scale: 1, duration: .45 }, 0.5);
+      /* The correction lands at 2.6s — after the eye has settled on the total. */
+      tl.to('#s1-num', { scale: .78, y: -108, color: '#8a8f8a', duration: .7, ease: 'power3.inOut' }, 2.6);
+      tl.to('#s1-eyebrow', { opacity: .45, y: -108, duration: .7, ease: 'power3.inOut' }, 2.6);
+      tl.fromTo('#s1-fix', { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: .75, ease: 'power3.out' }, 2.95);
+      tl.to('#s1', { opacity: 0, duration: .45 }, 5.95);
+
+      /* 2 — reveal. The rule draws out from the wordmark; nothing bounces. */
+      tl.fromTo('#s2-mark', { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: .65, ease: 'power3.out' }, 6.55);
+      tl.fromTo('#s2-rule', { width: 0 }, { width: 300, duration: .7, ease: 'power3.inOut' }, 6.95);
+      tl.fromTo('#s2-line', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: .6, ease: 'power3.out' }, 7.25);
+      tl.to('#s2', { opacity: 0, duration: .4 }, 9.6);
+
+      /* 3-5 — product frames. One shape, three times: the shot rises and settles,
+         the caption follows a beat later so the eye reads image then words. */
+      [['#s3', 10], ['#s4', 14], ['#s5', 17.8]].forEach(([id, t]) => {
+        tl.fromTo(id + '-img', { opacity: 0, y: 54, scale: .975 },
+                  { opacity: 1, y: 0, scale: 1, duration: .8, ease: 'power3.out' }, t + .1);
+        tl.fromTo(id + '-cap', { opacity: 0, x: -26 },
+                  { opacity: 1, x: 0, duration: .55, ease: 'power3.out' }, t + .45);
+      });
+      tl.to('#s3', { opacity: 0, duration: .35 }, 13.65);
+      tl.to('#s4', { opacity: 0, duration: .35 }, 17.45);
+
+      /* 6 — outro. The claim that is actually unusual: the sandbox on the site
+         is the product, driveable, with invented numbers in it. */
+      tl.to('#s5', { opacity: 0, duration: .4 }, 21.0);
+      tl.fromTo('#s6-mark', { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: .6, ease: 'power3.out' }, 21.5);
+      tl.fromTo('#s6-line', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .55, ease: 'power3.out' }, 21.85);
+      tl.fromTo('#s6-badge', { opacity: 0 }, { opacity: 1, duration: .5 }, 22.25);
+      /* Music out under the last card rather than a sting on the logo. */
+      tl.to('#bgm', { duration: 1.4 }, 23.0);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines['main'] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

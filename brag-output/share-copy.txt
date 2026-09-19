@@ -1,0 +1,31 @@
+--- X / Twitter ---
+Most receivables reports count TDS as money you're owed.
+It was deducted before the client ever paid.
+
+FinTrack keeps delivery and the money on one set of records — and shows you
+the query behind every figure.
+
+Drive it yourself. No signup: [link]
+
+--- LinkedIn ---
+A small accounting detail that quietly breaks project finance in India:
+
+TDS is deducted by the client *before* they pay you. Most receivables
+reports still leave it sitting in the outstanding column — so the number you
+chase every month is larger than the number anyone actually owes you.
+
+In our sample ledger that's ₹5,47,850 of ₹32,99,500. Sixteen percent of a
+collections list, chasing money that was never coming.
+
+FinTrack was built around that. Project delivery and the money for it on one
+set of records — a live status board sitting on the same rows as the
+invoices, GST and TDS reported separately, and an AI analyst that prints the
+compiled SQL next to every answer, because on money an answer you can't check
+isn't a faster answer.
+
+There's a working sandbox on the site. Real interface, invented numbers, no
+signup and no demo call: [link]
+
+--- Short / Discord / WhatsApp ---
+Built a finance tool that refuses to count TDS as money you're owed, and
+shows you the SQL behind every number. Driveable on the site, no signup: [link]

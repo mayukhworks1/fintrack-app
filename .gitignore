@@ -31,3 +31,21 @@ Thumbs.db
 memory.md
 improvement.md
 memory_history/
+
+# /brag working files. The deliverables (brag.mp4, poster, plan, share copy)
+# and the composition source are kept; everything below is either
+# re-installable, re-derivable, or third-party media we should not
+# redistribute raw.
+brag-output/composition/node_modules/
+brag-output/composition/renders/
+brag-output/composition/snapshots/
+brag-output/composition/vendor/
+brag-output/composition/package-lock.json
+# Bundled with the /brag skill under its own terms (music: ende.app,
+# SFX: Kenney). Licensed for use *in* the video, which is where it is —
+# encoded into brag.mp4 — not for redistribution as source files.
+brag-output/composition/assets/audio/
+# Copies of frontend/public/fonts — one source of truth for the faces.
+brag-output/composition/assets/fonts/
+# Site capture scratch; re-runnable with `hyperframes capture`.
+brag-output/capture/
