@@ -187,7 +187,12 @@ export default function ProductMediaShowcase() {
           {/* ── Right Column: Clean 3D Framed Device / Visualizer ─────── */}
           <div className="lg:col-span-6 flex flex-col items-center justify-center">
             {/* View Switcher Controls */}
-            <div className="w-full flex items-center justify-between gap-2 mb-3 px-1">
+            {/* flex-wrap, not nowrap: the segmented switcher plus the Fullscreen
+                button need 304px, and at a 320px viewport this row is 238px —
+                so the button ran 25px past the right edge and gave the whole
+                landing page a horizontal scrollbar. Wrapping costs a line on
+                the narrowest phones and nothing anywhere else. */}
+            <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
               <div className="inline-flex p-1 rounded-xl"
                    style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
                 <button
@@ -226,7 +231,7 @@ export default function ProductMediaShowcase() {
                 }}
               >
                 <Maximize2 size={13} />
-                <span>Fullscreen</span>
+                <span className="hidden min-[360px]:inline">Fullscreen</span>
               </button>
             </div>
 

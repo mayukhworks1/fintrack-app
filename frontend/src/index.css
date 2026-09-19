@@ -2864,12 +2864,88 @@ html.dark .web-invoices-shell {
    one place it is most expensive. */
 .ft-tour-stage {
   position: relative;
-  aspect-ratio: 4 / 3;
+  /* A DEFINITE height, not a ratio and not a floor.
+     The scenes are already built to scroll: the list is `flex-1 min-h-0
+     overflow-y-auto` inside a scene that is `h-full`. That only works when
+     this box has a height to resolve against. aspect-ratio gave it one, but
+     derived it from width — on a 304px-wide phone that is 228px, less than
+     the KPIs, filters and category row need before a single invoice row, so
+     the surplus overflowed into overflow:hidden and could not be scrolled to.
+     A min-height instead leaves the height auto, which makes `h-full` auto
+     too, so the list stops constraining and stretches the page to 1186px.
+     clamp() with a vh term is definite at every width: the window keeps a
+     sane size, and the list scrolls inside it the way it was designed to. */
+  height: clamp(24rem, 70vh, 32rem);
   padding: 12px;
   overflow: hidden;
 }
-@media (min-width: 560px) { .ft-tour-stage { aspect-ratio: 16 / 10; padding: 16px; } }
-@media (min-width: 900px) { .ft-tour-stage { aspect-ratio: 16 / 9; } }
+@media (min-width: 560px) { .ft-tour-stage { height: clamp(26rem, 62vh, 34rem); padding: 16px; } }
+@media (min-width: 900px) { .ft-tour-stage { height: clamp(28rem, 66vh, 38rem); } }
+
+/* The sandbox toolbar.
+
+   Measured at 390px, where the stage is 280px wide: the status group needs
+   ~200px, the currency switcher ~145px and the export button ~34px. Those
+   cannot share a row, and the original single flex-wrap line let each group
+   break wherever it landed — the four status buttons split across two rows
+   and the export button ended up alone on a third.
+
+   So: search and the two small controls on row one, the status group whole
+   on row two, categories on row three. Three rows, each one a complete
+   group, nothing orphaned and nothing sliced at a scroll edge. The currency
+   switcher is tightened on a phone to make row one add up (110 + 34 + the
+   search's 120 minimum + gaps = 276, inside 280). */
+.ft-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.ft-tools-search { grid-column: 1; grid-row: 1; }
+.ft-tools-aux { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; }
+/* Whole width on its own row, so all four filters fit without a scroll edge
+   cutting a word. Rows are stated rather than left to auto-placement: a
+   full-width item after a half-width one pushes anything that follows onto a
+   third row, which left the currency switcher stranded beside an empty cell. */
+.ft-tools-status { grid-column: 1 / -1; grid-row: 2; display: flex; gap: 4px; min-width: 0; }
+
+@media (max-width: 559px) {
+  .ft-tools-aux button { padding: 2px 5px !important; font-size: 9.5px !important; }
+}
+
+/* Under 360px the sums stop working: the stage is ~210px, the currency
+   switcher and export take ~150 of it, and the search is left with 54px —
+   a box that shows "Se". Below that width every group gets its own row. */
+@media (max-width: 359px) {
+  .ft-tools-search { grid-column: 1 / -1; grid-row: 1; }
+  .ft-tools-status { grid-column: 1 / -1; grid-row: 2; }
+  .ft-tools-aux    { grid-column: 1 / -1; grid-row: 3; justify-self: end; }
+}
+
+@media (min-width: 560px) {
+  .ft-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ft-tools-search { flex: 1 1 140px; min-width: 120px; }
+}
+
+
+/* Invoice rows on a very narrow phone.
+   The row's fixed cells — checkbox 17, amount 92, badge 58, four 8px gaps and
+   24 of padding — come to 223px. At 320px the stage is 210px wide, so the one
+   flexible cell, the client name, was squeezed to nothing: rows showed an
+   amount and a status and no indication of who owed it.
+   Bulk-select is a pointer affordance that has no gesture on a phone, so it
+   stands down here and gives its width back to the name. */
+@media (max-width: 399px) {
+  .ft-row { gap: 6px !important; padding-left: 9px !important; padding-right: 9px !important; }
+  .ft-row > span:first-child,
+  /* Select-all goes with them, or the header's labels sit indented from the
+     rows they label. */
+  .ft-rowhead > button:first-child { display: none; }
+  .ft-rowhead { gap: 6px !important; padding-left: 9px !important; padding-right: 9px !important; }
+  .ft-row > span:nth-child(2) { min-width: 56px; }
+  .ft-row > span:nth-last-child(2) { flex: 0 0 auto !important; font-size: 10.5px !important; }
+  .ft-row > span:last-child { flex: 0 0 auto !important; }
+}
 
 @keyframes ft-scene-in {
   from { opacity: 0; transform: translateY(8px) scale(0.995) }

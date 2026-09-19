@@ -467,8 +467,13 @@ function Receivables({ state, set, onOpen, searchRef }) {
       </div>
 
       {/* ── Search & Status Filters & Currency Toggles ── */}
-      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-        <div className="relative flex-1" style={{ minWidth: 120 }}>
+      {/* Deliberate rows rather than one wrapping flex line. A search box,
+          four status filters, a four-way currency switcher and an export
+          button sharing one wrap context broke into four ragged rows on a
+          phone — the export button orphaned on a row of its own, and four
+          rows of chrome standing between the reader and the first invoice. */}
+      <div className="ft-tools mb-1.5">
+        <div className="ft-tools-search relative">
           <Search size={13} aria-hidden="true"
                   style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
                            color: 'var(--text-3)' }} />
@@ -485,6 +490,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
           />
         </div>
 
+        <div className="ft-tools-status">
         {['all', 'Overdue', 'Sent', 'Paid'].map(s => (
           <button key={s} onClick={() => set({ status: s })}
                   aria-pressed={status === s}
@@ -498,7 +504,9 @@ function Receivables({ state, set, onOpen, searchRef }) {
             {s === 'all' ? 'All' : s}
           </button>
         ))}
+        </div>
 
+        <div className="ft-tools-aux">
         {/* Currency Switcher */}
         <div className="flex items-center rounded-lg border p-0.5" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
           {Object.keys(CURRENCY_RATES).map(cKey => (
@@ -531,6 +539,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
           <Download size={12} />
           <span className="hidden sm:inline">CSV</span>
         </button>
+        </div>
       </div>
 
       {/* ── Category Filter Pills ── */}
@@ -568,7 +577,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
            style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
         
         {/* Table Header */}
-        <div className="flex items-center gap-2 px-3 shrink-0"
+        <div className="ft-rowhead flex items-center gap-2 px-3 shrink-0"
              style={{ height: 30, background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
           <button
             onClick={selectAllRows}
