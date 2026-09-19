@@ -39,7 +39,7 @@ import { useReveal } from '../hooks/useReveal'
 function G({ children, vb = '0 0 120 64' }) {
   const ref = useReveal({ threshold: 0.1 })
   return (
-    <svg ref={ref} className="ft-reveal w-full" viewBox={vb} aria-hidden="true"
+    <svg ref={ref} className="ft-reveal ft-glyph w-full" viewBox={vb} aria-hidden="true"
          style={{ display: 'block', maxHeight: '100%' }}>
       {children}
     </svg>
