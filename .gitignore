@@ -49,3 +49,13 @@ brag-output/composition/assets/audio/
 brag-output/composition/assets/fonts/
 # Site capture scratch; re-runnable with `hyperframes capture`.
 brag-output/capture/
+brag-output/vertical/node_modules/
+brag-output/vertical/renders/
+brag-output/vertical/snapshots/
+brag-output/vertical/vendor/
+brag-output/vertical/assets/audio/
+brag-output/vertical/assets/fonts/
+brag-output/vertical/package-lock.json
+brag-output/composition/assets/mobile/
+brag-output/vertical/sheet.png
+brag-output/vertical/assets/shots/
