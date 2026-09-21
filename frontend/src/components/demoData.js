@@ -372,3 +372,62 @@ export const boardBy = (key) => {
     .map(name => ({ name, cards: DELIVERY.filter(d => d[key] === name) }))
     .filter(col => col.cards.length > 0 || key === 'lane')
 }
+
+/* ── Enriched Institutional Modules Mock Data ──────────────────────────── */
+
+export const TAX_SUMMARY = {
+  taxableValue: 1519400,
+  gstCollected: 273492,
+  tdsCollected: 151940,
+  grossInvoiced: 1792892,
+  netReceivable: 1640952,
+  openInvoices: 0,
+  gstRateAvg: '18% avg',
+  tdsRateAvg: '10% avg',
+  cgst: 136746,
+  sgst: 136746,
+}
+
+export const TAX_CLIENTS = [
+  { client: 'Birla Open Minds', invoices: 4, taxable: 879400, gst: 158292, tds: 87940, gross: 1037692, share: '58%' },
+  { client: 'Innovine', invoices: 5, taxable: 640000, gst: 115200, tds: 64000, gross: 755200, share: '42%' },
+]
+
+export const PAGES_MOCK = [
+  { id: 'p-1', title: 'test', url: '/p/test', type: 'Html', status: 'Live', views: 4, created: '24 Aug 2026' },
+  { id: 'p-2', title: 'Zoho landing page', url: '/p/landing-page-zoho', type: 'Html', status: 'Live', views: 1, created: '31 Jul 2026' },
+  { id: 'p-3', title: 'People Manual', url: '/p/people-manual', type: 'Html', status: 'Live', views: 186, created: '9 Jul 2026' },
+]
+
+export const AI_CHAT_PRESETS = [
+  {
+    q: 'What are current outstanding ?',
+    a: 'Outstanding invoices total ₹5,86,656. The sole pending invoice is WM/26-27/009 (PMS) for ₹2,33,280. All other invoices are paid or cancelled.',
+    tag: 'Portfolio Q&A',
+    model: 'nemotron-3-super-120b-a12b',
+    confidence: 'Verified medium',
+  },
+  {
+    q: 'Check project margins for Birla Open Minds',
+    a: 'Birla Open Minds active engagements carry an aggregate margin of 46.3% across ₹33,47,400 billed. PMS stands at 43.5% margin (₹9.18L profit) and Innovine leads at 52.1% margin (₹5.64L profit).',
+    tag: 'Margin Analysis',
+    model: 'deterministic-sql-transpiler',
+    confidence: 'Exact 100%',
+  },
+  {
+    q: 'Summarize GST liabilities for Q2',
+    a: 'Q2 taxable turnover is ₹15,19,400 with ₹2,73,492 in gross GST collected (CGST ₹1,36,746 + SGST ₹1,36,746). All 9 tax invoices are cleared with zero statutory escrow deficit.',
+    tag: 'Tax Compliance',
+    model: 'tax-ledger-ast',
+    confidence: 'Reconciled',
+  },
+]
+
+export const REPORT_TEMPLATES = [
+  { id: 'board', title: 'Board Pack', blurb: 'Full executive pack across revenue, risk, and delivery.' },
+  { id: 'founder', title: 'Founder Weekly', blurb: 'Cash, pressure points, and leadership-ready weekly summary.' },
+  { id: 'collections', title: 'Collections', blurb: 'Pending invoices, aging pressure, and receivables follow-up.' },
+  { id: 'health', title: 'Project Health', blurb: 'Margin pressure, delivery health, and projects needing review.' },
+  { id: 'billing', title: 'Client Billing', blurb: 'Top billed clients and portfolio concentration.' },
+]
+
