@@ -12,7 +12,7 @@
  */
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Search, X, Sparkles, Filter } from 'lucide-react'
+import { ArrowRight, Search, X, Filter } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import { Grain } from '../../components/LandingVisuals'
@@ -62,8 +62,6 @@ export default function Faq() {
   return (
     <PublicLayout>
       <section className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
-        <div className="ft-dotgrid" aria-hidden="true" />
         <Grain />
         <PageHead eyebrow="Questions" lines={['Answers,', <em key="e">at length</em>]}>
           The ones people actually ask before they buy — including the two most
@@ -113,7 +111,7 @@ export default function Faq() {
           {/* Prompt chips */}
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1">
-              <Sparkles size={11} className="text-[var(--accent)]" /> Quick lookups:
+              <Filter size={11} className="text-[var(--accent)]" /> Topic filters:
             </span>
             {QUICK_PROMPTS.map(p => (
               <button

@@ -31,8 +31,6 @@ export default function Customise() {
   return (
     <PublicLayout>
       <section className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
-        <div className="ft-dotgrid" aria-hidden="true" />
         <Grain />
         <PageHead eyebrow="Made yours"
                   lines={['Shaped to how you work —', <em key="e">except the one thing that must not move</em>]}

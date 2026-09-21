@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Palette, Globe, Sparkles, Check, ArrowRight,
+  Palette, Globe, Check, ArrowRight,
   Layers, Play, Maximize2, X, Sliders, Shield
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
@@ -28,7 +28,7 @@ export default function BrandCustomizerSandbox() {
   return (
     <div
       ref={cardTilt}
-      className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden ft-glow-border"
+      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -38,8 +38,8 @@ export default function BrandCustomizerSandbox() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2"
-               style={{ background: theme.dim, color: theme.primary }}>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: theme.dim, color: theme.primary, border: '1px solid var(--card-border)' }}>
             <Palette size={13} />
             Live White-Label & Theme Sandbox
           </div>

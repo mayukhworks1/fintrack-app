@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Maximize2, X, Sparkles } from 'lucide-react'
+import { ArrowRight, Maximize2, X } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
@@ -38,8 +38,6 @@ export default function HowItWorks() {
   return (
     <PublicLayout>
       <section className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
-        <div className="ft-dotgrid" aria-hidden="true" />
         <Grain />
         <PageHead eyebrow="How it works"
                   lines={['Nothing to migrate,', <em key="e">and nothing to take on faith</em>]}>
@@ -60,7 +58,7 @@ export default function HowItWorks() {
             style={{ listStyle: 'none',
                      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
           {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className="relative rounded-2xl p-5 sm:p-6"
+            <li key={title} className="relative rounded-xl p-5 sm:p-6"
                 style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <div className="flex items-center gap-3 mb-3">
                 <span className="flex items-center justify-center rounded-lg font-bold text-sm"
@@ -70,16 +68,6 @@ export default function HowItWorks() {
               </div>
               <h3 className="ft-display text-lg mb-2" style={{ color: 'var(--text-1)' }}>{title}</h3>
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-              {i < STEPS.length - 1 && (
-                <span aria-hidden="true" className="hidden lg:block"
-                      style={{ position: 'absolute', right: -14, top: '50%', width: 12, height: 6 }}>
-                  <span className="ft-travel" style={{
-                    display: 'block', width: 6, height: 6, borderRadius: 99,
-                    background: 'var(--accent)', ['--ft-travel-to']: '14px',
-                    animationDelay: `${i * 700}ms`,
-                  }} />
-                </span>
-              )}
             </li>
           ))}
         </ol>

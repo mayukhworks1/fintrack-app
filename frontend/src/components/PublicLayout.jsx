@@ -24,22 +24,28 @@ export default function PublicLayout({ children }) {
   const { dark, toggle } = useTheme()
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
+  const [legalModal, setLegalModal] = useState(null) // 'terms' | 'privacy' | null
 
   // Close on navigation, or the menu stays over the page you just opened.
   useEffect(() => { setOpen(false) }, [pathname])
 
   // A fixed overlay that scrolls the page behind it reads as broken.
   useEffect(() => {
-    if (!open) return
+    if (!open && !legalModal) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+        setLegalModal(null)
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
       window.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, legalModal])
 
   return (
     // `main-app-theme` is the product's palette. Without it the public pages
@@ -153,7 +159,7 @@ export default function PublicLayout({ children }) {
 
         {open && (
           /* Every destination, grouped and described. A phone sheet that
-             lists six bare nouns is the same problem the desktop nav had. */
+              lists six bare nouns is the same problem the desktop nav had. */
           <div className="md:hidden px-4 pb-4 overflow-y-auto"
                style={{ borderTop: '1px solid var(--card-border)', maxHeight: 'calc(100vh - 60px)' }}>
             <button
@@ -215,10 +221,9 @@ export default function PublicLayout({ children }) {
              style={{ borderTop: '1px solid var(--card-border)' }}>
           <p className="text-xs flex items-center gap-2 flex-wrap justify-center sm:justify-start"
              style={{ color: 'var(--text-3)' }}>
-            FinTrack — AI finance manager
+            FinTrack — Financial Control & Delivery Intelligence
             <span className="hidden sm:inline">·</span>
-            {/* Otherwise nobody finds it. A shortcut with no affordance is a
-                shortcut for the person who wrote it. */}
+            {/* Affordance for command palette */}
             <span className="hidden sm:flex items-center gap-1.5">
               press <kbd className="ft-kbd">⌘K</kbd> to search
             </span>
@@ -230,6 +235,20 @@ export default function PublicLayout({ children }) {
                 {label}
               </Link>
             ))}
+            <button
+              onClick={() => setLegalModal('privacy')}
+              className="inline-flex items-center text-xs font-semibold rounded-lg bg-transparent border-none cursor-pointer"
+              style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)' }}
+            >
+              Privacy Policy
+            </button>
+            <button
+              onClick={() => setLegalModal('terms')}
+              className="inline-flex items-center text-xs font-semibold rounded-lg bg-transparent border-none cursor-pointer"
+              style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)' }}
+            >
+              Terms of Service
+            </button>
             <Link to="/login" className="inline-flex items-center text-xs font-semibold rounded-lg"
                   style={{ minHeight: 44, padding: '0 10px', color: 'var(--accent)', textDecoration: 'none' }}>
               Sign in
@@ -237,6 +256,91 @@ export default function PublicLayout({ children }) {
           </div>
         </div>
       </footer>
+
+      {/* Institutional Legal Modal Dialog */}
+      {legalModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setLegalModal(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[85vh] flex flex-col rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--card-border)',
+              color: 'var(--text-1)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b"
+                 style={{ borderColor: 'var(--card-border)' }}>
+              <div>
+                <h3 className="ft-display text-lg font-bold" style={{ color: 'var(--text-1)' }}>
+                  {legalModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+                </h3>
+                <p className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  Effective Date: January 1, 2026 · FinTrack Institutional Platform
+                </p>
+              </div>
+              <button
+                onClick={() => setLegalModal(null)}
+                className="p-1.5 rounded-lg text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"
+                aria-label="Close dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed"
+                 style={{ color: 'var(--text-2)' }}>
+              {legalModal === 'privacy' ? (
+                <>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>1. Data Isolation & Tenant Boundaries</h4>
+                    <p>FinTrack operates with strict tenant-level cryptographic and relational data isolation. Customer financial ledger entries, tax filings, invoice records, and proprietary contract documents are stored in dedicated schema spaces and are never co-mingled or used to train public foundation models.</p>
+                  </section>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>2. Security & Audit Logging</h4>
+                    <p>All authenticated sessions, API transactions, and query executions are logged asynchronously into an immutable audit ledger containing actor identifiers, timestamps, origin IP metadata, and parameter payloads for regulatory compliance.</p>
+                  </section>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>3. Document Encryption</h4>
+                    <p>Uploaded contracts, agreements, and financial statements are encrypted at rest using AES-256 and in transit via TLS 1.3. Vector embeddings generated for semantic citations are scoped strictly to the customer workspace.</p>
+                  </section>
+                </>
+              ) : (
+                <>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>1. Service Provision & SLA</h4>
+                    <p>FinTrack provides real-time financial tracking, receivables monitoring, statutory tax ledger calculation, and document intelligence services subject to enterprise service tier agreements.</p>
+                  </section>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>2. Role-Based Access & Accountability</h4>
+                    <p>Organizations are responsible for configuring and administering role-based permissions (RBAC) and access tokens issued to authorized personnel. FinTrack enforces server-side query scoping on every database round-trip.</p>
+                  </section>
+                  <section>
+                    <h4 className="font-bold text-sm mb-1" style={{ color: 'var(--text-1)' }}>3. Deterministic Computations</h4>
+                    <p>Financial summaries and analytical queries are executed deterministically against synchronized database mirrors. The AI analytical assistant acts as a query transpiler and does not generate unverified arithmetic.</p>
+                  </section>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t flex justify-end"
+                 style={{ borderColor: 'var(--card-border)', background: 'var(--bg-input)' }}>
+              <button
+                onClick={() => setLegalModal(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-opacity"
+                style={{ background: 'var(--accent-btn)' }}
+              >
+                Acknowledge & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

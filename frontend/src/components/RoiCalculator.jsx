@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import {
-  Calculator, TrendingUp, Clock, ShieldAlert, Sparkles,
+  Calculator, TrendingUp, Clock, ShieldAlert,
   Layers, Maximize2, X, ArrowRight, CheckCircle2, Zap
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
@@ -43,7 +43,7 @@ export default function RoiCalculator() {
   return (
     <div
       ref={cardTilt}
-      className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden ft-glow-border"
+      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -53,8 +53,8 @@ export default function RoiCalculator() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
             <Calculator size={13} />
             Interactive ROI & Working Capital Simulator
           </div>
@@ -201,7 +201,7 @@ export default function RoiCalculator() {
 
               {/* Annual Interest Drag Saved */}
               <div
-                className="p-5 rounded-2xl border relative overflow-hidden transition-all"
+                className="p-5 rounded-xl border relative overflow-hidden transition-all"
                 style={{
                   background: 'var(--card-bg)',
                   borderColor: 'rgba(16, 185, 129, 0.3)',
@@ -222,7 +222,7 @@ export default function RoiCalculator() {
             </div>
 
             {/* Additional Secondary Benefits */}
-            <div className="p-4 sm:p-5 rounded-2xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="p-4 sm:p-5 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-[11px] font-bold text-[var(--text-3)] block mb-1">
@@ -268,7 +268,7 @@ export default function RoiCalculator() {
           </div>
         </div>
       ) : (
-        <div className="relative rounded-2xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
+        <div className="relative rounded-xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
           <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl" />
           <button
             onClick={() => setLightboxOpen(true)}
@@ -287,7 +287,7 @@ export default function RoiCalculator() {
           onClick={() => setLightboxOpen(false)}
         >
           <div
-            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
+            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col rounded-xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">

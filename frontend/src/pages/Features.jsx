@@ -17,7 +17,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Receipt, FolderKanban, BarChart3, FileSearch, Sparkles, Globe,
+  Receipt, FolderKanban, BarChart3, FileSearch, Code2, Globe,
   Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck,
   Play, Pause, Maximize2, Layers, X, Eye,
 } from 'lucide-react'
@@ -93,7 +93,7 @@ export const FEATURES = [
     demo: 'tax',
   },
   {
-    id: 'documents', icon: FileSearch, label: 'Studio — documents',
+    id: 'documents', icon: FileSearch, label: 'Document intelligence',
     headline: 'Ask your contracts a question',
     body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from. An answer you cannot check is barely better than a guess.',
     points: [
@@ -107,7 +107,7 @@ export const FEATURES = [
     demo: 'docs',
   },
   {
-    id: 'analyst', icon: Sparkles, label: 'Studio — finance data',
+    id: 'analyst', icon: Code2, label: 'Financial query engine',
     headline: 'It shows you the query it ran',
     body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the code compiles the SQL — the model never writes SQL itself, and the statement is shown with every answer.',
     points: [
@@ -121,7 +121,7 @@ export const FEATURES = [
     demo: 'table',
   },
   {
-    id: 'reports', icon: FileText, label: 'AI reports & assistant',
+    id: 'reports', icon: FileText, label: 'Executive reports',
     headline: 'A written report, and someone to ask',
     body: 'Generate a period report over your own figures, keep the history, and ask follow-up questions in a chat that already has the current context loaded.',
     points: [
@@ -135,7 +135,7 @@ export const FEATURES = [
     demo: 'analyst',
   },
   {
-    id: 'pages', icon: Globe, label: 'Pages',
+    id: 'pages', icon: Globe, label: 'Web studio',
     headline: 'Describe a page, watch it get written',
     body: 'The generator streams as it works, so you see the page appear rather than a spinner. Revisions edit the document in place instead of regenerating it, so the parts you did not mention stay exactly as they were.',
     points: [
@@ -271,7 +271,6 @@ export default function Features() {
   return (
     <PublicLayout>
       <section className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
         <Grain />
         <div ref={headRef} className="ft-reveal relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
@@ -430,7 +429,7 @@ export default function Features() {
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div className="rounded-3xl px-6 py-12 sm:px-12 sm:py-14 text-center"
+        <div className="rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
              style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <h2 className="ft-display mb-3"
               style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>

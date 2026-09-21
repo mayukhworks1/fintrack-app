@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileSearch, Sparkles, Check, ChevronRight, Layers, Play, Maximize2, X, ExternalLink, ShieldAlert } from 'lucide-react'
+import { FileSearch, Check, ChevronRight, Layers, Play, Maximize2, X, ExternalLink, ShieldAlert } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import LoopVideo from './LoopVideo'
 
@@ -43,7 +43,7 @@ export default function ContractCitationInspector() {
   return (
     <div
       ref={tiltRef}
-      className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden ft-glow-border"
+      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -53,8 +53,8 @@ export default function ContractCitationInspector() {
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
             <FileSearch size={13} />
             Contract Intelligence & Page-Level Citations
           </div>
@@ -186,7 +186,7 @@ export default function ContractCitationInspector() {
                   }}
                 >
                   <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-bold" style={{ color: 'var(--accent)' }}>
-                    <Sparkles size={12} />
+                    <FileSearch size={12} />
                     <span>{current.citation}</span>
                   </div>
                   <p className="font-sans text-xs sm:text-[13px] leading-relaxed font-medium">
@@ -208,7 +208,7 @@ export default function ContractCitationInspector() {
           </div>
         </div>
       ) : (
-        <div className="relative rounded-2xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
+        <div className="relative rounded-xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
           <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
         </div>
       )}

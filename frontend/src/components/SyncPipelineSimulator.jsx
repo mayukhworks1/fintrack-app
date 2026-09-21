@@ -59,7 +59,7 @@ export default function SyncPipelineSimulator() {
   return (
     <div
       ref={cardTilt}
-      className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden ft-glow-border"
+      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -69,8 +69,8 @@ export default function SyncPipelineSimulator() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
             <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
             Zero-Migration Realtime Pipeline Telemetry
           </div>

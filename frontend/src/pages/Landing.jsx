@@ -15,7 +15,7 @@
  * browser from demoData.js, and no part of this route makes an API call.
  */
 import { Link } from 'react-router-dom'
-import { ArrowRight, Sparkles, Check } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
@@ -79,18 +79,14 @@ export default function Landing() {
     <PublicLayout>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <section ref={heroLight} className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
-        <div className="ft-dotgrid" aria-hidden="true" />
-        <div className="ft-spotlight" aria-hidden="true" />
         <Grain />
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
           <Rising style={{ maxWidth: 820 }}>
-            <span className="inline-flex items-center gap-2 rounded-full text-xs font-semibold mb-4"
-                  style={{ padding: '6px 12px', background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-              <Sparkles size={13} aria-hidden="true" />
-              Delivery, receivables and an analyst that shows its working
+            <span className="inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
+                  style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+              Institutional Financial Control Platform
             </span>
 
             {/* Two lines, each rising out of its own mask on a stagger. A
@@ -109,7 +105,7 @@ export default function Landing() {
 
             <p className="ft-lede mb-7">
               A live board of where every project stands, and the receivables,
-              margin and GST for the same work — not two systems somebody
+              margin and GST for the same work: not two systems somebody
               reconciles on a Friday. Ask it anything in plain words and it
               prints the query behind the answer.
             </p>
@@ -119,8 +115,8 @@ export default function Landing() {
                  className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold"
                  style={{ minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
                           color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
-                          boxShadow: '0 6px 20px var(--accent-glow)' }}>
-                Try it — no account needed <ArrowRight size={17} aria-hidden="true" />
+                          boxShadow: '0 4px 14px var(--accent-glow)' }}>
+                Launch Interactive Sandbox <ArrowRight size={17} aria-hidden="true" />
               </a>
               <Link to="/login"
                     className="flex items-center justify-center gap-2 rounded-xl font-bold"

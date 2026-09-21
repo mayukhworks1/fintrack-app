@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Sparkles,
-  Receipt, FolderKanban, ShieldCheck, Check, X,
+  Code2, Receipt, FolderKanban, ShieldCheck, Check, X,
   ArrowRight, Activity
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
@@ -10,7 +9,7 @@ import LoopVideo from './LoopVideo'
 const SHOWCASE_ITEMS = [
   {
     id: 'tax-ledger',
-    label: 'Tax Ledger & AI Insights',
+    label: 'Tax Ledger & Insights',
     tag: '3D Architecture',
     icon: Receipt,
     title: 'Single-ledger architecture for delivery & tax compliance',
@@ -26,9 +25,9 @@ const SHOWCASE_ITEMS = [
   },
   {
     id: 'ai-analyst',
-    label: 'Autonomous Financial Analyst',
+    label: 'Financial Query Engine',
     tag: 'Verified Intelligence',
-    icon: Sparkles,
+    icon: Code2,
     title: 'Natural language queries compiled into verifiable SQL',
     desc: 'Ask complex financial questions and get exact answers accompanied by the exact parameterized SQL statement. Zero hallucination by mathematical construction.',
     video: '/media/pomelli_photoshoot-5.mp4',
@@ -98,7 +97,8 @@ export default function ProductMediaShowcase() {
     <div className="w-full">
       {/* ── Main Showcase Container ─────────────────────────────────── */}
       <div
-        className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300"
+        ref={frameTilt}
+        className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300"
         style={{
           background: 'var(--card-bg)',
           border: '1px solid var(--card-border)',
@@ -135,9 +135,9 @@ export default function ProductMediaShowcase() {
 
             {/* Feature Description Card */}
             <div className="mb-6">
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider mb-3"
-                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                <Sparkles size={12} />
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-3"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <Activity size={12} />
                 {current.tag}
               </div>
               <h3 className="ft-display text-xl sm:text-2xl lg:text-[1.65rem] mb-3"

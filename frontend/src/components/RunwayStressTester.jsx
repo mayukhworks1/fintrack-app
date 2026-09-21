@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   TrendingDown, AlertTriangle, ShieldCheck, Clock,
-  ArrowRight, Sparkles, Layers, Play, Maximize2, X
+  ArrowRight, Layers, Play, Maximize2, X
 } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
@@ -49,7 +49,7 @@ export default function RunwayStressTester() {
   return (
     <div
       ref={cardTilt}
-      className="rounded-3xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden ft-glow-border"
+      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -59,10 +59,10 @@ export default function RunwayStressTester() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
             <TrendingDown size={13} />
-            Cash Runway & Overdue Delay Stress-Tester
+            Cash Runway & Stress-Testing Simulator
           </div>
           <h3 className="ft-display text-xl sm:text-2xl" style={{ color: 'var(--text-1)' }}>
             Scenario planning: what happens when clients delay payments?

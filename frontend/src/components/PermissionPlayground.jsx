@@ -72,7 +72,7 @@ export default function PermissionPlayground() {
   const overrideCount = MODULES.filter(m => isOverride(m.key)).length
 
   return (
-    <div ref={ref} className="ft-reveal rounded-3xl overflow-hidden border transition-all"
+    <div ref={ref} className="ft-reveal rounded-xl overflow-hidden border transition-all"
          style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
       {/* Header Bar */}
       <div className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap border-b"

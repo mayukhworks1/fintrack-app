@@ -36,7 +36,7 @@ const MATRIX = [
   ['Create & edit invoices',{ superadmin: true, admin: true,  manager: true,  finance: true,  user: 'own', viewer: false }],
   ['View projects',        { superadmin: true, admin: true,  manager: true,  finance: true,  user: 'own', viewer: 'own' }],
   ['Tax ledger',           { superadmin: true, admin: true,  manager: false, finance: true,  user: false, viewer: false }],
-  ['Studio — ask',         { superadmin: true, admin: true,  manager: true,  finance: true,  user: true,  viewer: false }],
+  ['Financial query engine',{ superadmin: true, admin: true,  manager: true,  finance: true,  user: true,  viewer: false }],
   ['Publish pages',        { superadmin: true, admin: true,  manager: true,  finance: false, user: false, viewer: false }],
   ['Manage users & roles', { superadmin: true, admin: true,  manager: false, finance: false, user: false, viewer: false }],
   ['Read the audit log',   { superadmin: true, admin: true,  manager: false, finance: false, user: false, viewer: false }],
@@ -73,7 +73,6 @@ export default function Security() {
   return (
     <PublicLayout>
       <section className="relative overflow-hidden">
-        <div className="ft-aurora" aria-hidden="true"><span /><span /></div>
         <Grain />
         <div ref={head} className="ft-reveal relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
@@ -166,7 +165,7 @@ export default function Security() {
           fate for the one section that tells a visitor none of what they
           are looking at belongs to anyone. */}
       <section id="privacy" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div className="rounded-3xl p-6 sm:p-10"
+        <div className="rounded-xl p-6 sm:p-10"
              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
           <Head eyebrow="Access" title="This page is public. Your data is not.">
             Everything described here is capability, and the sandbox on the
@@ -194,7 +193,7 @@ export default function Security() {
         <div className="grid gap-4 sm:gap-5"
              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
           {PILLARS.map(({ icon: Icon, title, body }) => (
-            <div key={title} className="rounded-2xl p-5"
+            <div key={title} className="rounded-xl p-5"
                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <div className="flex items-center justify-center rounded-xl mb-3"
                    style={{ width: 40, height: 40, background: 'var(--accent-dim)', color: 'var(--accent)' }}>
@@ -208,7 +207,7 @@ export default function Security() {
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div className="rounded-3xl px-6 py-12 sm:px-12 sm:py-14 text-center"
+        <div className="rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
              style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <ShieldCheck size={26} className="mx-auto mb-3" aria-hidden="true" />
           <h2 className="ft-display mb-3"

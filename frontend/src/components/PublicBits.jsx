@@ -77,7 +77,7 @@ export function Head({ n, eyebrow, title, children, className = '' }) {
 /** A card in a row of them. One shape, so a grid of three reads as a set. */
 export function Card({ icon: Icon, kicker, title, body, delay = 0, visual: Visual, children }) {
   return (
-    <Reveal delay={delay} className="ft-lift rounded-2xl p-5 sm:p-6 h-full flex flex-col"
+    <Reveal delay={delay} className="ft-lift rounded-xl p-5 sm:p-6 h-full flex flex-col"
             style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
       {/* The drawing goes above the words, not below them. A card whose
           picture is at the bottom is a card whose picture nobody sees. */}
@@ -122,7 +122,7 @@ export function Closing({ title, children, cta, to, next }) {
           every page, so it is worth more than one colour: a drifting mesh
           behind it, the mark's hairline along the top, and grain over the
           whole thing to stop the gradient banding. */}
-      <Reveal className="ft-closing ft-shine relative overflow-hidden rounded-3xl
+      <Reveal className="ft-closing ft-shine relative overflow-hidden rounded-xl
                          px-6 py-14 sm:px-12 sm:py-16 text-center">
         <span className="ft-closing-mesh" aria-hidden="true" />
         <Grain opacity={0.05} />
