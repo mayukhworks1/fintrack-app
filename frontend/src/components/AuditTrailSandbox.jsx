@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import {
   ShieldCheck, Lock, KeyRound, Zap, CheckCircle2,
-  Trash2, RefreshCw, Layers, Maximize2, X, AlertTriangle,
+  Trash2, RefreshCw, AlertTriangle,
   Fingerprint, Laptop, Smartphone, Monitor
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
-import LoopVideo from './LoopVideo'
 
 const INITIAL_LOGS = [
   {
@@ -49,8 +48,6 @@ const INITIAL_SESSIONS = [
 export default function AuditTrailSandbox() {
   const [logs, setLogs] = useState(INITIAL_LOGS)
   const [sessions, setSessions] = useState(INITIAL_SESSIONS)
-  const [activeMedia, setActiveMedia] = useState('sandbox') // 'sandbox' | 'blueprint'
-  const [lightboxOpen, setLightboxOpen] = useState(false)
   const cardTilt = useTilt({ max: 2.5 })
 
   const triggerEvent = (type) => {
@@ -137,34 +134,9 @@ export default function AuditTrailSandbox() {
             Every state mutation is hashed, attributed to an authenticated session, and verified in real time.
           </p>
         </div>
-
-        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <button
-            onClick={() => setActiveMedia('sandbox')}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'sandbox' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'sandbox' ? 'var(--accent)' : 'var(--text-3)',
-            }}
-          >
-            Audit Sandbox
-          </button>
-          <button
-            onClick={() => setActiveMedia('blueprint')}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
-            }}
-          >
-            <Layers size={13} /> 3D View
-          </button>
-        </div>
       </div>
 
-      {activeMedia === 'sandbox' ? (
-        <div className="space-y-6">
+      <div className="space-y-6">
           {/* Action Trigger Toolbar */}
           <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border"
                style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
@@ -307,44 +279,6 @@ export default function AuditTrailSandbox() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative rounded-2xl overflow-hidden p-6 bg-slate-950 flex flex-col items-center justify-center min-h-[380px]">
-          <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[360px] w-auto object-contain rounded-lg drop-shadow-2xl" />
-          <button
-            onClick={() => setLightboxOpen(true)}
-            className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900/90 text-white border border-slate-700 hover:border-sky-400 backdrop-blur transition-all"
-          >
-            <Maximize2 size={13} /> Inspect High-Res
-          </button>
-        </div>
-      )}
-
-      {lightboxOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <div
-            className="relative max-w-4xl w-full max-h-[92vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-              <span className="text-xs font-bold text-slate-200">Security Architecture & Audit Verification Motion Loop</span>
-              <button
-                onClick={() => setLightboxOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 overflow-auto flex items-center justify-center">
-              <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[78vh] object-contain rounded-lg" />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

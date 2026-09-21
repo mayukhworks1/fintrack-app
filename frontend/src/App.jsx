@@ -180,6 +180,23 @@ export default function App() {
     }
   }, [status, location.pathname, navigate])
 
+  // Scroll window to top whenever the route pathname changes, ensuring
+  // clicking links/buttons never drops the user at the bottom of the next page.
+  useEffect(() => {
+    if (!location.hash) {
+      window.scrollTo(0, 0)
+      if (typeof document !== 'undefined') {
+        document.documentElement.scrollTop = 0
+        document.body.scrollTop = 0
+      }
+    } else {
+      const target = document.getElementById(location.hash.replace(/^#/, ''))
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+  }, [location.pathname, location.hash])
+
   // ── Public routes — no authentication required ──────────────────────────
   if (location.pathname.startsWith('/view/')) {
     return (

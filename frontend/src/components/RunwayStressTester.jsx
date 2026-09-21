@@ -1,17 +1,15 @@
 import { useState, useMemo } from 'react'
 import {
   TrendingDown, AlertTriangle, ShieldCheck, Clock,
-  ArrowRight, Layers, Play, Maximize2, X
+  ArrowRight
 } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
-import LoopVideo from './LoopVideo'
 
 export default function RunwayStressTester() {
   const [cashReserve, setCashReserve] = useState(4500000) // ₹45 Lakhs
   const [monthlyBurn, setMonthlyBurn] = useState(650000)  // ₹6.5 Lakhs / mo
   const [delayDays, setDelayDays] = useState(30)         // 30 days overdue delay
-  const [activeMedia, setActiveMedia] = useState('tester') // 'tester' | 'blueprint' | 'motion'
   const cardTilt = useTilt({ max: 3 })
 
   // Expected monthly collection under normal terms vs delayed terms
@@ -71,37 +69,9 @@ export default function RunwayStressTester() {
             Simulate working capital stress by varying client overdue delays and burn rates.
           </p>
         </div>
-
-        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <button
-            onClick={() => setActiveMedia('tester')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'tester' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'tester' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'tester' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            Stress-Tester
-          </button>
-          <button
-            onClick={() => setActiveMedia('motion')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'motion' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'motion' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'motion' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Play size={13} />
-            Motion
-          </button>
-        </div>
       </div>
 
-      {activeMedia === 'tester' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Controls Column */}
           <div className="lg:col-span-5 flex flex-col gap-5">
             {/* Slider 1: Cash Reserve */}
@@ -272,11 +242,6 @@ export default function RunwayStressTester() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative rounded-2xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
-          <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
-        </div>
-      )}
     </div>
   )
 }

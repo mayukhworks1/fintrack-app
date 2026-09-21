@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import { Landmark, ArrowRight, ShieldCheck, RefreshCw, Layers, Play, Pause, Maximize2, X } from 'lucide-react'
+import { Landmark, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
-import LoopVideo from './LoopVideo'
 
 export default function TaxFlowSimulator() {
   const [billed, setBilled] = useState(2500000) // ₹25 Lakhs
   const [gstRate, setGstRate] = useState(0.18)   // 18%
   const [tdsRate, setTdsRate] = useState(0.10)   // 10%
   const [clientType, setClientType] = useState('domestic_tech') // domestic_tech | contractor | sez_export
-  const [activeMedia, setActiveMedia] = useState('flow') // 'flow' | 'blueprint' | 'motion'
   const cardTilt = useTilt({ max: 3 })
 
   const gstAmount = Math.round(billed * gstRate)
@@ -57,38 +55,9 @@ export default function TaxFlowSimulator() {
             Adjust billing volume and tax categories to watch cash, GST liabilities, and Form 26AS TDS credits segregate dynamically.
           </p>
         </div>
-
-        {/* Media Perspective Switcher */}
-        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <button
-            onClick={() => setActiveMedia('flow')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'flow' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'flow' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'flow' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            Interactive Flow
-          </button>
-          <button
-            onClick={() => setActiveMedia('motion')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'motion' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'motion' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'motion' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Play size={13} />
-            Motion
-          </button>
-        </div>
       </div>
 
-      {activeMedia === 'flow' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Controls Column */}
           <div className="lg:col-span-5 flex flex-col gap-5">
             {/* Client Mix Presets */}
@@ -271,11 +240,6 @@ export default function TaxFlowSimulator() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative rounded-2xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
-          <LoopVideo src="/media/pomelli_photoshoot-5.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
-        </div>
-      )}
     </div>
   )
 }

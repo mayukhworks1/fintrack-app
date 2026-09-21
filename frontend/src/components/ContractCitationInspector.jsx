@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { FileSearch, Check, ChevronRight, Layers, Play, Maximize2, X, ExternalLink, ShieldAlert } from 'lucide-react'
+import { FileSearch, Check, ChevronRight, Layers, ExternalLink, ShieldAlert } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
-import LoopVideo from './LoopVideo'
 
 const SAMPLE_QUERIES = [
   {
@@ -35,7 +34,6 @@ const SAMPLE_QUERIES = [
 
 export default function ContractCitationInspector() {
   const [activeQuery, setActiveQuery] = useState(0)
-  const [activeMedia, setActiveMedia] = useState('inspector') // 'inspector' | 'blueprint' | 'motion'
   const tiltRef = useTilt({ max: 3 })
 
   const current = SAMPLE_QUERIES[activeQuery]
@@ -65,38 +63,9 @@ export default function ContractCitationInspector() {
             Every answer is anchored to exact page numbers and paragraph coordinates. Click prompt chips to see the document jump and highlight.
           </p>
         </div>
-
-        {/* Media Switcher */}
-        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <button
-            onClick={() => setActiveMedia('inspector')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'inspector' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'inspector' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'inspector' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            Inspector
-          </button>
-          <button
-            onClick={() => setActiveMedia('motion')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: activeMedia === 'motion' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'motion' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'motion' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Play size={13} />
-            Motion
-          </button>
-        </div>
       </div>
 
-      {activeMedia === 'inspector' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Interactive Prompts & Answer */}
           <div className="lg:col-span-6 flex flex-col gap-4">
             <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -207,11 +176,6 @@ export default function ContractCitationInspector() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative rounded-xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
-          <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
-        </div>
-      )}
     </div>
   )
 }

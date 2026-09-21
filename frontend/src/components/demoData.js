@@ -376,47 +376,241 @@ export const boardBy = (key) => {
 /* ── Enriched Institutional Modules Mock Data ──────────────────────────── */
 
 export const TAX_SUMMARY = {
-  taxableValue: 1519400,
-  gstCollected: 273492,
-  tdsCollected: 151940,
-  grossInvoiced: 1792892,
-  netReceivable: 1640952,
-  openInvoices: 0,
+  get taxableValue() { return sum(INVOICES, i => i.amount) },
+  get gstCollected() { return sum(INVOICES, i => i.gst) },
+  get tdsCollected() { return sum(INVOICES, i => i.tds) },
+  get grossInvoiced() { return this.taxableValue + this.gstCollected },
+  get netReceivable() { return this.taxableValue + this.gstCollected - this.tdsCollected },
+  get openInvoices() { return open.length },
   gstRateAvg: '18% avg',
   tdsRateAvg: '10% avg',
-  cgst: 136746,
-  sgst: 136746,
+  get cgst() { return Math.round(this.gstCollected / 2) },
+  get sgst() { return Math.round(this.gstCollected / 2) },
 }
 
-export const TAX_CLIENTS = [
-  { client: 'Birla Open Minds', invoices: 4, taxable: 879400, gst: 158292, tds: 87940, gross: 1037692, share: '58%' },
-  { client: 'Innovine', invoices: 5, taxable: 640000, gst: 115200, tds: 64000, gross: 755200, share: '42%' },
-]
+export const TAX_CLIENTS = CLIENTS.map(client => {
+  const invs = INVOICES.filter(i => i.client === client)
+  const taxable = sum(invs, i => i.amount)
+  const gst = sum(invs, i => i.gst)
+  const tds = sum(invs, i => i.tds)
+  const totalBilled = sum(INVOICES, i => i.amount)
+  const share = totalBilled > 0 ? `${Math.round((taxable / totalBilled) * 100)}%` : '0%'
+  return {
+    client,
+    invoices: invs.length,
+    taxable,
+    gst,
+    tds,
+    gross: taxable + gst,
+    share,
+  }
+}).filter(c => c.invoices > 0).sort((a, b) => b.taxable - a.taxable)
 
 export const PAGES_MOCK = [
-  { id: 'p-1', title: 'test', url: '/p/test', type: 'Html', status: 'Live', views: 4, created: '24 Aug 2026' },
-  { id: 'p-2', title: 'Zoho landing page', url: '/p/landing-page-zoho', type: 'Html', status: 'Live', views: 1, created: '31 Jul 2026' },
-  { id: 'p-3', title: 'People Manual', url: '/p/people-manual', type: 'Html', status: 'Live', views: 186, created: '9 Jul 2026' },
+  {
+    id: 'p-1',
+    title: 'Meridian Client Portal',
+    url: '/p/meridian-portal',
+    type: 'Html',
+    format: 'HTML Portal',
+    status: 'Live',
+    views: 48,
+    created: '24 Aug 2026',
+    template: 'Client Portal',
+    description: 'Executive milestone approvals, payment gateway embed, and real-time deliverables ledger.',
+  },
+  {
+    id: 'p-2',
+    title: 'Halcyon Retainer Calculator',
+    url: '/p/retainer-calculator',
+    type: 'Widget',
+    format: 'Interactive Widget',
+    status: 'Live',
+    views: 124,
+    created: '31 Jul 2026',
+    template: 'Retainer Calculator',
+    description: 'Dynamic team scope slider, sprint velocity estimator, and blended rate calculator.',
+  },
+  {
+    id: 'p-3',
+    title: 'Ashgrove Annual Report Deck',
+    url: '/p/ashgrove-deck',
+    type: 'Markdown',
+    format: 'Markdown Brief',
+    status: 'Live',
+    views: 186,
+    created: '9 Jul 2026',
+    template: 'Executive Deck',
+    description: 'FY26 audited financial review, P&L breakdown, and revenue growth trajectory.',
+  },
+  {
+    id: 'p-4',
+    title: 'Bellwether Delivery Spec',
+    url: '/p/bellwether-spec',
+    type: 'Html',
+    format: 'HTML Portal',
+    status: 'Live',
+    views: 32,
+    created: '14 Jun 2026',
+    template: 'Milestone Acceptance',
+    description: 'Video campaign sign-off milestones with digital signature capture and invoice triggers.',
+  },
+]
+
+export const PAGE_TEMPLATES = [
+  {
+    id: 'tpl-portal',
+    title: 'Client Approval & Payment Portal',
+    format: 'HTML',
+    icon: 'Globe',
+    blurb: 'Milestone acceptance gates, live invoice status, and integrated Razorpay settlement link.',
+    samplePrompt: 'Create a client review portal for Meridian Labs with sprint sign-offs and payment button',
+  },
+  {
+    id: 'tpl-calculator',
+    title: 'Interactive Retainer & Scope Calculator',
+    format: 'Widget',
+    icon: 'Sliders',
+    blurb: 'Real-time pricing sliders, engineering hours estimator, and instant SOW scope builder.',
+    samplePrompt: 'Build an interactive retainer calculator with sprint velocity and margin estimation',
+  },
+  {
+    id: 'tpl-brief',
+    title: 'Executive Financial Brief & Risk Radar',
+    format: 'Markdown',
+    icon: 'FileText',
+    blurb: 'Structured markdown report with KPI tables, statutory escrow audit, and revenue trends.',
+    samplePrompt: 'Draft an executive board brief summarizing Q2 margin leakage and tax compliance',
+  },
+  {
+    id: 'tpl-acceptance',
+    title: 'Milestone Acceptance & Sign-off Deck',
+    format: 'HTML',
+    icon: 'FileCheck',
+    blurb: 'Deliverable checklist with cryptographic hash audit and instant billing webhook trigger.',
+    samplePrompt: 'Generate a deliverable acceptance spec with digital sign-off and milestone triggers',
+  },
+]
+
+export const STUDIO_DOCS = [
+  {
+    id: 'doc-1',
+    title: 'FY26 Master Services Agreement — Meridian Labs',
+    size: '2.4 MB',
+    tokens: 14200,
+    citations: 18,
+    status: 'Indexed',
+    category: 'MSA / Contract',
+    uploadedAt: '12 Aug 2026',
+    summary: 'Governing agreement for engineering and cloud architecture. Includes 45-day payment terms, 10% TDS withholding under 194J, and IP assignment clauses.',
+    excerpt: 'Clause 8.2 (Payment Terms): Client shall remit invoice settlements within 45 calendar days of receipt. All professional fees are subject to 10% TDS deduction under Section 194J of the Indian Income Tax Act. GST at the prevailing 18% statutory rate applies to all invoice line items.',
+    ragMatchScore: 98.4,
+  },
+  {
+    id: 'doc-2',
+    title: 'Halcyon Group SOW Q2-Q3 Milestone Schedule',
+    size: '1.1 MB',
+    tokens: 8400,
+    citations: 12,
+    status: 'Indexed',
+    category: 'Statement of Work',
+    uploadedAt: '28 Jul 2026',
+    summary: 'Milestone deliverables schedule for marketing automation and design retainer. Defines bi-weekly review gates and net-15 payment cycles.',
+    excerpt: 'Section 4.1 (Milestone Deliverables): Monthly retainer of ₹3.25L covering sprint cycles Alpha through Delta. Payment due 15 days from milestone sign-off. Delayed deliverables incur zero penalty unless critical path is obstructed.',
+    ragMatchScore: 96.1,
+  },
+  {
+    id: 'doc-3',
+    title: 'Ravensbourne Studio Service Agreement & SEZ Clause',
+    size: '840 KB',
+    tokens: 4100,
+    citations: 9,
+    status: 'Indexed',
+    category: 'Legal / Tax',
+    uploadedAt: '19 Jun 2026',
+    summary: 'Standard service agreement with export/SEZ zero-rating provisions and confidential IP assignment.',
+    excerpt: 'Annexure B (Statutory Tax Provisions): Standard 18% GST applies on domestic deliverables. Where client provides valid SEZ Unit authorization or LUT under Section 16 of IGST Act, zero-rated export invoicing shall be applied.',
+    ragMatchScore: 94.7,
+  },
+  {
+    id: 'doc-4',
+    title: 'Bellwether Foods Campaign SOW & Commercial Terms',
+    size: '1.8 MB',
+    tokens: 11200,
+    citations: 15,
+    status: 'Indexed',
+    category: 'Production SOW',
+    uploadedAt: '04 Sep 2026',
+    summary: 'Video campaign production schedule, crew day-rates, licensing terms, and 45-day milestone settlement structure.',
+    excerpt: 'Clause 5.3 (Production Invoicing): Pre-production advance (40%) raised upon script lock. Remaining 60% invoiced in two equal milestone tranches upon final color-graded master delivery.',
+    ragMatchScore: 92.5,
+  },
+]
+
+export const STUDIO_RAG_PRESETS = [
+  {
+    q: 'What are the payment terms and TDS clauses for Meridian Labs?',
+    docId: 'doc-1',
+    docTitle: 'FY26 MSA — Meridian Labs',
+    matchScore: '98.4%',
+    answer: 'According to Clause 8.2 of the Meridian Labs MSA, payments are net-45 days from invoice issuance. Professional fees are subject to 10% TDS deduction under Section 194J, with an 18% statutory GST surcharge.',
+    citation: 'Clause 8.2 (Payment Terms), Page 6',
+  },
+  {
+    q: 'What is the retainer cadence and review cycle for Halcyon Group?',
+    docId: 'doc-2',
+    docTitle: 'Halcyon Group SOW Q2-Q3',
+    matchScore: '96.1%',
+    answer: 'Section 4.1 specifies a monthly retainer of ₹3.25L with net-15 payment terms following bi-weekly sprint milestone sign-offs.',
+    citation: 'Section 4.1 (Milestone Deliverables), Page 3',
+  },
+  {
+    q: 'How does the SEZ tax exemption work for Ravensbourne Studio?',
+    docId: 'doc-3',
+    docTitle: 'Ravensbourne Studio Service Agreement',
+    matchScore: '94.7%',
+    answer: 'Annexure B allows zero-rated GST invoicing provided a valid SEZ Unit authorization certificate or Letter of Undertaking (LUT) under Section 16 of the IGST Act is on file.',
+    citation: 'Annexure B (Statutory Tax Provisions), Page 9',
+  },
+  {
+    q: 'What are the milestone payment tranches for Bellwether Foods?',
+    docId: 'doc-4',
+    docTitle: 'Bellwether Foods Campaign SOW',
+    matchScore: '92.5%',
+    answer: 'Clause 5.3 establishes a 40% pre-production advance upon script approval, followed by two 30% milestone tranches upon rough cut and final master delivery.',
+    citation: 'Clause 5.3 (Production Invoicing), Page 4',
+  },
 ]
 
 export const AI_CHAT_PRESETS = [
   {
     q: 'What are current outstanding ?',
-    a: 'Outstanding invoices total ₹5,86,656. The sole pending invoice is WM/26-27/009 (PMS) for ₹2,33,280. All other invoices are paid or cancelled.',
+    get a() {
+      const top = [...open].sort((a, b) => b.amount - a.amount)[0]
+      return `Outstanding invoices total ${inr(TOTALS.outstanding)} across ${open.length} pending invoices. The largest single receivable is ${top?.id} (${top?.client}) for ${inr(top?.amount)} (${top?.daysOverdue} days overdue).`
+    },
     tag: 'Portfolio Q&A',
     model: 'nemotron-3-super-120b-a12b',
-    confidence: 'Verified medium',
+    confidence: 'Verified 100%',
   },
   {
-    q: 'Check project margins for Birla Open Minds',
-    a: 'Birla Open Minds active engagements carry an aggregate margin of 46.3% across ₹33,47,400 billed. PMS stands at 43.5% margin (₹9.18L profit) and Innovine leads at 52.1% margin (₹5.64L profit).',
+    q: 'Check project margins across portfolio',
+    get a() {
+      const totalBilled = sum(PROJECT_ROLLUP, p => p.billed)
+      const totalProfit = sum(PROJECT_ROLLUP, p => p.profit)
+      const avgMargin = totalBilled ? Math.round((totalProfit / totalBilled) * 100) : 0
+      const topProj = [...PROJECT_ROLLUP].sort((a, b) => b.margin - a.margin)[0]
+      return `Overall portfolio margin is ${avgMargin}% across ${inr(totalBilled)} billed. Highest margin project is ${topProj?.name} (${topProj?.client}) at ${topProj?.margin}% margin (${inr(topProj?.profit)} profit).`
+    },
     tag: 'Margin Analysis',
     model: 'deterministic-sql-transpiler',
     confidence: 'Exact 100%',
   },
   {
     q: 'Summarize GST liabilities for Q2',
-    a: 'Q2 taxable turnover is ₹15,19,400 with ₹2,73,492 in gross GST collected (CGST ₹1,36,746 + SGST ₹1,36,746). All 9 tax invoices are cleared with zero statutory escrow deficit.',
+    get a() {
+      return `FY26 Q2 taxable turnover is ${inr(sum(INVOICES, i => i.amount))} with ${inr(sum(INVOICES, i => i.gst))} in gross GST collected (CGST ${inr(Math.round(sum(INVOICES, i => i.gst)/2))} + SGST ${inr(Math.round(sum(INVOICES, i => i.gst)/2))}). TDS credit claims total ${inr(sum(INVOICES, i => i.tds))} with Form 26AS matching 100%.`
+    },
     tag: 'Tax Compliance',
     model: 'tax-ledger-ast',
     confidence: 'Reconciled',
@@ -430,4 +624,14 @@ export const REPORT_TEMPLATES = [
   { id: 'health', title: 'Project Health', blurb: 'Margin pressure, delivery health, and projects needing review.' },
   { id: 'billing', title: 'Client Billing', blurb: 'Top billed clients and portfolio concentration.' },
 ]
+
+export const CUSTOM_DASHBOARD_WIDGETS = [
+  { id: 'runway', label: 'Safe Runway Forecast', desc: 'Predictive cash runway based on burn rate and collections.', defaultEnabled: true },
+  { id: 'escrow', label: 'GST Statutory Escrow', desc: 'Working capital ring-fenced for quarterly GST payouts.', defaultEnabled: true },
+  { id: 'recovery', label: 'TDS 26AS Matching', desc: 'Tax withheld credit tracking against Form 26AS filings.', defaultEnabled: true },
+  { id: 'velocity', label: 'DSO Collection Velocity', desc: 'Average turnaround days from invoice issue to bank settlement.', defaultEnabled: false },
+  { id: 'concentration', label: 'Client Exposure Matrix', desc: 'Revenue concentration index across top 3 client accounts.', defaultEnabled: false },
+  { id: 'burn', label: 'Project Delivery Burn', desc: 'Real-time project cost burn vs contract margins.', defaultEnabled: false },
+]
+
 

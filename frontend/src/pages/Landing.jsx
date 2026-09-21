@@ -112,7 +112,15 @@ export default function Landing() {
 
             <div className="flex flex-col sm:flex-row gap-3">
               <a href="#try" ref={heroCta}
-                 className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold"
+                 onClick={(e) => {
+                   e.preventDefault()
+                   const el = document.getElementById('try')
+                   if (el) {
+                     el.scrollIntoView({ behavior: 'smooth' })
+                   }
+                   window.dispatchEvent(new CustomEvent('ft-start-tour'))
+                 }}
+                 className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold cursor-pointer"
                  style={{ minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
                           color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
                           boxShadow: '0 4px 14px var(--accent-glow)' }}>

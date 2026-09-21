@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { useReveal } from '../hooks/useReveal'
 import { inr } from './demoData'
-import LoopVideo from './LoopVideo'
 
 const MODULES = [
   { key: 'receivables', label: 'Receivables', icon: Receipt },
@@ -53,7 +52,6 @@ export default function PermissionPlayground() {
   const ref = useReveal({ threshold: 0.15 })
   const [roleId, setRoleId] = useState('viewer')
   const [overrides, setOverrides] = useState({})
-  const [activeMedia, setActiveMedia] = useState('matrix') // 'matrix' | 'blueprint' | 'motion'
 
   const role = ROLES.find(r => r.id === roleId)
   const roleOverrides = overrides[roleId] ?? {}
@@ -85,30 +83,6 @@ export default function PermissionPlayground() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="inline-flex p-1 rounded-xl"
-               style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-            <button
-              onClick={() => setActiveMedia('matrix')}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold"
-              style={{
-                background: activeMedia === 'matrix' ? 'var(--accent-dim)' : 'transparent',
-                color: activeMedia === 'matrix' ? 'var(--accent)' : 'var(--text-3)',
-              }}
-            >
-              Matrix
-            </button>
-            <button
-              onClick={() => setActiveMedia('motion')}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold"
-              style={{
-                background: activeMedia === 'motion' ? 'var(--accent-dim)' : 'transparent',
-                color: activeMedia === 'motion' ? 'var(--accent)' : 'var(--text-3)',
-              }}
-            >
-              Motion
-            </button>
-          </div>
-
           {overrideCount > 0 && (
             <button onClick={reset}
                     className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold"
@@ -120,8 +94,7 @@ export default function PermissionPlayground() {
         </div>
       </div>
 
-      {activeMedia === 'matrix' ? (
-        <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left Column: Role Selector */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -259,11 +232,6 @@ export default function PermissionPlayground() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="relative rounded-2xl overflow-hidden p-4 bg-slate-950 flex items-center justify-center min-h-[380px]">
-          <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="max-h-[360px] w-auto object-contain rounded-lg shadow-2xl" />
-        </div>
-      )}
     </div>
   )
 }
