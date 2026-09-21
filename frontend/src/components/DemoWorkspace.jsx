@@ -3668,7 +3668,7 @@ export default function DemoWorkspace() {
   const [tourIndex, setTourIndex] = useState(0)
   const [tourPaused, setTourPaused] = useState(false)
   const [tourProgress, setTourProgress] = useState(0)
-  const [onScreen, setOnScreen] = useState(false)
+  const [onScreen, setOnScreen] = useState(true)
   const [hints, setHints] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -3689,6 +3689,7 @@ export default function DemoWorkspace() {
     setTourPaused(false)
     setTourIndex(0)
     setTourProgress(0)
+    setOnScreen(true)
     setState(s => ({
       ...s,
       tab: TOUR_STEPS[0].tab,
@@ -3696,35 +3697,72 @@ export default function DemoWorkspace() {
       status: 'all',
       band: null,
       query: '',
+      board: 'lane',
     }))
   }
 
   useEffect(() => {
     const el = hostRef.current
     if (!el || typeof IntersectionObserver === 'undefined') { setOnScreen(true); return }
-    const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), { threshold: 0.25 })
+    const io = new IntersectionObserver(([e]) => {
+      // Any visibility counts as on-screen
+      setOnScreen(e.isIntersecting || e.intersectionRatio > 0)
+    }, { threshold: [0, 0.05, 0.1] })
     io.observe(el)
     return () => io.disconnect()
   }, [])
 
-  // Auto-advance guided tour
+  // Auto-advance guided tour with dynamic simulated actions
   useEffect(() => {
-    if (!tourActive || tourPaused || driving || !onScreen) return
+    if (!tourActive || tourPaused || driving) return
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
 
     const timer = setInterval(() => {
       setTourProgress(prev => {
-        if (prev >= 100) {
+        const next = prev + 2.5 // advances every 4 seconds (40 ticks * 100ms)
+        if (next >= 100) {
           const nextIdx = (tourIndex + 1) % TOUR_STEPS.length
           setTourIndex(nextIdx)
-          setState(s => ({ ...s, tab: TOUR_STEPS[nextIdx].tab, detail: null }))
+          setState(s => ({
+            ...s,
+            tab: TOUR_STEPS[nextIdx].tab,
+            detail: null,
+            status: 'all',
+            band: null,
+            query: '',
+            board: 'lane',
+            question: nextIdx === 3 ? 0 : s.question,
+          }))
           return 0
         }
-        return prev + 2.5 // advances every 4 seconds
+
+        // Live simulated actions within active tour steps
+        if (tourIndex === 0) {
+          // Receivables: show dynamic filtering to overdue and invoice drawer
+          if (next >= 28 && next < 56) {
+            setState(s => s.status !== 'overdue' ? { ...s, status: 'overdue' } : s)
+          } else if (next >= 56 && next < 86) {
+            setState(s => (!s.detail ? { ...s, status: 'overdue', detail: 'INV-2296' } : s))
+          } else if (next >= 86) {
+            setState(s => (s.detail || s.status !== 'all' ? { ...s, status: 'all', detail: null } : s))
+          }
+        } else if (tourIndex === 1) {
+          // Delivery: switch between Kanban and Client group view
+          if (next >= 50 && next < 88) {
+            setState(s => s.board !== 'client' ? { ...s, board: 'client' } : s)
+          }
+        } else if (tourIndex === 3) {
+          // AI Analyst: dynamically demonstrate second natural language query
+          if (next >= 50) {
+            setState(s => s.question !== 1 ? { ...s, question: 1 } : s)
+          }
+        }
+
+        return next
       })
     }, 100)
     return () => clearInterval(timer)
-  }, [tourActive, tourPaused, driving, onScreen, tourIndex])
+  }, [tourActive, tourPaused, driving, tourIndex])
 
   // Listen to external trigger event from Launch button
   useEffect(() => {
@@ -3896,24 +3934,53 @@ export default function DemoWorkspace() {
             {tourActive && !driving && (
               <div className="mx-3 mt-3 p-3 sm:p-4 rounded-xl border relative overflow-hidden backdrop-blur-md shrink-0"
                    style={{
-                     background: 'linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(56,189,248,0.08) 100%)',
+                     background: 'linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(56,189,248,0.09) 100%)',
                      borderColor: 'var(--accent-soft)',
                      boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                    }}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 rounded text-[9.5px] font-extrabold uppercase tracking-wider text-white"
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="px-2 py-0.5 rounded text-[9.5px] font-extrabold uppercase tracking-wider text-white flex items-center gap-1"
                             style={{ background: 'var(--accent)' }}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                         {TOUR_STEPS[tourIndex]?.badge || `Step ${tourIndex + 1}`}
                       </span>
                       <span className="text-xs font-bold text-[var(--text-1)] truncate">
                         {TOUR_STEPS[tourIndex]?.title}
                       </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        {tourPaused ? 'Paused' : `Auto-advancing (${((100 - tourProgress) / 25).toFixed(0)}s)`}
+                      </span>
                     </div>
-                    <p className="text-[11.5px] leading-snug text-[var(--text-2)] m-0">
+                    <p className="text-[11.5px] leading-snug text-[var(--text-2)] m-0 mb-2">
                       {TOUR_STEPS[tourIndex]?.desc}
                     </p>
+
+                    {/* Quick Step Navigation Pills */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {TOUR_STEPS.map((st, idx) => {
+                        const isCur = idx === tourIndex
+                        return (
+                          <button
+                            key={st.tab}
+                            onClick={() => {
+                              setTourIndex(idx)
+                              setTourProgress(0)
+                              setState(s => ({ ...s, tab: st.tab, detail: null, status: 'all', band: null, query: '' }))
+                            }}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium transition-all cursor-pointer border"
+                            style={{
+                              background: isCur ? 'var(--accent)' : 'var(--card-bg)',
+                              borderColor: isCur ? 'var(--accent)' : 'var(--card-border)',
+                              color: isCur ? '#fff' : 'var(--text-2)',
+                            }}
+                          >
+                            {idx + 1}. {st.tab.charAt(0).toUpperCase() + st.tab.slice(1)}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   {/* Tour Action Controls */}
@@ -3925,7 +3992,7 @@ export default function DemoWorkspace() {
                         setTourProgress(0)
                         setState(s => ({ ...s, tab: TOUR_STEPS[prevIdx].tab, detail: null }))
                       }}
-                      className="p-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer"
+                      className="p-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
                       style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
                       title="Previous Tour Step"
                     >
@@ -3953,7 +4020,7 @@ export default function DemoWorkspace() {
                         setTourProgress(0)
                         setState(s => ({ ...s, tab: TOUR_STEPS[nextIdx].tab, detail: null }))
                       }}
-                      className="p-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer"
+                      className="p-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
                       style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
                       title="Next Tour Step"
                     >
@@ -3965,7 +4032,7 @@ export default function DemoWorkspace() {
                         setTourActive(false)
                         setDriving(true)
                       }}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ml-1"
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ml-1 hover:border-blue-500"
                       style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-1)' }}
                       title="Take full control"
                     >
