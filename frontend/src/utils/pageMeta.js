@@ -32,6 +32,11 @@ const ROUTES = [
   // PageViewer replaces both of these with the page's own title and summary
   // once it loads; this is only what the tab reads in the meantime.
   ['/p/:slug',      'Page',          'A page shared with you from FinTrack.'],
+  ['/features',     'Features',      'Explore FinTrack modules, single-ledger architecture, and live sandboxes.'],
+  ['/security',     'Security',      'Enterprise security, cryptographic access controls, and zero-retention policies.'],
+  ['/how-it-works', 'How It Works',  'How FinTrack synchronizes operations, invoices, and tax on one set of records.'],
+  ['/customise',    'Customise',     'White-label branding, custom domains, and theme configuration.'],
+  ['/faq',          'FAQ',           'Frequently asked questions about FinTrack, self-hosting, and compliance.'],
   ['/terms',        'Terms of Service', 'FinTrack platform terms of service, governance, and institutional SLA.'],
   ['/privacy',      'Privacy Policy',   'FinTrack data isolation, zero foundation model training guarantee, and privacy policy.'],
   ['/',             'Dashboard',     'Receivables, project health and invoice activity at a glance.'],
