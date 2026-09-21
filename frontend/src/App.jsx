@@ -12,6 +12,8 @@ const Security = lazy(() => import('./pages/Security'))
 const HowItWorks = lazy(() => import('./pages/public/HowItWorks'))
 const Customise = lazy(() => import('./pages/public/Customise'))
 const Faq = lazy(() => import('./pages/public/Faq'))
+const Terms = lazy(() => import('./pages/public/Terms'))
+const Privacy = lazy(() => import('./pages/public/Privacy'))
 
 // Public marketing routes. Anything not listed here still goes straight to the
 // sign-in form, because a deep link into the app is someone reaching for a
@@ -23,6 +25,8 @@ const PUBLIC_ROUTES = {
   '/how-it-works': HowItWorks,
   '/customise': Customise,
   '/faq': Faq,
+  '/terms': Terms,
+  '/privacy': Privacy,
 }
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'

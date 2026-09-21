@@ -235,20 +235,14 @@ export default function PublicLayout({ children }) {
                 {label}
               </Link>
             ))}
-            <button
-              onClick={() => setLegalModal('privacy')}
-              className="inline-flex items-center text-xs font-semibold rounded-lg bg-transparent border-none cursor-pointer"
-              style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)' }}
-            >
+            <Link to="/privacy" className="inline-flex items-center text-xs font-semibold rounded-lg"
+                  style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)', textDecoration: 'none' }}>
               Privacy Policy
-            </button>
-            <button
-              onClick={() => setLegalModal('terms')}
-              className="inline-flex items-center text-xs font-semibold rounded-lg bg-transparent border-none cursor-pointer"
-              style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)' }}
-            >
+            </Link>
+            <Link to="/terms" className="inline-flex items-center text-xs font-semibold rounded-lg"
+                  style={{ minHeight: 44, padding: '0 10px', color: 'var(--text-2)', textDecoration: 'none' }}>
               Terms of Service
-            </button>
+            </Link>
             <Link to="/login" className="inline-flex items-center text-xs font-semibold rounded-lg"
                   style={{ minHeight: 44, padding: '0 10px', color: 'var(--accent)', textDecoration: 'none' }}>
               Sign in
