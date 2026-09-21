@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { FileSearch, Check, ChevronRight, Layers, ExternalLink, ShieldAlert } from 'lucide-react'
+import { FileSearch, Check, ChevronRight, Layers, ExternalLink, ShieldAlert, Sliders, Activity } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 const SAMPLE_QUERIES = [
   {
@@ -34,6 +35,7 @@ const SAMPLE_QUERIES = [
 
 export default function ContractCitationInspector() {
   const [activeQuery, setActiveQuery] = useState(0)
+  const [activeMedia, setActiveMedia] = useState('inspector') // 'inspector' | 'blueprint'
   const tiltRef = useTilt({ max: 3 })
 
   const current = SAMPLE_QUERIES[activeQuery]
@@ -63,9 +65,39 @@ export default function ContractCitationInspector() {
             Every answer is anchored to exact page numbers and paragraph coordinates. Click prompt chips to see the document jump and highlight.
           </p>
         </div>
+
+        {/* View Switcher */}
+        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          <button
+            onClick={() => setActiveMedia('inspector')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'inspector' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'inspector' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'inspector' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Sliders size={13} />
+            Inspector
+          </button>
+          <button
+            onClick={() => setActiveMedia('blueprint')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Layers size={13} />
+            3D Vector Engine
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {activeMedia === 'inspector' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Interactive Prompts & Answer */}
           <div className="lg:col-span-6 flex flex-col gap-4">
             <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -79,7 +111,7 @@ export default function ContractCitationInspector() {
                   <button
                     key={sq.q}
                     onClick={() => setActiveQuery(idx)}
-                    className="p-3.5 rounded-xl text-left transition-all flex items-start justify-between gap-3 group"
+                    className="p-3.5 rounded-xl text-left transition-all flex items-start justify-between gap-3 group cursor-pointer"
                     style={{
                       background: isSelected ? 'var(--accent-dim)' : 'var(--bg-input)',
                       border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--card-border)'}`,
@@ -110,22 +142,19 @@ export default function ContractCitationInspector() {
               <p className="text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
                 {current.answer}
               </p>
+              <div className="mt-3 pt-2.5 border-t flex items-center justify-between text-[11px]"
+                   style={{ borderColor: 'var(--card-border)', color: 'var(--text-3)' }}>
+                <span className="font-mono">{current.badge}</span>
+                <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                  <Check size={12} /> Cosine Similarity: 0.94
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Right Column: Simulated PDF Sheet with Live Highlight */}
-          <div className="lg:col-span-6 flex flex-col gap-3">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold text-[var(--text-2)]">
-                Master Services Agreement (MSA_2026_Final.pdf)
-              </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20">
-                {current.badge}
-              </span>
-            </div>
-
-            {/* Paper Document Container */}
-            <div className="rounded-2xl p-5 sm:p-6 border shadow-lg relative min-h-[300px] flex flex-col justify-between"
+          {/* Right Column: Highlighted Document Coordinates View */}
+          <div className="lg:col-span-6">
+            <div className="rounded-2xl p-5 sm:p-6 border relative"
                  style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
               {/* Document Mock Header */}
               <div className="border-b pb-3 mb-4 flex items-center justify-between" style={{ borderColor: 'var(--card-border)' }}>
@@ -176,6 +205,66 @@ export default function ContractCitationInspector() {
             </div>
           </div>
         </div>
+      ) : (
+        /* 3D Vector Architecture Dual-Pane Presentation */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Vector Engine Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <Activity size={12} />
+                Vector Embeddings & OCR Pipeline
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Hybrid pgvector semantic indexing & AST clause boundary detection
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Contracts and statements of work are parsed into hierarchical markdown trees, embedded in pgvector, and retrieved with strict citation grounding.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  'HNSW vector indexing in Postgres',
+                  'Page-number and bounding-box coordinates',
+                  'Strict source verification before response',
+                  'Zero synthetic clauses or hallucinations',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Embedding Latency</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">&lt; 40ms</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Grounding Precision</span>
+                  <span className="font-extrabold text-sm text-emerald-500">100% Verifiable</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

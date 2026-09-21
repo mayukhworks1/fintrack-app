@@ -1,15 +1,17 @@
 import { useState, useMemo } from 'react'
 import {
   TrendingDown, AlertTriangle, ShieldCheck, Clock,
-  ArrowRight
+  ArrowRight, Layers, Sliders, Activity, Check
 } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 export default function RunwayStressTester() {
   const [cashReserve, setCashReserve] = useState(4500000) // ₹45 Lakhs
   const [monthlyBurn, setMonthlyBurn] = useState(650000)  // ₹6.5 Lakhs / mo
   const [delayDays, setDelayDays] = useState(30)         // 30 days overdue delay
+  const [activeMedia, setActiveMedia] = useState('tester') // 'tester' | 'blueprint'
   const cardTilt = useTilt({ max: 3 })
 
   // Expected monthly collection under normal terms vs delayed terms
@@ -69,9 +71,39 @@ export default function RunwayStressTester() {
             Simulate working capital stress by varying client overdue delays and burn rates.
           </p>
         </div>
+
+        {/* View Switcher */}
+        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          <button
+            onClick={() => setActiveMedia('tester')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'tester' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'tester' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'tester' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Sliders size={13} />
+            Stress-Tester
+          </button>
+          <button
+            onClick={() => setActiveMedia('blueprint')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Layers size={13} />
+            3D Cash Model
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      {activeMedia === 'tester' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Controls Column */}
           <div className="lg:col-span-5 flex flex-col gap-5">
             {/* Slider 1: Cash Reserve */}
@@ -100,10 +132,10 @@ export default function RunwayStressTester() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-                  Monthly Team & Ops Burn
+                  Monthly Operating Burn
                 </label>
-                <span className="font-extrabold text-xs sm:text-sm tabular-nums" style={{ color: 'var(--bad)' }}>
-                  − {inr(monthlyBurn)} / mo
+                <span className="font-extrabold text-xs sm:text-sm tabular-nums text-rose-500">
+                  {inr(monthlyBurn)}/mo
                 </span>
               </div>
               <input
@@ -113,80 +145,72 @@ export default function RunwayStressTester() {
                 step="50000"
                 value={monthlyBurn}
                 onChange={(e) => setMonthlyBurn(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-[var(--bad)]"
+                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-rose-500"
                 style={{ background: 'var(--bg-input)' }}
               />
             </div>
 
-            {/* Slider 3: Client Delay */}
+            {/* Slider 3: Delay Days */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-                  Client Payment Delay (Overdue)
+                  Average Client Delay Window
                 </label>
-                <span className="font-extrabold text-xs sm:text-sm tabular-nums" style={{ color: delayDays > 45 ? 'var(--bad)' : delayDays > 15 ? 'var(--warn)' : 'var(--ok)' }}>
-                  +{delayDays} Days Lag
+                <span className="font-extrabold text-xs sm:text-sm tabular-nums text-amber-500">
+                  +{delayDays} days overdue
                 </span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="90"
-                step="15"
+                step="5"
                 value={delayDays}
                 onChange={(e) => setDelayDays(Number(e.target.value))}
                 className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-amber-500"
                 style={{ background: 'var(--bg-input)' }}
               />
-              <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
-                <span>0 Days (On-Time)</span>
-                <span>45 Days</span>
-                <span>90 Days (Stalled)</span>
-              </div>
             </div>
           </div>
 
-          {/* Visualization Output Column */}
+          {/* Visualization Column */}
           <div className="lg:col-span-7 flex flex-col gap-4">
-            {/* KPI Result Tiles */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl p-3.5 border text-center"
+            {/* KPI Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl p-4 border"
                    style={{
-                     background: runwayStatus === 'healthy' ? 'var(--ok-dim)' : runwayStatus === 'watch' ? 'var(--warn-dim)' : 'var(--bad-dim)',
-                     borderColor: runwayStatus === 'healthy' ? 'var(--ok)' : runwayStatus === 'watch' ? 'var(--warn)' : 'var(--bad)',
+                     background: 'var(--bg-input)',
+                     borderColor: runwayStatus === 'healthy' ? 'var(--ok-dim)' : runwayStatus === 'watch' ? 'var(--warn-dim)' : 'var(--bad-dim)',
                    }}>
-                <span className="block text-[10px] font-extrabold uppercase tracking-wider opacity-80"
-                      style={{ color: runwayStatus === 'healthy' ? 'var(--ok)' : runwayStatus === 'watch' ? 'var(--warn)' : 'var(--bad)' }}>
-                  Runway Horizon
+                <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-3)' }}>
+                  Remaining Runway
                 </span>
-                <span className="text-xl sm:text-2xl font-extrabold my-1 block tabular-nums"
+                <span className="text-2xl font-extrabold my-1 block tabular-nums"
                       style={{ color: runwayStatus === 'healthy' ? 'var(--ok)' : runwayStatus === 'watch' ? 'var(--warn)' : 'var(--bad)' }}>
-                  {runwayMonths >= 36 ? '36+ Mos' : `${runwayMonths} Mos`}
+                  {runwayMonths >= 36 ? '36+ mos' : `${runwayMonths} mos`}
                 </span>
                 <span className="text-[10px] font-semibold"
                       style={{ color: runwayStatus === 'healthy' ? 'var(--ok)' : runwayStatus === 'watch' ? 'var(--warn)' : 'var(--bad)' }}>
-                  {runwayStatus === 'healthy' ? 'Safe Operating Buffer' : runwayStatus === 'watch' ? 'Caution Required' : 'Critical Cash Risk'}
+                  {runwayStatus === 'healthy' ? 'Low Risk' : runwayStatus === 'watch' ? 'Moderate Drag' : 'Critical Cash Risk'}
                 </span>
               </div>
 
-              <div className="rounded-2xl p-3.5 border text-center"
-                   style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)]">
-                  Net Monthly Cash
+              <div className="rounded-2xl p-4 border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-3)' }}>
+                  Net Cashflow
                 </span>
                 <span className="text-lg sm:text-xl font-extrabold my-1 block tabular-nums"
                       style={{ color: netMonthlyCashflow >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
-                  {netMonthlyCashflow >= 0 ? `+${inrShort(netMonthlyCashflow)}` : `−${inrShort(Math.abs(netMonthlyCashflow))}`}
+                  {netMonthlyCashflow >= 0 ? `+${inrShort(netMonthlyCashflow)}` : `-${inrShort(Math.abs(netMonthlyCashflow))}`}
                 </span>
                 <span className="text-[10px] text-[var(--text-3)]">
-                  Inflow vs burn
+                  Per month
                 </span>
               </div>
 
-              <div className="rounded-2xl p-3.5 border text-center"
-                   style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)]">
-                  Overdue Capital
+              <div className="rounded-2xl p-4 border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-3)' }}>
+                  Delayed Inflow
                 </span>
                 <span className="text-lg sm:text-xl font-extrabold my-1 block text-amber-500 tabular-nums">
                   {inrShort(Math.round(baseMonthlyCollection * (delayDays / 30)))}
@@ -242,6 +266,66 @@ export default function RunwayStressTester() {
             </div>
           </div>
         </div>
+      ) : (
+        /* 3D Runway Simulation Dual-Pane Presentation */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Stress Model Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <Activity size={12} />
+                Liquidity Stress Engine
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Monte Carlo cash runway forecasting & overdue shock models
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Simulate delayed client settlements and see how overdue invoice aging directly impacts payroll, contractor burn, and statutory cash safety.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  '12-month forward predictive liquidity curve',
+                  'Client-specific historical payment lag weighting',
+                  'Automated burn rate containment threshold alerts',
+                  'Instant scenario export for leadership & investors',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Model Precision</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">Invoice-Level</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Shock Buffer</span>
+                  <span className="font-extrabold text-sm text-emerald-500">Dynamic Escrow</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

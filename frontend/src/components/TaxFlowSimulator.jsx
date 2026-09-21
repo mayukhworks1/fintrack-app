@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { Landmark, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react'
+import { Landmark, ArrowRight, ShieldCheck, RefreshCw, Layers, Sliders, Activity, Check } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 export default function TaxFlowSimulator() {
   const [billed, setBilled] = useState(2500000) // ₹25 Lakhs
   const [gstRate, setGstRate] = useState(0.18)   // 18%
   const [tdsRate, setTdsRate] = useState(0.10)   // 10%
   const [clientType, setClientType] = useState('domestic_tech') // domestic_tech | contractor | sez_export
+  const [activeMedia, setActiveMedia] = useState('flow') // 'flow' | 'blueprint'
   const cardTilt = useTilt({ max: 3 })
 
   const gstAmount = Math.round(billed * gstRate)
@@ -55,9 +57,39 @@ export default function TaxFlowSimulator() {
             Adjust billing volume and tax categories to watch cash, GST liabilities, and Form 26AS TDS credits segregate dynamically.
           </p>
         </div>
+
+        {/* View Switcher */}
+        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          <button
+            onClick={() => setActiveMedia('flow')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'flow' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'flow' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'flow' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Sliders size={13} />
+            Interactive Flow
+          </button>
+          <button
+            onClick={() => setActiveMedia('blueprint')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Layers size={13} />
+            3D Architecture
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      {activeMedia === 'flow' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Controls Column */}
           <div className="lg:col-span-5 flex flex-col gap-5">
             {/* Client Mix Presets */}
@@ -74,7 +106,7 @@ export default function TaxFlowSimulator() {
                   <button
                     key={p.id}
                     onClick={() => handleClientType(p.id)}
-                    className="p-2.5 rounded-xl text-left transition-all"
+                    className="p-2.5 rounded-xl text-left transition-all cursor-pointer"
                     style={{
                       background: clientType === p.id ? 'var(--accent-dim)' : 'var(--bg-input)',
                       border: `1px solid ${clientType === p.id ? 'var(--accent)' : 'var(--card-border)'}`,
@@ -100,72 +132,81 @@ export default function TaxFlowSimulator() {
               </div>
               <input
                 type="range"
-                min="500000"
-                max="10000000"
-                step="250000"
+                min={500000}
+                max={10000000}
+                step={250000}
                 value={billed}
                 onChange={(e) => setBilled(Number(e.target.value))}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-                style={{ background: 'var(--bg-input)' }}
+                className="w-full accent-[var(--accent)] cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+              <div className="flex justify-between text-[10px] font-mono mt-1" style={{ color: 'var(--text-3)' }}>
                 <span>₹5 Lakhs</span>
                 <span>₹50 Lakhs</span>
-                <span>₹1.0 Crore</span>
+                <span>₹1 Crore</span>
               </div>
             </div>
 
-            {/* Statutory Key Rules */}
-            <div className="rounded-xl p-3.5 flex flex-col gap-2"
-                 style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-start gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
-                <ShieldCheck size={15} className="text-emerald-500 shrink-0 mt-0.5" />
-                <span>
-                  <strong>GST Escrow:</strong> ₹{inr(gstAmount)} must be remitted by the 20th. Never mix with working capital.
+            {/* Statutory Parameters Readout */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl p-3 border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-3)' }}>
+                  Gross Invoiced (With GST)
+                </span>
+                <span className="font-extrabold text-sm tabular-nums" style={{ color: 'var(--text-1)' }}>
+                  {inr(invoicedTotal)}
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
-                <Landmark size={15} className="text-sky-500 shrink-0 mt-0.5" />
-                <span>
-                  <strong>TDS Form 26AS:</strong> ₹{inr(tdsAmount)} withheld by client. Matched automatically in FinTrack tax ledger.
+              <div className="rounded-xl p-3 border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-3)' }}>
+                  TDS Withheld (194J)
+                </span>
+                <span className="font-extrabold text-sm tabular-nums text-amber-500">
+                  {inr(tdsAmount)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Visual Dynamic Flow Canvas */}
+          {/* Visualization Column */}
           <div className="lg:col-span-7 flex flex-col gap-4">
+            {/* Live Allocation Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Card 1: Gross Invoiced */}
-              <div className="rounded-2xl p-4 flex flex-col justify-between border"
-                   style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-                <span className="text-[11px] font-bold text-[var(--text-3)] uppercase">Gross Invoiced</span>
-                <span className="text-xl font-extrabold my-2 text-[var(--text-1)] tabular-nums">
-                  {inr(invoicedTotal)}
+              {/* Card 1: Bank Cash */}
+              <div className="rounded-2xl p-4 border"
+                   style={{ background: 'var(--bg-input)', borderColor: 'var(--accent-soft)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block text-[var(--accent)]">
+                  1. Net Cash to Bank
+                </span>
+                <span className="text-xl font-extrabold my-1 block tabular-nums text-[var(--text-1)]">
+                  {inrShort(bankReceived)}
                 </span>
                 <span className="text-[10.5px] text-[var(--text-3)]">
-                  Billed + {Math.round(gstRate * 100)}% GST
+                  Post-TDS Net Inflow
                 </span>
               </div>
 
-              {/* Card 2: Tax Escrow Hold */}
-              <div className="rounded-2xl p-4 flex flex-col justify-between border"
-                   style={{ background: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-                <span className="text-[11px] font-bold text-red-500 uppercase">GST State Escrow</span>
-                <span className="text-xl font-extrabold my-2 text-red-500 tabular-nums">
-                  − {inr(gstAmount)}
+              {/* Card 2: GST Escrow */}
+              <div className="rounded-2xl p-4 border"
+                   style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block text-rose-500">
+                  2. GST Escrow (Liabilities)
                 </span>
-                <span className="text-[10.5px] text-red-500/80">
-                  Must remit before filing
+                <span className="text-xl font-extrabold my-1 block tabular-nums text-rose-500">
+                  {inrShort(gstAmount)}
+                </span>
+                <span className="text-[10.5px] text-[var(--text-3)]">
+                  Reserved for 20th Filing
                 </span>
               </div>
 
-              {/* Card 3: Net Operating Cash */}
-              <div className="rounded-2xl p-4 flex flex-col justify-between border"
-                   style={{ background: 'var(--accent-dim)', borderColor: 'var(--accent-soft)' }}>
-                <span className="text-[11px] font-bold text-[var(--accent)] uppercase">Lands In Bank</span>
-                <span className="text-xl font-extrabold my-2 text-[var(--accent)] tabular-nums">
-                  {inr(bankReceived)}
+              {/* Card 3: Safe Runway */}
+              <div className="rounded-2xl p-4 border"
+                   style={{ background: 'var(--bg-input)', borderColor: 'var(--ok-dim)' }}>
+                <span className="text-[10px] uppercase font-bold tracking-wider block text-emerald-500">
+                  3. Safe Spendable Capital
+                </span>
+                <span className="text-xl font-extrabold my-1 block tabular-nums text-emerald-500">
+                  {inrShort(safeReserve)}
                 </span>
                 <span className="text-[10.5px] text-[var(--accent)]">
                   Net usable liquidity
@@ -240,6 +281,66 @@ export default function TaxFlowSimulator() {
             </div>
           </div>
         </div>
+      ) : (
+        /* 3D Tax Architecture Dual-Pane Presentation */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Tax Engine Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <Activity size={12} />
+                Tax Ledger Engine
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Automated statutory tax escrow & real-time 26AS reconciliation
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Keeps collected GST liabilities isolated from operating balances, and tracks Form 26AS TDS withholding automatically.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  '18% CGST/SGST split automation',
+                  'Section 194J/194C TDS certificate audit',
+                  'Filing schedule alerts for 20th of month',
+                  'Zero mixing of tax float with OPEX',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Reconciliation</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">100% Automated</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Tax Drift</span>
+                  <span className="font-extrabold text-sm text-emerald-500">₹0.00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-5.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

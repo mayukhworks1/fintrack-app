@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import {
   ShieldCheck, Lock, KeyRound, Zap, CheckCircle2,
-  Trash2, RefreshCw, AlertTriangle,
+  Trash2, RefreshCw, AlertTriangle, Layers, Sliders, Activity, Check,
   Fingerprint, Laptop, Smartphone, Monitor
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
+import LoopVideo from './LoopVideo'
 
 const INITIAL_LOGS = [
   {
@@ -48,6 +49,7 @@ const INITIAL_SESSIONS = [
 export default function AuditTrailSandbox() {
   const [logs, setLogs] = useState(INITIAL_LOGS)
   const [sessions, setSessions] = useState(INITIAL_SESSIONS)
+  const [activeMedia, setActiveMedia] = useState('sandbox') // 'sandbox' | 'blueprint'
   const cardTilt = useTilt({ max: 2.5 })
 
   const triggerEvent = (type) => {
@@ -134,9 +136,39 @@ export default function AuditTrailSandbox() {
             Every state mutation is hashed, attributed to an authenticated session, and verified in real time.
           </p>
         </div>
+
+        {/* View Switcher */}
+        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          <button
+            onClick={() => setActiveMedia('sandbox')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'sandbox' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'sandbox' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'sandbox' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Sliders size={13} />
+            Audit Sandbox
+          </button>
+          <button
+            onClick={() => setActiveMedia('blueprint')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            style={{
+              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
+              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            <Layers size={13} />
+            3D Security Architecture
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-6">
+      {activeMedia === 'sandbox' ? (
+        <div className="space-y-6">
           {/* Action Trigger Toolbar */}
           <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border"
                style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
@@ -145,95 +177,84 @@ export default function AuditTrailSandbox() {
             </span>
             <button
               onClick={() => triggerEvent('invoice')}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
               style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-1)' }}
             >
               + Invoice State Change
             </button>
             <button
               onClick={() => triggerEvent('permission')}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
               style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-1)' }}
             >
-              + Revoke Permission
+              + Role Override
             </button>
             <button
               onClick={() => triggerEvent('query')}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
               style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-1)' }}
             >
-              + Scoped AI SQL Run
+              + Scoped AI Query
             </button>
           </div>
 
+          {/* Dual Panel: Live Logs vs Device Sessions */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Audit Log Stream (8 cols) */}
-            <div className="lg:col-span-8 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
-                  Live Audit Telemetry Stream (SHA-256 Verified)
+            {/* Left: Tamper-Proof Cryptographic Log Stream (7 cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                  <ShieldCheck size={13} className="text-emerald-500" /> Immutable Event Hash Chain
                 </span>
-                <span className="text-[11px] font-mono text-emerald-500 flex items-center gap-1">
-                  <CheckCircle2 size={12} /> Append-Only Log Active
+                <span className="text-[10px] font-mono text-[var(--text-3)]">
+                  SHA-256 Digest
                 </span>
               </div>
 
-              <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--bg-base)', borderColor: 'var(--card-border)' }}>
-                <div className="divide-y divide-[var(--card-border)]">
-                  {logs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="p-3 sm:p-3.5 flex flex-col gap-1 transition-all"
-                      style={{ animation: 'ft-slide-up 240ms ease-out' }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-bold"
-                            style={{
-                              background: log.action.includes('REVOK') || log.action.includes('TERMINAT')
-                                ? 'var(--bad-dim)'
-                                : log.action.includes('QUERY')
-                                ? 'var(--accent-dim)'
-                                : 'var(--ok-dim)',
-                              color: log.action.includes('REVOK') || log.action.includes('TERMINAT')
-                                ? 'var(--bad)'
-                                : log.action.includes('QUERY')
-                                ? 'var(--accent)'
-                                : 'var(--ok)',
-                            }}
-                          >
-                            {log.action}
-                          </span>
-                          <span className="text-[11px] font-mono text-[var(--text-3)]">{log.timestamp}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-[var(--text-3)] hidden sm:inline-block">
-                          {log.ip}
-                        </span>
-                      </div>
-                      <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>
-                        {log.detail}
-                      </p>
-                      <div className="flex items-center gap-2 pt-1 text-[10px] font-mono text-[var(--text-3)]">
-                        <span className="truncate">Hash: {log.hash.slice(0, 24)}...</span>
-                        <span className="shrink-0 text-emerald-500 font-bold flex items-center gap-0.5">
-                          ✓ Verified
-                        </span>
-                      </div>
+              <div className="space-y-2">
+                {logs.map(log => (
+                  <div
+                    key={log.id}
+                    className="p-3.5 rounded-2xl border transition-all"
+                    style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono font-bold text-xs text-[var(--accent)]">
+                        {log.action}
+                      </span>
+                      <span className="text-[10.5px] font-mono text-[var(--text-3)]">
+                        {log.timestamp}
+                      </span>
                     </div>
-                  ))}
-                </div>
+
+                    <p className="text-xs font-medium text-[var(--text-1)] mb-2">
+                      {log.detail}
+                    </p>
+
+                    <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-[var(--card-border)] text-[var(--text-3)]">
+                      <span className="truncate max-w-[200px]">{log.actor}</span>
+                      <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Hash Verified
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Active Sessions & Server-Side Revocation (4 cols) */}
-            <div className="lg:col-span-4 flex flex-col gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] px-1">
-                Active Server Sessions
-              </span>
+            {/* Right: Active Sessions & Instant Invalidation (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                  <KeyRound size={13} className="text-[var(--accent)]" /> Active Sessions
+                </span>
+                <span className="text-[10px] text-emerald-500 font-bold">
+                  Instant Revocation
+                </span>
+              </div>
 
               <div className="space-y-2.5">
-                {sessions.map((sess) => {
+                {sessions.map(sess => {
                   const Icon = sess.icon
                   return (
                     <div
@@ -262,7 +283,7 @@ export default function AuditTrailSandbox() {
                         {sess.active && !sess.current ? (
                           <button
                             onClick={() => revokeSession(sess.id)}
-                            className="px-2 py-0.5 rounded text-[10px] font-bold border transition-all hover:bg-rose-500/10 text-rose-500 border-rose-500/30"
+                            className="px-2 py-0.5 rounded text-[10px] font-bold border transition-all hover:bg-rose-500/10 text-rose-500 border-rose-500/30 cursor-pointer"
                           >
                             Revoke Now
                           </button>
@@ -279,6 +300,66 @@ export default function AuditTrailSandbox() {
             </div>
           </div>
         </div>
+      ) : (
+        /* 3D Security Architecture Dual-Pane Presentation */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Audit Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <Activity size={12} />
+                Cryptographic Audit Architecture
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Immutable SHA-256 state change ledger & instant session kill switch
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Every financial update, permission modification, and AI query is chained with cryptographic hash signatures and verified in real time.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  'Cryptographic SHA-256 hash chaining',
+                  'Client IP, device, and timing telemetry',
+                  'Instant token revocation via Redis blacklist',
+                  'Exportable SOC-2 & ISO-27001 audit logs',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Hashing Overhead</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">&lt; 0.2ms</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Session Invalidation</span>
+                  <span className="font-extrabold text-sm text-rose-500">Immediate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

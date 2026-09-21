@@ -2,10 +2,11 @@ import { useState } from 'react'
 import {
   Receipt, FolderKanban, BarChart3, Landmark, FileSearch, Sparkles,
   FileText, Globe, Activity, Share2, ShieldCheck, RotateCcw, Check,
-  Lock, Eye, EyeOff, Layers, Play, Maximize2, X
+  Lock, Eye, EyeOff, Layers, Sliders, Shield
 } from 'lucide-react'
 import { useReveal } from '../hooks/useReveal'
 import { inr } from './demoData'
+import LoopVideo from './LoopVideo'
 
 const MODULES = [
   { key: 'receivables', label: 'Receivables', icon: Receipt },
@@ -52,6 +53,7 @@ export default function PermissionPlayground() {
   const ref = useReveal({ threshold: 0.15 })
   const [roleId, setRoleId] = useState('viewer')
   const [overrides, setOverrides] = useState({})
+  const [activeMedia, setActiveMedia] = useState('matrix') // 'matrix' | 'blueprint'
 
   const role = ROLES.find(r => r.id === roleId)
   const roleOverrides = overrides[roleId] ?? {}
@@ -83,9 +85,37 @@ export default function PermissionPlayground() {
         </div>
 
         <div className="flex items-center gap-2">
-          {overrideCount > 0 && (
+          <div className="inline-flex p-1 rounded-xl"
+               style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+            <button
+              onClick={() => setActiveMedia('matrix')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              style={{
+                background: activeMedia === 'matrix' ? 'var(--accent-dim)' : 'transparent',
+                color: activeMedia === 'matrix' ? 'var(--accent)' : 'var(--text-3)',
+                boxShadow: activeMedia === 'matrix' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <Sliders size={12} />
+              RBAC Matrix
+            </button>
+            <button
+              onClick={() => setActiveMedia('blueprint')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              style={{
+                background: activeMedia === 'blueprint' ? 'var(--accent-dim)' : 'transparent',
+                color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+                boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <Layers size={12} />
+              3D Security Flow
+            </button>
+          </div>
+
+          {overrideCount > 0 && activeMedia === 'matrix' && (
             <button onClick={reset}
-                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold"
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold cursor-pointer"
                     style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', color: 'var(--text-2)' }}>
               <RotateCcw size={11} />
               Reset defaults
@@ -94,7 +124,8 @@ export default function PermissionPlayground() {
         </div>
       </div>
 
-      <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {activeMedia === 'matrix' ? (
+        <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left Column: Role Selector */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -107,7 +138,7 @@ export default function PermissionPlayground() {
                   <button
                     key={r.id}
                     onClick={() => setRoleId(r.id)}
-                    className="flex items-start gap-3 p-3.5 rounded-2xl text-left transition-all"
+                    className="flex items-start gap-3 p-3.5 rounded-2xl text-left transition-all cursor-pointer"
                     style={{
                       background: on ? 'var(--accent-dim)' : 'var(--bg-input)',
                       border: `1px solid ${on ? 'var(--accent)' : 'var(--card-border)'}`,
@@ -169,7 +200,7 @@ export default function PermissionPlayground() {
                     <button
                       key={m.key}
                       onClick={() => toggle(m.key)}
-                      className="flex items-center justify-between p-2.5 rounded-xl border text-left transition-all"
+                      className="flex items-center justify-between p-2.5 rounded-xl border text-left transition-all cursor-pointer"
                       style={{
                         background: hasAccess ? 'var(--card-bg)' : 'var(--bg-input)',
                         borderColor: overridden ? 'var(--warn)' : hasAccess ? 'var(--accent-soft)' : 'var(--card-border)',
@@ -232,6 +263,66 @@ export default function PermissionPlayground() {
             </div>
           </div>
         </div>
+      ) : (
+        /* 3D Security Architecture Presentation */
+        <div className="p-5 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Security Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <ShieldCheck size={12} />
+                Cryptographic Access Security
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Row-level database scoping & deterministic role enforcement
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Every API call and AI query compiles session-scoped WHERE predicates directly into the SQL query before database execution.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  'Eight pre-built role hierarchies',
+                  'Per-person granular module overrides',
+                  'Zero-leakage SQL query compilation',
+                  'Server-side session hash validation',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">RBAC Latency</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">&lt; 1ms</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Scoping Engine</span>
+                  <span className="font-extrabold text-sm text-emerald-500">Parameterized AST</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
