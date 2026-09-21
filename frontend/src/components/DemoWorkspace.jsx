@@ -3715,7 +3715,6 @@ export default function DemoWorkspace() {
   // Auto-advance guided tour with dynamic simulated actions
   useEffect(() => {
     if (!tourActive || tourPaused || driving) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
 
     const timer = setInterval(() => {
       setTourProgress(prev => {
@@ -3764,13 +3763,39 @@ export default function DemoWorkspace() {
     return () => clearInterval(timer)
   }, [tourActive, tourPaused, driving, tourIndex])
 
-  // Listen to external trigger event from Launch button
+  // Listen to external trigger event from Launch button & Product Film
   useEffect(() => {
     const handleStartTour = () => {
       startTour()
+      if (hostRef.current) {
+        hostRef.current.scrollIntoView({ behavior: 'smooth' })
+      }
     }
+    const handleSwitchTab = (e) => {
+      const tabId = e?.detail
+      if (tabId && PANELS[tabId]) {
+        setState(s => ({
+          ...s,
+          tab: tabId,
+          detail: null,
+          status: 'all',
+          band: null,
+          query: '',
+        }))
+        setDriving(true)
+        setTourActive(false)
+        if (hostRef.current) {
+          hostRef.current.scrollIntoView({ behavior: 'smooth' })
+        }
+      }
+    }
+
     window.addEventListener('ft-start-tour', handleStartTour)
-    return () => window.removeEventListener('ft-start-tour', handleStartTour)
+    window.addEventListener('ft-switch-tab', handleSwitchTab)
+    return () => {
+      window.removeEventListener('ft-start-tour', handleStartTour)
+      window.removeEventListener('ft-switch-tab', handleSwitchTab)
+    }
   }, [])
 
   const Panel = PANELS[state.tab] || PANELS.receivables
