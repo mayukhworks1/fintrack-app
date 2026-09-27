@@ -2994,6 +2994,46 @@ html.dark .web-invoices-shell {
   .ft-kpi > div:first-child > span:not(.k) { display: none; }
 }
 
+
+/* ── Rows arriving ───────────────────────────────────────────────────────
+   The sandbox's lists appeared fully formed, which is the one moment the
+   product has to look alive: filtering to "overdue" is the whole argument,
+   and it read as a static table being swapped for another static table.
+   Rows now arrive in the order they are read, on a stagger that shortens as
+   it goes — a constant step down seventeen rows takes long enough that the
+   last one feels forgotten.
+   React keys these by invoice id, so a row that survives a filter keeps its
+   node and does not re-animate. Only the ones that genuinely just arrived
+   move, which is what makes the filter legible rather than decorative. */
+@keyframes ft-row-in {
+  from { opacity: 0; transform: translateY(7px) }
+  to   { opacity: 1; transform: none }
+}
+.ft-tour-scene [data-row] {
+  animation: ft-row-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ft-tour-scene [data-row]:nth-child(1)  { animation-delay: 0ms }
+.ft-tour-scene [data-row]:nth-child(2)  { animation-delay: 34ms }
+.ft-tour-scene [data-row]:nth-child(3)  { animation-delay: 66ms }
+.ft-tour-scene [data-row]:nth-child(4)  { animation-delay: 96ms }
+.ft-tour-scene [data-row]:nth-child(5)  { animation-delay: 122ms }
+.ft-tour-scene [data-row]:nth-child(6)  { animation-delay: 146ms }
+.ft-tour-scene [data-row]:nth-child(7)  { animation-delay: 167ms }
+.ft-tour-scene [data-row]:nth-child(8)  { animation-delay: 185ms }
+.ft-tour-scene [data-row]:nth-child(9)  { animation-delay: 200ms }
+.ft-tour-scene [data-row]:nth-child(n+10) { animation-delay: 212ms }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Stated outright rather than left to the global duration collapse: at
+     0.01ms the fill does not land and the rows stay at opacity 0 for good.
+     That fault cost the glyphs their entire drawing once already. */
+  .ft-tour-scene [data-row] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 @keyframes ft-scene-in {
   from { opacity: 0; transform: translateY(8px) scale(0.995) }
   to   { opacity: 1; transform: none }
