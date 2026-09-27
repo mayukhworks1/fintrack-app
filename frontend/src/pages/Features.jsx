@@ -40,7 +40,7 @@ import LoopVideo from '../components/LoopVideo'
 
 export const FEATURES = [
   {
-    id: 'receivables', icon: Receipt, label: 'Receivables',
+    id: 'receivables', icon: Receipt, label: 'Invoices',
     headline: 'Know what is owed, how old it is, and what is missing',
     body: 'Invoices carry aging bands, a collection rate and average days to collect. GST and TDS are separate figures, because tax withheld at source is not money a client still owes you — counting it as outstanding overstates what you can actually collect.',
     points: [

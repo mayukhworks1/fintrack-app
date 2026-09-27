@@ -18,6 +18,10 @@ import { render, screen, within, fireEvent, waitFor } from '@testing-library/rea
 import DemoWorkspace, { TABS } from '../components/DemoWorkspace'
 import { INVOICES, TOTALS, inr, inrShort, GST_RATE, TDS_RATE, DELIVERY, LANES } from '../components/demoData'
 
+/* Query by whatever the rail actually calls a tab. Hard-coding the words
+   meant a rename broke five tests that were not about naming at all. */
+const labelFor = (id) => TABS.find(t => t.id === id).label
+
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', class {
     constructor(cb) { this.cb = cb }
@@ -114,7 +118,7 @@ describe('the sandbox', () => {
     const { container } = render(<DemoWorkspace />)
     const search = screen.getByLabelText(/Search the sample invoices/)
     fireEvent.keyDown(search, { key: '4' })
-    expect(screen.getByText(/fintrack — receivables/)).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`fintrack — ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
   })
 
   it('filters, and the footer total is the rows that survived', () => {
@@ -161,7 +165,7 @@ describe('the sandbox', () => {
     fireEvent.click(rail.getByRole('button', { name: 'Ageing' }))
     fireEvent.click(screen.getByRole('button', { name: /61–90 days/ }))
     // It should land on the invoice list, filtered, with something in it.
-    expect(screen.getByText(/fintrack — receivables/)).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`fintrack — ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
     expect(screen.getByText(/Ageing: 61–90 days/)).toBeInTheDocument()
     expect(rows(container).length).toBeGreaterThan(0)
   })
@@ -172,7 +176,7 @@ describe('the sandbox', () => {
     // set of records, so the board knows the money without a reconciliation.
     const { container } = render(<DemoWorkspace />)
     const rail = within(container.querySelector('.ft-tour-rail'))
-    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+    fireEvent.click(rail.getByRole('button', { name: labelFor('delivery') }))
 
     for (const lane of LANES) expect(screen.getAllByText(lane).length).toBeGreaterThan(0)
     const withMoney = DELIVERY.filter(d => d.outstanding > 0)
@@ -185,7 +189,7 @@ describe('the sandbox', () => {
   it('opens a status note when a board card is clicked', () => {
     const { container } = render(<DemoWorkspace />)
     const rail = within(container.querySelector('.ft-tour-rail'))
-    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+    fireEvent.click(rail.getByRole('button', { name: labelFor('delivery') }))
     const card = DELIVERY[0]
     fireEvent.click(screen.getByRole('button', { name: new RegExp(card.project) }))
     expect(screen.getByText(card.detail)).toBeInTheDocument()
@@ -194,7 +198,7 @@ describe('the sandbox', () => {
   it('regroups the board by client', () => {
     const { container } = render(<DemoWorkspace />)
     const rail = within(container.querySelector('.ft-tour-rail'))
-    fireEvent.click(rail.getByRole('button', { name: 'Delivery' }))
+    fireEvent.click(rail.getByRole('button', { name: labelFor('delivery') }))
     fireEvent.click(screen.getByRole('button', { name: /by client/i }))
     for (const client of new Set(DELIVERY.map(d => d.client))) {
       expect(screen.getAllByText(client).length).toBeGreaterThan(0)

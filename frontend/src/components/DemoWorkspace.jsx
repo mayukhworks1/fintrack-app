@@ -43,16 +43,27 @@ import {
 } from './demoData'
 
 export const TABS = [
+/* Labels are the signed-in app's, exactly. This is a replica, so a visitor
+   who drives it and then signs in must find the same words in the same rail —
+   four of these did not match and "Receivables" was a module the product does
+   not have. The ids stay as they are: they are internal keys wired through
+   the tour, the film's chapters and the deep links, and renaming them buys
+   nothing a user can see. src/test/sandboxnames.test.js holds this to
+   Layout.jsx's NAV so it cannot drift again. */
   { id: 'dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
-  { id: 'receivables', label: 'Receivables',  icon: Receipt },
+  { id: 'receivables', label: 'Invoices',     icon: Receipt },
   { id: 'projects',    label: 'Projects',     icon: FolderKanban },
   { id: 'tax',         label: 'Tax Ledger',   icon: FileSpreadsheet },
   { id: 'analytics',   label: 'Analytics',    icon: BarChart3 },
-  { id: 'analyst',     label: 'AI assistant', icon: Sparkles },
-  { id: 'reports',     label: 'Reports',      icon: FileText },
-  { id: 'delivery',    label: 'Delivery',     icon: KanbanSquare },
+  { id: 'analyst',     label: 'AI Assistant', icon: Sparkles },
+  { id: 'reports',     label: 'Report',       icon: FileText },
+  { id: 'delivery',    label: 'Status Board', icon: KanbanSquare },
   { id: 'pages',       label: 'Pages',        icon: Globe },
   { id: 'studio',      label: 'Studio',       icon: Layers },
+  /* Ageing is not a tenth module in the app — it is the aging bands inside
+     Invoices, surfaced here as its own entry because a band is the fastest
+     way into the demo. Clicking one sends you to Invoices with the filter
+     applied, which is exactly where it lives in the product. */
   { id: 'ageing',      label: 'Ageing',       icon: Timer },
 ]
 
@@ -3620,7 +3631,7 @@ export const TOUR_STEPS = [
   {
     tab: 'receivables',
     badge: 'Step 1 of 6 · Core Ledger',
-    title: 'Receivables & Invoice Aging Analysis',
+    title: 'Invoices & Aging Analysis',
     desc: 'Real-time invoice ledger with D3 aging bands (0-30, 31-60, 61-90, 90+ days), margin calculation, and instant payment settlement.',
   },
   {
@@ -3874,15 +3885,22 @@ export default function DemoWorkspace() {
           {['#ef4444', '#fbbf24', '#22c55e'].map(c => (
             <span key={c} className="ft-tour-dot" style={{ background: c }} />
           ))}
-          <span className="ml-2 font-semibold truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          {/* Hidden under 380px, where the row cannot hold it and the badge
+              both. The rail already shows which module is open, so the window
+              title is the duplicate and the badge is the one that stays. */}
+          <span className="ft-chrome-title hidden min-[380px]:inline ml-2 font-semibold truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
             fintrack — {TABS.find(t => t.id === state.tab)?.label.toLowerCase()}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
             {/* Quick Tour Button */}
+            {/* Hidden on phones: the same control sits in the footer bar, and
+                the chrome row is 19px over at 390 with both. The "Sample data"
+                badge is the one thing in this row that cannot be dropped —
+                it is the honesty label — so the duplicate goes instead. */}
             <button
               onClick={startTour}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer shadow-sm"
+              className="ft-chrome-tour hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer shadow-sm"
               style={{
                 background: tourActive && !driving ? 'var(--accent-dim)' : 'var(--card-bg)',
                 border: `1px solid ${tourActive && !driving ? 'var(--accent)' : 'var(--card-border)'}`,
@@ -4022,7 +4040,7 @@ export default function DemoWorkspace() {
                   </div>
 
                   {/* Tour Action Controls */}
-                  <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
+                  <div className="ft-tourbar-actions flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
                     <button
                       onClick={() => {
                         const prevIdx = (tourIndex - 1 + TOUR_STEPS.length) % TOUR_STEPS.length

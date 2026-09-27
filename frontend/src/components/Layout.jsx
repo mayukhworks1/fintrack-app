@@ -31,7 +31,7 @@ function NewQuickAction({ collapsed }) {
 }
 
 // roles that can see each nav item; perm = permission key required (null = always show)
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { to: '/',          label: 'Dashboard',    icon: LayoutDashboard, end: true,  roles: ['editor','viewer'], perm: 'module.dashboard.view' },
   { to: '/projects',  label: 'Projects',     icon: FolderKanban,                roles: ['editor','viewer'], perm: 'module.projects.view' },
   { to: '/invoices',  label: 'Invoices',     icon: Receipt,                     roles: ['editor','viewer'], perm: 'module.invoices.view' },

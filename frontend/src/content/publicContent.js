@@ -20,7 +20,7 @@ import {
 export const MODULES = [
   {
     icon: Receipt, span: 'span-3', visual: 'ledger',
-    title: 'Receivables',
+    title: 'Invoices',
     body: 'Track invoices across aging bands, collection rates, and average days to collect. GST and TDS are segregated automatically to prevent collection overstatement.',
     points: ['Aging bands: 0-30, 31-60, 61-90, 90+ days', 'Real-time collection velocity and follow-up queues', 'Automated recurring retainer schedules'],
   },

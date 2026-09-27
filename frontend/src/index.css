@@ -2881,10 +2881,23 @@ html.dark .web-invoices-shell {
 /* Under 360px the sums stop working: the stage is ~210px, the currency
    switcher and export take ~150 of it, and the search is left with 54px —
    a box that shows "Se". Below that width every group gets its own row. */
-@media (max-width: 359px) {
+/* The aux group used to be small enough to share row one with the search.
+   It is not any more: the rewrite added a Table / Cards / Timeline switcher
+   and the group measures 290px against 265 of stage at 375. As the grid's
+   `auto` column it was sizing the whole grid, which forced the full-width
+   status row out to 296 and pushed both past the frame — the status filters
+   looked like the problem and were only downstream of it.
+   So on every phone width the aux takes its own row, and scrolls there if it
+   still does not fit. A control group that cannot fit should scroll inside
+   its own row, never widen the row above it. */
+@media (max-width: 639px) {
   .ft-tools-search { grid-column: 1 / -1; grid-row: 1; }
   .ft-tools-status { grid-column: 1 / -1; grid-row: 2; }
-  .ft-tools-aux    { grid-column: 1 / -1; grid-row: 3; justify-self: end; }
+  .ft-tools-aux {
+    grid-column: 1 / -1; grid-row: 3; justify-content: flex-end;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .ft-tools-aux::-webkit-scrollbar { display: none; }
 }
 
 @media (min-width: 560px) {
@@ -3131,6 +3144,53 @@ html.dark .web-invoices-shell {
   .ft-tour-scene .ft-kpi > .v {
     animation: none !important; opacity: 1 !important; transform: none !important;
   }
+}
+
+
+/* ── Sandbox targets on a phone ──────────────────────────────────────────
+   Measured at 390px: every control in the sandbox already cleared 44px of
+   height, and every one of them missed on width — the rail at 39, the small
+   pills between 21 and 38. Height was the fix that was already made; this is
+   the other axis.
+
+   The rail first, because it is eleven of the twenty-four and it is the
+   demo's primary navigation. Its column is 52px, so 44 fits with room.
+
+   Not the currency switcher. Four segments at 40px each is 160px against the
+   119 they occupy now, and row one of that toolbar already measures 276
+   against 280 of stage — widening them re-breaks the layout that was fixed
+   two commits ago. A segmented control is one control with four positions,
+   and the right answer there is to collapse it to a single cycling button on
+   a phone, which is a change to the component rather than to its padding. */
+@media (max-width: 639px) {
+  .ft-tour-rail-item { min-width: 44px; justify-content: center; }
+  .ft-tour-stage button { min-width: 40px; }
+  /* Except the toolbar rows. Those are measured to the pixel — search plus
+     the small controls come to 276 against 280 of stage — and a 40px floor
+     on four status filters took the group from 292 to 312 and pushed it
+     straight out of the frame. Widening a target is not free when the row it
+     sits in has no slack. */
+  .ft-tools button { min-width: 0; }
+}
+
+
+/* The guided-tour controls are shrink-0 and measure 229px, which is 32 more
+   than a 320px phone gives the stage. They wrap there instead of running out
+   of the frame — a control that cannot be reached is worse than one on a
+   second line. */
+@media (max-width: 379px) {
+  .ft-tourbar-actions { flex-wrap: wrap; flex-shrink: 1; justify-content: flex-end; }
+}
+
+
+/* At 320px the window chrome still runs 19px over, and the one element that
+   must survive is the "Sample data" badge — it is what stops a visitor
+   reading invented figures as someone's real ledger. So the row is allowed
+   to shrink around it: the title truncates, the badge does not. */
+@media (max-width: 379px) {
+  .ft-tour-chrome { min-width: 0; }
+  .ft-tour-chrome > span:not([class*="ft-tour-dot"]) { min-width: 0; }
+  .ft-tour-chrome > div { min-width: 0; flex-shrink: 1; }
 }
 
 @keyframes ft-scene-in {

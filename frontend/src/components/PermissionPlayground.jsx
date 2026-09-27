@@ -9,7 +9,7 @@ import { inr } from './demoData'
 import LoopVideo from './LoopVideo'
 
 const MODULES = [
-  { key: 'receivables', label: 'Receivables', icon: Receipt },
+  { key: 'receivables', label: 'Invoices', icon: Receipt },
   { key: 'projects',    label: 'Projects',    icon: FolderKanban },
   { key: 'analytics',   label: 'Analytics',   icon: BarChart3 },
   { key: 'tax',         label: 'Tax ledger',  icon: Landmark },
