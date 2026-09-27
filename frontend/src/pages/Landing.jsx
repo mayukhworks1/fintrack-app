@@ -257,7 +257,7 @@ export default function Landing() {
                 <span className="block font-bold" style={{ fontSize: 13.5, color: 'var(--text-1)' }}>
                   {title}
                 </span>
-                <span className="block truncate" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                <span className="ft-chip-bullet block truncate" style={{ color: 'var(--text-3)' }}>
                   {points[0]}
                 </span>
               </span>

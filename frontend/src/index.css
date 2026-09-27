@@ -3034,6 +3034,73 @@ html.dark .web-invoices-shell {
   }
 }
 
+
+/* ── Mobile: a floor under the type, and thumbs that can hit things ──────
+   Measured on a 390px phone: 74 pieces of copy on the landing page rendered
+   below 12px, 16 of them at 9.5px. That is marketing text, read at arm's
+   length, on the page that has to do the convincing. The sizes are written
+   as Tailwind arbitrary values across a dozen components, so the floor is
+   applied here rather than by editing each one — and then handed back inside
+   .ft-tour, where small type is deliberate: the sandbox is a scale model of
+   a desktop app and its chrome is meant to read as chrome. */
+@media (max-width: 639px) {
+  .text-\[9\.5px\]  { font-size: 11.5px }
+  .text-\[10px\]    { font-size: 12px }
+  .text-\[10\.5px\] { font-size: 12px }
+  .text-\[11px\]    { font-size: 12.5px }
+  .text-\[11\.5px\] { font-size: 12.5px }
+
+  .ft-tour .text-\[9\.5px\]  { font-size: 9.5px }
+  .ft-tour .text-\[10px\]    { font-size: 10px }
+  .ft-tour .text-\[10\.5px\] { font-size: 10.5px }
+  .ft-tour .text-\[11px\]    { font-size: 11px }
+  .ft-tour .text-\[11\.5px\] { font-size: 11.5px }
+
+  /* The demo's own navigation was eleven 30px targets. It is the first thing
+     a thumb reaches for and the one control the whole sandbox depends on. */
+  .ft-tour-rail-item { height: 40px; font-size: 12px; padding: 0 10px; }
+}
+
+/* ── Cards arriving ─────────────────────────────────────────────────────
+   Eleven module chips appeared as one block. They now come in on a stagger,
+   in reading order, which is what makes a grid feel assembled rather than
+   pasted. Only on entry; nothing loops. */
+@keyframes ft-card-in {
+  from { opacity: 0; transform: translateY(14px) }
+  to   { opacity: 1; transform: none }
+}
+.ft-reveal[data-shown] > .ft-chip {
+  animation: ft-card-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ft-reveal[data-shown] > .ft-chip:nth-child(1)  { animation-delay: 0ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(2)  { animation-delay: 52ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(3)  { animation-delay: 100ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(4)  { animation-delay: 144ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(5)  { animation-delay: 182ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(6)  { animation-delay: 214ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(7)  { animation-delay: 242ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(8)  { animation-delay: 266ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(9)  { animation-delay: 286ms }
+.ft-reveal[data-shown] > .ft-chip:nth-child(n+10) { animation-delay: 302ms }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Explicit, not left to the global duration collapse — at 0.01ms the fill
+     never lands and the cards would stay invisible. */
+  .ft-reveal[data-shown] > .ft-chip {
+    animation: none !important; opacity: 1 !important; transform: none !important;
+  }
+}
+
+
+/* The module-chip bullets and the section eyebrows were the last copy on the
+   landing page still under 12px on a phone. Both carry real sentences, so
+   both get a floor; the desktop sizes are unchanged. */
+.ft-chip-bullet { font-size: 11.5px; }
+@media (max-width: 639px) {
+  .ft-chip-bullet { font-size: 12.5px; }
+  .ft-eyebrow { font-size: 0.78rem; letter-spacing: 0.16em; }
+}
+
 @keyframes ft-scene-in {
   from { opacity: 0; transform: translateY(8px) scale(0.995) }
   to   { opacity: 1; transform: none }
