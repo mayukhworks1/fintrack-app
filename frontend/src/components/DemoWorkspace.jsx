@@ -31,6 +31,11 @@ import {
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
+  // `open` — the unpaid invoices. Without this import the two call sites
+  // below resolved to the global window.open and printed that function's
+  // arity, so the dashboard read "0 invoices" beside 33.0L of outstanding
+  // and the assistant answered "across 0 pending invoices".
+  open,
   ask, bandOf, monthly, inr, inrShort, shortDate, GST_RATE, TDS_RATE,
   DELIVERY, LANES, boardBy, TAX_SUMMARY, TAX_CLIENTS, PAGES_MOCK,
   PAGE_TEMPLATES, STUDIO_DOCS, STUDIO_RAG_PRESETS, AI_CHAT_PRESETS,
@@ -556,7 +561,10 @@ function Dashboard({ set }) {
                 <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--text-3)]">
                   Retainer Health
                 </span>
-                <span className="text-[10px] font-semibold text-[var(--ok)]">{healthyCount} Healthy · 0 Overdue</span>
+                <span className="text-[10px] font-semibold text-[var(--ok)]">
+                  {/* was "0 Overdue", hardcoded beside a computed figure. */}
+                  {healthyCount} healthy · {PROJECT_ROLLUP.length - healthyCount} at risk
+                </span>
               </div>
               <div className="w-full h-2 rounded-full overflow-hidden flex" style={{ background: 'var(--bg-input)' }}>
                 <div className="h-full bg-[var(--ok)]" style={{ width: '85%' }} />
