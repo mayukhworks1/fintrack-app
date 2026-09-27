@@ -103,7 +103,7 @@ const SANDBOX_REEL_STEPS = [
     id: 'receivables',
     tab: 'receivables',
     tabLabel: 'Invoices Ledger',
-    title: 'Unified Receivables & TDS Withholding',
+    title: 'Unified Invoices & TDS Withholding',
     subtitle: 'Zero spreadsheet reconciliation between gross billing and true cash.',
     badge: 'Core Ledger',
     metric: `₹${(TOTALS.outstanding / 100000).toFixed(2)}L Outstanding`,
@@ -389,7 +389,7 @@ export default function ProductFilm() {
               onEnded={() => setPlaying(false)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
-              aria-label="A twenty-four second launch film of FinTrack: outstanding receivables, TDS deduction, delivery board, and transparent SQL assistant."
+              aria-label={`A ${filmLength} launch film of FinTrack: what is outstanding, the TDS already deducted from it, the status board, and an assistant that shows its query.`}
               className="block w-full cursor-pointer"
               style={{ aspectRatio: '16 / 9', objectFit: 'cover' }}
               onClick={togglePlay}
@@ -443,7 +443,7 @@ export default function ProductFilm() {
                   Watch FinTrack Unify Operations & Capital
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
-                  How one PostgreSQL row synchronizes Receivables, Delivery Kanban, Statutory Tax Escrow, and Studio Vector RAG without spreadsheet reconciliation.
+                  How one PostgreSQL row synchronizes Invoices, the Status Board, Statutory Tax Escrow, and Studio Vector RAG without spreadsheet reconciliation.
                 </p>
 
                 {/* Primary Kinetic Play Action */}

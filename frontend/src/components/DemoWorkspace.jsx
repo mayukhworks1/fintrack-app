@@ -4032,7 +4032,13 @@ export default function DemoWorkspace() {
                               color: isCur ? '#fff' : 'var(--text-2)',
                             }}
                           >
-                            {idx + 1}. {st.tab.charAt(0).toUpperCase() + st.tab.slice(1)}
+                            {/* The label, not the id with a capital letter on it.
+                                Capitalising st.tab printed "Receivables", "Analyst"
+                                and "Delivery" — the internal keys — which is how a
+                                module the product does not have ended up on screen
+                                after the rail itself had been corrected. One source
+                                of truth: TABS. */}
+                            {idx + 1}. {TABS.find(t => t.id === st.tab)?.label ?? st.tab}
                           </button>
                         )
                       })}

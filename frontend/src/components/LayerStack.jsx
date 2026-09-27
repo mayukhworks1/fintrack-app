@@ -74,7 +74,7 @@ export const LAYERS = [
   {
     id: 'modules',
     title: 'Eleven modules',
-    body: 'Receivables, projects, tax, analytics, documents, reports, audit.',
+    body: 'Invoices, projects, tax, analytics, documents, reports, audit.',
     top: '#3987e5', side: '#2a6cbd', front: '#317ad1',
   },
   {
