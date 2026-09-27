@@ -19,7 +19,7 @@ import PublicLayout from '../components/PublicLayout'
 import { Grain } from '../components/LandingVisuals'
 import { Head, Card, Grid } from '../components/PublicBits'
 import AuditTrailSandbox from '../components/AuditTrailSandbox'
-import { SECURITY } from '../content/publicContent'
+import { SECURITY, TRUST } from '../content/publicContent'
 
 const ROLES = [
   { key: 'superadmin', label: 'Super Admin', rank: 1,  note: 'Full auth, security and audit control.' },
@@ -182,8 +182,30 @@ export default function Security() {
       </section>
 
       {/* ── Tamper-Evident Audit & Session Sandbox ──────────────────────── */}
+      {/* Moved here from /how-it-works, which was 9.5 screens on a phone —
+          the longest page on the site — with 1296px of these at the bottom.
+          They belong on this page anyway: every one of them is a claim about
+          where the model's authority stops and what enforces it, which is the
+          same question the rest of this page answers. The narrative that
+          introduces them stays there and links across. */}
+      <section id="mechanisms" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Head n="02" eyebrow="Why you can trust the answer"
+              title="Checkable by construction, not by policy">
+          Plenty of tools promise not to make things up. These are the four
+          places the promise is replaced by a mechanism — you can see exactly
+          where the model&rsquo;s authority stops, and it stops two steps
+          before the number.
+        </Head>
+        <Grid>
+          {TRUST.map(({ icon, title, body }, i) => (
+            <Card key={title} icon={icon} title={title} body={body}
+                  delay={Math.min(i, 3) * 70} />
+          ))}
+        </Grid>
+      </section>
+
       <section className="mx-auto px-4 sm:px-6 pb-14" style={{ maxWidth: 1120 }}>
-        <Head n="02" eyebrow="Tamper-proof trail" title="Every state change is cryptographically attributed">
+        <Head n="03" eyebrow="Tamper-proof trail" title="Every state change is cryptographically attributed">
           Inspect how role overrides, invoice updates, and query executions produce verifiable SHA-256 event checksums, and test immediate server-side session termination across active devices.
         </Head>
         <AuditTrailSandbox />

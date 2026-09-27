@@ -152,13 +152,19 @@ export default function HowItWorks() {
           The model's entire output is two values, each chosen from a closed list. There is no route from a sentence to arbitrary SQL — which is also why the analyst cannot be talked into reading rows your account may not see. Scoping is applied when the statement is assembled, below the point where anything the model said still counts.
         </ScrollLit>
 
-        <Grid>
-          {TRUST.map(({ icon, title, body }, i) => (
-            <Card key={title} icon={icon} title={title} body={body}
-                  visual={[undefined, PermissionRows, CitedAnswer, undefined][i]}
-                  delay={Math.min(i, 3) * 70} />
-          ))}
-        </Grid>
+        {/* The four mechanism cards that were here are on /security now. They
+            are the same kind of claim as the ones already on that page — who
+            can reach what, and what enforces it — and this page was 9.5
+            screens on a phone, the longest on the site, with 1296px of them
+            at the bottom. The narrative above stays: it is the argument, and
+            the cards were the appendix to it. */}
+        <p className="mt-10">
+          <Link to="/security" className="ft-cta-link inline-flex items-center gap-2 font-bold"
+                style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '1rem' }}>
+            The four mechanisms behind it, on the security page
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </p>
       </section>
 
       <Closing title="See it on your own numbers"
