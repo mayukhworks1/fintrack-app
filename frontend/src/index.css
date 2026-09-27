@@ -2967,6 +2967,33 @@ html.dark .web-invoices-shell {
   }
 }
 
+
+/* ── KPI cards on a phone ────────────────────────────────────────────────
+   The card grew a sub-label and a trend chip and became a three-line block.
+   Measured at 375px that made the Receivables KPI strip 240px — over half
+   the 467px window — which left the invoice table 33px, enough for its
+   header and nothing else, so the "n of 17 invoices" footer was clipped
+   inside the frame. Ageing overflowed the same way and pushed its explainer
+   30px below the stage.
+   One line per figure here: label left, number right. The sub-label and the
+   trend chip are supporting detail, and a phone has no room to spend on
+   them. Both come back at 640px where the strip goes three-across. */
+@media (max-width: 639px) {
+  .ft-kpi {
+    flex-direction: row !important;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .ft-kpi > div:first-child {
+    width: auto !important;
+    margin-bottom: 0 !important;
+    min-width: 0;
+  }
+  /* the trend chip, the only other child of that row */
+  .ft-kpi > div:first-child > span:not(.k) { display: none; }
+}
+
 @keyframes ft-scene-in {
   from { opacity: 0; transform: translateY(8px) scale(0.995) }
   to   { opacity: 1; transform: none }

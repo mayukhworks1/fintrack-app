@@ -3440,7 +3440,7 @@ function Ageing({ state, set }) {
         Pick a band — it filters the invoice list, it does not just colour a chart.
       </p>
 
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto">
         {AGEING.map((b, i) => (
           <button key={b.id}
                   onClick={() => set({ band: state.band === b.id ? null : b.id, tab: 'receivables', status: 'all' })}
@@ -3739,9 +3739,14 @@ export default function DemoWorkspace() {
         if (tourIndex === 0) {
           // Receivables: show dynamic filtering to overdue and invoice drawer
           if (next >= 28 && next < 56) {
-            setState(s => s.status !== 'overdue' ? { ...s, status: 'overdue' } : s)
+            // 'Overdue', not 'overdue'. The data's statuses are Paid / Overdue /
+            // Sent, so the lowercase value matched nothing and the tour step whose
+            // whole point is "filter to overdue" filtered to an empty list — and
+            // left no pill pressed, so anyone taking over mid-tour was stranded on
+            // an empty table with no visible filter to clear.
+            setState(s => s.status !== 'Overdue' ? { ...s, status: 'Overdue' } : s)
           } else if (next >= 56 && next < 86) {
-            setState(s => (!s.detail ? { ...s, status: 'overdue', detail: 'INV-2296' } : s))
+            setState(s => (!s.detail ? { ...s, status: 'Overdue', detail: 'INV-2296' } : s))
           } else if (next >= 86) {
             setState(s => (s.detail || s.status !== 'all' ? { ...s, status: 'all', detail: null } : s))
           }
