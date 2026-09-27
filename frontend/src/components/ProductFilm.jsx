@@ -87,7 +87,7 @@ const CHAPTERS = [
     id: 6,
     title: 'An Answer You Can Check',
     start: 26.6,
-    end: 32,
+    end: 32.5,
     tag: '0:26 - 0:32',
     badge: 'Shows Its Query',
     tab: 'analyst',
@@ -394,8 +394,13 @@ export default function ProductFilm() {
               style={{ aspectRatio: '16 / 9', objectFit: 'cover' }}
               onClick={togglePlay}
             >
-              <source src="/media/fintrack-film.webm" type="video/webm" />
+              {/* mp4 first, and that is a measurement rather than a habit: for
+                  this cut H.264 came out at 1.85MB against VP9's 2.07MB, the
+                  reverse of the ambient loops. The browser takes the first it
+                  can decode, so the smaller file has to be the one listed
+                  first — which is not always the same format. */}
               <source src="/media/fintrack-film.mp4" type="video/mp4" />
+              <source src="/media/fintrack-film.webm" type="video/webm" />
             </video>
 
             {/* Dynamic Telemetry HUD Banner (Active During Playback) */}
