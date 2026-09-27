@@ -10,58 +10,91 @@ import {
   inr, inrShort
 } from './demoData'
 
+/* Chapter marks are the film's own scene boundaries. They were 0-6, 6-12,
+   12-18, 18-24 — the timings of the previous 24.4s cut — so against the
+   current 32s film every mark pointed at the wrong moment and the scrubber
+   described a scene the viewer was not watching. A chapter list that does not
+   match the footage is worse than none: it is a caption that lies.
+   These are the real cuts, and each names a tab the film is actually showing
+   so the sandbox below follows what is on screen. */
 const CHAPTERS = [
   {
     id: 1,
     title: 'Float Drag & TDS Trap',
     start: 0,
-    end: 6,
-    tag: '0:00 - 0:06',
+    end: 10,
+    tag: '0:00 - 0:10',
     badge: 'Capital Leakage',
     tab: 'receivables',
     tabLabel: 'Receivables & Ageing',
-    metric: `₹${(TOTALS.outstanding / 100000).toFixed(1)}L Floating`,
-    problem: 'Accounting tools count gross invoices while ₹5.47L is deducted at source in Section 194J TDS, creating silent working capital drag.',
-    solution: 'FinTrack isolates withholding tax at source on every invoice row, reconciling net cash against D3 aging buckets in real time.',
+    metric: `₹${(TOTALS.tds / 100000).toFixed(2)}L withheld`,
+    problem: 'Accounting tools count gross invoices while tax deducted at source never arrives, so the collections list overstates what can actually be collected.',
+    solution: 'FinTrack reports TDS as its own figure and keeps it out of outstanding, so the number being chased is the number owed.',
   },
   {
     id: 2,
-    title: 'Single-Ledger Kanban Sync',
-    start: 6,
-    end: 12,
-    tag: '0:06 - 0:12',
-    badge: 'Postgres Mirror',
-    tab: 'delivery',
-    tabLabel: 'Delivery & Projects',
-    metric: '11 Modules Synced',
-    problem: 'PMs update Jira while finance reconciles invoices in spreadsheets. Delivery milestones drift away from billing triggers.',
-    solution: 'Moving a deliverable card to "Shipped" immediately triggers billing readiness and calculates project margin on the same PostgreSQL row.',
+    title: 'Executive Dashboard',
+    start: 10,
+    end: 14.4,
+    tag: '0:10 - 0:14',
+    badge: 'One Ledger',
+    tab: 'dashboard',
+    tabLabel: 'Dashboard',
+    metric: `₹${(TOTALS.outstanding / 100000).toFixed(1)}L outstanding`,
+    problem: 'Revenue sits in one tool, margin in another and runway in a spreadsheet that is a week old by the time anyone reads it.',
+    solution: 'Revenue, direct cost, margin, runway and what is owed all read the same rows, so two of them cannot disagree.',
   },
   {
     id: 3,
-    title: 'Studio Vector RAG',
-    start: 12,
-    end: 18,
-    tag: '0:12 - 0:18',
-    badge: 'pgvector Index',
-    tab: 'studio',
-    tabLabel: 'Studio RAG',
-    metric: '94% Vector Similarity',
-    problem: 'Payment milestones, liability caps, and SLA penalty clauses stay trapped in 40-page PDF Master Services Agreements.',
-    solution: 'FinTrack ingests SOWs & MSAs into pgvector embeddings, returning exact paragraph citations with mathematical similarity scores.',
+    title: 'Receivables & Ageing',
+    start: 14.4,
+    end: 18.6,
+    tag: '0:14 - 0:18',
+    badge: 'Collections',
+    tab: 'receivables',
+    tabLabel: 'Receivables',
+    metric: `${INVOICES.filter(i => i.status === 'Overdue').length} of ${INVOICES.length} overdue`,
+    problem: 'A list of every invoice is not a collections list. What matters is which ones are genuinely past their terms.',
+    solution: 'Ageing bands are days past due rather than days since raised, and filter the table to exactly the invoices worth a phone call.',
   },
   {
     id: 4,
-    title: 'Statutory Escrow & SQL',
-    start: 18,
-    end: 24,
-    tag: '0:18 - 0:24',
-    badge: 'Zero Hallucination',
+    title: 'Statutory Tax Ledger',
+    start: 18.6,
+    end: 22.6,
+    tag: '0:18 - 0:22',
+    badge: 'GST & TDS',
     tab: 'tax',
-    tabLabel: 'Tax Ledger & AI',
-    metric: '100% AST Compiled',
-    problem: 'Financial LLMs hallucinate numbers, and agencies co-mingle 18% GST and 10% TDS liabilities with spendable operational cash.',
-    solution: '18% GST and Form 26AS TDS credits are segregated into escrow, while natural language compiles to verified, parameterized SQL.',
+    tabLabel: 'Tax Ledger',
+    metric: `₹${(TOTALS.gst / 100000).toFixed(2)}L GST`,
+    problem: 'A filing figure and a cash figure get read off the same column, and the difference is discovered at the end of the quarter.',
+    solution: 'GST collected and TDS withheld are kept as separate monthly figures, so a filing number is never mistaken for money in hand.',
+  },
+  {
+    id: 5,
+    title: 'Delivery on the Same Row',
+    start: 22.6,
+    end: 26.6,
+    tag: '0:22 - 0:26',
+    badge: 'Operations Mirror',
+    tab: 'delivery',
+    tabLabel: 'Delivery & Projects',
+    metric: 'Live board',
+    problem: 'Project managers move cards in one system while finance reconciles invoices in another, and the two drift apart between reviews.',
+    solution: 'A card carries what its project is owed, because the board and the ledger are the same records rather than two copies.',
+  },
+  {
+    id: 6,
+    title: 'An Answer You Can Check',
+    start: 26.6,
+    end: 32,
+    tag: '0:26 - 0:32',
+    badge: 'Shows Its Query',
+    tab: 'analyst',
+    tabLabel: 'AI Analyst',
+    metric: 'Query shown',
+    problem: 'A chat window bolted onto a ledger will confidently invent a total, and on money a fast wrong answer is a liability.',
+    solution: 'The model picks a measure and a grouping from a fixed set; the application compiles the statement and prints it beside the answer.',
   },
 ]
 
@@ -164,7 +197,9 @@ export default function ProductFilm() {
   const [viewMode, setViewMode] = useState('film') // 'film' | 'sandbox-reel'
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(24)
+  /* Seeded from the chapter table's last mark rather than a typed 24, so the
+     label is right before metadata lands and cannot go stale on a re-cut. */
+  const [duration, setDuration] = useState(CHAPTERS[CHAPTERS.length - 1].end)
   const [muted, setMuted] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [hovered, setHovered] = useState(false)
@@ -176,6 +211,9 @@ export default function ProductFilm() {
   
   const videoRef = useRef(null)
 
+  /* The chapter table ends where the film ends, so its last mark is the
+     honest source for the label until metadata has loaded. */
+  const filmLength = `${Math.round(duration || CHAPTERS[CHAPTERS.length - 1].end)}-second`
   const activeChapterIndex = CHAPTERS.findIndex(c => currentTime >= c.start && currentTime < c.end)
   const currentChapter = activeChapterIndex !== -1 ? CHAPTERS[activeChapterIndex] : CHAPTERS[0]
 
@@ -313,7 +351,7 @@ export default function ProductFilm() {
         </div>
       </div>
 
-      {/* ── MODE 1: 24-Second Film Reel ───────────────────────────────── */}
+      {/* ── MODE 1: the film reel. Length is read off the media, never typed. */}
       {viewMode === 'film' && (
         <div className="flex flex-col space-y-3">
           {/* Main Cinematic Video Stage */}
@@ -393,7 +431,7 @@ export default function ProductFilm() {
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase mb-3 shadow-sm"
                      style={{ background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(56,189,248,0.4)', color: '#38bdf8' }}>
                   <Film size={12} />
-                  24-Second Single-Ledger Sandbox Film
+                  {filmLength} Single-Ledger Sandbox Film
                 </div>
 
                 <h3 className="text-lg sm:text-2xl font-extrabold text-white mb-2 tracking-tight max-w-lg">
@@ -414,7 +452,7 @@ export default function ProductFilm() {
                   }}
                 >
                   <Play size={18} fill="#fff" />
-                  <span>Play 24-Second Film</span>
+                  <span>Play the {filmLength} film</span>
                 </button>
 
                 {/* Direct Act Preview Badges */}
