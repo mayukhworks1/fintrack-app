@@ -3101,6 +3101,38 @@ html.dark .web-invoices-shell {
   .ft-eyebrow { font-size: 0.78rem; letter-spacing: 0.16em; }
 }
 
+
+/* ── KPI figures landing ─────────────────────────────────────────────────
+   The numbers were the last static thing left in the sandbox: rows arrive,
+   ageing bars grow, cards stagger, and the figures those all describe simply
+   appeared. They now rise into place a beat after their card, left to right,
+   so the strip reads as being filled in rather than printed.
+   The label holds still. Only the figure moves, because the figure is the
+   part that would change if this were a live workspace — motion here is
+   saying which part is data. */
+@keyframes ft-value-land {
+  from { opacity: 0; transform: translateY(0.38em) }
+  to   { opacity: 1; transform: none }
+}
+.ft-tour-scene .ft-kpi > .v {
+  display: inline-block;
+  animation: ft-value-land 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ft-tour-scene .ft-kpi:nth-child(1) > .v { animation-delay: 120ms }
+.ft-tour-scene .ft-kpi:nth-child(2) > .v { animation-delay: 190ms }
+.ft-tour-scene .ft-kpi:nth-child(3) > .v { animation-delay: 250ms }
+.ft-tour-scene .ft-kpi:nth-child(4) > .v { animation-delay: 300ms }
+.ft-tour-scene .ft-kpi:nth-child(5) > .v { animation-delay: 340ms }
+.ft-tour-scene .ft-kpi:nth-child(n+6) > .v { animation-delay: 370ms }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Written out, not left to the global duration collapse: at 0.01ms the
+     fill does not land and every figure in the sandbox would read blank. */
+  .ft-tour-scene .ft-kpi > .v {
+    animation: none !important; opacity: 1 !important; transform: none !important;
+  }
+}
+
 @keyframes ft-scene-in {
   from { opacity: 0; transform: translateY(8px) scale(0.995) }
   to   { opacity: 1; transform: none }
