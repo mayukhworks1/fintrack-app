@@ -64,3 +64,6 @@ brag-output/composition/assets/v2/
 brag-output/film-v2.*
 brag-output/q-*.png
 brag-output/composition/v2-sheet.png
+brag-output/composition/.transcode-cache/
+brag-output/composition/v3-sheet.png
+brag-output/film-v3.*
