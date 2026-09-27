@@ -25,6 +25,9 @@ import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
 import { useTilt } from '../hooks/useTilt'
 import PublicLayout from '../components/PublicLayout'
+import { Head, Reveal } from '../components/PublicBits'
+import ProductMediaShowcase from '../components/ProductMediaShowcase'
+import RoiCalculator from '../components/RoiCalculator'
 import { AnalystDemo, MiniBars, MiniDocs, Grain } from '../components/LandingVisuals'
 import {
   GlyphMargin, GlyphTaxSplit, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
@@ -426,6 +429,31 @@ export default function Features() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Both of these lived on the landing page, where they cost 4.8 of its
+          13.2 screens on a phone — more than a third of the page, for the two
+          sections furthest from what a first-time reader needs. They belong
+          here beside the other working simulators, where someone has already
+          decided they want detail. */}
+      {/* ── 3D Architecture & Live Motion Showcase ──────────────────────── */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Head n="02" eyebrow="3D Architecture & Live Motion" title="Interactive visual blueprint & real-time telemetry">
+          Explore FinTrack's single-ledger architecture in 3D. Inspect how natural language queries transpiled into parameterized SQL, how GST/TDS are segregated, and watch live operation streams in action.
+        </Head>
+        <Reveal>
+          <ProductMediaShowcase />
+        </Reveal>
+      </section>
+
+      {/* ── Working Capital & ROI Simulator ─────────────────────────────── */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Head n="03" eyebrow="Working Capital & ROI" title="Calculate your capital unlocked and interest saved">
+          Simulate how much floating capital is currently locked in aging receivables, and calculate the exact annual interest drag saved when invoices and GST/TDS are reconciled automatically.
+        </Head>
+        <Reveal>
+          <RoiCalculator />
+        </Reveal>
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>

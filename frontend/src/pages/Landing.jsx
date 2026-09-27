@@ -28,8 +28,6 @@ import {
 } from '../components/Glyphs'
 import Overstatement from '../components/Overstatement'
 import ProductFilm from '../components/ProductFilm'
-import ProductMediaShowcase from '../components/ProductMediaShowcase'
-import RoiCalculator from '../components/RoiCalculator'
 import ScrollLit from '../components/ScrollLit'
 import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
@@ -201,32 +199,12 @@ export default function Landing() {
         <Overstatement />
       </section>
 
-      {/* ── 3D Architecture & Live Motion Showcase ──────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head n="02" eyebrow="3D Architecture & Live Motion" title="Interactive visual blueprint & real-time telemetry">
-          Explore FinTrack's single-ledger architecture in 3D. Inspect how natural language queries transpiled into parameterized SQL, how GST/TDS are segregated, and watch live operation streams in action.
-        </Head>
-        <Reveal>
-          <ProductMediaShowcase />
-        </Reveal>
-      </section>
-
-      {/* ── Working Capital & ROI Simulator ─────────────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head n="03" eyebrow="Working Capital & ROI" title="Calculate your capital unlocked and interest saved">
-          Simulate how much floating capital is currently locked in aging receivables, and calculate the exact annual interest drag saved when invoices and GST/TDS are reconciled automatically.
-        </Head>
-        <Reveal>
-          <RoiCalculator />
-        </Reveal>
-      </section>
-
       {/* ── Modules, named and nothing more ──────────────────────────────
           The full cards live on /features, where there is room to say what
           each one does. Here they are a contents page: what ships, at a
           glance, and one link to the detail. */}
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head n="04" eyebrow="What is inside" title="Eleven modules, one source of truth">
+        <Head n="02" eyebrow="What is inside" title="Eleven modules, one source of truth">
           Records live in one place and every module reads the same rows, so a
           number on the dashboard and a number in a report cannot disagree.
           Every total opens to the invoices underneath it.
@@ -280,7 +258,7 @@ export default function Landing() {
           A short page only works if it hands you somewhere. */}
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <hr className="ft-rule mb-14" />
-        <Head n="04" eyebrow="Read on" title="The rest of it, in three pages">
+        <Head n="03" eyebrow="Read on" title="The rest of it, in three pages">
           Split up rather than stacked, because a page that takes seventeen
           screens on a phone is a page nobody finishes.
         </Head>
