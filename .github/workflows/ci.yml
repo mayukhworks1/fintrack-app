@@ -29,6 +29,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Runs before the build: a failing assertion is a faster, more specific
+      # answer than a build that succeeds regardless. The suite carries the
+      # guards that exist precisely because the build cannot catch what they
+      # catch — scope errors inside components, and sandbox module names
+      # drifting away from the names the real app uses.
+      - name: Run frontend tests
+        run: npm test
+
       - name: Build frontend
         env:
           VITE_API_URL: https://example.invalid

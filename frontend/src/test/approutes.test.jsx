@@ -11,7 +11,7 @@
  * before a user finds it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 let authState = { status: 'anon', isWeb: false, isAll: false, isAdmin: false, isViewer: false, isImpersonating: false }
@@ -62,6 +62,14 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+/* Every public route is behind React.lazy, so the first assertion in this file
+   pays for importing the whole route chunk — and the landing chunk now pulls
+   the sandbox, the film and the visuals with it. Testing Library's default
+   findBy timeout is 1000ms, which that import was landing either side of: this
+   file failed roughly one run in three, always on whichever test ran first.
+   A flaky test is worse than no test, because it teaches you to ignore red. */
+const LAZY_ROUTE = { timeout: 8000 }
+
 describe('App routing, signed out', () => {
   // The regression: this threw ReferenceError and rendered nothing at all.
   // Anchored on the sandbox rather than on the headline — the headline is copy
@@ -69,14 +77,17 @@ describe('App routing, signed out', () => {
   // its mind reports nothing useful about routing.
   it('renders the landing page at the root without throwing', async () => {
     at('/')
-    expect(await screen.findByRole('navigation', { name: /sample workspace/i })).toBeInTheDocument()
+    expect(await screen.findByRole('navigation', { name: /sample workspace/i }, LAZY_ROUTE)).toBeInTheDocument()
   })
 
+  // Asserts the sign-in form arrives, not merely that the sandbox is absent.
+  // Absence alone passes before the lazy chunk has loaded anything at all, so
+  // the old form of this test would have gone green on a blank page — which is
+  // the exact failure the file was written to catch.
   it('sends a deep link to sign-in rather than to marketing', async () => {
     at('/invoices')
-    await waitFor(() => {
-      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
-    })
+    expect(await screen.findByLabelText('Email', undefined, LAZY_ROUTE)).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
   })
 
   // Asserted on the module picker rather than the heading: the heading carries
@@ -84,19 +95,18 @@ describe('App routing, signed out', () => {
   // module is added — which tells you nothing about routing.
   it('serves the features page publicly', async () => {
     at('/features')
-    expect(await screen.findByRole('tablist', { name: /modules/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tablist', { name: /modules/i }, LAZY_ROUTE)).toBeInTheDocument()
   })
 
   it('serves the security page publicly', async () => {
     at('/security')
-    expect(await screen.findByText(/Who can see what/)).toBeInTheDocument()
+    expect(await screen.findByText(/Who can see what/, undefined, LAZY_ROUTE)).toBeInTheDocument()
   })
 
   it('renders sign-in at /login', async () => {
     at('/login')
-    await waitFor(() => {
-      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
-    })
+    expect(await screen.findByLabelText('Email', undefined, LAZY_ROUTE)).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
   })
 })
 
@@ -104,8 +114,7 @@ describe('App routing, signed in', () => {
   it('does not show the public landing page to an authenticated user', async () => {
     authState = { ...authState, status: 'authed' }
     at('/')
-    await waitFor(() => {
-      expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
-    })
+    expect(await screen.findByText('dashboard stub', undefined, LAZY_ROUTE)).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /sample workspace/i })).not.toBeInTheDocument()
   })
 })
