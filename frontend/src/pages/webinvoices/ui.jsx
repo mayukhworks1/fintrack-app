@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { AlertTriangle, Check, ChevronDown, ExternalLink, FileText, Image as ImageIcon, Loader2, Paperclip, Plus, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { KPI_PALETTE, STATUS_META, isImage, isPdf } from './utils'
+import { LiveValue } from '../../components/LiveFigures'
 
 export function RaisedByBadge({ email, avatarMap = {}, size = 16, className = '' }) {
   const entry = avatarMap[email?.toLowerCase()] || {}
@@ -162,9 +163,23 @@ export function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
   )
 }
 
-export function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, compact = false, iconSlot = true }) {
-  const display = value == null ? '—' : String(value)
+/**
+ * `amount` + `format` make the figure live: it travels to its new value when
+ * the poll brings one back. `value` stays for everything that is not a single
+ * number, and is stringified — passing a node to it renders "[object Object]",
+ * which is why the live path is a separate pair of props rather than a node.
+ */
+export function DashboardMetric({ label, value, amount, format, sub, icon: Icon, tone, accent, compact = false, iconSlot = true }) {
+  const live = Number.isFinite(amount) && typeof format === 'function'
+  const display = live ? format(amount) : value == null ? '—' : String(value)
   const currencyMatch = display.match(/^([^\d-]+)([\d,.\-]+)$/)
+  // The layout below prints the currency symbol and the digits at different
+  // sizes, so the travelling figure has to be the digits alone.
+  const digitsOnly = v => {
+    const t = format(v)
+    const m = t.match(/^([^\d-]+)([\d,.\-]+)$/)
+    return m ? m[2] : t
+  }
   return (
     <div
       className="rounded-2xl p-4 transition-shadow min-w-0"
@@ -196,7 +211,7 @@ export function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, c
                   whiteSpace: 'nowrap',
                   lineHeight: 1,
                 }}>
-                {currencyMatch[2]}
+                {live ? <LiveValue value={amount} format={digitsOnly} /> : currencyMatch[2]}
               </span>
             </div>
           ) : (
@@ -207,7 +222,7 @@ export function DashboardMetric({ label, value, sub, icon: Icon, tone, accent, c
                 fontSize: compact ? 'clamp(1rem, 1.2vw, 1.35rem)' : 'clamp(1.15rem, 1.7vw, 1.9rem)',
                 whiteSpace: 'nowrap',
               }}>
-              {display}
+              {live ? <LiveValue value={amount} format={format} /> : display}
             </p>
           )}
           {sub && <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{sub}</p>}

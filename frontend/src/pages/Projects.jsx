@@ -4,6 +4,7 @@ import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal, Fo
 import ProjectCard from '../components/ProjectCard'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
@@ -31,13 +32,6 @@ function SkeletonCard() {
         <div className="skeleton h-7 rounded w-1/2" />
       </div>
     </div>
-  )
-}
-
-function SyncDot({ syncing }) {
-  return (
-    <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
   )
 }
 
@@ -82,12 +76,15 @@ export default function Projects() {
       .then(d => d.records || [])
   , [status, client, sortBy])
 
-  const { data: _data, loading, error, refresh, lastUpdated, syncing } =
+  const { data: _data, loading, error, refresh, lastUpdated, changedAt, changeCount, syncing } =
     useAutoRefresh(fetchProjects, 5_000)
   const fetchSummary = useCallback((opts = {}) => api.projects.summary(opts), [])
   const { data: summary } = useAutoRefresh(fetchSummary, 10_000)
   const records = _data ?? []
-  const updatedLabel = useRelativeTime(lastUpdated)
+  // The changed time, not the polled time: this chip used to read
+  // "live · just now" on a five-second loop regardless of whether the project
+  // list had moved.
+  const changedLabel = useRelativeTime(changedAt)
 
   // Debounced search
   useEffect(() => {
@@ -179,7 +176,7 @@ export default function Projects() {
             <ExecutiveChip accent>{visibleCount} visible project{visibleCount !== 1 ? 's' : ''}</ExecutiveChip>
             {lastUpdated && (
               <ExecutiveChip>
-                <SyncDot syncing={syncing} /> {syncing ? 'syncing…' : `live · ${updatedLabel}`}
+                <LiveDot changeCount={changeCount} loading={syncing && !_data} /> {changedAt ? `changed ${changedLabel}` : 'live'}
               </ExecutiveChip>
             )}
             {activeFilters.length > 0 && <ExecutiveChip>{activeFilters.length} active filter{activeFilters.length !== 1 ? 's' : ''}</ExecutiveChip>}
@@ -212,7 +209,7 @@ export default function Projects() {
         <ExecutiveStatGrid className="mt-5">
           <ExecutiveStatCard
             label="Needs action"
-            value={projectsNeedingAction.length}
+            value={<LiveValue value={projectsNeedingAction.length} format={v => String(Math.round(v))} />}
             sub={projectsNeedingAction.length
               ? `${projectsNeedingAction[0]?.fields?.['Project Name'] || 'Top project'} is the first review candidate`
               : 'No urgent collections or delivery blockers in the visible scope'}
@@ -221,13 +218,13 @@ export default function Projects() {
           />
           <ExecutiveStatCard
             label="Cashflow summary"
-            value={summary ? formatInr(summary.total_billed || 0) : '—'}
+            value={summary ? <LiveValue value={summary.total_billed || 0} format={formatInr} /> : '—'}
             sub={summary ? `${formatInr(summary.total_profit || 0)} profit · ${formatPct(margin, 2)} margin` : 'Loading billing health'}
             icon={IndianRupee}
           />
           <ExecutiveStatCard
             label="Open receivables"
-            value={formatInr(outstandingTotal)}
+            value={<LiveValue value={outstandingTotal} format={formatInr} />}
             sub={highestExposure
               ? `${highestExposure.fields?.['Project Name'] || 'Highest billed project'} has the largest billed exposure`
               : 'No billing exposure visible in this scope'}
@@ -236,7 +233,7 @@ export default function Projects() {
           />
           <ExecutiveStatCard
             label="Delivery blockers"
-            value={blockedProjects.length}
+            value={<LiveValue value={blockedProjects.length} format={v => String(Math.round(v))} />}
             sub={blindSpots.length
               ? `${blindSpots.length} project${blindSpots.length !== 1 ? 's' : ''} still missing health or status`
               : 'Project health and status are available on the visible projects'}

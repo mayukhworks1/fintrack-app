@@ -5,6 +5,7 @@ import { RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, E
 import { api } from '../services/api'
 import AgingRunway from '../components/AgingRunway'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -160,7 +161,7 @@ export default function WebInvoices() {
   }, [])
 
   const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
-  const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
+  const { data: summary, loading: sumLoading, changeCount: summaryChanges } = useAutoRefresh(fetchSummary, 10_000)
 
   const fetchRecords = useCallback((opts = {}) =>
     api.webInvoices.list({
@@ -898,8 +899,10 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="grid grid-cols-2 2xl:grid-cols-4 gap-3">
                   <DashboardMetric
-                    label="Total raised"
-                    value={sumLoading && !s ? '—' : fmt(s?.total_raised)}
+                    label={<span className="inline-flex items-center gap-1.5">Total raised <LiveDot changeCount={summaryChanges} loading={sumLoading && !s} size={5} /></span>}
+                    value={sumLoading && !s ? '—' : undefined}
+                    amount={sumLoading && !s ? undefined : Number(s?.total_raised)}
+                    format={fmt}
                     sub={`${allRecords.length} invoices across all workspaces`}
                     icon={null}
                     iconSlot={false}
@@ -908,7 +911,9 @@ export default function WebInvoices() {
                   />
                   <DashboardMetric
                     label="Collected"
-                    value={sumLoading && !s ? '—' : fmt(s?.total_received)}
+                    value={sumLoading && !s ? '—' : undefined}
+                    amount={sumLoading && !s ? undefined : Number(s?.total_received)}
+                    format={fmt}
                     sub={`${(s?.collection_rate ?? 0).toFixed(1)}% collection rate`}
                     icon={TrendingUp}
                     tone={dashboardStyles.accentPanel}
@@ -917,7 +922,9 @@ export default function WebInvoices() {
                   />
                   <DashboardMetric
                     label="Outstanding"
-                    value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)}
+                    value={sumLoading && !s ? '—' : undefined}
+                    amount={sumLoading && !s ? undefined : Number(s?.total_outstanding)}
+                    format={fmt}
                     sub={`${overdue.length} invoice${overdue.length === 1 ? '' : 's'} beyond 30 days`}
                     icon={AlertOctagon}
                     tone={dashboardStyles.warnPanel}
@@ -1596,11 +1603,11 @@ export default function WebInvoices() {
             <>
               {/* ── RS Primary KPIs ── */}
               <section aria-label="Invoice metrics (₹)" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-                <KpiCard tone={0} label="Total Raised (₹)"   value={sumLoading && !s ? null : fmt(s?.total_raised)}    icon={IndianRupee} />
-                <KpiCard tone={1} label="Incl. GST (₹)"      value={sumLoading && !s ? null : fmt(s?.total_with_tax)}  icon={Receipt} />
-                <KpiCard tone={2} label="Collected (₹)"      value={sumLoading && !s ? null : fmt(s?.total_received)}  icon={TrendingUp} semantic="positive" />
+                <KpiCard tone={0} label="Total Raised (₹)"   value={sumLoading && !s ? null : <LiveValue value={s?.total_raised} format={fmt} />}    icon={IndianRupee} />
+                <KpiCard tone={1} label="Incl. GST (₹)"      value={sumLoading && !s ? null : <LiveValue value={s?.total_with_tax} format={fmt} />}  icon={Receipt} />
+                <KpiCard tone={2} label="Collected (₹)"      value={sumLoading && !s ? null : <LiveValue value={s?.total_received} format={fmt} />}  icon={TrendingUp} semantic="positive" />
                 <KpiCard tone={3} label="Outstanding (₹)"
-                  value={sumLoading && !s ? null : fmt(s?.total_outstanding)}
+                  value={sumLoading && !s ? null : <LiveValue value={s?.total_outstanding} format={fmt} />}
                   icon={CalendarClock}
                   semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
                   sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_currency?.RS?.pending_count || s?.by_status?.Pending || 0} pending` : 'Fully collected'} />

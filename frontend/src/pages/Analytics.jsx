@@ -16,6 +16,7 @@ import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct, formatInt } from '../utils/format'
 import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
@@ -124,13 +125,6 @@ const ANALYTICS_WIDGET_CATALOG = [
 const ANALYTICS_DEFAULT_WIDGET_IDS = ANALYTICS_WIDGET_CATALOG.map((widget) => widget.id)
 
 /* ── Components ──────────────────────────────────────────────────────── */
-function SyncDot({ syncing }) {
-  return (
-    <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
-  )
-}
-
 const TILE_PALETTE = [
   { bg: '#dbeafe', fg: '#2563eb' },
   { bg: '#dcfce7', fg: '#16a34a' },
@@ -327,8 +321,10 @@ export default function Analytics() {
     }))
   , [])
 
-  const { data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchAll, 10_000)
-  const updatedLabel = useRelativeTime(lastUpdated)
+  const { data, loading, error, refresh, lastUpdated, changedAt, changeCount, syncing } = useAutoRefresh(fetchAll, 10_000)
+  // The changed time, not the polled time — `lastUpdated` moves every ten
+  // seconds whether or not a figure did.
+  const changedLabel = useRelativeTime(changedAt)
 
   const ps = data?.projSummary
   const is = data?.invSummary
@@ -986,16 +982,16 @@ export default function Analytics() {
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Cash position</p>
                 <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
-                  {inr(filtered.received)}
+                  <LiveValue value={filtered.received} format={inr} />
                 </h2>
                 <p className="text-sm mt-2" style={{ color: 'var(--text-3)' }}>
-                  Collected in the selected period, against {inr(filtered.raised)} raised and {inr(filtered.outstanding)} still open.
+                  Collected in the selected period, against <LiveValue value={filtered.raised} format={inr} /> raised and <LiveValue value={filtered.outstanding} format={inr} /> still open.
                 </p>
               </div>
               <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
                 <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Collection rate</p>
                 <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
-                  {formatPct(filtered.collectionRate, 1)}
+                  <LiveValue value={filtered.collectionRate} format={v => formatPct(v, 1)} />
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
                   {filtered.avgDso != null ? `${filtered.avgDso.toFixed(0)} day average payment cycle` : 'Waiting for more paid invoice data'}
@@ -1004,9 +1000,9 @@ export default function Analytics() {
             </div>
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Outstanding', value: inr(filtered.outstanding), tone: filtered.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-1)' },
-                { label: 'Margin', value: formatPct(margin, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
-                { label: 'Period invoices', value: `${invoices.length}`, tone: 'var(--text-1)' },
+                { label: 'Outstanding', value: <LiveValue value={filtered.outstanding} format={inr} />, tone: filtered.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-1)' },
+                { label: 'Margin', value: <LiveValue value={margin} format={v => formatPct(v, 2)} />, tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
+                { label: 'Period invoices', value: <LiveValue value={invoices.length} format={v => String(Math.round(v))} />, tone: 'var(--text-1)' },
                 { label: isEarlyMonth ? 'MTD vs last' : 'Month delta', value: monthDelta != null ? formatPct(monthDelta, 1) : '—', tone: monthDelta == null ? 'var(--text-1)' : (isEarlyMonth && monthDelta < 0) ? 'var(--text-3)' : monthDelta >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)', sub: isEarlyMonth && monthDelta != null && monthDelta < 0 ? 'month in progress' : undefined },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
@@ -1024,9 +1020,9 @@ export default function Analytics() {
             <div className="mt-5 space-y-3">
               <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync state</p>
-                <p className="text-sm mt-2 flex items-center gap-2" style={{ color: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
-                  <SyncDot syncing={syncing} />
-                  {syncing ? 'Syncing current finance context' : `Updated ${updatedLabel || 'just now'}`}
+                <p className="text-sm mt-2 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+                  <LiveDot changeCount={changeCount} loading={syncing && !data} />
+                  {changedAt ? `Figures changed ${changedLabel}` : 'Live — nothing has moved yet'}
                 </p>
               </div>
               <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
@@ -1059,18 +1055,18 @@ export default function Analytics() {
       <section aria-label="Key analytics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         <KpiCard tone={0} icon={IndianRupee}
           label="Revenue (period)"
-          value={inr(filtered.raised)}
+          value={<LiveValue value={filtered.raised} format={inr} />}
           sub={`${invoices.length} invoice${invoices.length === 1 ? '' : 's'}`}
           spark={sparks.raised} sparkColor="#2563eb" />
         <KpiCard tone={1} icon={Wallet}
           label="Collected"
-          value={inr(filtered.received)}
+          value={<LiveValue value={filtered.received} format={inr} />}
           accent="positive"
           sub={`${formatPct(filtered.collectionRate, 1)} collection rate`}
           spark={sparks.collected} sparkColor="#16a34a" />
         <KpiCard tone={2} icon={Clock}
           label="Outstanding"
-          value={inr(filtered.outstanding)}
+          value={<LiveValue value={filtered.outstanding} format={inr} />}
           accent={filtered.outstanding > 0 ? 'warning' : 'positive'}
           sub={`${filtered.byStatus?.Pending || 0} pending`} />
         <KpiCard tone={3} icon={Hourglass}
@@ -1080,7 +1076,7 @@ export default function Analytics() {
           sub="DSO across paid invoices" />
         <KpiCard tone={4} icon={Target}
           label="Profit Margin"
-          value={formatPct(margin, 2)}
+          value={<LiveValue value={margin} format={v => formatPct(v, 2)} />}
           accent={margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative'}
           sub={inr(ps?.total_profit) + ' on ' + inr(ps?.total_billed)} />
       </section>

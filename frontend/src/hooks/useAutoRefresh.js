@@ -7,7 +7,14 @@ import { useEffect, useRef, useCallback, useState } from 'react'
  * - Uses a ref to always call the LATEST fetchFn, so changing filters/sort
  *   (which creates a new fetchFn reference) immediately triggers a fresh fetch.
  * - Skips state update if data is unchanged (avoids unnecessary re-renders).
- * - Returns { data, loading, error, refresh, lastUpdated, syncing }.
+ * - Reports whether a poll actually brought anything back, separately from
+ *   whether a poll happened. The UI needs both and they are not the same
+ *   claim: `lastUpdated` moves on every successful poll, so a label built on
+ *   it says "updated 3s ago" when the truth is "checked 3s ago, nothing had
+ *   moved". `changedAt` / `changeCount` move only on a real change, which is
+ *   what a live indicator should be marking.
+ * - Returns { data, loading, error, refresh, lastUpdated, changedAt,
+ *   changeCount, syncing }.
  */
 export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   const [data,        setData]        = useState(undefined)
@@ -16,6 +23,8 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
   const [error,       setError]       = useState(null)
   const [errorStatus, setErrorStatus] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [changedAt,   setChangedAt]   = useState(null)
+  const [changeCount, setChangeCount] = useState(0)
 
   const mounted   = useRef(true)
   const lastHash  = useRef(null)
@@ -47,8 +56,16 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
       deniedRef.current = false
       const hash = JSON.stringify(result)
       if (hash !== lastHash.current) {
+        // A null hash is a baseline, not a change: it means first load, or a
+        // filter/sort change, or an explicit refresh. Different data is
+        // expected in all three, and none of them is news worth marking.
+        const isBaseline = lastHash.current === null
         lastHash.current = hash
         setData(result)
+        if (!isBaseline) {
+          setChangedAt(new Date())
+          setChangeCount(n => n + 1)
+        }
       }
       setLastUpdated(new Date())
     } catch (e) {
@@ -124,7 +141,7 @@ export function useAutoRefresh(fetchFn, intervalMs = 5_000) {
     run(false, true)
   }, [run])
 
-  return { data, loading, error, errorStatus, refresh, lastUpdated, syncing }
+  return { data, loading, error, errorStatus, refresh, lastUpdated, changedAt, changeCount, syncing }
 }
 
 /** Format last-updated as relative time string. */

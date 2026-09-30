@@ -13,6 +13,7 @@ import CustomInsightBlocks from '../components/CustomInsightBlocks'
 import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct } from '../utils/format'
 import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
@@ -20,13 +21,6 @@ import clsx from 'clsx'
 /* Count projects whose health does NOT contain 🔴 */
 const countHealthy = (byHealth = {}) =>
   Object.entries(byHealth).reduce((sum, [k, v]) => sum + (k.includes('🔴') ? 0 : v), 0)
-
-function SyncDot({ syncing }) {
-  return (
-    <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', syncing && 'animate-pulse')}
-      style={{ background: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }} aria-hidden="true" />
-  )
-}
 
 function SkeletonCard() {
   return (
@@ -254,8 +248,11 @@ export default function Dashboard() {
     ]).then(([summary, list]) => ({ summary, records: list.records || [] }))
   }, [kpiFrom, kpiTo])
 
-  const { data, loading, error, refresh, lastUpdated, syncing } = useAutoRefresh(fetchAll, 5_000)
-  const updatedLabel = useRelativeTime(lastUpdated)
+  const { data, loading, error, refresh, lastUpdated, changedAt, changeCount, syncing } = useAutoRefresh(fetchAll, 5_000)
+  // Deliberately the changed time, not the polled time. The old label read
+  // `lastUpdated`, which moves on every poll, so it said "updated just now"
+  // every five seconds whether or not a single figure had moved.
+  const changedLabel = useRelativeTime(changedAt)
 
   // Invoice records for the activity timeline chart
   const [invoiceRecords, setInvoiceRecords] = useState([])
@@ -448,10 +445,10 @@ export default function Dashboard() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
                 <h2 className="text-[2.35rem] sm:text-[3rem] font-semibold mt-2 tabular-nums leading-none" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
-                  {inr(s?.total_profit)}
+                  <LiveValue value={s?.total_profit} format={inr} />
                 </h2>
                 <p className="text-sm mt-2 max-w-xl" style={{ color: 'var(--text-3)' }}>
-                  Net profit from <span style={{ color: 'var(--text-2)' }}>{inr(s?.total_billed)}</span> billed across {s?.total_projects ?? 0} active portfolio entries.
+                  Net profit from <LiveValue value={s?.total_billed} format={inr} style={{ color: 'var(--text-2)' }} /> billed across {s?.total_projects ?? 0} active portfolio entries.
                 </p>
               </div>
               <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
@@ -465,14 +462,16 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Revenue', value: inr(s?.total_billed), tone: 'var(--text-1)' },
-                { label: 'Margin', value: formatPct(margin, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
-                { label: 'Cost load', value: formatPct(costRatio, 1), tone: 'var(--fin-warning)' },
-                { label: 'At risk', value: `${atRisk.length}`, tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
+                { label: 'Revenue', value: s?.total_billed, format: inr, tone: 'var(--text-1)' },
+                { label: 'Margin', value: margin, format: v => formatPct(v, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },
+                { label: 'Cost load', value: costRatio, format: v => formatPct(v, 1), tone: 'var(--fin-warning)' },
+                { label: 'At risk', value: atRisk.length, format: v => String(Math.round(v)), tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
                   <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
-                  <p className="text-lg sm:text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
+                  <p className="text-lg sm:text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>
+                    <LiveValue value={item.value} format={item.format} />
+                  </p>
                 </div>
               ))}
             </div>
@@ -489,9 +488,9 @@ export default function Dashboard() {
               {lastUpdated && (
                 <div className="text-right">
                   <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync</p>
-                  <p className="text-xs mt-1 flex items-center gap-1.5 justify-end" style={{ color: syncing ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
-                    <SyncDot syncing={syncing} />
-                    {syncing ? 'syncing…' : updatedLabel}
+                  <p className="text-xs mt-1 flex items-center gap-1.5 justify-end" style={{ color: 'var(--text-2)' }}>
+                    <LiveDot changeCount={changeCount} loading={syncing && !data} />
+                    {changedAt ? `changed ${changedLabel}` : 'up to date'}
                   </p>
                 </div>
               )}
@@ -578,36 +577,36 @@ export default function Dashboard() {
             : <>
                 <KpiCard tone={0}
                   label="Total Revenue"
-                  value={inr(s?.total_billed)}
+                  value={<LiveValue value={s?.total_billed} format={inr} />}
                   icon={IndianRupee}
                 />
                 <KpiCard tone={1}
                   label="Net Profit"
-                  value={inr(s?.total_profit)}
+                  value={<LiveValue value={s?.total_profit} format={inr} />}
                   icon={TrendingUp}
                   accent={(s?.total_profit ?? 0) >= 0 ? 'positive' : 'negative'}
                   trend={s?.avg_profit_pct}
                 />
                 <KpiCard tone={2}
                   label="Total Cost"
-                  value={inr(s?.total_cost)}
+                  value={<LiveValue value={s?.total_cost} format={inr} />}
                   icon={Activity}
                   sub={s?.total_cost > 0 ? `${formatPct(costRatio, 1)} of revenue` : undefined}
                 />
                 <KpiCard tone={3}
                   label="Profit Margin"
-                  value={formatPct(margin, 2)}
+                  value={<LiveValue value={margin} format={v => formatPct(v, 2)} />}
                   icon={Flame}
                   accent={margin >= 20 ? 'positive' : margin >= 0 ? 'warning' : 'negative'}
                 />
                 <KpiCard tone={4}
                   label="Targets Hit"
-                  value={`${s?.target_achieved_count ?? 0} / ${s?.total_projects ?? 0}`}
+                  value={<><LiveValue value={s?.target_achieved_count ?? 0} format={v => String(Math.round(v))} /> / <LiveValue value={s?.total_projects ?? 0} format={v => String(Math.round(v))} /></>}
                   icon={Target}
                 />
                 <KpiCard tone={5}
                   label="Projects"
-                  value={s?.total_projects ?? '—'}
+                  value={s?.total_projects == null ? '—' : <LiveValue value={s.total_projects} format={v => String(Math.round(v))} />}
                   icon={FolderKanban}
                   sub={`${healthOk} healthy`}
                 />

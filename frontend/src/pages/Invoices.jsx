@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Save, Filter, CalendarDays, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, RotateCcw, Paperclip, Download, Columns3 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -112,7 +113,7 @@ export default function Invoices() {
 
   /* ── Fetch summary ── */
   const fetchSummary = useCallback((opts = {}) => api.invoices.summary(opts), [])
-  const { data: summary, loading: sumLoading } = useAutoRefresh(fetchSummary, 10_000)
+  const { data: summary, loading: sumLoading, changeCount: summaryChanges } = useAutoRefresh(fetchSummary, 10_000)
 
   /* ── Fetch ALL records from Teable (no server-side status/project filter) ──
    * Filtering by status/project happens client-side in scopedRecords so that
@@ -944,13 +945,13 @@ export default function Invoices() {
         )}
 
         <ExecutiveStatGrid className="mt-5">
-          <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : fmt(s?.total_raised)} icon={IndianRupee} />
-          <ExecutiveStatCard label="Incl. GST" value={sumLoading && !s ? '—' : fmt(s?.total_with_tax)} icon={Receipt} />
-          <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : fmt(s?.total_received)} sub={s ? `${s?.by_status?.Paid || 0} paid invoices` : ''} accent="positive" icon={TrendingUp} />
-          <ExecutiveStatCard label="Outstanding" value={sumLoading && !s ? '—' : fmt(s?.total_outstanding)} sub={`${s?.by_status?.Pending || 0} pending invoices`} accent={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'} icon={CalendarClock} />
+          <ExecutiveStatCard label="Total raised" value={sumLoading && !s ? '—' : <LiveValue value={s?.total_raised} format={fmt} />} icon={IndianRupee} />
+          <ExecutiveStatCard label="Incl. GST" value={sumLoading && !s ? '—' : <LiveValue value={s?.total_with_tax} format={fmt} />} icon={Receipt} />
+          <ExecutiveStatCard label="Collected" value={sumLoading && !s ? '—' : <LiveValue value={s?.total_received} format={fmt} />} sub={s ? `${s?.by_status?.Paid || 0} paid invoices` : ''} accent="positive" icon={TrendingUp} />
+          <ExecutiveStatCard label="Outstanding" value={sumLoading && !s ? '—' : <LiveValue value={s?.total_outstanding} format={fmt} />} sub={`${s?.by_status?.Pending || 0} pending invoices`} accent={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'} icon={CalendarClock} />
           <ExecutiveStatCard
-            label="Collection rate"
-            value={sumLoading && !s ? '—' : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
+            label={<span className="inline-flex items-center gap-1.5">Collection rate <LiveDot changeCount={summaryChanges} loading={sumLoading && !s} size={5} /></span>}
+            value={sumLoading && !s ? '—' : s ? <LiveValue value={s.collection_rate ?? 0} format={v => `${v.toFixed(1)}%`} /> : '—'}
             sub={s ? `${s?.active_invoices || 0} active invoices in scope` : ''}
             accent={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'}
             icon={Percent}

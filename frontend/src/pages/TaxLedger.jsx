@@ -21,6 +21,7 @@ import {
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -214,7 +215,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
     const params = { limit: 1000, order_by: 'Raised Date', order: 'desc', ...opts }
     return isWebSource ? api.webInvoices.list(params) : api.invoices.list(params)
   }, [isWebSource])
-  const { data: listData, loading, refresh } = useAutoRefresh(fetchInvoices, 15_000)
+  const { data: listData, loading, refresh, changeCount } = useAutoRefresh(fetchInvoices, 15_000)
   const allInvoices = listData?.records || []
 
   // Active period
@@ -598,7 +599,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
               </button>
             </>
           )}
-          <div className="ml-auto text-xs" style={{ color: 'var(--text-3)' }}>
+          <div className="ml-auto text-xs flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+            <LiveDot changeCount={changeCount} loading={loading && !listData} size={5} />
             <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{totals.count}</span> paid tax invoice{totals.count !== 1 ? 's' : ''} · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{openSummary.count}</span> open · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{period.label}</span>
           </div>
         </div>
@@ -606,12 +608,12 @@ export default function TaxLedger({ source = 'main' } = {}) {
 
       {/* ── KPI strip ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Taxable Value"   value={FMT_INR(totals.taxable)}     sub="Pre-GST base" />
-        <StatCard label="GST Collected Total" value={FMT_INR(totals.gstAmt)}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent />
-        <StatCard label="TDS Collected Total" value={FMT_INR(totals.tdsAmt)}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveTdsPct)} on taxable`} warn={totals.tdsAmt > 0} />
-        <StatCard label="Gross Invoiced"  value={FMT_INR(totals.gross)}       sub={`${totals.count} paid invoices`} />
-        <StatCard label="Net Receivable"  value={FMT_INR(totals.netReceivable)} sub="Gross minus TDS" />
-        <StatCard label="Open Invoices"   value={FMT_INR(openSummary.outstanding)} sub={`${openSummary.count} pending · excluded from GST/TDS`} warn={openSummary.count > 0} />
+        <StatCard label="Taxable Value"   value={<LiveValue value={totals.taxable} format={FMT_INR} />}     sub="Pre-GST base" />
+        <StatCard label="GST Collected Total" value={<LiveValue value={totals.gstAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent />
+        <StatCard label="TDS Collected Total" value={<LiveValue value={totals.tdsAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveTdsPct)} on taxable`} warn={totals.tdsAmt > 0} />
+        <StatCard label="Gross Invoiced"  value={<LiveValue value={totals.gross} format={FMT_INR} />}       sub={`${totals.count} paid invoices`} />
+        <StatCard label="Net Receivable"  value={<LiveValue value={totals.netReceivable} format={FMT_INR} />} sub="Gross minus TDS" />
+        <StatCard label="Open Invoices"   value={<LiveValue value={openSummary.outstanding} format={FMT_INR} />} sub={`${openSummary.count} pending · excluded from GST/TDS`} warn={openSummary.count > 0} />
       </div>
 
       {/* ── GST / TDS health bar ───────────────────────────────────────────── */}
