@@ -6,6 +6,7 @@ import { api } from '../services/api'
 import AgingRunway from '../components/AgingRunway'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
+import { useRecordMotion } from '../hooks/useRecordMotion'
 
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -251,6 +252,12 @@ export default function WebInvoices() {
     return true
   })
   const records = applyConditions(baseRecords, filterConditions, r => r.fields ?? {})
+  // Fed the full server set, not the filtered view: an invoice that arrives is
+  // news whatever the reader has filtered to, and a filter change then cannot
+  // masquerade as rows arriving.
+  const rowMotion = useRecordMotion(allRecords, {
+    watch: r => `${r.fields?.['Payment Status'] || ''}|${r.fields?.['Outstanding Amount'] || ''}|${r.fields?.['Amount'] || ''}`,
+  })
 
   // Totals for the money columns, grouped by currency. Unlike the main invoice
   // table — which formats everything as INR — this module renders each row in
@@ -2486,7 +2493,7 @@ export default function WebInvoices() {
                           return (
                             <Fragment key={r.id}>
                             <tr
-                              className="tbl-row"
+                              className={clsx('tbl-row', rowMotion(r) && `ft-row-${rowMotion(r)}`)}
                               style={{
                                 cursor: 'pointer',
                                 background: isHovered ? 'var(--table-row-hover)' : rowIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',

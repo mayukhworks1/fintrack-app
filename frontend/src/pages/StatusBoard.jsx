@@ -25,6 +25,7 @@ import EmptyState from '../components/EmptyState'
 // ── Extracted modules ─────────────────────────────────────────────────────
 import { AIUpdateModal, AppearancePanel, ColumnSelector, ConfirmModal, ManageSharesModal, SavedViewsMenu, ShareModal, StatusModal } from './statusboard/StatusModals'
 import { DetailPanel, KanbanColumn, ListViewRow, StatusCard, StatusDashboard } from './statusboard/StatusViews'
+import { useRecordMotion } from '../hooks/useRecordMotion'
 import { BOARD_GROUP_OPTIONS, CARD_GROUP_OPTIONS, CARD_GROUP_SORT_OPTIONS, CARD_RECORD_SORT_OPTIONS, DEFAULT_COLUMNS, EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT, LIST_COLUMN_META, STATUS_FILTER_FIELDS, STATUS_OPTIONS_FALLBACK, clientColor, encodeViewConfig, getListLayout, getViewConfigFromUrl, hexToRgba, resolveTheme, sanitizeAttachmentsForSave, statusStyle } from './statusboard/utils'
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -151,6 +152,12 @@ export default function StatusBoard() {
     finally { if (!silent) setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  // The board is pushed to over SSE, so cards move without anyone on this
+  // screen touching them. Watching the lane field: a card that changed status
+  // is remounted under a different column, so unlike a table row it genuinely
+  // re-enters — which is exactly the motion worth showing.
+  const cardMotion = useRecordMotion(records, { watch: r => r.fields?.['Status'] || '' })
 
   // ── Real-time SSE sync (zero-latency push from backend) ───────────────────
   // Backend fires a "changed" event whenever any status record is mutated —
@@ -1006,6 +1013,7 @@ export default function StatusBoard() {
                       compact={compact}
                       showClientAccents={showClientAccents}
                       draggable={boardIsDraggable}
+                      motionFor={cardMotion}
                     />
                   )
                 })}

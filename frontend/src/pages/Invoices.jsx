@@ -5,6 +5,7 @@ import { Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, 
 import { api } from '../services/api'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
+import { useRecordMotion } from '../hooks/useRecordMotion'
 
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -379,6 +380,17 @@ export default function Invoices() {
     statusFilter,
     todayIso,
   ])
+
+  // Which rows a poll brought in or altered. Watching the money and the status
+  // rather than the whole record: a row is news when it arrives, when it gets
+  // paid, or when the figure on it moves — not when some unrelated field is
+  // touched upstream.
+  // Fed the full server set rather than the filtered view: an invoice that
+  // arrives is news whatever the reader has filtered to, and a filter change
+  // then cannot masquerade as rows arriving.
+  const rowMotion = useRecordMotion(allRecords, {
+    watch: r => `${r.fields?.['Payment Status'] || ''}|${r.fields?.['Outstanding Amount'] || ''}|${r.fields?.['Amount'] || ''}`,
+  })
 
   const records = useMemo(
     () => applyConditions(scopedRecords, filterConditions, r => r.fields ?? {}),
@@ -2279,7 +2291,7 @@ export default function Invoices() {
                       return (
                         <Fragment key={r.id}>
                         <tr
-                          className="tbl-row"
+                          className={clsx('tbl-row', rowMotion(r) && `ft-row-${rowMotion(r)}`)}
                           style={{
                             cursor: 'pointer',
                             background: isHovered ? 'var(--table-row-hover)' : globalIndex % 2 === 0 ? 'var(--table-row-even)' : 'var(--table-row-odd)',

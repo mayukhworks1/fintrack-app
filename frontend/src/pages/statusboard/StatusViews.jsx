@@ -488,7 +488,7 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false }) {
+export function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false , landed = false }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'
@@ -498,7 +498,7 @@ export function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSel
 
   return (
     <div
-      className="rounded-xl p-3 transition-all select-none"
+      className={`rounded-xl p-3 transition-all select-none${landed ? ' ft-card-landed' : ''}`}
       style={{
         background: sel ? hexToRgba(clrHex, 0.08) : 'var(--card-bg)',
         border: sel ? `1.5px solid ${clrHex}` : '1px solid var(--border)',
@@ -561,7 +561,7 @@ export function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSel
   )
 }
 
-export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true }) {
+export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true, motionFor }) {
   const [dragOver, setDragOver] = useState(false)
   const sc = draggable ? statusStyle(statusLabel) : { color: '#475569', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8' }
 
@@ -622,6 +622,7 @@ export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit
             compact={compact}
             showClientAccents={showClientAccents}
             dragDisabled={!draggable}
+            landed={motionFor ? !!motionFor(r) : false}
           />
         ))}
       </div>

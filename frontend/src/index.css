@@ -4058,3 +4058,79 @@ html.dark .main-app-theme {
   }
   .ft-live-core { transition: none !important }
 }
+
+/* ── Rows that a poll brought in, or altered ──────────────────────────────
+   Only the rows that moved carry these. A table where every row animates on
+   every poll reports nothing, because the eye cannot pick the one that is
+   actually news out of the twenty that are not. */
+
+@keyframes ft-row-arrive {
+  from { opacity: 0; transform: translateY(-6px) }
+  to   { opacity: 1; transform: translateY(0) }
+}
+.ft-row-new > td {
+  animation: ft-row-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* A left edge that fades out, so the new row is findable after it has landed
+   without leaving a permanent mark on the table. */
+.ft-row-new {
+  animation: ft-row-flag 1500ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes ft-row-flag {
+  0%   { box-shadow: inset 3px 0 0 0 var(--fin-positive) }
+  70%  { box-shadow: inset 3px 0 0 0 var(--fin-positive) }
+  100% { box-shadow: inset 3px 0 0 0 transparent }
+}
+
+/* An altered row — a status that moved, an amount that was corrected. It does
+   not re-enter, because it did not arrive; it is the same row saying so. */
+.ft-row-changed {
+  animation: ft-row-touched 1500ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes ft-row-touched {
+  0%   { box-shadow: inset 3px 0 0 0 var(--fin-warning) }
+  70%  { box-shadow: inset 3px 0 0 0 var(--fin-warning) }
+  100% { box-shadow: inset 3px 0 0 0 transparent }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Only the animation is cancelled. Forcing `box-shadow: none` here would
+     also strip the row's own resting and hover shadow for as long as the mark
+     is applied — suppressing the motion must not suppress the styling the
+     element had anyway. */
+  .ft-row-new,
+  .ft-row-changed,
+  .ft-row-new > td {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ── Kanban cards that landed somewhere new ───────────────────────────────
+   A card changing lane is remounted under a different column, so unlike a
+   table row it genuinely re-enters. One class covers both cases: a card that
+   was just created and a card that moved. */
+@keyframes ft-card-land {
+  0%   { opacity: 0; transform: translateY(-8px) scale(0.985) }
+  60%  { opacity: 1; transform: translateY(1px) scale(1) }
+  100% { opacity: 1; transform: translateY(0) scale(1) }
+}
+@keyframes ft-card-ring {
+  0%   { box-shadow: 0 0 0 2px var(--fin-positive), 0 1px 3px rgba(0,0,0,0.05) }
+  70%  { box-shadow: 0 0 0 2px var(--fin-positive), 0 1px 3px rgba(0,0,0,0.05) }
+  100% { box-shadow: 0 0 0 0 transparent, 0 1px 3px rgba(0,0,0,0.05) }
+}
+.ft-card-landed {
+  animation: ft-card-land 460ms cubic-bezier(0.22, 1, 0.36, 1) both,
+             ft-card-ring 1600ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* As above: cancel the animation, keep the card's own shadow. */
+  .ft-card-landed {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
