@@ -178,11 +178,15 @@ export default function WebInvoices() {
 
   const { data: listData, loading, error, errorStatus, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
   const isStaleData = listData?._stale === true
-  const serverRecords = listData?.records || []
   const [recordsState, setRecordsState] = useState([])
+  // The dependency is `listData?.records`, not a `|| []` fallback hoisted into
+  // a variable. The fallback builds a fresh array on every render, so the
+  // effect saw a new dependency each time, set state, and re-rendered — an
+  // infinite render loop for as long as listData was undefined. That is every
+  // initial load until the first fetch resolves, and forever if it fails.
   useEffect(() => {
-    setRecordsState(serverRecords)
-  }, [serverRecords])
+    setRecordsState(listData?.records || [])
+  }, [listData?.records])
   const allRecords = recordsState
 
   const monthOptions = useMemo(() => (
