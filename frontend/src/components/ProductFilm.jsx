@@ -10,91 +10,79 @@ import {
   inr, inrShort
 } from './demoData'
 
-/* Chapter marks are the film's own scene boundaries. They were 0-6, 6-12,
-   12-18, 18-24 — the timings of the previous 24.4s cut — so against the
-   current 32s film every mark pointed at the wrong moment and the scrubber
-   described a scene the viewer was not watching. A chapter list that does not
-   match the footage is worse than none: it is a caption that lies.
-   These are the real cuts, and each names a tab the film is actually showing
-   so the sandbox below follows what is on screen. */
+/* Chapter marks are the film's own scene boundaries, and they have to be
+   re-derived every time the cut changes — a chapter list that does not match
+   the footage is worse than none, because it is a caption that lies. The
+   previous set still described a 32.5s cut and named a Tax Ledger and a
+   Delivery scene the film never contained. These are measured against the
+   30.3s cut: each boundary is a point where the recording actually changes
+   module, verified by reading the app's own window title at the first and
+   last frame of every segment. */
 const CHAPTERS = [
   {
     id: 1,
-    title: 'Float Drag & TDS Trap',
+    title: 'The figure, corrected',
     start: 0,
-    end: 10,
-    tag: '0:00 - 0:10',
+    end: 11.7,
+    tag: '0:00 - 0:11',
     badge: 'Capital Leakage',
     tab: 'receivables',
-    tabLabel: 'Invoices & Ageing',
+    tabLabel: 'Invoices',
     metric: `₹${(TOTALS.tds / 100000).toFixed(2)}L withheld`,
     problem: 'Accounting tools count gross invoices while tax deducted at source never arrives, so the collections list overstates what can actually be collected.',
     solution: 'FinTrack reports TDS as its own figure and keeps it out of outstanding, so the number being chased is the number owed.',
   },
   {
     id: 2,
-    title: 'Executive Dashboard',
-    start: 10,
-    end: 14.4,
-    tag: '0:10 - 0:14',
-    badge: 'One Ledger',
-    tab: 'dashboard',
-    tabLabel: 'Dashboard',
-    metric: `₹${(TOTALS.outstanding / 100000).toFixed(1)}L outstanding`,
-    problem: 'Revenue sits in one tool, margin in another and runway in a spreadsheet that is a week old by the time anyone reads it.',
-    solution: 'Revenue, direct cost, margin, runway and what is owed all read the same rows, so two of them cannot disagree.',
+    title: 'One invoice, opened',
+    start: 11.7,
+    end: 15.3,
+    tag: '0:11 - 0:15',
+    badge: 'Every Deduction Named',
+    tab: 'receivables',
+    tabLabel: 'Invoices',
+    metric: '₹6,58,800 lands',
+    problem: 'An invoice total tells you what was billed, not what arrives: GST belongs to the state and TDS is withheld before the client pays.',
+    solution: 'Each deduction is named on the invoice itself, ending on the figure that actually reaches the bank.',
   },
   {
     id: 3,
-    title: 'Invoices & Ageing',
-    start: 14.4,
-    end: 18.6,
-    tag: '0:14 - 0:18',
-    badge: 'Collections',
+    title: 'Ageing, and the table it filters',
+    start: 15.3,
+    end: 20.8,
+    tag: '0:15 - 0:20',
+    badge: 'Days Past Due',
     tab: 'receivables',
-    tabLabel: 'Invoices',
-    metric: `${INVOICES.filter(i => i.status === 'Overdue').length} of ${INVOICES.length} overdue`,
-    problem: 'A list of every invoice is not a collections list. What matters is which ones are genuinely past their terms.',
-    solution: 'Ageing bands are days past due rather than days since raised, and filter the table to exactly the invoices worth a phone call.',
+    tabLabel: 'Ageing',
+    metric: '₹8,05,000 at 61–90 days',
+    problem: 'An ageing chart that is only a chart tells you a band is bad without telling you which invoices are in it.',
+    solution: 'Picking a band filters the table underneath, and every total follows it down.',
   },
   {
     id: 4,
-    title: 'Statutory Tax Ledger',
-    start: 18.6,
-    end: 22.6,
-    tag: '0:18 - 0:22',
-    badge: 'GST & TDS',
-    tab: 'tax',
-    tabLabel: 'Tax Ledger',
-    metric: `₹${(TOTALS.gst / 100000).toFixed(2)}L GST`,
-    problem: 'A filing figure and a cash figure get read off the same column, and the difference is discovered at the end of the quarter.',
-    solution: 'GST collected and TDS withheld are kept as separate monthly figures, so a filing number is never mistaken for money in hand.',
+    title: 'Status Board',
+    start: 20.8,
+    end: 24.4,
+    tag: '0:20 - 0:24',
+    badge: 'Delivery On The Same Row',
+    tab: 'delivery',
+    tabLabel: 'Status Board',
+    metric: '₹3,75,000 delivered',
+    problem: 'Delivery status lives in one tool and the money in another, so nobody can say what the work in progress is worth.',
+    solution: 'The board regroups by client in a click and carries the money with the cards.',
   },
   {
     id: 5,
-    title: 'Delivery on the Same Row',
-    start: 22.6,
-    end: 26.6,
-    tag: '0:22 - 0:26',
-    badge: 'Operations Mirror',
-    tab: 'delivery',
-    tabLabel: 'Delivery & Projects',
-    metric: 'Live board',
-    problem: 'Project managers move cards in one system while finance reconciles invoices in another, and the two drift apart between reviews.',
-    solution: 'A card carries what its project is owed, because the board and the ledger are the same records rather than two copies.',
-  },
-  {
-    id: 6,
-    title: 'An Answer You Can Check',
-    start: 26.6,
-    end: 32.5,
-    tag: '0:26 - 0:32',
-    badge: 'Shows Its Query',
+    title: 'An answer you can check',
+    start: 24.4,
+    end: 30.3,
+    tag: '0:24 - 0:30',
+    badge: 'Shows Its Working',
     tab: 'analyst',
-    tabLabel: 'AI Analyst',
-    metric: 'Query shown',
-    problem: 'A chat window bolted onto a ledger will confidently invent a total, and on money a fast wrong answer is a liability.',
-    solution: 'The model picks a measure and a grouping from a fixed set; the application compiles the statement and prints it beside the answer.',
+    tabLabel: 'AI Assistant',
+    metric: '₹12,36,000 top client',
+    problem: 'An assistant that answers in prose is impossible to audit — you cannot tell a reading of the data from an invention.',
+    solution: 'The compiled query is shown beside the answer, so the figure can be checked rather than trusted.',
   },
 ]
 
@@ -399,8 +387,12 @@ export default function ProductFilm() {
                   reverse of the ambient loops. The browser takes the first it
                   can decode, so the smaller file has to be the one listed
                   first — which is not always the same format. */}
-              <source src="/media/fintrack-film.mp4" type="video/mp4" />
+              {/* Smaller first — the browser takes the first source it can
+                  decode. VP9 measured smaller than H.264 for this cut
+                  (2.37MB vs 2.52MB at equal SSIM); it was the other way round
+                  for the previous one, so the order is measured, not assumed. */}
               <source src="/media/fintrack-film.webm" type="video/webm" />
+              <source src="/media/fintrack-film.mp4" type="video/mp4" />
             </video>
 
             {/* Dynamic Telemetry HUD Banner (Active During Playback) */}

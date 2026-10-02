@@ -44,7 +44,12 @@ brag-output/composition/package-lock.json
 # Bundled with the /brag skill under its own terms (music: ende.app,
 # SFX: Kenney). Licensed for use *in* the video, which is where it is —
 # encoded into brag.mp4 — not for redistribution as source files.
-brag-output/composition/assets/audio/
+# The directory's CONTENTS, not the directory — git never descends into an
+# ignored directory, so a negation under one has no effect.
+brag-output/composition/assets/audio/*
+# ...except the effects generated here with ffmpeg. They carry no licence of
+# anyone else's, and the composition cannot be re-rendered without them.
+!brag-output/composition/assets/audio/sfx-*.ogg
 # Copies of frontend/public/fonts — one source of truth for the faces.
 brag-output/composition/assets/fonts/
 # Site capture scratch; re-runnable with `hyperframes capture`.
@@ -68,3 +73,4 @@ brag-output/composition/.transcode-cache/
 brag-output/composition/v3-sheet.png
 brag-output/film-v3.*
 brag-output/film-v4.*
+brag-output/film-v5.*
