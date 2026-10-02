@@ -36,12 +36,14 @@
       .wordmark{font-family:'Jost Wordmark','Outfit',sans-serif;font-weight:500;letter-spacing:-.012em}
 
       /* ── The frosted stage the footage sits in. ──
-         The clip is 1072px of real pixels. It is shown at 1200 — a 1.12x
-         upscale, less than the 1.21x it carried before — and never magnified
-         further. Zooming a screen recording only magnifies its softness, so
-         the thing that matters is restated in type at full resolution instead,
-         in the card beside it. */
-      #stage{position:absolute;left:70px;top:204px;width:1200px;height:664px;
+         The clip is a true 2x master: 2142x1372, produced by lifting the
+         sandbox's max-width cap and zooming it so the browser re-lays-out at
+         double size. Playwright's screencast records at CSS resolution
+         whatever deviceScaleFactor says, so this is the only way to get real
+         pixels out of it. Shown at 1232 wide, the footage is being DOWNSCALED
+         1.7x — which is why the push-in below is now free: even at 1.08 it is
+         still sampling below native. */
+      #stage{position:absolute;left:70px;top:150px;width:1232px;height:789px;
              border-radius:26px;overflow:hidden;
              background:rgba(255,255,255,.055);
              border:1px solid rgba(255,255,255,.14);
@@ -53,12 +55,12 @@
          and decode, which it does slightly before the clip's own data-start.
          That put the AI Assistant screen under the Status Board callout. Each
          clip is now driven to 1 and back to 0 by the timeline alone. */
-      .film{position:absolute;left:0;top:0;width:1200px;height:664px;display:block;
+      .film{position:absolute;left:0;top:0;width:1232px;height:789px;display:block;
             object-fit:cover;opacity:0;will-change:transform,opacity}
 
       /* ── The callout: the number the segment is about, set in type rather
             than cropped out of the video. ── */
-      .callout{position:absolute;left:1322px;top:300px;width:528px;
+      .callout{position:absolute;left:1352px;top:286px;width:498px;
                border-radius:28px;padding:34px 34px 36px;
                background:rgba(255,255,255,.085);
                border:1px solid rgba(255,255,255,.16);
@@ -71,7 +73,7 @@
       .cal-rule{height:3px;width:0;background:linear-gradient(90deg,#5c84ff,#34c759);
                 border-radius:2px;margin-top:24px}
 
-      .caption{position:absolute;left:70px;top:906px;width:1200px;text-align:left;opacity:0}
+      .caption{position:absolute;left:70px;top:962px;width:1232px;text-align:left;opacity:0}
       .caption .k{font-size:23px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:#8fb0ff}
       .caption .v{font-family:'Fraunces',Georgia,serif;font-size:46px;font-weight:500;
                   letter-spacing:-.02em;margin-top:12px;line-height:1.14}
@@ -84,7 +86,7 @@
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="30.3"
+    <div id="root" data-composition-id="main" data-start="0" data-duration="28.5"
          data-width="1920" data-height="1080">
 
       <div class="blob" id="b1"></div>
@@ -111,85 +113,85 @@
 
       <div id="stage">
         <video class="film" id="s3-v" src="./assets/drive/drive.webm"
-               data-start="11.7" data-duration="3.6" data-media-start="12.0" muted></video>
+               data-start="11.7" data-duration="3.0" data-media-start="14.2" muted></video>
         <video class="film" id="s4-v" src="./assets/drive/drive.webm"
-               data-start="15.3" data-duration="2.8" data-media-start="23.0" muted></video>
+               data-start="14.7" data-duration="2.6" data-media-start="18.2" muted></video>
         <video class="film" id="s5-v" src="./assets/drive/drive.webm"
-               data-start="18.1" data-duration="2.7" data-media-start="26.0" muted></video>
+               data-start="17.3" data-duration="2.6" data-media-start="24.3" muted></video>
         <video class="film" id="s6-v" src="./assets/drive/drive.webm"
-               data-start="20.8" data-duration="3.6" data-media-start="32.2" muted></video>
+               data-start="19.9" data-duration="3.2" data-media-start="28.5" muted></video>
         <video class="film" id="s7-v" src="./assets/drive/drive.webm"
-               data-start="24.4" data-duration="3.9" data-media-start="38.5" muted></video>
+               data-start="23.1" data-duration="3.4" data-media-start="33.6" muted></video>
       </div>
 
-      <div id="s3-callout" class="callout" data-start="11.7" data-duration="3.6">
+      <div id="s3-callout" class="callout" data-start="11.7" data-duration="3.0">
+        <p class="k">Overdue</p>
+        <p class="n">&#8377;23.7L</p>
+        <p class="d">Seven of seventeen invoices, already past their due date.</p>
+        <div class="cal-rule" id="s3-rule"></div>
+      </div>
+      <div class="caption" id="s3-cap" data-start="11.7" data-duration="3.0">
+        <p class="k">Invoices</p>
+        <p class="v">Filter to overdue, and every total follows it.</p>
+      </div>
+      <div id="s4-callout" class="callout" data-start="14.7" data-duration="2.6">
         <p class="k">Invoice</p>
         <p class="n">&#8722;&#8377;61,000</p>
         <p class="d">TDS withheld by the client. &#8377;6,58,800 is what lands in the bank.</p>
-        <div class="cal-rule" id="s3-rule"></div>
+        <div class="cal-rule" id="s4-rule"></div>
       </div>
-      <div class="caption" id="s3-cap" data-start="11.7" data-duration="3.6">
+      <div class="caption" id="s4-cap" data-start="14.7" data-duration="2.6">
         <p class="k">One invoice, opened</p>
         <p class="v">Every deduction named, and what actually lands.</p>
       </div>
-      <div id="s4-callout" class="callout" data-start="15.3" data-duration="2.8">
-        <p class="k">Ageing</p>
+      <div id="s5-callout" class="callout" data-start="17.3" data-duration="2.6">
+        <p class="k">61&ndash;90 days</p>
         <p class="n">&#8377;8,05,000</p>
-        <p class="d">Sitting in the 61&ndash;90 day band &mdash; two invoices, both past due.</p>
-        <div class="cal-rule" id="s4-rule"></div>
-      </div>
-      <div class="caption" id="s4-cap" data-start="15.3" data-duration="2.8">
-        <p class="k">Ageing</p>
-        <p class="v">Pick a band &mdash; it filters the invoice list, not just a chart.</p>
-      </div>
-      <div id="s5-callout" class="callout" data-start="18.1" data-duration="2.7">
-        <p class="k">Invoices</p>
-        <p class="n">&#8377;33.0L</p>
-        <p class="d">Outstanding across 17 invoices. &#8377;23.7L of it already overdue.</p>
+        <p class="d">Two invoices in that band, and the table filtered to them.</p>
         <div class="cal-rule" id="s5-rule"></div>
       </div>
-      <div class="caption" id="s5-cap" data-start="18.1" data-duration="2.7">
-        <p class="k">Invoices</p>
-        <p class="v">The band filters the table, and the totals follow it down.</p>
+      <div class="caption" id="s5-cap" data-start="17.3" data-duration="2.6">
+        <p class="k">Ageing</p>
+        <p class="v">Bands are days past due &mdash; and they filter the list.</p>
       </div>
-      <div id="s6-callout" class="callout" data-start="20.8" data-duration="3.6">
-        <p class="k">Status Board</p>
+      <div id="s6-callout" class="callout" data-start="19.9" data-duration="3.2">
+        <p class="k">Delivered</p>
         <p class="n">&#8377;3,75,000</p>
         <p class="d">Delivered and incurred, regrouped by client in one click.</p>
         <div class="cal-rule" id="s6-rule"></div>
       </div>
-      <div class="caption" id="s6-cap" data-start="20.8" data-duration="3.6">
+      <div class="caption" id="s6-cap" data-start="19.9" data-duration="3.2">
         <p class="k">Status Board</p>
         <p class="v">Regroup the board and the money follows the cards.</p>
       </div>
-      <div id="s7-callout" class="callout" data-start="24.4" data-duration="3.9">
-        <p class="k">AI Assistant</p>
+      <div id="s7-callout" class="callout" data-start="23.1" data-duration="3.4">
+        <p class="k">Top client</p>
         <p class="n">&#8377;12,36,000</p>
-        <p class="d">Meridian Labs, top of the answer. The SQL comes with it.</p>
+        <p class="d">Meridian Labs. The compiled SQL is shown beside the figure.</p>
         <div class="cal-rule" id="s7-rule"></div>
       </div>
-      <div class="caption" id="s7-cap" data-start="24.4" data-duration="3.9">
+      <div class="caption" id="s7-cap" data-start="23.1" data-duration="3.4">
         <p class="k">AI Assistant</p>
         <p class="v">Ask in words. The compiled query comes with the answer.</p>
       </div>
 
-      <div class="clip" id="s8" data-start="28.3" data-duration="2.0" data-track-index="0">
+      <div class="clip" id="s8" data-start="26.5" data-duration="2.0" data-track-index="0">
         <p class="wordmark" id="s8-mark" style="font-size:96px">fintrack</p>
         <p class="sub" id="s8-line" style="margin-top:26px;font-size:36px">Try the sandbox. No sign-in, no data of yours.</p>
         <div style="margin-top:34px"><span class="badge" id="s8-badge">twfintracker.worksmayukh.space</span></div>
       </div>
 
-      <div id="rail" data-start="0" data-duration="30.3"><div id="railfill"></div></div>
+      <div id="rail" data-start="0" data-duration="28.5"><div id="railfill"></div></div>
 
-      <audio id="bgm" src="./assets/audio/music.mp3" data-start="0" data-duration="30.3"
+      <audio id="bgm" src="./assets/audio/music.mp3" data-start="0" data-duration="28.5"
              data-volume="0.3"></audio>
       <audio src="./assets/audio/sfx-counter.ogg" data-start="0.5"  data-duration="1.6" data-volume="0.30"></audio>
       <audio src="./assets/audio/sfx-tick.ogg"    data-start="12.0" data-duration="0.3" data-volume="0.42"></audio>
-      <audio src="./assets/audio/sfx-tick.ogg"    data-start="15.6" data-duration="0.3" data-volume="0.42"></audio>
-      <audio src="./assets/audio/sfx-tick.ogg"    data-start="18.4" data-duration="0.3" data-volume="0.42"></audio>
-      <audio src="./assets/audio/sfx-tick.ogg"    data-start="21.1" data-duration="0.3" data-volume="0.42"></audio>
-      <audio src="./assets/audio/sfx-tick.ogg"    data-start="24.7" data-duration="0.3" data-volume="0.42"></audio>
-      <audio src="./assets/audio/sfx-chime.ogg"   data-start="28.5" data-duration="1.6" data-volume="0.28"></audio>
+      <audio src="./assets/audio/sfx-tick.ogg"    data-start="15.0" data-duration="0.3" data-volume="0.42"></audio>
+      <audio src="./assets/audio/sfx-tick.ogg"    data-start="17.6" data-duration="0.3" data-volume="0.42"></audio>
+      <audio src="./assets/audio/sfx-tick.ogg"    data-start="20.2" data-duration="0.3" data-volume="0.42"></audio>
+      <audio src="./assets/audio/sfx-tick.ogg"    data-start="23.4" data-duration="0.3" data-volume="0.42"></audio>
+      <audio src="./assets/audio/sfx-chime.ogg"   data-start="26.7" data-duration="1.6" data-volume="0.28"></audio>
     </div>
 
     <script>
@@ -202,9 +204,9 @@
 
       /* The blobs drift for the whole film. Slow enough that you never catch
          them moving — it only stops the dark reading as flat. */
-      tl.to('#b1', { x: 150, y: 90,  duration: 30.3, ease: 'none' }, 0);
-      tl.to('#b2', { x: -120, y: 140, duration: 30.3, ease: 'none' }, 0);
-      tl.to('#b3', { x: 90,  y: -110, duration: 30.3, ease: 'none' }, 0);
+      tl.to('#b1', { x: 150, y: 90,  duration: 28.5, ease: 'none' }, 0);
+      tl.to('#b2', { x: -120, y: 140, duration: 28.5, ease: 'none' }, 0);
+      tl.to('#b3', { x: 90,  y: -110, duration: 28.5, ease: 'none' }, 0);
 
       /* ── 1. The figure, and the correction ── */
       tl.fromTo('#s1-eyebrow', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .5 }, 0.15);
@@ -231,8 +233,8 @@
          The push on the footage is 1.00 to 1.045: enough that the frame is not
          dead, small enough that it never becomes an upscale. */
       const SEGS = [
-        ['#s3', 11.7, 3.6], ['#s4', 15.3, 2.8], ['#s5', 18.1, 2.7],
-        ['#s6', 20.8, 3.6], ['#s7', 24.4, 3.9],
+        ['#s3', 11.7, 3.0], ['#s4', 14.7, 2.6], ['#s5', 17.3, 2.6],
+        ['#s6', 19.9, 3.2], ['#s7', 23.1, 3.4],
       ];
 
       tl.to('#stage', { opacity: 1, duration: .5, ease: 'power2.out' }, 11.5);
@@ -240,7 +242,7 @@
       SEGS.forEach(([id, t, dur]) => {
         tl.fromTo(id + '-v', { opacity: 0, scale: 1.0 },
           { opacity: 1, duration: .5, ease: 'power2.out' }, t + .02);
-        tl.to(id + '-v', { scale: 1.045, duration: dur, ease: 'none' }, t);
+        tl.to(id + '-v', { scale: 1.08, duration: dur, ease: 'none' }, t);
 
         /* Each segment owns its caption and callout, timed in the markup.
            They were one shared pair re-lettered by a tl.call(), which is not
@@ -257,13 +259,13 @@
         tl.to([id + '-cap', id + '-callout'], { opacity: 0, duration: .28 }, t + dur - .3);
       });
 
-      tl.to('#stage', { opacity: 0, duration: .4, ease: 'power2.in' }, 27.9);
+      tl.to('#stage', { opacity: 0, duration: .4, ease: 'power2.in' }, 26.1);
 
       /* ── 8. The close ── */
-      tl.fromTo('#s8-mark', { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: .5, ease: 'power3.out' }, 28.4);
-      tl.fromTo('#s8-line', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .45, ease: 'power3.out' }, 28.65);
-      tl.fromTo('#s8-badge', { opacity: 0, scale: .97 }, { opacity: 1, scale: 1, duration: .45, ease: 'power3.out' }, 28.9);
-      tl.fromTo('#railfill', { width: '0%' }, { width: '100%', duration: 30.3, ease: 'none' }, 0);
+      tl.fromTo('#s8-mark', { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: .5, ease: 'power3.out' }, 26.6);
+      tl.fromTo('#s8-line', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .45, ease: 'power3.out' }, 26.85);
+      tl.fromTo('#s8-badge', { opacity: 0, scale: .97 }, { opacity: 1, scale: 1, duration: .45, ease: 'power3.out' }, 27.1);
+      tl.fromTo('#railfill', { width: '0%' }, { width: '100%', duration: 28.5, ease: 'none' }, 0);
 
       window.__timelines = window.__timelines || {};
       window.__timelines['main'] = tl;

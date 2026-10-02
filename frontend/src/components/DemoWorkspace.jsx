@@ -27,7 +27,7 @@ import {
   Plus, Eye, Code, RefreshCw, CheckCircle2, AlertTriangle, Clock,
   Cpu, Database, HelpCircle, Bell, User, MessageSquare, Send,
   Printer, Share2, Check, List, Sliders, CheckSquare2, FileCheck,
-  IndianRupee, Activity, Upload, Lock, Unlock, Compass,
+  IndianRupee, Activity, Upload, Lock, Unlock, Compass, Moon, LogOut,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
@@ -3966,6 +3966,22 @@ export default function DemoWorkspace() {
         <div className="ft-tour-body">
           {/* Navigation Rail */}
           <nav className="ft-tour-rail" aria-label="Sample workspace sections">
+            {/* The brand block, the quick action, the admin divider and the
+                footer are what make the real sidebar recognisable. The rail
+                had none of them, so the sandbox read as a wireframe of the
+                product rather than the product itself. */}
+            <div className="ft-rail-head" aria-hidden="true">
+              <span className="ft-rail-mark">F</span>
+              <div className="hidden sm:block min-w-0">
+                <p className="ft-rail-name ft-wordmark">FinTrack</p>
+                <p className="ft-rail-sub">AI Finance Manager</p>
+              </div>
+            </div>
+            <div className="ft-rail-cta" aria-hidden="true">
+              <Plus size={11} strokeWidth={2.6} />
+              <span className="hidden sm:inline">New Invoice</span>
+            </div>
+
             {TABS.map(t => {
               const Icon = t.icon
               const on = state.tab === t.id
@@ -3982,6 +3998,24 @@ export default function DemoWorkspace() {
                 </button>
               )
             })}
+
+            <div className="ft-rail-foot" aria-hidden="true">
+              <div className="ft-tour-rail-item" style={{ cursor: 'default' }}>
+                <Moon size={13} style={{ flexShrink: 0 }} />
+                <span className="hidden sm:inline truncate">Dark mode</span>
+              </div>
+              <div className="ft-tour-rail-item" style={{ cursor: 'default' }}>
+                <LogOut size={13} style={{ flexShrink: 0 }} />
+                <span className="hidden sm:inline truncate">Sign out</span>
+              </div>
+              <div className="ft-rail-user">
+                <span className="ft-rail-avatar">M</span>
+                <div className="hidden sm:block min-w-0">
+                  <p className="ft-rail-uname truncate">Sample workspace</p>
+                  <p className="ft-rail-umail truncate">no sign-in needed</p>
+                </div>
+              </div>
+            </div>
           </nav>
 
           {/* Main Stage */}

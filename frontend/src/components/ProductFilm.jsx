@@ -34,10 +34,23 @@ const CHAPTERS = [
   },
   {
     id: 2,
-    title: 'One invoice, opened',
+    title: 'Filter to overdue',
     start: 11.7,
-    end: 15.3,
-    tag: '0:11 - 0:15',
+    end: 14.7,
+    tag: '0:11 - 0:14',
+    badge: 'Totals That Follow',
+    tab: 'receivables',
+    tabLabel: 'Invoices',
+    metric: '₹23.7L overdue',
+    problem: 'Filtering a list usually leaves the headline figures behind, so the number on screen stops describing the rows under it.',
+    solution: 'Every total is derived from the visible rows, so a filter moves the figures with it.',
+  },
+  {
+    id: 3,
+    title: 'One invoice, opened',
+    start: 14.7,
+    end: 17.3,
+    tag: '0:14 - 0:17',
     badge: 'Every Deduction Named',
     tab: 'receivables',
     tabLabel: 'Invoices',
@@ -46,11 +59,11 @@ const CHAPTERS = [
     solution: 'Each deduction is named on the invoice itself, ending on the figure that actually reaches the bank.',
   },
   {
-    id: 3,
-    title: 'Ageing, and the table it filters',
-    start: 15.3,
-    end: 20.8,
-    tag: '0:15 - 0:20',
+    id: 4,
+    title: 'Ageing bands',
+    start: 17.3,
+    end: 19.9,
+    tag: '0:17 - 0:19',
     badge: 'Days Past Due',
     tab: 'receivables',
     tabLabel: 'Ageing',
@@ -59,11 +72,11 @@ const CHAPTERS = [
     solution: 'Picking a band filters the table underneath, and every total follows it down.',
   },
   {
-    id: 4,
+    id: 5,
     title: 'Status Board',
-    start: 20.8,
-    end: 24.4,
-    tag: '0:20 - 0:24',
+    start: 19.9,
+    end: 23.1,
+    tag: '0:19 - 0:23',
     badge: 'Delivery On The Same Row',
     tab: 'delivery',
     tabLabel: 'Status Board',
@@ -72,11 +85,11 @@ const CHAPTERS = [
     solution: 'The board regroups by client in a click and carries the money with the cards.',
   },
   {
-    id: 5,
+    id: 6,
     title: 'An answer you can check',
-    start: 24.4,
-    end: 30.3,
-    tag: '0:24 - 0:30',
+    start: 23.1,
+    end: 28.5,
+    tag: '0:23 - 0:28',
     badge: 'Shows Its Working',
     tab: 'analyst',
     tabLabel: 'AI Assistant',
@@ -387,11 +400,12 @@ export default function ProductFilm() {
                   reverse of the ambient loops. The browser takes the first it
                   can decode, so the smaller file has to be the one listed
                   first — which is not always the same format. */}
-              {/* Smaller first — the browser takes the first source it can
-                  decode. VP9 measured smaller than H.264 for this cut
-                  (2.37MB vs 2.52MB at equal SSIM); it was the other way round
-                  for the previous one, so the order is measured, not assumed. */}
-              <source src="/media/fintrack-film.webm" type="video/webm" />
+              {/* One source, measured. At the quality this cut is now shipped
+                  at, H.264 beat VP9 on both axes — 9.3MB at SSIM 0.9977
+                  against 10.0MB at 0.9966 — so a webm would have been a larger
+                  file AND a worse picture, carried for no browser that needs
+                  it. The earlier cut shipped both because VP9 won there; the
+                  answer changes per encode, which is why it gets measured. */}
               <source src="/media/fintrack-film.mp4" type="video/mp4" />
             </video>
 
