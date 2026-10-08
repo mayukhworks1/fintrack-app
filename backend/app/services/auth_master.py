@@ -290,14 +290,20 @@ async def _create_session_for_user(
             json.dumps(session_metadata),
         )
 
-    await log_login(
+    # Bookkeeping, not authentication: the login_sessions row (with a geo
+    # lookup inside) used to be awaited here, after the session was already
+    # created, before the token could be returned. The Google callback
+    # averaged 6 s in the audit log; this and the success event below were
+    # two of its serial waits.
+    from ..utils.tasks import spawn
+    spawn(log_login(
         role=legacy_role,
         token_hint=token_hint,
         ip=_client_ip(request),
         user_agent=ua,
         ttl_secs=settings.app_session_ttl,
         client_hint=request.headers.get("x-client-hint", ""),
-    )
+    ), name="log-login")
     return {
         "token": token,
         "role": legacy_role,
@@ -646,7 +652,8 @@ async def login_with_email(email: str, password: str, request: Request) -> dict[
         raise HTTPException(status_code=403, detail=f"User is {user['status']}")
 
     session = await _create_session_for_user(user, request, login_method="password")
-    await _write_auth_event(
+    from ..utils.tasks import spawn
+    spawn(_write_auth_event(
         "password_login_success",
         request,
         target_user_id=str(user["id"]),
@@ -654,7 +661,7 @@ async def login_with_email(email: str, password: str, request: Request) -> dict[
         email=email_norm,
         status="active",
         metadata={"legacy_role": session["role"], "session_id": session["session_id"]},
-    )
+    ), name="auth-event")
     return session
 
 
@@ -866,7 +873,8 @@ async def _login_with_oidc_profile(
     session = await _create_session_for_user(
         user, request, login_method=provider, metadata={"provider_user_id": provider_user_id}
     )
-    await _write_auth_event(
+    from ..utils.tasks import spawn
+    spawn(_write_auth_event(
         f"{provider}_login_success",
         request,
         target_user_id=str(user["id"]),
@@ -874,7 +882,7 @@ async def _login_with_oidc_profile(
         email=email_norm,
         status="active",
         metadata={"legacy_role": session["role"], "session_id": session["session_id"], "provider_user_id": provider_user_id},
-    )
+    ), name="auth-event")
     return session
 
 

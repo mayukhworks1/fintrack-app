@@ -254,3 +254,80 @@ class TestAdminStats:
         elapsed = time.perf_counter() - t0
         assert out["audit_total"] == 1 and out["top_error_paths"] == [] and out["top_slow_paths"] == []
         assert elapsed < 0.3, f"queries ran in sequence: {elapsed:.2f}s"
+
+
+# ── no reset statement on release ────────────────────────────────────────────
+
+class TestNoResetOnRelease:
+    def test_the_reset_statement_is_empty_so_release_costs_no_round_trip(self):
+        conn = object.__new__(pg._NoResetConnection)       # the override needs no state
+        assert pg._NoResetConnection._get_reset_query(conn) == ""
+
+    def test_the_pool_is_built_with_the_warm_no_reset_settings(self, monkeypatch):
+        import app.db.migrate as migrate
+        from app.config import settings
+        seen = {}
+
+        class FakeConn:
+            async def execute(self, sql): return "OK"
+        class FakePool:
+            def acquire(self): return self
+            async def __aenter__(self): return FakeConn()
+            async def __aexit__(self, *a): return False
+        async def create_pool(dsn, **kw):
+            seen.update(kw); return FakePool()
+        async def no_migrations(): return True
+
+        monkeypatch.setattr(pg.asyncpg, "create_pool", create_pool)
+        monkeypatch.setattr(migrate, "run_migrations", no_migrations)
+        monkeypatch.setattr(settings, "postgres_url", "postgres://u:p@h/db")
+        monkeypatch.setattr(pg, "_pool", None)
+        asyncio.run(pg.init_pool())
+        monkeypatch.setattr(pg, "_pool", None)
+
+        assert seen["connection_class"] is pg._NoResetConnection
+        assert seen["min_size"] == 4 and seen["max_size"] == 10
+        assert seen["max_inactive_connection_lifetime"] == pg._POOL_IDLE_LIFETIME_S
+        assert seen["ssl"] == "require"
+
+
+# ── login: bookkeeping is write-behind ───────────────────────────────────────
+
+class TestLoginBookkeeping:
+    def test_session_creation_does_not_wait_on_the_login_log(self, monkeypatch):
+        import app.services.auth_master as A
+        monkeypatch.setenv("APP_SECRET", "x-local-test-secret-xxxxxxxxxxxx")
+        logged = {"started": False, "done": False}
+
+        async def slow_log_login(**kw):
+            logged["started"] = True
+            await asyncio.sleep(0.3)
+            logged["done"] = True
+        async def primary_role(uid): return "viewer"
+        class P:
+            async def fetchval(self, sql, *a): return "sess-1"
+            def acquire(self): return self
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+        class Req:
+            headers = {"user-agent": "pytest", "x-client-hint": ""}
+            client = type("C", (), {"host": "203.0.113.5"})()
+            state = type("S", (), {"request_id": "r1"})()
+
+        monkeypatch.setattr(A, "log_login", slow_log_login)
+        monkeypatch.setattr(A, "_primary_role", primary_role)
+        monkeypatch.setattr(A, "get_pool", lambda: P())
+
+        async def run():
+            t0 = time.perf_counter()
+            out = await A._create_session_for_user({"id": "u1", "email": "u@x", "first_name": "U",
+                                                    "last_name": "X", "full_name": "U X", "status": "active",
+                                                    "avatar_url": None, "avatar_is_custom": False},
+                                                   Req(), login_method="password")
+            elapsed = time.perf_counter() - t0
+            await asyncio.sleep(0.35)                 # let the background write finish
+            return out, elapsed
+        out, elapsed = asyncio.run(run())
+        assert out["session_id"] == "sess-1" and out["token"]
+        assert elapsed < 0.2, f"the response waited on the login log: {elapsed:.2f}s"
+        assert logged["started"] and logged["done"]    # but it was written

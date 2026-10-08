@@ -1165,6 +1165,23 @@ ALTER TABLE studio_turns ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT
 # ---------------------------------------------------------------------------
 
 
+class _NoResetConnection(asyncpg.Connection):
+    """A pooled connection that skips asyncpg's reset statement on release.
+
+    On every release asyncpg runs
+        SELECT pg_advisory_unlock_all(); CLOSE ALL; UNLISTEN *; RESET ALL;
+    — a full round trip after every query, so each pooled fetch cost two trips
+    to a database ~220 ms away. /health measured it: SELECT 1 took ~460 ms
+    while a Valkey ping took 220. The statement exists to undo per-session
+    state, and this app creates none: no advisory locks, no cursors, no
+    LISTEN, and its only SET is a transaction-scoped SET LOCAL. An open
+    transaction is still rolled back by reset() itself; only the statement is
+    skipped.
+    """
+    def _get_reset_query(self):
+        return ""
+
+
 async def init_pool() -> None:
     global _pool, _init_error
     if not settings.postgres_url:
@@ -1185,6 +1202,7 @@ async def init_pool() -> None:
             # lazily on the next acquire. The keepalive loop pings well
             # inside this window, so a request never finds one expired.
             max_inactive_connection_lifetime=_POOL_IDLE_LIFETIME_S,
+            connection_class=_NoResetConnection,
             ssl="require",
         )
         async with _pool.acquire() as conn:

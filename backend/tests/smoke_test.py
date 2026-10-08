@@ -24,6 +24,7 @@ def _stub_module(name: str, **attrs):
 asyncpg_stub = _stub_module("asyncpg",
     create_pool=lambda *a, **kw: None,
     Pool=object,
+    Connection=object,   # postgres.py subclasses it to drop the reset-on-release statement
 )
 
 # Stub redis
