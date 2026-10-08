@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Optional
 
+from .tasks import spawn
+
 
 @dataclass
 class _Entry:
@@ -128,16 +130,12 @@ class TTLCache:
 
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
-            # Re-check after acquiring lock
+            # Re-check the local store only. Whoever held the lock before us
+            # populated it on success. Asking Valkey again here was a second
+            # ~210 ms round trip on every miss, paid before the loader began.
             cached = self.get(key)
             if cached is not None:
                 return cached
-            if vk:
-                remote = await vk.cache_get(key)
-                if remote is not None:
-                    self.set(key, remote, ttl)
-                    self._hits += 1
-                    return remote
 
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
             self._inflight[key] = fut
@@ -146,7 +144,9 @@ class TTLCache:
                 result = await asyncio.wait_for(loader(), timeout=180.0)
                 self.set(key, result, ttl)
                 if vk:
-                    await vk.cache_set(key, result, int(ttl))
+                    # Write-behind: the response does not wait on Valkey. A
+                    # lost write costs one extra loader call after a restart.
+                    spawn(vk.cache_set(key, result, int(ttl)), name="cache-write-behind")
                 fut.set_result(result)
                 return result
             except Exception as e:

@@ -19,10 +19,14 @@ patterns, well-known CMS/admin probes, and paths this app has never served.
 A legitimate route must never match — a false positive here is a user locked
 out for an hour — so nothing resembling a real API path is included.
 
-Strikes and bans live in Valkey (shared across workers, survive restarts) with
-a bounded in-memory fallback so the trap keeps working when Valkey is down.
-Both Valkey helpers fail open on their own, so a Valkey outage can never block
-legitimate traffic; it can only pause banning.
+The ban check runs on EVERY request, so it must cost nothing: it reads an
+in-process table and never awaits. Valkey is ~210 ms from the Space, and the
+first version of this module asked it "is this IP banned?" before routing
+each request — a flat 210 ms tax on every call in the app, including the
+health probe. Valkey is now touched only on the probe path (strike counting,
+and writing a ban so it survives a restart) and once at startup, when the
+bans it holds are loaded back into memory. A legitimate request never waits
+on it. The Valkey helpers fail open, so an outage can only pause banning.
 """
 from __future__ import annotations
 
@@ -105,18 +109,44 @@ def _mem_ban(ip: str, now: float) -> None:
 _stats: dict[str, int] = {"probes": 0, "bans": 0, "blocked": 0}
 
 
-async def is_banned(ip: str) -> bool:
+def is_banned(ip: str) -> bool:
+    """Memory only, by design — this runs before routing on every request."""
     if not ip:
         return False
+    return _mem_is_banned(ip, time.time())
+
+
+_BAN_KEY_PREFIX = "scanner:ban:"
+
+
+async def load_bans_from_valkey() -> int:
+    """Rehydrate the in-memory ban table from Valkey, once, at startup.
+
+    Bans are written to Valkey with their TTL when issued, so a restart does
+    not forgive a scanner mid-ban. This is the only read of those keys; the
+    per-request check never leaves the process. Returns the number loaded.
+    """
+    client = vk.get_client()
+    if client is None:
+        return 0
+    loaded = 0
     now = time.time()
-    if _mem_is_banned(ip, now):
-        return True
     try:
-        if vk.get_client() is not None:
-            return await vk.key_exists(f"scanner:ban:{ip}")
-    except Exception:
-        pass
-    return False
+        async for key in client.scan_iter(_BAN_KEY_PREFIX + "*", count=500):
+            name = key.decode() if isinstance(key, bytes) else str(key)
+            ip = name[len(_BAN_KEY_PREFIX):]
+            if not ip:
+                continue
+            ttl = await client.ttl(name)
+            if ttl is None or ttl <= 0:
+                continue
+            _mem_bans[ip] = now + float(ttl)
+            _mem_bans.move_to_end(ip)
+            loaded += 1
+        _trim(_mem_bans)
+    except Exception as exc:
+        logger.debug("scanner trap: could not load bans from valkey (%s)", exc)
+    return loaded
 
 
 async def record_probe(ip: str) -> bool:

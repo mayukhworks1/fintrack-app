@@ -73,55 +73,63 @@ class TestStaleSkip:
 # ── 2. legacy tokens honour logout ───────────────────────────────────────────
 
 class TestLegacyRevocation:
-    class _P:
-        def __init__(self, v=None, raise_=False): self.v, self.r = v, raise_
-        async def fetchval(self, sql, *p):
-            if self.r: raise RuntimeError("pg down")
-            assert "login_sessions" in sql and "token_hint" in sql
-            return self.v
+    """
+    The legacy login_sessions.is_active read now rides in the same statement
+    as the auth_sessions lookup (deps._AUTH_LOOKUP_SQL), so a legacy token
+    costs one round trip, not two. The row always comes back — session
+    columns NULL when there is no email-auth session — with `legacy_active`
+    alongside. These pin what each shape of row must do.
+    """
 
-    def _run(self, monkeypatch, pool):
+    class _P:
+        def __init__(self, legacy_active=None, session=False):
+            self.legacy_active, self.session = legacy_active, session
+            self.calls = 0
+        async def fetchrow(self, sql, *p):
+            self.calls += 1
+            assert "auth_sessions s" in sql and "login_sessions" in sql, "both reads in one statement"
+            row = {"session_id": None, "user_id": None, "expires_at": None, "revoked_at": None,
+                   "metadata": None, "email": None, "first_name": None, "last_name": None,
+                   "full_name": None, "status": None, "teable_email": None, "auth_role": None,
+                   "legacy_active": self.legacy_active}
+            if self.session:
+                row.update(session_id="s1", user_id="u1", email="u@x", status="active")
+            return row
+
+    def _attach(self, monkeypatch, pool):
         import app.routers.deps as D
         monkeypatch.setattr(D, "get_pool", lambda: pool)
+        class Req:
+            class state: pass
+            class url: path = "/x"
         try:
-            asyncio.run(D._reject_if_legacy_session_revoked("abcdefghijklmnop"))
-            return "allow"
+            return asyncio.run(D._attach_auth_session(Req(), "abcdefghijklmnop"))
         except HTTPException as e:
             return e.status_code
 
-    def test_explicitly_inactive_is_rejected(self, monkeypatch):
-        assert self._run(monkeypatch, self._P(False)) == 401
+    def test_explicitly_inactive_legacy_login_is_rejected(self, monkeypatch):
+        assert self._attach(monkeypatch, self._P(legacy_active=False)) == 401
 
-    @pytest.mark.parametrize("pool", [_P(True), _P(None), _P(raise_=True), None])
-    def test_active_missing_error_and_no_pool_all_allow(self, monkeypatch, pool):
-        # Closing the logout gap must not become a mass logout on a DB blip.
-        assert self._run(monkeypatch, pool) == "allow"
+    @pytest.mark.parametrize("pool", [_P(legacy_active=True), _P(legacy_active=None), None])
+    def test_active_missing_and_no_pool_all_allow(self, monkeypatch, pool):
+        # Closing the logout gap must not become a mass logout.
+        assert self._attach(monkeypatch, pool) is None
 
-    def test_email_auth_sessions_never_reach_the_legacy_lookup(self, monkeypatch):
+    def test_an_email_session_is_attached_regardless_of_the_legacy_column(self, monkeypatch):
+        out = self._attach(monkeypatch, self._P(legacy_active=False, session=True))
+        assert isinstance(out, dict) and out["session_id"] == "s1"
+
+    @pytest.mark.parametrize("session", [True, False])
+    def test_require_auth_is_one_round_trip_for_both_token_kinds(self, monkeypatch, session):
         import app.routers.deps as D
-        calls = []
-        async def attach_row(request, hint): return {"session_id": "s"}
-        async def legacy(hint): calls.append(hint)
-        monkeypatch.setattr(D, "_attach_auth_session", attach_row)
-        monkeypatch.setattr(D, "_reject_if_legacy_session_revoked", legacy)
+        pool = self._P(legacy_active=None, session=session)
+        monkeypatch.setattr(D, "get_pool", lambda: pool)
         monkeypatch.setattr(D, "verify_token", lambda t: "viewer")
         class Req:
             class state: pass
+            class url: path = "/x"
         asyncio.run(D.require_auth(Req(), token="abcdefghijklmnopqrstuvwxyz"))
-        assert calls == []
-
-    def test_legacy_tokens_do_reach_it(self, monkeypatch):
-        import app.routers.deps as D
-        calls = []
-        async def attach_none(request, hint): return None
-        async def legacy(hint): calls.append(hint)
-        monkeypatch.setattr(D, "_attach_auth_session", attach_none)
-        monkeypatch.setattr(D, "_reject_if_legacy_session_revoked", legacy)
-        monkeypatch.setattr(D, "verify_token", lambda t: "viewer")
-        class Req:
-            class state: pass
-        asyncio.run(D.require_auth(Req(), token="abcdefghijklmnopqrstuvwxyz"))
-        assert calls == ["abcdefghijklmnop"]
+        assert pool.calls == 1
 
 
 # ── 3. AI quota gates exactly the LLM callers ────────────────────────────────

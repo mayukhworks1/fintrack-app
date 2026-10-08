@@ -82,15 +82,15 @@ class TestStrikesAndBans:
         ip = "203.0.113.9"
         assert asyncio.run(T.record_probe(ip)) is False
         assert asyncio.run(T.record_probe(ip)) is False
-        assert asyncio.run(T.is_banned(ip)) is False
+        assert T.is_banned(ip) is False
         assert asyncio.run(T.record_probe(ip)) is True       # third strike
-        assert asyncio.run(T.is_banned(ip)) is True
+        assert T.is_banned(ip) is True
         assert T.state()["bans"] == 1 and T.state()["probes"] == 3
 
     def test_a_ban_expires(self):
         ip = "203.0.113.10"
         T._mem_bans[ip] = time.time() - 1
-        assert asyncio.run(T.is_banned(ip)) is False
+        assert T.is_banned(ip) is False
 
     def test_strikes_outside_the_window_do_not_count(self, monkeypatch):
         ip = "203.0.113.11"
@@ -100,10 +100,27 @@ class TestStrikesAndBans:
 
     def test_unknown_ip_is_never_banned(self):
         assert asyncio.run(T.record_probe("")) is False
-        assert asyncio.run(T.is_banned("")) is False
+        assert T.is_banned("") is False
 
     def test_fails_open_with_no_valkey_and_no_memory_ban(self):
-        assert asyncio.run(T.is_banned("198.51.100.1")) is False
+        assert T.is_banned("198.51.100.1") is False
+
+    def test_the_per_request_check_never_awaits(self):
+        # Valkey is ~210 ms away. The first version asked it on every request
+        # — a flat tax on the whole app. The check must stay in-process.
+        import inspect
+        assert not inspect.iscoroutinefunction(T.is_banned)
+
+    def test_bans_are_restored_from_valkey_at_startup(self, monkeypatch):
+        class FakeClient:
+            def __init__(self): self.ttls = {"scanner:ban:203.0.113.30": 1200, "scanner:ban:203.0.113.31": -2}
+            async def scan_iter(self, pattern, count=100):
+                for k in list(self.ttls): yield k.encode()
+            async def ttl(self, name): return self.ttls[name]
+        monkeypatch.setattr(T.vk, "get_client", lambda: FakeClient())
+        assert asyncio.run(T.load_bans_from_valkey()) == 1
+        assert T.is_banned("203.0.113.30") is True      # live ban came back
+        assert T.is_banned("203.0.113.31") is False     # expired key ignored
 
 
 class TestMiddlewareIntegration:

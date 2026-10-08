@@ -413,6 +413,28 @@ async def export_invoices(
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────
 
+async def _all_invoices_or_mirror(
+    svc: InvoiceService, scoped_email: Optional[str], *, limit: int = 2000,
+) -> list[dict]:
+    """Every invoice the caller may see, newest first.
+
+    Served from the service's shared all-invoices read — the one the summary
+    card already uses, coalesced and held for 30 s — so the Dashboard's three
+    invoice widgets cost one Teable fetch between them instead of one each.
+    Every app-side mutation busts that read, so the only staleness is an edit
+    made directly in Teable, bounded at 30 s. Falls back to the PG mirror when
+    Teable cannot answer.
+    """
+    try:
+        return list(await svc.get_all_invoices(raised_by=scoped_email))
+    except Exception as exc:
+        logger.warning("invoice read via Teable failed, falling back to PG mirror: %s", exc)
+    result = await svc.list_invoices_from_pg(
+        raised_by=scoped_email, limit=limit, skip=0, order_by="Raised Date", order="desc",
+    )
+    return list((result or {}).get("records", []))
+
+
 @router.get("/aging-buckets")
 async def aging_buckets(
     request: Request,
@@ -422,14 +444,10 @@ async def aging_buckets(
     """Return invoice counts/amounts grouped into 0-30, 30-60, 60-90, 90+ day aging buckets."""
     svc = InvoiceService()
     scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        status="Pending", raised_by=scoped_email, limit=2000, skip=0,
-    )
-    if result is None:
-        result = await svc.list_invoices_from_pg(
-            status="Pending", raised_by=scoped_email, limit=2000, skip=0,
-        )
-    records = (result or {}).get("records", [])
+    records = [
+        r for r in await _all_invoices_or_mirror(svc, scoped_email)
+        if (r.get("fields") or {}).get("Payment Status") == "Pending"
+    ]
 
     buckets = {
         "0_30":  {"label": "0–30 days",  "count": 0, "amount": 0.0},
@@ -505,14 +523,7 @@ async def dashboard_activity(
     """
     svc = InvoiceService()
     scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        raised_by=scoped_email, limit=limit, skip=0, order_by="Raised Date", order="desc",
-    )
-    if result is None:
-        result = await svc.list_invoices_from_pg(
-            raised_by=scoped_email, limit=limit, skip=0, order_by="Raised Date", order="desc",
-        )
-    records = (result or {}).get("records", [])
+    records = (await _all_invoices_or_mirror(svc, scoped_email, limit=limit))[:limit]
 
     this_month = month or _date.today().strftime("%Y-%m")
     retainers = [r for r in records if _RETAINER_RE.search(str((r.get("fields") or {}).get("Category") or ""))]

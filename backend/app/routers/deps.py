@@ -99,6 +99,43 @@ def _get_token(
 
 PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance", "web_admin"}
 
+# One statement answers both questions a request has about its token: is
+# there a live email-auth session for it, and — if not — has the legacy
+# login it came from been logged out. These used to be two round trips in
+# sequence for every legacy token, to a database ~210 ms away. The FROM is a
+# single constant row so the statement always returns exactly one row, with
+# the session columns NULL when there is no session; `legacy_active` is a
+# scalar subquery on the indexed login_sessions.token_hint (ls_token_idx).
+_AUTH_LOOKUP_SQL = """
+SELECT
+    s.id AS session_id,
+    s.user_id,
+    s.expires_at,
+    s.revoked_at,
+    s.metadata,
+    u.email,
+    u.first_name,
+    u.last_name,
+    u.full_name,
+    u.status,
+    u.teable_email,
+    r.role_key AS auth_role,
+    (
+        SELECT ls.is_active
+        FROM login_sessions ls
+        WHERE ls.token_hint = $1
+        ORDER BY ls.created_at DESC
+        LIMIT 1
+    ) AS legacy_active
+FROM (SELECT 1) AS _one
+LEFT JOIN auth_sessions s   ON s.token_hint = $1
+LEFT JOIN auth_users u      ON u.id = s.user_id
+LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
+LEFT JOIN auth_roles r      ON r.id = ur.role_id
+ORDER BY r.rank ASC NULLS LAST, ur.assigned_at ASC NULLS LAST
+LIMIT 1
+"""
+
 
 async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, Any] | None:
     """
@@ -110,35 +147,18 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     pool = get_pool()
     if not pool:
         return None
-    row = await pool.fetchrow(
-        """
-        SELECT
-            s.id AS session_id,
-            s.user_id,
-            s.expires_at,
-            s.revoked_at,
-            s.metadata,
-            u.email,
-            u.first_name,
-            u.last_name,
-            u.full_name,
-            u.status,
-            u.teable_email,
-            r.role_key AS auth_role
-        FROM auth_sessions s
-        JOIN auth_users u ON u.id = s.user_id
-        LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
-        LEFT JOIN auth_roles r ON r.id = ur.role_id
-        WHERE s.token_hint = $1
-        ORDER BY r.rank ASC NULLS LAST, ur.assigned_at ASC NULLS LAST
-        LIMIT 1
-        """,
-        # Callers pass token[:16]; auth_sessions.token_hint is stored as token[:16]
-        # too. Match on the value as-is — the old token_hint[:20] slice was a no-op
-        # that implied a 20-char hint and masked the real, shared 16-char length.
-        token_hint,
-    )
-    if not row:
+    # Callers pass token[:16]; auth_sessions.token_hint is stored as token[:16]
+    # too. Match on the value as-is — the old token_hint[:20] slice was a no-op
+    # that implied a 20-char hint and masked the real, shared 16-char length.
+    row = await pool.fetchrow(_AUTH_LOOKUP_SQL, token_hint)
+    if not row or row.get("session_id") is None:
+        # No email-auth session for this hint: a legacy role token, or one
+        # issued before session tracking existed. Logout for those flips
+        # login_sessions.is_active, which the same statement already read.
+        # Only an explicit False rejects; a missing row allows, so this can
+        # never turn a database blip into a mass logout.
+        if row is not None and row.get("legacy_active") is False:
+            raise HTTPException(status_code=401, detail="Session has been revoked")
         return None
     if row["revoked_at"] is not None:
         raise HTTPException(status_code=401, detail="Session has been revoked")
@@ -244,35 +264,6 @@ def owner_scope_email(request: Request) -> str | None:
     return email if email else None
 
 
-async def _reject_if_legacy_session_revoked(token_hint: str) -> None:
-    """401 when a legacy token's login_sessions row was explicitly deactivated.
-
-    One indexed read (ls_token_idx). Newest row wins because tokens are
-    `expiry:role` with no nonce, so two same-role logins in the same second
-    share a hint; revoking one revokes the other, which is correct — they are
-    the same credential. No pool or no row means allow: this closes the
-    logout gap without turning a database blip into a mass logout.
-    """
-    pool = get_pool()
-    if not pool:
-        return
-    try:
-        active = await pool.fetchval(
-            """
-            SELECT is_active FROM login_sessions
-             WHERE token_hint = $1
-             ORDER BY created_at DESC
-             LIMIT 1
-            """,
-            token_hint,
-        )
-    except Exception as exc:
-        logger.warning("legacy session revocation check failed (allowing): %s", exc)
-        return
-    if active is False:
-        raise HTTPException(status_code=401, detail="Session has been revoked")
-
-
 async def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
     """
     Accepts any valid token (editor / viewer / web / all / admin).
@@ -286,18 +277,15 @@ async def require_auth(request: Request, token: str = Depends(_get_token)) -> st
     request.state.role       = role
     request.state.token_hint = token[:16]
     request.state.is_email_auth = False
-    attached = await _attach_auth_session(request, token[:16])
-    if attached is None:
-        # Legacy role token (login(password) / web / all / editor). These have
-        # no auth_sessions row, so the revocation check above never ran for
-        # them: logout flipped login_sessions.is_active, but nothing read it,
-        # and the HMAC token stayed valid for its full 7-day TTL. Email-auth
-        # sessions were already revoked via auth_sessions.revoked_at — this
-        # was the one path left open.
-        #
-        # A missing row means a token issued before session tracking existed;
-        # it is allowed through so the change does not log everyone out.
-        await _reject_if_legacy_session_revoked(token[:16])
+    # One round trip for every kind of token. Email-auth sessions are
+    # attached (and checked for revocation / expiry / user status) from the
+    # row; legacy role tokens — login(password) / web / all / editor — have
+    # no auth_sessions row, and the same statement reads login_sessions'
+    # is_active for them, so a logout there is honoured too. Newest login
+    # row wins because legacy tokens are `expiry:role` with no nonce: two
+    # same-role logins in the same second share a hint and are, correctly,
+    # the same credential.
+    await _attach_auth_session(request, token[:16])
     return role
 
 

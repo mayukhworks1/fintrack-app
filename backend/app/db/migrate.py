@@ -37,13 +37,30 @@ def asyncpg_url(raw: str | None) -> str:
     if not raw:
         raise RuntimeError("POSTGRES_URL is not set; cannot run migrations")
     url = raw.strip()
-    for prefix in ("postgresql+asyncpg://", "postgres+asyncpg://"):
+    for prefix in ("postgresql+asyncpg://", "postgres+asyncpg://", "postgresql://", "postgres://"):
         if url.startswith(prefix):
-            return "postgresql+asyncpg://" + url[len(prefix):]
-    for prefix in ("postgresql://", "postgres://"):
-        if url.startswith(prefix):
-            return "postgresql+asyncpg://" + url[len(prefix):]
+            return "postgresql+asyncpg://" + _strip_libpq_ssl_params(url[len(prefix):])
     raise RuntimeError(f"Unrecognised Postgres URL scheme: {url.split('://', 1)[0]}://")
+
+
+# Query keys libpq understands and asyncpg.connect() does not. SQLAlchemy
+# passes every URL query key to the driver as a keyword argument.
+_LIBPQ_SSL_KEYS = {"sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl", "ssl"}
+
+
+def _strip_libpq_ssl_params(rest: str) -> str:
+    """Drop `?sslmode=...` and friends; keep every other query key.
+
+    Aiven DSNs carry `?sslmode=require`. Production logged
+    `connect() got an unexpected keyword argument 'sslmode'` on every boot
+    and never ran a migration. SSL itself is requested through connect_args
+    in migrations/env.py, matching the app's own pool.
+    """
+    if "?" not in rest:
+        return rest
+    path, _, query = rest.partition("?")
+    kept = [p for p in query.split("&") if p and p.split("=", 1)[0].lower() not in _LIBPQ_SSL_KEYS]
+    return path + ("?" + "&".join(kept) if kept else "")
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _INI = _BACKEND_DIR / "alembic.ini"

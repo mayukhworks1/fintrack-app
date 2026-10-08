@@ -62,9 +62,11 @@ def _call(monkeypatch, svc, month="2026-10"):
 class _Svc:
     def __init__(self):
         self.calls = {}
-    async def list_invoices(self, **kw):
-        self.calls["live"] = kw
-        return {"records": RECORDS}
+    async def get_all_invoices(self, raised_by=None):
+        # The shared, coalesced read the summary card uses — one Teable fetch
+        # for every dashboard widget, not one each.
+        self.calls["live"] = {"raised_by": raised_by}
+        return list(RECORDS)
     async def list_invoices_from_pg(self, **kw):
         self.calls["pg"] = kw
         return {"records": RECORDS}
@@ -120,15 +122,15 @@ class TestPlumbing:
         svc = _Svc()
         _call(monkeypatch, svc)
         assert svc.calls["live"]["raised_by"] == "owner@x.com"
-        assert svc.calls["live"]["order_by"] == "Raised Date" and svc.calls["live"]["order"] == "desc"
 
-    def test_falls_back_to_the_pg_mirror_when_live_returns_none(self, monkeypatch):
+    def test_falls_back_to_the_pg_mirror_when_teable_fails(self, monkeypatch):
         class Down(_Svc):
-            async def list_invoices(self, **kw):
-                return None
+            async def get_all_invoices(self, raised_by=None):
+                raise RuntimeError("teable 502")
         svc = Down()
         out = _call(monkeypatch, svc)
         assert "pg" in svc.calls and out["retainer"]["total"] == 11
+        assert svc.calls["pg"]["raised_by"] == "owner@x.com"
 
     def test_route_is_declared_before_record_id(self, monkeypatch):
         monkeypatch.setenv("APP_SECRET", "x-local-test-secret-xxxxxxxxxxxx")

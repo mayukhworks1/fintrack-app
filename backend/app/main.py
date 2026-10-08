@@ -133,6 +133,20 @@ async def lifespan(app: FastAPI):
 
     if settings.valkey_url:
         await vk.init_client(settings.valkey_url)
+        # Bans issued before the last restart come back into memory here,
+        # once; the per-request check never leaves the process.
+        try:
+            _restored = await scanner_trap.load_bans_from_valkey()
+            if _restored:
+                logger.info("scanner trap: %d ban(s) restored from Valkey", _restored)
+        except Exception as exc:
+            logger.debug("scanner trap: ban restore skipped (%s)", exc)
+
+    # Keep every pooled connection warm. Without this, asyncpg let idle
+    # connections expire and the next request paid a full TLS + SCRAM
+    # handshake to a database ~210 ms away — about a second — before its
+    # query ran. That was the p90 of nearly every endpoint in the audit log.
+    postgres.start_keepalive()
 
     # ── Async audit log queue ────────────────────────────────────────────
     # Must be started before any requests arrive so middleware can enqueue.
@@ -197,6 +211,7 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
+    await postgres.stop_keepalive()
     await postgres.close_pool()
     await vk.close_client()
     await close_http()
@@ -329,7 +344,7 @@ async def request_middleware(request: Request, call_next):
         if settings.scanner_trap_enabled:
             _ip = _get_client_ip(request)
             _path = request.url.path
-            if await scanner_trap.is_banned(_ip):
+            if scanner_trap.is_banned(_ip):
                 scanner_trap.note_blocked()
                 _trap_hit = JSONResponse({"detail": "Forbidden"}, status_code=403)
             elif scanner_trap.is_probe(_path):
@@ -417,23 +432,49 @@ async def health():
     pg_ok = postgres.get_pool() is not None
     vk_ok = vk.get_client() is not None
     pg_err = get_init_error()
-    sync_meta = None
-    if pg_ok:
-        try:
-            sync_meta = await postgres.get_pool().fetchrow(  # type: ignore[union-attr]
-                """
-                SELECT source, synced_at, total, created, updated, unchanged, duration_ms, error
-                FROM sync_log
-                ORDER BY synced_at DESC
-                LIMIT 1
-                """
-            )
-            if sync_meta:
-                sync_meta = dict(sync_meta)
-                if hasattr(sync_meta.get("synced_at"), "isoformat"):
-                    sync_meta["synced_at"] = sync_meta["synced_at"].isoformat()
-        except Exception:
-            sync_meta = None
+
+    # Round-trip times to the two stores, measured here so the number that
+    # explains most of this app's latency is visible without a profiler. All
+    # three probes run concurrently; /health costs one round trip, not three.
+    async def _pg_rtt() -> int:
+        t0 = time.perf_counter()
+        await asyncio.wait_for(postgres.get_pool().fetchval("SELECT 1"), timeout=5.0)  # type: ignore[union-attr]
+        return int((time.perf_counter() - t0) * 1000)
+
+    async def _vk_rtt() -> int:
+        t0 = time.perf_counter()
+        await asyncio.wait_for(vk.get_client().ping(), timeout=5.0)  # type: ignore[union-attr]
+        return int((time.perf_counter() - t0) * 1000)
+
+    async def _last_sync():
+        row = await postgres.get_pool().fetchrow(  # type: ignore[union-attr]
+            """
+            SELECT source, synced_at, total, created, updated, unchanged, duration_ms, error
+            FROM sync_log
+            ORDER BY synced_at DESC
+            LIMIT 1
+            """
+        )
+        if not row:
+            return None
+        meta = dict(row)
+        if hasattr(meta.get("synced_at"), "isoformat"):
+            meta["synced_at"] = meta["synced_at"].isoformat()
+        return meta
+
+    async def _none():
+        return None
+
+    pg_rtt, vk_rtt, sync_meta = await asyncio.gather(
+        _pg_rtt() if pg_ok else _none(),
+        _vk_rtt() if vk_ok else _none(),
+        _last_sync() if pg_ok else _none(),
+        return_exceptions=True,
+    )
+    pg_rtt_ms = pg_rtt if isinstance(pg_rtt, int) else None
+    vk_rtt_ms = vk_rtt if isinstance(vk_rtt, int) else None
+    if isinstance(sync_meta, BaseException):
+        sync_meta = None
     from .services.embeddings import _pgvector_ok as _pgv
     return {
         "status":            "healthy",
@@ -443,7 +484,10 @@ async def health():
         "storage_configured": bool(settings.hf_token and settings.hf_dataset_repo),
         "postgres":          "connected" if pg_ok else "unavailable",
         "postgres_error":    pg_err,
+        "pg_rtt_ms":         pg_rtt_ms,
+        "pool":              postgres.pool_stats(),
         "valkey":            "connected" if vk_ok else "unavailable",
+        "valkey_rtt_ms":     vk_rtt_ms,
         "pgvector":          "available" if _pgv else ("unavailable" if _pgv is False else "unchecked"),
         "sync_running":      _sync_task is not None and not _sync_task.done(),
         "aging_running":     _aging_refresh_task is not None and not _aging_refresh_task.done(),

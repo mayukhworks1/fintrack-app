@@ -24,7 +24,9 @@ Tables created on first startup:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 import asyncpg
 from ..config import settings
 
@@ -1172,9 +1174,17 @@ async def init_pool() -> None:
     try:
         _pool = await asyncpg.create_pool(
             settings.postgres_url,
-            min_size=2,
+            # Four warm connections, not two: a page mount fires three or
+            # four queries at once (auth, list, summary, picklists), and any
+            # that found no idle connection paid a full TLS + SCRAM handshake
+            # to a database ~210 ms away — about a second — before its query.
+            min_size=4,
             max_size=10,
             command_timeout=30,
+            # asyncpg closes a connection idle this long and reconnects
+            # lazily on the next acquire. The keepalive loop pings well
+            # inside this window, so a request never finds one expired.
+            max_inactive_connection_lifetime=_POOL_IDLE_LIFETIME_S,
             ssl="require",
         )
         async with _pool.acquire() as conn:
@@ -1210,3 +1220,104 @@ def get_pool() -> asyncpg.Pool | None:
 def get_init_error() -> str | None:
     """Return the last pool initialisation error (for diagnostics)."""
     return _init_error
+
+
+# ── Pool keepalive ───────────────────────────────────────────────────────────
+#
+# The database is ~210 ms away. A connection that asyncpg has closed as idle
+# is re-opened on the next acquire at the cost of TCP + TLS + SCRAM — four or
+# five round trips, about a second — paid by whichever user request happened
+# to be first. The pool hands out the most recently released connection, so
+# under light traffic one connection stays hot and the rest quietly expire;
+# the moment a page fires several queries at once, every extra one reconnects.
+#
+# The loop below runs SELECT 1 on every idle connection, concurrently, well
+# inside the idle lifetime. Connections then never expire, and a dead one is
+# found by the ping rather than by a user.
+
+_POOL_IDLE_LIFETIME_S: float = 600.0
+_KEEPALIVE_INTERVAL_S: float = 60.0
+_keepalive_task: asyncio.Task | None = None
+_keepalive_stats: dict = {"runs": 0, "pinged": 0, "failed": 0, "last_at": None}
+
+
+async def ping_idle_connections(pool) -> int:
+    """SELECT 1 on every idle connection at once. Returns how many answered."""
+    idle = pool.get_idle_size()
+    if idle <= 0:
+        return 0
+    conns: list = []
+    try:
+        for _ in range(idle):
+            try:
+                conns.append(await pool.acquire(timeout=0.5))
+            except Exception:
+                break   # a request took it first — leave it alone
+        results = await asyncio.gather(
+            *(asyncio.wait_for(c.execute("SELECT 1"), timeout=5.0) for c in conns),
+            return_exceptions=True,
+        )
+        failed = sum(1 for r in results if isinstance(r, BaseException))
+        _keepalive_stats["failed"] += failed
+        return len(conns) - failed
+    finally:
+        for c in conns:
+            try:
+                await pool.release(c)
+            except Exception:
+                pass
+
+
+async def _keepalive_loop() -> None:
+    while True:
+        await asyncio.sleep(_KEEPALIVE_INTERVAL_S)
+        pool = _pool
+        if pool is None:
+            continue
+        try:
+            n = await ping_idle_connections(pool)
+            _keepalive_stats["runs"] += 1
+            _keepalive_stats["pinged"] += n
+            _keepalive_stats["last_at"] = time.time()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug("pool keepalive: %s", exc)
+
+
+def start_keepalive() -> None:
+    """Idempotent; a no-op without a pool."""
+    global _keepalive_task
+    if _pool is None:
+        return
+    if _keepalive_task is None or _keepalive_task.done():
+        _keepalive_task = asyncio.create_task(_keepalive_loop(), name="pg-pool-keepalive")
+
+
+async def stop_keepalive() -> None:
+    global _keepalive_task
+    task, _keepalive_task = _keepalive_task, None
+    if task and not task.done():
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
+def pool_stats() -> dict:
+    """For /health: pool occupancy plus what the keepalive has done."""
+    out = {
+        "size": 0, "idle": 0, "min": 0, "max": 0,
+        "keepalive_running": _keepalive_task is not None and not _keepalive_task.done(),
+        "keepalive": dict(_keepalive_stats),
+    }
+    pool = _pool
+    if pool is None:
+        return out
+    try:
+        out.update(size=pool.get_size(), idle=pool.get_idle_size(),
+                   min=pool.get_min_size(), max=pool.get_max_size())
+    except Exception:
+        pass
+    return out
