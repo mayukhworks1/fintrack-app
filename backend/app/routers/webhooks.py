@@ -120,6 +120,11 @@ def _parse_payload(body: dict) -> list[tuple[str, dict, str]]:
         for rec in body["records"]:
             rid    = rec.get("id", "")
             fields = rec.get("fields", rec)   # fallback: the rec itself is the fields
+            # Keep the record-level timestamp: upsert_record uses it to refuse
+            # an older state arriving after a newer one. It was dropped here.
+            _lmt = rec.get("lastModifiedTime")
+            if _lmt and isinstance(fields, dict) and "lastModifiedTime" not in fields:
+                fields = {**fields, "lastModifiedTime": _lmt}
             if rid:
                 results.append((rid, fields, "delete" if is_delete else "upsert"))
         return results
@@ -129,6 +134,9 @@ def _parse_payload(body: dict) -> list[tuple[str, dict, str]]:
         rec    = body["record"]
         rid    = rec.get("id", "")
         fields = rec.get("fields", {})
+        _lmt = rec.get("lastModifiedTime")   # see Format A: ordering for upsert_record
+        if _lmt and isinstance(fields, dict) and "lastModifiedTime" not in fields:
+            fields = {**fields, "lastModifiedTime": _lmt}
         if rid:
             results.append((rid, fields, "delete" if is_delete else "upsert"))
         return results

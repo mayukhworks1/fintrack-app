@@ -256,6 +256,30 @@ def _table_config(table_id: str) -> Optional[tuple]:
 
 # ── Core upsert — shared by all three sync paths ────────────────────────────
 
+def _parse_lmt(fields: dict) -> float | None:
+    """lastModifiedTime as a POSIX timestamp, or None if absent/unparseable."""
+    raw = (fields or {}).get("lastModifiedTime")
+    if not raw:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def _is_older_than_stored(incoming: dict, stored: dict) -> bool:
+    """True only when both carry a parseable lastModifiedTime and the stored
+    row's is strictly newer. Anything less certain returns False, so a record
+    without a timestamp keeps the pre-existing last-write-wins behaviour
+    instead of being silently refused."""
+    new_ts = _parse_lmt(incoming)
+    old_ts = _parse_lmt(stored)
+    if new_ts is None or old_ts is None:
+        return False
+    return old_ts > new_ts
+
+
 def _changed_fields(old: dict, new: dict) -> list[str]:
     keys = set(old) | set(new)
     return sorted(k for k in keys if old.get(k) != new.get(k))
@@ -305,6 +329,18 @@ async def upsert_record(
             return "created"
 
         old_fields = json.loads(existing_row["fields"])
+
+        # Refuse to move backwards. Three writers reach this function — the
+        # full sync, the incremental sync, and the webhook — and nothing
+        # ordered them: whichever arrived last won. A webhook carrying an
+        # older Teable state could land after a fresher write-through and
+        # overwrite it, silently reverting a user's save. Compare the record's
+        # own lastModifiedTime; when the stored copy is newer, leave the row
+        # (and its history) alone. Unparseable or missing timestamps fall
+        # through to the old behaviour rather than block a legitimate write.
+        if _is_older_than_stored(fields, old_fields):
+            return "stale"
+
         diff = _changed_fields(old_fields, fields)
         if not diff:
             return "unchanged"
@@ -604,6 +640,13 @@ async def _sync_records(
     for rec in records:
         tid    = rec.get("id", "")
         fields = rec.get("fields", {})
+        # Teable reports lastModifiedTime at record level, beside `fields`, not
+        # inside it. Fold it in so it is persisted in the JSONB — upsert_record
+        # compares it against the stored copy to refuse an older write arriving
+        # after a newer one. Without this the mirror had nothing to order by.
+        _lmt = rec.get("lastModifiedTime")
+        if _lmt and "lastModifiedTime" not in fields:
+            fields = {**fields, "lastModifiedTime": _lmt}
 
         if since > 0:
             lmt = rec.get("lastModifiedTime") or rec.get("fields", {}).get("lastModifiedTime")
@@ -818,9 +861,20 @@ async def sync_loop() -> None:
     # Short startup delay so the process is ready before touching Teable
     await asyncio.sleep(5)
 
-    # Initial full sync to populate mirror
+    # Initial full sync to populate mirror.
+    #
+    # Guarded, unlike before. This call ran outside any try/except, so a
+    # transient Teable error at cold start — the same class main.py already
+    # retries Postgres for — raised out of the task before the loop below ever
+    # began. The task died, nothing synced until a restart, and the only signal
+    # was a manual /api/admin/watchdog call that nobody is paged to make. The
+    # loop will retry on its normal cadence; losing the first pass is cheap,
+    # losing the loop is not.
     logger.info("Running initial full sync…")
-    await run_sync(incremental=False)
+    try:
+        await run_sync(incremental=False)
+    except Exception as exc:
+        logger.error("initial full sync failed (loop will retry): %s", exc)
 
     tick = 0
     while True:
