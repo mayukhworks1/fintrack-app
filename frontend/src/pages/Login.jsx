@@ -1,9 +1,29 @@
-import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Mail, Clock } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock } from 'lucide-react'
 import BrandMark from '../components/BrandMark'
 import { useAuth } from '../context/AuthContext'
+import { useTilt } from '../hooks/useTilt'
 import { api } from '../services/api'
+
+/* Four independent qualities, so the meter says what is missing rather
+   than grading on length alone. Only shown where a password is being set. */
+export function scorePassword(p) {
+  if (!p) return 0
+  let s = 0
+  if (p.length >= 10) s++
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++
+  if (/\d/.test(p)) s++
+  if (/[^A-Za-z0-9]/.test(p)) s++
+  return s
+}
+const STRENGTH = [
+  ['', ''],
+  ['Weak', 'var(--fin-negative)'],
+  ['Fair', '#D18A1A'],
+  ['Good', 'var(--accent)'],
+  ['Strong', '#1B9A66'],
+]
 
 const OAUTH_ERROR_MESSAGES = {
   pending_approval: "Your account is awaiting superadmin approval. You'll be notified once it's activated.",
@@ -45,6 +65,20 @@ export default function Login() {
   const [notice, setNotice] = useState('')
   const [pendingApproval, setPendingApproval] = useState(false)
   const inputRef = useRef(null)
+  // Motion state. The card shakes once when an error lands; the hint shows
+  // while Caps Lock is on and the password is masked — the one time a
+  // typist cannot see why the same password keeps failing.
+  const [shake, setShake] = useState(false)
+  const [capsOn, setCapsOn] = useState(false)
+  // Pointer light behind the page, and a few degrees of tilt on the card.
+  // Both hooks are inert on a touch screen and under reduced motion.
+  const pageLight = useTilt({ max: 0 })
+  const cardTilt = useTilt({ max: 3 })
+  const strength = useMemo(() => scorePassword(password), [password])
+  const mode = resetToken ? (isInvite ? 'invite' : 'reset') : registerMode ? 'register' : legacyMode ? 'legacy' : 'signin'
+  const trackCaps = (e) => setCapsOn(Boolean(e.getModifierState && e.getModifierState('CapsLock')))
+
+  useEffect(() => { if (error) setShake(true) }, [error])
 
   // Show session-expired message if redirected from 401
   useEffect(() => {
@@ -111,10 +145,10 @@ export default function Login() {
 
   if (oauthToken && loading) {
     return (
-      <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm animate-fade-in">
+      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
-            <BrandMark size={36} />
+            <BrandMark size={36} className="ft-login-mark" />
             <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
               FinTrack
             </span>
@@ -245,10 +279,10 @@ export default function Login() {
 
   if (pendingApproval) {
     return (
-      <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm animate-fade-in">
+      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
-            <BrandMark size={36} />
+            <BrandMark size={36} className="ft-login-mark" />
             <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
               FinTrack
             </span>
@@ -262,7 +296,7 @@ export default function Login() {
             }}
           >
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              className="ft-pop w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
               style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}
             >
               <Clock size={26} style={{ color: '#f59e0b' }} />
@@ -277,7 +311,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setPendingApproval(false)}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
+              className="ft-provider w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}
             >
               Back to sign in
@@ -289,34 +323,44 @@ export default function Login() {
   }
 
   return (
-    <div className="login-bg min-h-screen flex items-center justify-center px-4 py-8">
+    <div ref={pageLight} className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
 
-      <div className="w-full max-w-sm animate-fade-in">
+      {/* The column arrives in order: way back, mark, card, footnote. */}
+      <div className="w-full max-w-sm ft-login-enter">
+
+        <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-5"
+              style={{ color: 'var(--text-3)', textDecoration: 'none' }}>
+          <ArrowLeft size={13} aria-hidden="true" /> Back to overview
+        </Link>
 
         {/* Brand wordmark above card */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <BrandMark size={36} />
+          <BrandMark size={36} className="ft-login-mark" />
           <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
             FinTrack
           </span>
         </div>
 
-        {/* Card */}
+        {/* Card. Tilts a few degrees toward the pointer with a sheen, and
+            shakes once when an error lands — the shake is on the card, not
+            the field, so the whole answer is seen to be refused. */}
         <div
-          className="rounded-2xl p-7"
+          ref={cardTilt}
+          className={`tilt tilt-sheen rounded-2xl p-7${shake ? ' ft-shake' : ''}`}
+          onAnimationEnd={(e) => { if (e.animationName === 'ft-shake') setShake(false) }}
           style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--card-border)',
             boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
           }}
         >
-          <div className="mb-6">
-            <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+          <div className="mb-6" key={mode}>
+            <h1 className="ft-swap text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
               {resetToken
                 ? (isInvite ? 'Set your password' : 'Reset your password')
                 : registerMode ? 'Create your account' : 'Sign in to your workspace'}
             </h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+            <p className="ft-swap text-sm mt-1" style={{ color: 'var(--text-3)', animationDelay: '60ms' }}>
               {resetToken
                 ? (isInvite
                     ? 'Choose a password to activate your account'
@@ -327,7 +371,7 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-4 ft-stagger-in">
             {(googleEnabled || zohoEnabled) && !resetToken && !registerMode && !legacyMode && (
               <>
                 <div className="flex flex-col gap-2">
@@ -336,7 +380,7 @@ export default function Login() {
                       type="button"
                       onClick={startGoogleLogin}
                       disabled={loading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
                       style={{
                         background: 'var(--card-bg)',
                         border: '1px solid var(--card-border)',
@@ -346,7 +390,7 @@ export default function Login() {
                       }}
                     >
                       <span
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
                         style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
                         aria-hidden="true"
                       >G</span>
@@ -358,7 +402,7 @@ export default function Login() {
                       type="button"
                       onClick={startZohoLogin}
                       disabled={loading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
                       style={{
                         background: 'var(--card-bg)',
                         border: '1px solid var(--card-border)',
@@ -368,7 +412,7 @@ export default function Login() {
                       }}
                     >
                       <span
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
                         style={{ background: '#E42527', color: '#fff', border: '1px solid rgba(228,37,39,0.3)' }}
                         aria-hidden="true"
                       >Z</span>
@@ -395,7 +439,7 @@ export default function Login() {
             {!legacyMode && !resetToken && (
               <div>
                 <label className="label" htmlFor="ft-email">Email</label>
-                <div className="relative">
+                <div className="relative ft-field">
                   <Mail
                     size={14}
                     className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -459,7 +503,7 @@ export default function Login() {
             {/* Password field */}
             <div>
               <label className="label" htmlFor="ft-password">Password</label>
-              <div className="relative">
+              <div className="relative ft-field">
                 <Lock
                   size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -488,20 +532,40 @@ export default function Login() {
                   autoCorrect="off"
                   disabled={loading}
                   maxLength={128}
+                  onKeyDown={trackCaps}
+                  onKeyUp={trackCaps}
+                  onBlur={() => setCapsOn(false)}
                 />
                 <button
                   type="button"
                   onClick={() => setShow((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all"
+                  className="ft-iconbtn absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg"
                   style={{ color: 'var(--text-3)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   aria-label={show ? 'Hide password' : 'Show password'}
                   tabIndex={-1}
                 >
-                  {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                  <span key={show ? 'off' : 'on'} className="ft-pop-sm inline-flex">
+                    {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </span>
                 </button>
               </div>
+              {capsOn && !show && (
+                <p className="ft-caps flex items-center gap-1.5 text-[11px] mt-1.5" style={{ color: '#D18A1A' }}>
+                  <AlertCircle size={11} aria-hidden="true" /> Caps Lock is on
+                </p>
+              )}
+              {(registerMode || resetToken) && password && (
+                <div className="mt-2" aria-live="polite">
+                  <div className="ft-strength" data-score={strength}
+                       style={{ '--ft-strength-color': STRENGTH[strength][1] }} aria-hidden="true">
+                    {[1, 2, 3, 4].map(n => <i key={n} className={n <= strength ? 'on' : ''} />)}
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    {STRENGTH[strength][0] || 'Weak'}
+                    {strength < 4 ? ' · 10+ characters, mixed case, a number and a symbol' : ' password'}
+                  </p>
+                </div>
+              )}
             </div>
 
             {resetToken && (
@@ -592,7 +656,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              className="ft-submit w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
               style={{
                 background: 'var(--accent-btn)',
                 color: 'white',
@@ -601,7 +665,6 @@ export default function Login() {
                 boxShadow: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword)
                   ? 'none'
                   : '0 2px 4px rgba(37,99,235,0.2), 0 6px 16px rgba(37,99,235,0.18)',
-                transform: 'translateY(0)',
                 letterSpacing: '-0.01em',
               }}
               onMouseEnter={e => {
@@ -626,7 +689,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setLegacyMode(v => !v); setRegisterMode(false); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
-                  className="font-semibold"
+                  className="ft-textlink font-semibold"
                   style={{ color: 'var(--accent-btn)' }}
                 >
                   {legacyMode ? 'Use email login' : 'Use legacy password'}
@@ -636,7 +699,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => { setRegisterMode(v => !v); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
-                      className="font-semibold"
+                      className="ft-textlink font-semibold"
                       style={{ color: 'var(--accent-btn)' }}
                     >
                       {registerMode ? 'Back to sign in' : 'Create account'}
@@ -646,7 +709,7 @@ export default function Login() {
                         type="button"
                         onClick={requestReset}
                         disabled={mailing}
-                        className="font-semibold"
+                        className="ft-textlink font-semibold"
                         style={{ color: mailing ? 'var(--text-3)' : 'var(--accent-btn)' }}
                       >
                         {mailing ? 'Sending…' : 'Forgot password?'}
