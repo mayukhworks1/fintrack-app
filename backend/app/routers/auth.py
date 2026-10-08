@@ -22,6 +22,7 @@ import base64
 import hashlib
 import hmac
 import time
+from ..utils.tasks import spawn
 from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
@@ -287,7 +288,6 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
     # ── Fire-and-forget session log ──────────────────────────────────────
     try:
         from ..db.audit import log_login
-        from ..utils.tasks import spawn
         spawn(log_login(
             role=role,
             token_hint=token_hint,
@@ -558,6 +558,12 @@ async def verify(authorization: str | None = Header(default=None)):
                     s.user_id,
                     s.revoked_at,
                     s.expires_at,
+                    -- Decided here, in the same round trip, instead of a second
+                    -- query that only existed to ask Postgres "is this timestamp
+                    -- in the past?". That query ran serially before every login
+                    -- could finish and was the single most pointless await on
+                    -- the spinner.
+                    (s.expires_at IS NOT NULL AND s.expires_at <= NOW()) AS expired,
                     s.metadata,
                     u.email,
                     u.first_name,
@@ -593,20 +599,20 @@ async def verify(authorization: str | None = Header(default=None)):
             if row:
                 if row["revoked_at"] is not None:
                     raise HTTPException(status_code=401, detail="Session has been revoked")
-                expired = await pool.fetchval("SELECT $1::timestamptz <= NOW()", row["expires_at"])
-                if expired:
+                if row["expired"]:
                     raise HTTPException(status_code=401, detail="Session has expired")
                 if row["status"] != "active":
                     raise HTTPException(status_code=403, detail=f"User is {row['status']}")
-                await pool.execute(
-                    """
-                    UPDATE auth_sessions
-                       SET last_seen_at = NOW(),
-                           request_count = COALESCE(request_count, 0) + 1
-                     WHERE id = $1
-                    """,
-                    row["session_id"],
-                )
+                # Bump last_seen out of band. This was an inline UPDATE — a WAL
+                # write and a full round trip — awaited before the response could
+                # be built, on every app load. The rate-limited touch in deps.py
+                # already does this job for ordinary requests; verify now uses the
+                # same path instead of paying for it synchronously.
+                #
+                # Imported here, not at module level: deps.py imports verify_token
+                # from this module, so a top-level import would be circular.
+                from .deps import _touch_auth_session
+                spawn(_touch_auth_session(str(row["session_id"])), name="touch-auth-session")
                 auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
                 user_id_str = str(row["user_id"])
                 # Fetch effective permissions for this user (union of role defaults + overrides)
