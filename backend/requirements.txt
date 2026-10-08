@@ -9,6 +9,12 @@ pypdf==4.3.1
 reportlab==4.2.2
 asyncpg==0.29.0
 redis[asyncio]==5.0.8
+# Schema migrations. Exact pins, per the note below: a loose bound here would
+# send the resolver searching on every Space build. greenlet is SQLAlchemy's
+# async dependency and is pinned for the same reason.
+alembic==1.14.0
+SQLAlchemy==2.0.36
+greenlet==3.1.1
 pytest==8.3.4
 pytest-asyncio==0.24.0
 huggingface_hub>=0.26.0

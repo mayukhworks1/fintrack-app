@@ -1181,6 +1181,15 @@ async def init_pool() -> None:
             await conn.execute(SCHEMA)
         _init_error = None
         logger.info("PostgreSQL connected and schema ready")
+        # Versioned migrations run after the bootstrap, in their own guard: the
+        # pool is up and the base schema applied, so a broken revision must
+        # degrade to "serving on the previous schema", never to "no database".
+        # run_migrations() already never raises; the try is belt and braces.
+        try:
+            from .migrate import run_migrations
+            await run_migrations()
+        except Exception as exc:
+            logger.error("migrations step failed to run: %s", exc)
     except Exception as exc:
         _init_error = f"{type(exc).__name__}: {exc}"
         logger.error("PostgreSQL init failed: %s", exc, exc_info=True)
