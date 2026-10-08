@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..config import settings
+from ..config import settings, using_insecure_app_secret
 from ..db.postgres import get_pool
 from ..services.shared_views import SharedViewService
 from .deps import (invalidate_permission_cache, require_admin, require_auth,
@@ -1531,7 +1531,10 @@ async def deployment_health(_: str = Depends(require_admin)):
     env_checks = {
         "POSTGRES_URL":  bool(s.postgres_url),
         "TEABLE_API_TOKEN": bool(s.teable_api_token),
-        "APP_SECRET":    bool(s.app_secret and s.app_secret != "fintrack-dev-secret-change-me"),
+        # Via the shared helper, not a copy of the literal — a second spelling of
+        # the dev secret here would quietly report "configured" after the real
+        # check had already failed.
+        "APP_SECRET":    bool(s.app_secret) and not using_insecure_app_secret(),
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
         "OPENROUTER_API_KEY": bool(s.openrouter_api_key),

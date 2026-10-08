@@ -58,11 +58,15 @@ class Settings(BaseSettings):
     teable_web_resources_table_id: str = "tblMjssDx55GOfLtgqo"
     # Current Status table — project-level status updates (Master@2026)
     teable_status_table_id: str = "tblgdbV6T4Ly9n6YNCU"
-    # Signing key for session tokens. This dev default is PUBLIC (repo is public),
-    # so it MUST be overridden by APP_SECRET in any real deployment — otherwise
-    # anyone can forge a valid token for any role. main.py warns loudly at startup
-    # if this default is still in effect.
+    # Signing key for session tokens. This dev default is PUBLIC (the repo is
+    # public), so anyone can read it and forge a token for any role, superadmin
+    # included. It MUST be overridden by APP_SECRET in any real deployment —
+    # startup refuses to boot on this default unless APP_ENV says development.
     app_secret: str = "fintrack-dev-secret-change-me"
+    # Deployment stage. Defaults to production so a host that forgets to set it
+    # gets the strict checks rather than the permissive ones — the failure mode
+    # of guessing wrong here is a silently forgeable auth token.
+    app_env: str = "production"
     # How long a login token stays valid (seconds). Default 7 days.
     app_session_ttl: int = 7 * 24 * 3600
 
@@ -152,4 +156,17 @@ class Settings(BaseSettings):
 
 DEV_APP_SECRET = "fintrack-dev-secret-change-me"
 
+# Values of APP_ENV that mean "a developer's machine", where running on the
+# public dev secret is a convenience rather than a vulnerability.
+_DEV_ENV_NAMES = frozenset({"dev", "development", "local", "test", "testing"})
+
 settings = Settings()
+
+
+def is_dev_env() -> bool:
+    return (settings.app_env or "").strip().lower() in _DEV_ENV_NAMES
+
+
+def using_insecure_app_secret() -> bool:
+    """True when session tokens are signed with the publicly-known dev key."""
+    return settings.app_secret == DEV_APP_SECRET

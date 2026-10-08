@@ -53,13 +53,31 @@ async def lifespan(app: FastAPI):
         logger.info("LangSmith tracing enabled (project=%s)", settings.langchain_project)
 
     # ── Security self-checks ─────────────────────────────────────────────────
-    from .config import DEV_APP_SECRET
-    if settings.app_secret == DEV_APP_SECRET:
-        logger.error(
-            "SECURITY: APP_SECRET is still the public dev default. Anyone can forge "
-            "tokens for any role. Set a strong APP_SECRET in the deployment secrets "
-            "(e.g. `openssl rand -base64 48`) and restart."
-        )
+    from .config import is_dev_env, using_insecure_app_secret
+    if using_insecure_app_secret():
+        # app_secret is the HMAC key for every session token, and the token
+        # payload carries the role — so a known key means anyone can mint
+        # superadmin. The default is published in a public repo.
+        #
+        # This refuses to boot rather than logging and serving. The old
+        # behaviour left a fully bypassable deployment running behind a log
+        # line, which is the one failure here nobody would notice. Every other
+        # missing secret in this block already fails closed; this one was the
+        # outlier.
+        if is_dev_env():
+            logger.warning(
+                "APP_SECRET is the public dev default. Allowed because APP_ENV=%s, "
+                "but tokens signed now are forgeable by anyone with the repo.",
+                settings.app_env,
+            )
+        else:
+            raise RuntimeError(
+                "SECURITY: refusing to start — APP_SECRET is still the public dev "
+                "default, so session tokens for any role (superadmin included) can "
+                "be forged by anyone who reads the repo. Set a strong APP_SECRET in "
+                "the deployment secrets (`openssl rand -base64 48`) and restart. "
+                "For local development set APP_ENV=development instead."
+            )
     if not settings.app_admin_password:
         logger.warning("APP_ADMIN_PASSWORD is not set — legacy admin-password login is disabled (fail-closed).")
     if not settings.teable_webhook_secret:
