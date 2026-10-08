@@ -4445,3 +4445,33 @@ html.dark .main-app-theme {
   .ft-field:focus-within > svg { transform: none; }
   .ft-field:focus-within > svg { transform: translateY(-50%); }
 }
+
+/* ── .input-field ──────────────────────────────────────────────────
+   Used across the status board, its modals and shared links, and until
+   now defined nowhere: each of those rendered as a bare browser control,
+   20px tall and unthemed. Same surface as .input, in the components layer
+   so utilities on the element (pl-8, w-full) still win, at a height a
+   thumb can hit. */
+@layer components {
+  .input-field {
+    background: var(--bg-input);
+    border: 1px solid var(--card-border);
+    color: var(--text-1);
+    padding: 0.5rem 0.75rem;
+    min-height: 40px;
+    border-radius: var(--radius-xs);
+    width: 100%;
+    font-size: 0.875rem;
+    font-family: inherit;
+    transition: border-color var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast);
+  }
+  .input-field::placeholder { color: var(--text-3); }
+  .input-field:focus {
+    outline: none;
+    background: var(--card-bg);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+  select.input-field { padding-right: 2rem; }
+  textarea.input-field { min-height: 88px; }
+}

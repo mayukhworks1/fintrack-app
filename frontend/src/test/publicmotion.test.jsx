@@ -69,3 +69,11 @@ describe('every ft- class used on the public pages has a rule', () => {
     })
   }
 })
+
+describe('form controls the status board relies on', () => {
+  it('.input-field has a rule and a tap height', () => {
+    const i = CSS.indexOf('.input-field {')
+    expect(i).toBeGreaterThan(0)
+    expect(CSS.slice(i, i + 400)).toMatch(/min-height: 40px/)
+  })
+})

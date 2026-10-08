@@ -573,19 +573,19 @@ export default function Dashboard() {
           <p className="text-[11px] uppercase tracking-[0.18em] font-semibold" style={{ color: 'var(--text-3)' }}>Filter by date</p>
           <input
             type="date" value={kpiFrom} onChange={e => setKpiFrom(e.target.value)}
-            className="input text-xs px-2 py-1 rounded-lg"
-            style={{ minWidth: 120, maxWidth: 140 }}
+            className="input text-xs px-2 py-2 rounded-lg"
+            style={{ minWidth: 120, maxWidth: 140, minHeight: 38 }}
           />
           <span className="text-xs" style={{ color: 'var(--text-3)' }}>to</span>
           <input
             type="date" value={kpiTo} onChange={e => setKpiTo(e.target.value)}
-            className="input text-xs px-2 py-1 rounded-lg"
-            style={{ minWidth: 120, maxWidth: 140 }}
+            className="input text-xs px-2 py-2 rounded-lg"
+            style={{ minWidth: 120, maxWidth: 140, minHeight: 38 }}
           />
           {(kpiFrom || kpiTo) && (
             <button
               onClick={() => { setKpiFrom(''); setKpiTo('') }}
-              className="text-xs px-2 py-1 rounded-lg"
+              className="text-xs px-2 py-2 rounded-lg"
               style={{ color: 'var(--text-3)', background: 'var(--bg-input)', border: '1px solid var(--border)' }}
             >
               Clear
@@ -738,12 +738,12 @@ export default function Dashboard() {
                   {chartPreset === 'custom' && (
                     <div className="flex items-center gap-1.5">
                       <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
-                        className="text-[11px] px-2 py-1 rounded-md"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                        className="text-[11px] px-2 py-1.5 rounded-md"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none', minHeight: 36 }} />
                       <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
                       <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
-                        className="text-[11px] px-2 py-1 rounded-md"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
+                        className="text-[11px] px-2 py-1.5 rounded-md"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none', minHeight: 36 }} />
                     </div>
                   )}
                 </div>
