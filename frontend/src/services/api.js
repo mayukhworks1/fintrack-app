@@ -1,4 +1,4 @@
-import { getDeviceHintHeader } from '../utils/deviceInfo'
+import { getDeviceHintHeader, currentDeviceHint } from '../utils/deviceInfo'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 /** Absolute base URL for the API — needed when constructing non-fetch connections
@@ -123,7 +123,8 @@ async function requestBlob(path, options = {}) {
     if (!_deviceHint) {
       try { _deviceHint = await getDeviceHintHeader() } catch {}
     }
-    const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+    const _hint = currentDeviceHint() || _deviceHint   // live: gains geo once it arrives
+    const hintHeader = _hint ? { 'X-Client-Hint': _hint } : {}
     const contentType = extraHeaders === null ? {} : { 'Content-Type': 'application/json' }
     const res = await fetch(`${BASE_URL}${path}`, {
       headers: { ...contentType, ...authHeader, ...hintHeader, ...(extraHeaders || {}) },
@@ -180,7 +181,8 @@ async function _doRequest(path, options = {}, retries = 2) {
     if (!_deviceHint) {
       try { _deviceHint = await getDeviceHintHeader() } catch {}
     }
-    const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+    const _hint = currentDeviceHint() || _deviceHint   // live: gains geo once it arrives
+    const hintHeader = _hint ? { 'X-Client-Hint': _hint } : {}
     // extraHeaders===null means "no Content-Type" (multipart — let browser set boundary).
     // extraHeaders===undefined/object means merge into defaults.
     const contentType = extraHeaders === null ? {} : { 'Content-Type': 'application/json' }
@@ -281,7 +283,8 @@ export const api = {
       if (!_deviceHint) {
         try { _deviceHint = await getDeviceHintHeader() } catch {}
       }
-      const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+      const _hint = currentDeviceHint() || _deviceHint   // live: gains geo once it arrives
+      const hintHeader = _hint ? { 'X-Client-Hint': _hint } : {}
       const res = await fetch(`${BASE_URL}/api/ai/chat/stream`, {
         method: 'POST',
         headers: {
@@ -755,7 +758,8 @@ export const api = {
       xhr.open('POST', `${BASE_URL}/api/studio/documents`)
       const token = getAuthToken()
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-      if (_deviceHint) xhr.setRequestHeader('X-Client-Hint', _deviceHint)
+      const _xh = currentDeviceHint() || _deviceHint
+      if (_xh) xhr.setRequestHeader('X-Client-Hint', _xh)
       xhr.timeout = 180000
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
@@ -829,7 +833,8 @@ export const api = {
       if (!_deviceHint) {
         try { _deviceHint = await getDeviceHintHeader() } catch {}
       }
-      const hintHeader = _deviceHint ? { 'X-Client-Hint': _deviceHint } : {}
+      const _hint = currentDeviceHint() || _deviceHint   // live: gains geo once it arrives
+      const hintHeader = _hint ? { 'X-Client-Hint': _hint } : {}
       const res = await fetch(`${BASE_URL}/api/pages/ai/stream`, {
         method: 'POST',
         headers: {

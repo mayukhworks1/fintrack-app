@@ -26,9 +26,11 @@
  * don't want to thrash the GPU canvas on every fetch.
  */
 
-let _cached = null
+let _cached = null          // latest encoded hint; gains browserGeo once a fix arrives
 let _cachedPromise = null
-let _geoPromise = null
+let _baseInfo = null
+let _geo = null
+let _geoStarted = false
 
 function _safeGetGPU() {
   try {
@@ -93,27 +95,6 @@ async function _collect() {
   // ── GPU ──
   const gpu = _safeGetGPU()
 
-  // ── Browser geolocation ──
-  // Try once per session. If the user allows location, backend logs should
-  // prefer this over coarse IP geo for audit/share traceability.
-  let browserGeo = null
-  try {
-    if (navigator.geolocation && window.isSecureContext) {
-      _geoPromise ||= new Promise(resolve => {
-        navigator.geolocation.getCurrentPosition(
-          pos => resolve({
-            lat: Number(pos.coords.latitude?.toFixed?.(6) ?? pos.coords.latitude),
-            lon: Number(pos.coords.longitude?.toFixed?.(6) ?? pos.coords.longitude),
-            accuracyM: typeof pos.coords.accuracy === 'number' ? Math.round(pos.coords.accuracy) : null,
-          }),
-          () => resolve(null),
-          { enableHighAccuracy: true, timeout: 3500, maximumAge: 2 * 60 * 1000 }
-        )
-      })
-      browserGeo = await _geoPromise
-    }
-  } catch {}
-
   return {
     // UA Client Hints (or null if unsupported)
     ch,
@@ -133,8 +114,53 @@ async function _collect() {
     gpu,
     network,
     downlinkMbps: downlink,
-    browserGeo,
   }
+}
+
+function _encode(info) {
+  const json = JSON.stringify(info)
+  // Base64-URL encoding for safe header transport
+  return typeof btoa === 'function'
+    ? btoa(unescape(encodeURIComponent(json)))
+    : Buffer.from(json, 'utf-8').toString('base64')
+}
+
+/**
+ * Browser geolocation, asked for once per session and NEVER waited on.
+ *
+ * This used to be awaited inside the collector, which the API client awaited
+ * before its first request: every page load held every initial request —
+ * /verify and the page's own data — behind a high-accuracy GPS fix with a
+ * 3.5 s timeout, or behind the permission prompt. On a phone that was the
+ * whole of "the app is slow to open". The fix now arrives in the background
+ * and is folded into the hint for the requests that follow; audit and login
+ * logging prefer it over IP geo exactly as before, they just never block.
+ */
+function _startGeo() {
+  if (_geoStarted) return
+  _geoStarted = true
+  try {
+    if (!(navigator.geolocation && window.isSecureContext)) return
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        _geo = {
+          lat: Number(pos.coords.latitude?.toFixed?.(6) ?? pos.coords.latitude),
+          lon: Number(pos.coords.longitude?.toFixed?.(6) ?? pos.coords.longitude),
+          accuracyM: typeof pos.coords.accuracy === 'number' ? Math.round(pos.coords.accuracy) : null,
+        }
+        if (_baseInfo) {
+          try { _cached = _encode({ ..._baseInfo, browserGeo: _geo }) } catch {}
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 3500, maximumAge: 2 * 60 * 1000 }
+    )
+  } catch {}
+}
+
+/** The latest encoded hint, synchronously — '' until the first collection completes. */
+export function currentDeviceHint() {
+  return _cached || ''
 }
 
 /**
@@ -147,14 +173,10 @@ export async function getDeviceHintHeader() {
   if (_cachedPromise) return _cachedPromise
   _cachedPromise = (async () => {
     try {
-      const info = await _collect()
-      const json = JSON.stringify(info)
-      // Base64-URL encoding for safe header transport
-      const b64 = typeof btoa === 'function'
-        ? btoa(unescape(encodeURIComponent(json)))
-        : Buffer.from(json, 'utf-8').toString('base64')
-      _cached = b64
-      return b64
+      _baseInfo = await _collect()
+      _cached = _encode({ ..._baseInfo, browserGeo: _geo })
+      _startGeo()                       // background; never awaited
+      return _cached
     } catch {
       _cached = ''
       return ''
@@ -165,5 +187,5 @@ export async function getDeviceHintHeader() {
   return _cachedPromise
 }
 
-/** For local diagnostics — returns the decoded object */
-export async function getDeviceInfo() { return _collect() }
+/** For local diagnostics — returns the decoded object (with whatever geo has arrived) */
+export async function getDeviceInfo() { return { ...(await _collect()), browserGeo: _geo } }
