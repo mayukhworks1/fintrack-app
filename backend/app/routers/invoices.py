@@ -436,6 +436,87 @@ async def aging_buckets(
     }
 
 
+# Fields the Dashboard's activity chart reads per invoice. Everything else a
+# record carries — description, remarks, attachment and reference arrays,
+# follow-up notes — was being shipped and discarded.
+_ACTIVITY_FIELDS = (
+    "Raised Date", "Amount Raised", "Payment Status", "Raised By",
+    "Invoice Number", "Invoice No", "Project Name", "Project",
+    "Client", "Client Name", "Agening (Days)",
+)
+
+# Fields the retainer-health widget renders for an overdue row.
+_RETAINER_ROW_FIELDS = (
+    "Client Name", "Client", "Project", "Invoice Number",
+    "Outstanding Amount", "Raised Date", "Category",
+)
+
+_RETAINER_RE = re.compile(r"retainer", re.IGNORECASE)
+
+
+def _slim(record: dict, keep: tuple[str, ...]) -> dict:
+    f = record.get("fields") or {}
+    return {"id": record.get("id"), "fields": {k: f[k] for k in keep if k in f}}
+
+
+@router.get("/dashboard-activity")
+async def dashboard_activity(
+    request: Request,
+    limit: int = Query(400, ge=1, le=2000),
+    month: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
+    """Everything the Dashboard needs from invoices, in one small response.
+
+    The Dashboard fetched its 400 most recent invoices in full — every
+    description, remark and attachment list — to drive two widgets that use a
+    handful of fields: the activity chart, which needs one slim row per
+    invoice, and the retainer-health card, which needs only an aggregate and
+    at most six overdue rows. This returns exactly that.
+
+    `month` is the caller's current month (YYYY-MM). The overdue rule compares
+    an invoice's raised month to "this month", and the browser and the server
+    can disagree about which month it is for a few hours at each boundary;
+    letting the client say keeps the widget's answer identical to before.
+    Declared before /{record_id} so the path is not captured as a record id.
+    """
+    svc = InvoiceService()
+    scoped_email = owner_scope_email(request)
+    result = await svc.list_invoices(
+        raised_by=scoped_email, limit=limit, skip=0, order_by="Raised Date", order="desc",
+    )
+    if result is None:
+        result = await svc.list_invoices_from_pg(
+            raised_by=scoped_email, limit=limit, skip=0, order_by="Raised Date", order="desc",
+        )
+    records = (result or {}).get("records", [])
+
+    this_month = month or _date.today().strftime("%Y-%m")
+    retainers = [r for r in records if _RETAINER_RE.search(str((r.get("fields") or {}).get("Category") or ""))]
+    overdue = []
+    for r in retainers:
+        f = r.get("fields") or {}
+        try:
+            outstanding = float(f.get("Outstanding Amount") or 0)
+        except (TypeError, ValueError):
+            outstanding = 0.0
+        raised_month = str(f.get("Raised Date") or "")[:7]
+        if outstanding > 0 and raised_month and raised_month <= this_month:
+            overdue.append(r)
+
+    return {
+        "activity": [_slim(r, _ACTIVITY_FIELDS) for r in records],
+        "retainer": {
+            "total":         len(retainers),
+            "overdue_count": len(overdue),
+            "healthy":       len(retainers) - len(overdue),
+            "overdue":       [_slim(r, _RETAINER_ROW_FIELDS) for r in overdue[:6]],
+        },
+        "month": this_month,
+    }
+
+
 @router.get("/{record_id}")
 async def get_invoice(
     record_id: str, request: Request,

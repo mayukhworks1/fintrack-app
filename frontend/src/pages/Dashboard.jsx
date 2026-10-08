@@ -257,14 +257,27 @@ export default function Dashboard() {
 
   // Invoice records for the activity timeline chart
   const [invoiceRecords, setInvoiceRecords] = useState([])
+  // { total, overdue_count, healthy, overdue: [≤6 slim rows] } — computed
+  // server-side so the retainer card no longer needs every invoice in memory.
+  const [retainerSummary, setRetainerSummary] = useState(null)
   const [chartPreset, setChartPreset] = useState('60d')
   const [chartFrom,   setChartFrom]   = useState('')
   const [chartTo,     setChartTo]     = useState('')
   const [agingBuckets, setAgingBuckets] = useState(null)
   useEffect(() => {
     let cancelled = false
-    api.invoices.list({ limit: 400, order_by: 'Raised Date', order: 'desc' })
-      .then(r => { if (!cancelled) setInvoiceRecords(r?.records || []) })
+    // One slim payload instead of 400 full records. The server computes the
+    // retainer aggregate; the chart still gets one row per invoice, but only
+    // the fields it reads. `month` is sent so "this month" is decided in the
+    // user's timezone, exactly as the widget did when it ran client-side.
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    api.invoices.dashboardActivity({ month })
+      .then(r => {
+        if (cancelled) return
+        setInvoiceRecords(r?.activity || [])
+        setRetainerSummary(r?.retainer || null)
+      })
       .catch(() => {})
     api.invoices.agingBuckets()
       .then(r => { if (!cancelled) setAgingBuckets(r) })
@@ -625,24 +638,20 @@ export default function Dashboard() {
       )}
 
       {/* ── Retainer health ── */}
-      {invoiceRecords.length > 0 && (() => {
-        const now = new Date()
-        const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        const retainers = invoiceRecords.filter(r => /retainer/i.test(String(r.fields?.['Category'] || '')))
-        if (!retainers.length) return null
-        const overdue = retainers.filter(r => {
-          const outstanding = Number(r.fields?.['Outstanding Amount'] || 0)
-          const raised = (r.fields?.['Raised Date'] || '').slice(0, 7)
-          return outstanding > 0 && raised && raised <= thisMonth
-        })
-        const healthy = retainers.length - overdue.length
+      {retainerSummary && retainerSummary.total > 0 && (() => {
+        // The filter, the overdue rule and the counts now come from the
+        // server. `overdue` is capped at six rows there, so the counts must
+        // come from the aggregate, not from the rows' length.
+        const overdue      = retainerSummary.overdue || []
+        const overdueCount = retainerSummary.overdue_count || 0
+        const healthy      = retainerSummary.healthy || 0
         return (
           <div className="rounded-[20px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Retainer health</p>
                 <p className="text-base font-semibold mt-1" style={{ color: 'var(--text-1)' }}>
-                  {overdue.length ? `${overdue.length} retainer${overdue.length > 1 ? 's' : ''} with outstanding balance` : 'All retainers cleared'}
+                  {overdueCount ? `${overdueCount} retainer${overdueCount > 1 ? 's' : ''} with outstanding balance` : 'All retainers cleared'}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -650,13 +659,13 @@ export default function Dashboard() {
                   <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Healthy</p>
                   <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{healthy}</p>
                 </div>
-                <div className="rounded-xl px-3 py-2 text-center" style={{ background: overdue.length ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)' }}>
+                <div className="rounded-xl px-3 py-2 text-center" style={{ background: overdueCount ? 'var(--fin-warn-bg)' : 'var(--fin-pos-bg)' }}>
                   <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Overdue</p>
-                  <p className="text-lg font-bold tabular-nums" style={{ color: overdue.length ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{overdue.length}</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: overdueCount ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{overdueCount}</p>
                 </div>
               </div>
             </div>
-            {overdue.length > 0 && (
+            {overdueCount > 0 && (
               <div className="space-y-2 mt-2">
                 {overdue.slice(0, 6).map(r => {
                   const f = r.fields || {}

@@ -385,6 +385,13 @@ export const api = {
       return result
     },
     agingBuckets: (opts = {}) => request('/api/invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
+    // One small payload for the Dashboard: slim rows for the activity chart
+    // plus the retainer-health aggregate. Replaces a 400-row full-record fetch.
+    dashboardActivity: ({ month, limit = 400, ...opts } = {}) => {
+      const q = new URLSearchParams({ limit: String(limit) })
+      if (month) q.set('month', month)
+      return request(`/api/invoices/dashboard-activity?${q}`, { fresh: true, cacheTtl: 0, ...opts })
+    },
     sendReminder: (id, body = {}) => request(`/api/invoices/${id}/send-reminder`, { method: 'POST', body: JSON.stringify(body) }),
     exportUrl: (params = {}) => {
       const q = new URLSearchParams({ fmt: 'csv' })
