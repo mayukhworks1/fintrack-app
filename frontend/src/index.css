@@ -4197,3 +4197,157 @@ html.dark .main-app-theme {
     transform: none !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Public pages — motion, second pass
+   ------------------------------------------------------------------
+   Everything here is CSS driven by the same [data-shown] attribute
+   useReveal already writes, or by a scroll timeline where the browser
+   has one. No listener, no library, nothing on the main thread.
+
+   The global prefers-reduced-motion block collapses every duration and
+   useReveal marks elements shown at once, so each of these lands in its
+   final state without travelling. The scroll-linked drift and the hover
+   lifts are the ones that must be switched off explicitly, and are.
+══════════════════════════════════════════════════════════════════ */
+
+/* The pieces of an opening — eyebrow, lede, buttons — arrive after the
+   headline's lines, each on its own delay (--d), inside a container
+   useReveal has marked. The container itself does not move. */
+/* Keyframes rather than transitions, here and in the stagger below: a
+   transition on opacity would replace the transition list a card already
+   has for its hover lift, and a keyframe with fill-mode both holds its
+   last frame without touching that list. */
+@keyframes ft-fade-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+.ft-up { opacity: 0; }
+[data-shown] .ft-up, [data-shown].ft-up {
+  animation: ft-fade-up 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Children of a marked container rise in sequence (Stagger in
+   PublicBits). The wrapper carries no motion, so nothing moves twice. */
+.ft-stagger > * { opacity: 0; }
+[data-shown].ft-stagger > * { animation: ft-fade-up 650ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ft-stagger > :nth-child(1) { animation-delay: 0ms }
+.ft-stagger > :nth-child(2) { animation-delay: 70ms }
+.ft-stagger > :nth-child(3) { animation-delay: 140ms }
+.ft-stagger > :nth-child(4) { animation-delay: 210ms }
+.ft-stagger > :nth-child(5) { animation-delay: 280ms }
+.ft-stagger > :nth-child(6) { animation-delay: 350ms }
+.ft-stagger > :nth-child(7) { animation-delay: 420ms }
+.ft-stagger > :nth-child(8) { animation-delay: 490ms }
+.ft-stagger > :nth-child(9) { animation-delay: 560ms }
+.ft-stagger > :nth-child(10) { animation-delay: 630ms }
+.ft-stagger > :nth-child(11) { animation-delay: 700ms }
+.ft-stagger > :nth-child(12) { animation-delay: 770ms }
+
+/* The same sequence for content that mounts fresh — a tab panel's list —
+   where there is no scroll to wait for. */
+.ft-stagger-in > * { animation: ft-fade-up 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ft-stagger-in > :nth-child(1) { animation-delay: 60ms }
+.ft-stagger-in > :nth-child(2) { animation-delay: 115ms }
+.ft-stagger-in > :nth-child(3) { animation-delay: 170ms }
+.ft-stagger-in > :nth-child(4) { animation-delay: 225ms }
+.ft-stagger-in > :nth-child(5) { animation-delay: 280ms }
+.ft-stagger-in > :nth-child(6) { animation-delay: 335ms }
+.ft-stagger-in > :nth-child(7) { animation-delay: 390ms }
+.ft-stagger-in > :nth-child(8) { animation-delay: 445ms }
+.ft-stagger-in > :nth-child(9) { animation-delay: 500ms }
+.ft-stagger-in > :nth-child(10) { animation-delay: 555ms }
+.ft-stagger-in > :nth-child(11) { animation-delay: 610ms }
+.ft-stagger-in > :nth-child(12) { animation-delay: 665ms }
+
+/* A cell that pops into place — the permission matrix after a role
+   change. --i is the row, so the column fills top to bottom. */
+@keyframes ft-pop { from { opacity: 0; transform: scale(0.55) } to { opacity: 1; transform: none } }
+.ft-pop {
+  animation: ft-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(var(--i, 0) * 38ms);
+}
+
+/* A rule that draws itself when reached: centre-out for a section break,
+   from the left where the rule is left-aligned. */
+.ft-rule-grow { transform: scaleX(0); transition: transform 1100ms cubic-bezier(0.22, 1, 0.36, 1) 100ms; }
+.ft-rule-grow.from-left { transform-origin: left center; }
+[data-shown] > .ft-rule-grow, [data-shown] .ft-rule-grow { transform: scaleX(1); }
+
+/* Buttons lift on hover, settle on press, and the arrow leads. The
+   hero's magnetic CTA keeps its own transform and takes only the arrow. */
+.ft-btn {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 240ms ease, filter 240ms ease;
+}
+.ft-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(20, 32, 51, 0.12); }
+.ft-btn:active { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
+.ft-btn svg, .ft-cta svg, .ft-cta-link svg { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.ft-btn:hover svg, .ft-cta:hover svg, .ft-cta-link:hover svg { transform: translateX(3px); }
+
+/* An arrowed text link: the underline draws in from the left. This class
+   was in use on /how-it-works with no rule behind it. */
+.ft-cta-link { position: relative; }
+.ft-cta-link::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 1.5px;
+  background: currentColor; transform: scaleX(0); transform-origin: left center;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ft-cta-link:hover::after { transform: scaleX(1); }
+
+/* The icon on a card leans in as the card lifts. */
+.ft-ico { transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.ft-lift:hover .ft-ico { transform: scale(1.14) rotate(-4deg); }
+
+/* Picker tabs nudge toward their panel; filter chips lift and settle. */
+.ft-pick {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              background 200ms ease, border-color 200ms ease, color 200ms ease !important;
+}
+.ft-pick:hover { transform: translateX(3px); }
+@media (max-width: 1023px) { .ft-pick:hover { transform: translateY(-1px); } }
+.ft-chipbtn {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+              background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+.ft-chipbtn:hover { transform: translateY(-1px); }
+.ft-chipbtn:active { transform: scale(0.96); }
+
+/* Steps: the number badge pops once its step has arrived, and above
+   960px a connector draws across behind the cards, so three cards read
+   as one sequence. */
+.ft-steps { position: relative; }
+.ft-steps .ft-badge {
+  transform: scale(0.5); opacity: 0;
+  transition: transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1) 220ms, opacity 300ms ease 220ms;
+}
+[data-shown].ft-steps .ft-badge { transform: none; opacity: 1; }
+@media (min-width: 960px) {
+  .ft-steps::before {
+    content: ''; position: absolute; left: 24px; right: 24px; top: 39px; height: 0;
+    border-top: 2px dashed color-mix(in srgb, var(--accent) 38%, transparent);
+    transform: scaleX(0); transform-origin: left center;
+    transition: transform 1400ms cubic-bezier(0.22, 1, 0.36, 1) 150ms;
+    pointer-events: none;
+  }
+  [data-shown].ft-steps::before { transform: scaleX(1); }
+}
+
+/* The hero block drifts up and dims as the sandbox scrolls over it —
+   depth with no listener. Browsers without scroll timelines never see it. */
+@supports (animation-timeline: view()) {
+  @keyframes ft-drift { to { transform: translateY(-36px); opacity: 0.3 } }
+  .ft-drift {
+    animation: ft-drift linear both;
+    animation-timeline: view();
+    animation-range: exit 0% exit 100%;
+  }
+}
+
+/* The header firms up once the page has moved under it. */
+.ft-header { transition: box-shadow 260ms ease; }
+.ft-header[data-scrolled] { box-shadow: 0 6px 24px rgba(20, 32, 51, 0.08); }
+.dark .ft-header[data-scrolled] { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-drift { animation: none !important; }
+  .ft-btn:hover, .ft-pick:hover, .ft-chipbtn:hover, .ft-lift:hover .ft-ico { transform: none; }
+}

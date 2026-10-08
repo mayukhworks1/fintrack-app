@@ -30,6 +30,26 @@ export function Rising({ children, ...rest }) {
 }
 
 /**
+ * Children rise in sequence as the block is reached. The wrapper carries no
+ * motion of its own, so a card is never lifted twice over the same pixels.
+ * `as` keeps list semantics where the children are list items.
+ */
+export function Stagger({ as: Tag = 'div', children, className = '', ...rest }) {
+  const ref = useReveal({ threshold: 0.08 })
+  return <Tag ref={ref} className={`ft-stagger ${className}`} {...rest}>{children}</Tag>
+}
+
+/** A section break that draws itself when reached. */
+export function Rule({ className = '', fromLeft = false, style }) {
+  const ref = useReveal({ threshold: 0.5 })
+  return (
+    <div ref={ref} className={className} style={style}>
+      <hr className={`ft-rule ft-rule-grow${fromLeft ? ' from-left' : ''}`} />
+    </div>
+  )
+}
+
+/**
  * A page opening: eyebrow, serif headline that rises line by line, lede.
  *
  * `lines` takes the headline pre-split, because only the author knows where
@@ -40,7 +60,7 @@ export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 
   return (
     <Rising className="relative mx-auto px-4 sm:px-6 pt-10 pb-8 sm:pt-14"
             style={{ maxWidth: 1120, zIndex: 1 }}>
-      <p className="ft-eyebrow mb-3">{eyebrow}</p>
+      <p className="ft-eyebrow ft-up mb-3">{eyebrow}</p>
       <h1 className="ft-display mb-4" style={{ fontSize: size, lineHeight: 1.08 }}>
         {lines.map((line, i) => (
           <span key={i} className="ft-rise">
@@ -48,7 +68,7 @@ export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 
           </span>
         ))}
       </h1>
-      {children && <p className="ft-lede">{children}</p>}
+      {children && <p className="ft-lede ft-up" style={{ '--d': '260ms' }}>{children}</p>}
     </Rising>
   )
 }
@@ -84,7 +104,7 @@ export function Card({ icon: Icon, kicker, title, body, delay = 0, visual: Visua
       {Visual && <Visual />}
       {(Icon || kicker) && (
         <div className="flex items-center gap-2.5 mb-2.5">
-          {Icon && <Icon size={18} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+          {Icon && <Icon size={18} aria-hidden="true" className="ft-ico" style={{ color: 'var(--accent)', flexShrink: 0 }} />}
           {kicker && <span className="ft-eyebrow" style={{ fontSize: '0.62rem' }}>{kicker}</span>}
         </div>
       )}

@@ -29,6 +29,16 @@ export default function PublicLayout({ children }) {
   // Close on navigation, or the menu stays over the page you just opened.
   useEffect(() => { setOpen(false) }, [pathname])
 
+  // The header gains a shadow once the page has moved under it. React
+  // ignores a set to the same value, so this costs nothing per scroll event.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   // A fixed overlay that scrolls the page behind it reads as broken.
   useEffect(() => {
     if (!open && !legalModal) return
@@ -55,7 +65,8 @@ export default function PublicLayout({ children }) {
     <div className="main-app-theme login-bg min-h-screen flex flex-col"
          style={{ color: 'var(--text-1)' }}>
       <header
-        className="sticky top-0 z-40"
+        className="ft-header sticky top-0 z-40"
+        data-scrolled={scrolled ? '' : undefined}
         style={{
           background: 'color-mix(in srgb, var(--bg-base) 88%, transparent)',
           backdropFilter: 'blur(12px)',
@@ -130,7 +141,7 @@ export default function PublicLayout({ children }) {
             </button>
 
             <Link to="/login"
-                  className="hidden md:flex items-center gap-1.5 rounded-lg font-semibold text-sm"
+                  className="ft-btn hidden md:flex items-center gap-1.5 rounded-lg font-semibold text-sm"
                   style={{
                     minHeight: 40, padding: '0 16px', background: 'var(--accent-btn)',
                     color: '#fff', textDecoration: 'none',

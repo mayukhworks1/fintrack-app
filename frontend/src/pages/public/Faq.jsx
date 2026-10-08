@@ -124,8 +124,8 @@ export default function Faq() {
 
       {/* Semantic Search & Quick Topic Chips */}
       <section className="mx-auto px-4 sm:px-6 pt-2 pb-8" style={{ maxWidth: 1120 }}>
-        <div className="p-4 sm:p-6 rounded-2xl border transition-all"
-             style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
+        <Reveal className="p-4 sm:p-6 rounded-2xl border transition-all"
+                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-3)]" />
@@ -187,7 +187,7 @@ export default function Faq() {
                 <button
                   key={t.id}
                   onClick={() => setActiveTopic(isSelected ? null : t.id)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5"
+                  className="ft-chipbtn px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5"
                   style={{
                     background: isSelected ? 'var(--accent-dim)' : 'var(--bg-input)',
                     borderColor: isSelected ? 'var(--accent)' : 'var(--card-border)',
@@ -201,7 +201,7 @@ export default function Faq() {
               )
             })}
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Two columns above 900px: a standing index on the left and the answers on the right. */}
@@ -277,7 +277,7 @@ export default function Faq() {
                     style={{ fontSize: '1.35rem', color: 'var(--text-1)' }}>
                   {g.name}
                 </h2>
-                <hr className="ft-rule mb-2" style={{ marginLeft: 0, maxWidth: 180 }} />
+                <hr className="ft-rule ft-rule-grow from-left mb-2" style={{ marginLeft: 0, maxWidth: 180 }} />
                 {g.items.map(({ q, a }, i) => (
                   <details key={q} className="ft-faq" open={isFiltered || (gi === 0 && i === 0)}>
                     <summary>{q}</summary>
@@ -293,12 +293,12 @@ export default function Faq() {
       </section>
 
       <Closing title="Something not answered here?"
-               cta={<Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                           style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                                    color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
                       Sign in <ArrowRight size={17} aria-hidden="true" />
                     </Link>}
-               next={<Link to="/" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               next={<Link to="/" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                            style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
                                     border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
                                     textDecoration: 'none', fontSize: '0.95rem' }}>

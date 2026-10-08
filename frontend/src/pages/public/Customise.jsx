@@ -87,12 +87,12 @@ export default function Customise() {
       </section>
 
       <Closing title="Tell us how you work"
-               cta={<Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                           style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                                    color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
                       Sign in <ArrowRight size={17} aria-hidden="true" />
                     </Link>}
-               next={<Link to="/security" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               next={<Link to="/security" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                            style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
                                     border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
                                     textDecoration: 'none', fontSize: '0.95rem' }}>

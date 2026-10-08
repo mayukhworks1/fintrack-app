@@ -29,7 +29,7 @@ import {
 import Overstatement from '../components/Overstatement'
 import ProductFilm from '../components/ProductFilm'
 import ScrollLit from '../components/ScrollLit'
-import { Reveal, Rising, Head, Card, Grid, Closing } from '../components/PublicBits'
+import { Reveal, Rising, Stagger, Rule, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
 } from '../content/publicContent'
@@ -76,13 +76,17 @@ export default function Landing() {
   return (
     <PublicLayout>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <section ref={heroLight} className="relative overflow-hidden">
+      {/* overflow: clip, not hidden. Hidden makes the section a scroll
+          container, and the hero's scroll-linked drift would then measure
+          its progress against the section instead of the viewport and
+          never move. Clip cuts the grain off at the edges just the same. */}
+      <section ref={heroLight} className="relative" style={{ overflow: 'clip' }}>
         <Grain />
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <Rising style={{ maxWidth: 820 }}>
-            <span className="inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
+          <Rising className="ft-drift" style={{ maxWidth: 820 }}>
+            <span className="ft-up inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
                   style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
               Institutional Financial Control Platform
             </span>
@@ -101,14 +105,14 @@ export default function Landing() {
               </span>
             </h1>
 
-            <p className="ft-lede mb-7">
+            <p className="ft-lede ft-up mb-7" style={{ '--d': '260ms' }}>
               A live board of where every project stands, and the receivables,
               margin and GST for the same work: not two systems somebody
               reconciles on a Friday. Ask it anything in plain words and it
               prints the query behind the answer.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="ft-up flex flex-col sm:flex-row gap-3" style={{ '--d': '380ms' }}>
               <a href="#try" ref={heroCta}
                  onClick={(e) => {
                    e.preventDefault()
@@ -125,7 +129,7 @@ export default function Landing() {
                 Launch Interactive Sandbox <ArrowRight size={17} aria-hidden="true" />
               </a>
               <Link to="/login"
-                    className="flex items-center justify-center gap-2 rounded-xl font-bold"
+                    className="ft-btn flex items-center justify-center gap-2 rounded-xl font-bold"
                     style={{ minHeight: 52, padding: '0 26px', background: 'var(--card-bg)',
                              border: '1px solid var(--card-border)', color: 'var(--text-1)',
                              textDecoration: 'none', fontSize: '0.975rem' }}>
@@ -157,15 +161,15 @@ export default function Landing() {
           Product facts — how many modules, how many roles — not workspace
           figures. They describe the software, so they are safe to show. */}
       <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
-        <Reveal className="grid gap-4 sm:gap-5"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
+        <Stagger className="grid gap-4 sm:gap-5"
+                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
           {[
             ['Modules', 11, '', 'receivables to audit'],
             ['Permission roles', 8, '', 'each override-able per person'],
             ['Sync latency', 30, 's', 'incremental, plus webhooks'],
             ['Answers with the query shown', 100, '%', 'no exceptions'],
           ].map(([label, value, suffix, sub]) => (
-            <div key={label} className="rounded-2xl p-4 sm:p-5"
+            <div key={label} className="ft-lift rounded-2xl p-4 sm:p-5"
                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <p className="font-extrabold tracking-tight"
                  style={{ fontSize: 'clamp(1.6rem, 4vw, 2.3rem)', color: 'var(--accent)',
@@ -176,7 +180,7 @@ export default function Landing() {
               <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
             </div>
           ))}
-        </Reveal>
+        </Stagger>
       </section>
 
       {/* ── The problem ─────────────────────────────────────────────────── */}
@@ -245,7 +249,7 @@ export default function Landing() {
 
         <Reveal>
           <Link to="/features"
-                className="inline-flex items-center gap-2 rounded-xl font-bold"
+                className="ft-btn inline-flex items-center gap-2 rounded-xl font-bold"
                 style={{ minHeight: 46, padding: '0 20px', background: 'var(--card-bg)',
                          border: '1px solid var(--card-border)', color: 'var(--text-1)',
                          textDecoration: 'none', fontSize: '0.93rem' }}>
@@ -257,7 +261,7 @@ export default function Landing() {
       {/* ── Where to go next ─────────────────────────────────────────────
           A short page only works if it hands you somewhere. */}
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <hr className="ft-rule mb-14" />
+        <Rule className="mb-14" />
         <Head n="03" eyebrow="Read on" title="The rest of it, in three pages">
           Split up rather than stacked, because a page that takes seventeen
           screens on a phone is a page nobody finishes.
@@ -292,14 +296,14 @@ export default function Landing() {
       {/* ── Close ───────────────────────────────────────────────────────── */}
       <Closing title="Already have an account?"
                cta={<Link to="/login"
-                          className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                          className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                           style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                                    color: 'var(--accent-btn)', textDecoration: 'none',
                                    fontSize: '0.975rem' }}>
                       Sign in <ArrowRight size={17} aria-hidden="true" />
                     </Link>}
                next={<Link to="/faq"
-                           className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                           className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                            style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
                                     border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
                                     textDecoration: 'none', fontSize: '0.95rem' }}>

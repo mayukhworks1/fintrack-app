@@ -275,9 +275,9 @@ export default function Features() {
     <PublicLayout>
       <section className="relative overflow-hidden">
         <Grain />
-        <div ref={headRef} className="ft-reveal relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
+        <div ref={headRef} className="relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <p className="ft-eyebrow mb-3">Features</p>
+          <p className="ft-eyebrow ft-up mb-3">Features</p>
           <h1 className="ft-display mb-4"
               style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
             <span className="ft-rise"><span>Eleven modules,</span></span>
@@ -285,7 +285,7 @@ export default function Features() {
               <span style={{ transitionDelay: '110ms' }}><em>one set of rows</em></span>
             </span>
           </h1>
-          <p className="ft-lede">
+          <p className="ft-lede ft-up" style={{ '--d': '260ms' }}>
             Pick one to see what it does. Every module reads the same records, so a
             figure on the dashboard and a figure in a report cannot disagree.
           </p>
@@ -316,7 +316,7 @@ export default function Features() {
                       setActive(i)
                       setViewMode('demo')
                     }}
-                    className="flex items-center gap-2.5 rounded-xl text-left shrink-0"
+                    className="ft-pick flex items-center gap-2.5 rounded-xl text-left shrink-0"
                     style={{
                       minHeight: 48, padding: '0 14px',
                       background: on ? 'var(--accent-dim)' : 'var(--card-bg)',
@@ -413,7 +413,7 @@ export default function Features() {
                 )}
               </div>
 
-              <ul className="grid gap-2 m-0 p-0" style={{
+              <ul className="ft-stagger-in grid gap-2 m-0 p-0" style={{
                 listStyle: 'none',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
               }}>
@@ -457,8 +457,8 @@ export default function Features() {
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div className="rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
-             style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
+        <Reveal className="ft-shine rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
+                style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <h2 className="ft-display mb-3"
               style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>
             See it on your own numbers
@@ -467,12 +467,12 @@ export default function Features() {
             Access is by invitation — an administrator approves each account.
           </p>
           <Link to="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                 style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                          color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
             Sign in <ArrowRight size={17} aria-hidden="true" />
           </Link>
-        </div>
+        </Reveal>
       </section>
     </PublicLayout>
   )

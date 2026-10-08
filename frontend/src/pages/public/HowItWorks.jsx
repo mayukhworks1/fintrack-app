@@ -17,7 +17,7 @@ import StackStory from '../../components/StackStory'
 import SyncPipelineSimulator from '../../components/SyncPipelineSimulator'
 import { Grain } from '../../components/LandingVisuals'
 import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
-import { Head, PageHead, Card, Grid, Closing, Reveal } from '../../components/PublicBits'
+import { Head, PageHead, Card, Grid, Closing, Reveal, Stagger, Rule } from '../../components/PublicBits'
 import ScrollLit from '../../components/ScrollLit'
 import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
 import LoopVideo from '../../components/LoopVideo'
@@ -54,14 +54,14 @@ export default function HowItWorks() {
           consequence of those three.
         </Head>
 
-        <ol className="relative grid gap-4 sm:gap-5 m-0 p-0 mb-14"
-            style={{ listStyle: 'none',
-                     gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
+        <Stagger as="ol" className="ft-steps relative grid gap-4 sm:gap-5 m-0 p-0 mb-14"
+                 style={{ listStyle: 'none',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
           {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className="relative rounded-xl p-5 sm:p-6"
+            <li key={title} className="ft-lift relative rounded-xl p-5 sm:p-6"
                 style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
               <div className="flex items-center gap-3 mb-3">
-                <span className="flex items-center justify-center rounded-lg font-bold text-sm"
+                <span className="ft-badge flex items-center justify-center rounded-lg font-bold text-sm"
                       style={{ width: 30, height: 30, background: 'var(--accent-dim)', color: 'var(--accent)' }}
                       aria-hidden="true">{i + 1}</span>
                 <Icon size={17} aria-hidden="true" style={{ color: 'var(--text-3)' }} />
@@ -70,10 +70,10 @@ export default function HowItWorks() {
               <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
             </li>
           ))}
-        </ol>
+        </Stagger>
 
-        <div className="grid gap-8 lg:gap-12 items-center mb-14"
-             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+        <Reveal className="grid gap-8 lg:gap-12 items-center mb-14"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
           <div><StaysPut /></div>
           <div>
             <h3 className="ft-display mb-2" style={{ fontSize: '1.3rem', color: 'var(--text-1)' }}>
@@ -87,14 +87,14 @@ export default function HowItWorks() {
               asks you to import first and reconcile later.
             </p>
           </div>
-        </div>
+        </Reveal>
 
         {/* ── Realtime Ingest & Database Pipeline Simulator ─────────────── */}
         <Reveal className="mb-14">
           <SyncPipelineSimulator />
         </Reveal>
 
-        <hr className="ft-rule mb-14" />
+        <Rule className="mb-14" />
         <Head n="02" eyebrow="One set of rows" title="Walk up the stack">
           Four layers, bottom to top, in the order the data actually moves.
           Scroll the column and the drawing follows.
@@ -132,7 +132,7 @@ export default function HowItWorks() {
       )}
 
       <section id="trust" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <hr className="ft-rule mb-14" />
+        <Rule className="mb-14" />
         <Head n="03" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
           Plenty of tools promise not to make things up. This is where the
@@ -168,12 +168,12 @@ export default function HowItWorks() {
       </section>
 
       <Closing title="See it on your own numbers"
-               cta={<Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                           style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                                    color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
                       Sign in <ArrowRight size={17} aria-hidden="true" />
                     </Link>}
-               next={<Link to="/customise" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+               next={<Link to="/customise" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                            style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
                                     border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
                                     textDecoration: 'none', fontSize: '0.95rem' }}>
