@@ -164,6 +164,16 @@ class Settings(BaseSettings):
     alert_error_rate_window_seconds: int = 300  # ...of this many seconds
     alert_pool_exhausted_checks:  int = 3     # consecutive all-busy samples before paging
 
+    # ── Scanner trap ───────────────────────────────────────────────────────
+    # Automated vulnerability scanners probe for /.env, path traversal, /mcp,
+    # wp-admin and the like. They already get 404s; this answers them before
+    # routing, counts strikes per IP, and temporarily bans repeat offenders so
+    # they stop inflating the 4xx rate and filling the audit log.
+    scanner_trap_enabled:   bool = True
+    scanner_strikes:        int = 3      # probe hits within the window before a ban
+    scanner_window_seconds: int = 600
+    scanner_ban_seconds:    int = 3600
+
     model_config = ConfigDict(env_file=".env")
 
 

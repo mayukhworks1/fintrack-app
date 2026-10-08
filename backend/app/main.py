@@ -23,13 +23,13 @@ from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
-from .db import postgres, valkey as vk
+from .db import postgres, valkey as vk, migrate
 from .db.postgres import get_init_error
 from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
 from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
-from .services import alerts
+from .services import alerts, scanner_trap
 from .routers.deps import require_auth, require_admin
 
 logger = logging.getLogger("fintrack")
@@ -322,7 +322,20 @@ async def request_middleware(request: Request, call_next):
 
     started = time.time()
     try:
-        response = await call_next(request)
+        # Scanner trap, before routing. Substitutes the response rather than
+        # returning early so everything below — timing headers, the audit
+        # enqueue, the 5xx counter — still runs for these requests.
+        _trap_hit = None
+        if settings.scanner_trap_enabled:
+            _ip = _get_client_ip(request)
+            _path = request.url.path
+            if await scanner_trap.is_banned(_ip):
+                scanner_trap.note_blocked()
+                _trap_hit = JSONResponse({"detail": "Forbidden"}, status_code=403)
+            elif scanner_trap.is_probe(_path):
+                await scanner_trap.record_probe(_ip)
+                _trap_hit = JSONResponse({"detail": "Not Found"}, status_code=404)
+        response = _trap_hit if _trap_hit is not None else await call_next(request)
     except Exception:
         logger.exception("[%s] %s %s — unhandled exception",
                          req_id, request.method, request.url.path)
@@ -437,6 +450,8 @@ async def health():
         "embed_running":     _embed_task is not None and not _embed_task.done(),
         "duration_running":  _duration_refresh_task is not None and not _duration_refresh_task.done(),
         "alerting":          alerts.state(),
+        "scanner_trap":      scanner_trap.state(),
+        "migrations":        migrate.state(),
         "langsmith_tracing": settings.langchain_tracing_v2 and bool(settings.langchain_api_key),
         "last_sync":         sync_meta,
         "cache":             cache.stats(),
