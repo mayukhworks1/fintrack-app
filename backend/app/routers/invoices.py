@@ -248,6 +248,28 @@ class InvoiceFields(BaseModel):
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+def _raise_translated_teable_error(e: RuntimeError, context: str) -> None:
+    """Turn a service-wrapped Teable rejection into the 4xx it should have been.
+
+    InvoiceService raises RuntimeError(...) from httpx.HTTPStatusError, so the
+    original response survives on e.__cause__. Status and message are derived
+    exactly as the routes' httpx.HTTPError branch does, so the two paths cannot
+    drift. A RuntimeError with no Teable cause is a genuine internal error and
+    stays a 500.
+    """
+    cause = e.__cause__
+    if isinstance(cause, httpx.HTTPStatusError) and cause.response is not None:
+        try:
+            error_data: str | dict = cause.response.json()
+        except Exception:
+            error_data = cause.response.text or str(e)
+        raise HTTPException(
+            status_code=cause.response.status_code,
+            detail=translate_teable_error(error_data, context),
+        ) from e
+    raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.get("/summary")
 async def invoice_summary(
     request: Request,
@@ -583,6 +605,14 @@ async def create_invoice(body: InvoiceFields, request: Request, role: str = Depe
             raise
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to create invoice")
+    except RuntimeError as e:
+        # The service wraps Teable's HTTPStatusError in a RuntimeError (`from
+        # exc`), so the httpx.HTTPError branch above never sees it and a Teable
+        # rejection — a bad option, a missing required field — reached the user
+        # as a 500 carrying raw error text, with no way to know what to fix.
+        # The cause is preserved on the chain; unwrap it and translate exactly
+        # as the branch above would have.
+        _raise_translated_teable_error(e, "creating invoice")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -624,6 +654,8 @@ async def update_invoice(
             raise
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to update invoice")
+    except RuntimeError as e:
+        _raise_translated_teable_error(e, "updating invoice")   # see create_invoice
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

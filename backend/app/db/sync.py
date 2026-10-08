@@ -55,6 +55,34 @@ _last_incremental_at: float = 0.0
 
 # ── Field extractor helpers ──────────────────────────────────────────────────
 
+def _parse_datetime(v) -> Optional[datetime.datetime]:
+    """
+    Convert a Teable timestamp (ISO string or None) to an aware datetime.
+
+    For TIMESTAMPTZ columns such as modified_time. asyncpg rejects a str with
+    "invalid input for query argument $N: ... (expected a datetime.date or
+    datetime.datetime instance, got 'str')".
+
+    This mattered only once lastModifiedTime started being folded into
+    `fields` for ordering: before that the key was never present, the column
+    was always NULL, and the raw-string assignment in the extractors never
+    executed. Afterwards every UPDATE of an existing projects or status row
+    failed on this argument.
+    """
+    if not v:
+        return None
+    try:
+        s = str(v).strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_date(v) -> Optional[datetime.date]:
     """
     Convert a Teable date value (ISO string or None) to a Python datetime.date.
@@ -114,7 +142,7 @@ def _extract_project(fields: dict) -> dict:
         "actual_profit": _num("Actual Profit"),
         "profit_pct":    _num("Profit percentage"),
         "created_time":  fields.get("createdTime"),
-        "modified_time": fields.get("lastModifiedTime"),
+        "modified_time": _parse_datetime(fields.get("lastModifiedTime")),
     }
 
 
@@ -209,7 +237,7 @@ def _extract_status(fields: dict) -> dict:
         "short_status":  _coerce_str(fields.get("Short Status"),              500),
         "detail_status": (str(fields.get("Current Status (Detailed)") or "")[:10000] or None),
         "status":        _coerce_str(fields.get("Status"),                    100),
-        "modified_time": fields.get("lastModifiedTime"),
+        "modified_time": _parse_datetime(fields.get("lastModifiedTime")),
     }
 
 
