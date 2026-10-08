@@ -151,6 +151,19 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = False
     langchain_project:    str = "fintrack"
 
+    # ── Alerting ───────────────────────────────────────────────────────────
+    # Where to send an alert when a background loop dies, sync goes stale,
+    # Postgres is unreachable, the pool is exhausted, or 5xx responses spike.
+    # Either or both; with neither set, the monitor logs once and exits.
+    alert_webhook_url: Optional[str] = None   # Slack / Discord / any JSON POST
+    alert_email_to:    Optional[str] = None   # via Brevo (HF Spaces block SMTP)
+    alert_check_interval_seconds: int = 60
+    alert_cooldown_seconds:       int = 1800  # same key is not re-sent within this
+    alert_sync_stale_seconds:     int = 600   # 20× the 30 s incremental cadence
+    alert_error_rate_threshold:   int = 5     # 5xx responses in the window...
+    alert_error_rate_window_seconds: int = 300  # ...of this many seconds
+    alert_pool_exhausted_checks:  int = 3     # consecutive all-busy samples before paging
+
     model_config = ConfigDict(env_file=".env")
 
 

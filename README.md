@@ -314,6 +314,8 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 | `APP_VIEW_PASSWORD` | Viewer role |
 | `APP_WEB_PASSWORD` | Web role |
 | `APP_ALL_PASSWORD` | All role |
+| `ALERT_WEBHOOK_URL` | Alerting — Slack/Discord/any JSON-POST webhook; fires on dead loop, stale sync, Postgres down, pool exhausted, 5xx spike |
+| `ALERT_EMAIL_TO` | Alerting — email recipient via Brevo; set one or both; verify with `POST /api/admin/alerts/test` |
 | `APP_ADMIN_PASSWORD` | Admin role (stored in HF Secrets only — never in source code) |
 | `APP_SECRET` | HMAC signing key |
 | `POSTGRES_URL` | Aiven PostgreSQL DSN |

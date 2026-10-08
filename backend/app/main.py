@@ -29,6 +29,7 @@ from .db.sync import sync_loop
 from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_session
 from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
+from .services import alerts
 from .routers.deps import require_auth, require_admin
 
 logger = logging.getLogger("fintrack")
@@ -38,11 +39,15 @@ _sync_task:       Optional[asyncio.Task] = None
 _audit_task:      Optional[asyncio.Task] = None
 _aging_refresh_task: Optional[asyncio.Task] = None
 _embed_task:      Optional[asyncio.Task] = None
+# Declared here, not left as a lifespan local: as a local the duration task was
+# invisible to /health, never cancelled at shutdown, and could not be watched.
+_duration_refresh_task: Optional[asyncio.Task] = None
+_alert_task:      Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _sync_task, _audit_task, _aging_refresh_task, _embed_task
+    global _sync_task, _audit_task, _aging_refresh_task, _embed_task, _duration_refresh_task, _alert_task
     logger.info("FinTrack API starting (version=%s)", app.version)
 
     # ── LangChain / LangSmith observability ─────────────────────────────────
@@ -161,6 +166,18 @@ async def lifespan(app: FastAPI):
         _embed_task = asyncio.create_task(_embed_loop(), name="embedding-bg")
         logger.info("Background embedding task started")
 
+    # ── Alerting ─────────────────────────────────────────────────────────
+    # Started unconditionally: the monitor decides for itself whether it has
+    # anywhere to send to, and exits with one log line if not. It reads the
+    # task handles through a provider so alerts.py never imports main.
+    alerts.register_tasks(lambda: {
+        "sync":      _sync_task,
+        "aging":     _aging_refresh_task,
+        "duration":  _duration_refresh_task,
+        "embedding": _embed_task,
+    })
+    _alert_task = asyncio.create_task(alerts.alert_monitor_loop(), name="alert-monitor")
+
     yield
 
     # ── Graceful shutdown ─────────────────────────────────────────────────
@@ -172,7 +189,7 @@ async def lifespan(app: FastAPI):
         except asyncio.TimeoutError:
             logger.warning("Audit queue did not drain within 5 s — some events may be lost")
 
-    for task in (_sync_task, _audit_task, _aging_refresh_task, _embed_task):
+    for task in (_sync_task, _audit_task, _aging_refresh_task, _embed_task, _duration_refresh_task, _alert_task):
         if task and not task.done():
             task.cancel()
             try:
@@ -309,9 +326,15 @@ async def request_middleware(request: Request, call_next):
     except Exception:
         logger.exception("[%s] %s %s — unhandled exception",
                          req_id, request.method, request.url.path)
+        # This path never reaches the status check below — the exception is
+        # re-raised and FastAPI builds the 500 outside this middleware — so
+        # count it here or the error-rate alert misses every crash.
+        alerts.record_server_error()
         raise
 
     duration_ms = int((time.time() - started) * 1000)
+    if response.status_code >= 500:
+        alerts.record_server_error()
     response.headers["X-Request-ID"]        = req_id
     response.headers["X-Response-Time-Ms"]  = str(duration_ms)
 
@@ -412,6 +435,8 @@ async def health():
         "sync_running":      _sync_task is not None and not _sync_task.done(),
         "aging_running":     _aging_refresh_task is not None and not _aging_refresh_task.done(),
         "embed_running":     _embed_task is not None and not _embed_task.done(),
+        "duration_running":  _duration_refresh_task is not None and not _duration_refresh_task.done(),
+        "alerting":          alerts.state(),
         "langsmith_tracing": settings.langchain_tracing_v2 and bool(settings.langchain_api_key),
         "last_sync":         sync_meta,
         "cache":             cache.stats(),
@@ -439,10 +464,23 @@ async def smtp_test(pw: str = "", to: str = ""):
 
 
 
+@app.post("/api/admin/alerts/test", tags=["health"])
+async def alerts_test(_: str = Depends(require_admin)):
+    """Send a real test alert through every configured channel.
+
+    Alerting you cannot verify is not alerting: set ALERT_WEBHOOK_URL and/or
+    ALERT_EMAIL_TO, call this, and confirm the message arrived.
+    """
+    result = await alerts.send_test_alert()
+    if not result["configured"]:
+        result["hint"] = "Set ALERT_WEBHOOK_URL and/or ALERT_EMAIL_TO, then restart."
+    return result
+
+
 @app.post("/api/admin/watchdog", tags=["health"])
 async def watchdog_restart(_: str = Depends(require_admin)):
     """Restart any dead background tasks (sync, aging). Safe to call anytime."""
-    global _sync_task, _aging_refresh_task
+    global _sync_task, _aging_refresh_task, _duration_refresh_task, _alert_task
     restarted = []
     if (_sync_task is None or _sync_task.done()) and (settings.teable_api_token or settings.teable_web_api_token):
         from .db.sync import sync_loop
@@ -454,9 +492,19 @@ async def watchdog_restart(_: str = Depends(require_admin)):
         _aging_refresh_task = asyncio.create_task(invoice_aging_refresh_loop(), name="invoice-aging-refresh")
         restarted.append("aging")
         logger.info("watchdog: aging task restarted")
+    if (_duration_refresh_task is None or _duration_refresh_task.done()) and postgres.get_pool():
+        _duration_refresh_task = asyncio.create_task(project_duration_refresh_loop(), name="project-duration-refresh")
+        restarted.append("duration")
+        logger.info("watchdog: duration task restarted")
+    if _alert_task is None or _alert_task.done():
+        _alert_task = asyncio.create_task(alerts.alert_monitor_loop(), name="alert-monitor")
+        restarted.append("alerts")
+        logger.info("watchdog: alert monitor restarted")
     return {
         "status": "ok",
         "restarted": restarted,
+        "duration_running": _duration_refresh_task is not None and not _duration_refresh_task.done(),
+        "alert_running": _alert_task is not None and not _alert_task.done(),
         "sync_running": _sync_task is not None and not _sync_task.done(),
         "aging_running": _aging_refresh_task is not None and not _aging_refresh_task.done(),
     }
