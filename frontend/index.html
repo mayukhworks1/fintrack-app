@@ -41,6 +41,13 @@
 
     <title>FinTrack — AI Project Finance Manager</title>
 
+    <!-- The API lives on a different origin (the HF Space). Opening its TCP +
+         TLS connection now, while HTML and fonts are still parsing, means the
+         first /api/auth/verify call — the one every render waits on — does not
+         pay a cold handshake on top of its own round trip. Vite substitutes the
+         build-time VITE_API_URL here. -->
+    <link rel="preconnect" href="%VITE_API_URL%" crossorigin />
+
     <!-- Typography — Outfit variable font, self-hosted (see src/index.css).
          Preloaded so text paints in the real face on first frame instead of
          swapping in after a round trip. Both subsets are preloaded: latin

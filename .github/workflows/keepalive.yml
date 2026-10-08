@@ -1,0 +1,31 @@
+name: Keep API warm
+
+# The backend runs on a Hugging Face Space, which sleeps after a period of
+# inactivity. Waking it is a cold start — the container boots, the app runs
+# its full startup (pool, sync, warm-ups) — and the first visitor after a quiet
+# spell waits on all of that before /verify can even answer. No amount of
+# bundle work hides a cold container, so this keeps it from going cold.
+#
+# A GET to /health/live is the lightest request the app serves: no database,
+# no Teable, no auth. The schedule has slack below the Space's idle threshold.
+# If the Space is ever moved to always-on hardware this workflow becomes a
+# harmless no-op and can be deleted.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: GET /health/live
+        env:
+          API_URL: ${{ secrets.VITE_API_URL || 'https://mayukhj24-fintrack-api.hf.space' }}
+        run: |
+          # --fail makes a non-2xx a visible failure in the Actions log rather
+          # than a silent success; --max-time bounds a Space that is mid-boot.
+          curl --silent --show-error --fail --max-time 60 \
+            "${API_URL%/}/health/live" -o /dev/null -w "status=%{http_code} time=%{time_total}s\n"

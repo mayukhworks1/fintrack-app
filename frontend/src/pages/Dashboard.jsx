@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -9,7 +9,8 @@ import {
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
 import ProjectCard from '../components/ProjectCard'
-import CustomInsightBlocks from '../components/CustomInsightBlocks'
+// Lazy: see the Suspense boundary at the render site for why.
+const CustomInsightBlocks = lazy(() => import('../components/CustomInsightBlocks'))
 import InsightWorkbench from '../components/InsightWorkbench'
 import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
@@ -538,11 +539,18 @@ export default function Dashboard() {
         </div>
       )}
 
-      <CustomInsightBlocks
-        blocks={activeCustomBlocks}
-        sourceOptions={dashboardSourceOptions}
-        sourceRowsByKey={customSourceRows}
-      />
+      {/* Deferred: this is the only Dashboard dependency that imports recharts,
+          and it sits at the bottom of the page. Eager, it put the ~373 KB chart
+          chunk (plus d3) on the first-paint critical path for every user, for
+          content they had to scroll to. Lazy, the KPI strip and tables render
+          before the chart library has even started downloading. */}
+      <Suspense fallback={null}>
+        <CustomInsightBlocks
+          blocks={activeCustomBlocks}
+          sourceOptions={dashboardSourceOptions}
+          sourceRowsByKey={customSourceRows}
+        />
+      </Suspense>
 
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}
