@@ -21,6 +21,15 @@ import sys
 import pytest
 
 
+# The module object every already-imported module captured `settings` from.
+# Reloading app.config creates a NEW module and a NEW settings object; modules
+# that did `from ..config import settings` at import time keep the old one.
+# Teardown must put the ORIGINAL back, or every later test that patches
+# `settings` patches an object the code under test no longer reads — which is
+# exactly how test_deployment_health failed only when run after this file.
+_ORIGINAL_CONFIG = sys.modules.get("app.config") or importlib.import_module("app.config")
+
+
 def _reload_config(monkeypatch, *, app_secret=None, app_env=None):
     """Re-import app.config under a given environment and return the module."""
     monkeypatch.delenv("APP_SECRET", raising=False)
@@ -80,6 +89,8 @@ class TestHealthEndpointAgreesWithTheGuard:
 
 
 def teardown_module(_module):
-    # Leave app.config as the rest of the suite expects to find it.
-    sys.modules.pop("app.config", None)
-    importlib.import_module("app.config")
+    # Put the ORIGINAL module object back — not a fresh import. Modules that
+    # captured `settings` at import time hold a reference to the original; a
+    # re-import would leave them reading a stale object for the rest of the
+    # suite, and later tests that patch `settings` would patch the wrong one.
+    sys.modules["app.config"] = _ORIGINAL_CONFIG

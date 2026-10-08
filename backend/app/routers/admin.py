@@ -109,7 +109,20 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
+# The commit a process is running cannot change while it runs. Computed once;
+# before this, every deployment-health call spawned a blocking `git rev-parse`
+# subprocess inside the async handler — on a container that may not even have
+# a .git directory — for a value that was the same every time.
+_GIT_SHA_CACHE: list = []
+
+
 def _git_commit_sha() -> str | None:
+    if not _GIT_SHA_CACHE:
+        _GIT_SHA_CACHE.append(_compute_git_commit_sha())
+    return _GIT_SHA_CACHE[0]
+
+
+def _compute_git_commit_sha() -> str | None:
     """Best-effort deployment commit detection without making health depend on git."""
     for key in ("GIT_COMMIT_SHA", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"):
         value = (os.getenv(key) or "").strip()
@@ -128,6 +141,14 @@ def _git_commit_sha() -> str | None:
         ).strip()
     except Exception:
         return None
+
+
+# deployment-health probe bounds. Each Teable attempt is short because every
+# token for a table runs concurrently; the stage deadline caps the whole Teable
+# step so a slow upstream yields a quick "timed out", not a 10 s diagnostic.
+_TEABLE_PROBE_TIMEOUT_S: float = 2.5
+_TEABLE_STAGE_DEADLINE_S: float = 6.0
+_INFRA_PING_TIMEOUT_S: float = 2.0
 
 
 def _health_item(ok: bool, detail: str, **extra) -> dict:
@@ -1340,29 +1361,48 @@ async def deployment_health(_: str = Depends(require_admin)):
 
     results: dict = {}
     pool = _pg()
+    _t0 = asyncio.get_running_loop().time()
 
-    # PostgreSQL
+    # PostgreSQL. Bounded like the Valkey ping: a pool whose connections are all
+    # busy or whose host has gone away should report that in 2 s, not hang the
+    # whole check behind a 30 s command timeout.
     if pool:
         try:
-            await pool.fetchval("SELECT 1")
+            await asyncio.wait_for(pool.fetchval("SELECT 1"), timeout=_INFRA_PING_TIMEOUT_S)
             results["postgres"] = _health_item(True, "Connected")
+        except asyncio.TimeoutError:
+            results["postgres"] = _health_item(False, f"No response within {_INFRA_PING_TIMEOUT_S:g}s")
         except Exception as exc:
             results["postgres"] = _health_item(False, str(exc))
     else:
         results["postgres"] = _health_item(False, get_init_error() or "Not configured")
 
-    # Valkey / Redis
+    # Valkey / Redis. The client's own socket timeouts are 5 s each, so a down
+    # Valkey could hold this stage for 5 s before the Teable probes even began.
+    # str(asyncio.TimeoutError()) is "", hence the explicit branch.
     try:
         vk = _vk.get_client()
         if vk:
-            await vk.ping()
+            await asyncio.wait_for(vk.ping(), timeout=_INFRA_PING_TIMEOUT_S)
             results["valkey"] = _health_item(True, "Connected")
         else:
             results["valkey"] = _health_item(False, "Not configured (VALKEY_URL missing)")
+    except asyncio.TimeoutError:
+        results["valkey"] = _health_item(False, f"No response within {_INFRA_PING_TIMEOUT_S:g}s")
     except Exception as exc:
         results["valkey"] = _health_item(False, str(exc))
 
     # Teable — check every configured operational table with any configured token.
+    #
+    # This stage was the whole reason the endpoint averaged ~10 s. Tables were
+    # gathered, but within each table the tokens were tried one after another,
+    # each a live Teable request with a 5 s timeout. Three tokens against a slow
+    # Teable is 15 s per table, and the endpoint is as slow as its slowest table.
+    #
+    # Now every token for a table is fired at once with a short timeout and the
+    # first success wins — one round trip whichever token is right — and the
+    # whole stage sits under a hard deadline, so this diagnostic can never take
+    # longer to say "Teable is slow" than Teable is slow.
     teable_tables = {
         "projects": s.teable_table_id,
         "invoices": s.teable_invoice_table_id,
@@ -1371,6 +1411,19 @@ async def deployment_health(_: str = Depends(require_admin)):
     }
     table_checks: dict[str, dict] = {}
     tokens = _all_tokens()
+
+    async def _probe(client, table_id: str, token: str) -> tuple[bool, str]:
+        try:
+            r = await client.get(
+                f"{s.teable_base_url.rstrip('/')}/api/table/{table_id}/record",
+                headers={"Authorization": f"Bearer {token}"},
+                params={**_BASE_PARAMS, "take": 1},
+                timeout=_TEABLE_PROBE_TIMEOUT_S,
+            )
+            return r.status_code < 400, f"HTTP {r.status_code}"
+        except Exception as exc:
+            return False, str(exc)[:180]
+
     async def _check_teable_table(name: str, table_id: str | None):
         if not table_id:
             table_checks[name] = _health_item(False, "Table ID not configured")
@@ -1378,32 +1431,38 @@ async def deployment_health(_: str = Depends(require_admin)):
         if not tokens:
             table_checks[name] = _health_item(False, "No Teable token configured")
             return
-        best_error = "No successful token"
-        async with shared_client(timeout=5) as client:
-            for token in tokens:
-                try:
-                    r = await client.get(
-                        f"{s.teable_base_url.rstrip('/')}/api/table/{table_id}/record",
-                        headers={"Authorization": f"Bearer {token}"},
-                        params={**_BASE_PARAMS, "take": 1},
-                    )
-                    if r.status_code < 400:
-                        table_checks[name] = _health_item(True, f"HTTP {r.status_code}", table_id=table_id)
-                        return
-                    best_error = f"HTTP {r.status_code}"
-                except Exception as exc:
-                    best_error = str(exc)[:180]
-        table_checks[name] = _health_item(False, best_error, table_id=table_id)
+        async with shared_client(timeout=_TEABLE_PROBE_TIMEOUT_S) as client:
+            outcomes = await asyncio.gather(*[_probe(client, table_id, t) for t in tokens])
+        # Tokens are in priority order, so the first success is the preferred one.
+        for ok, detail in outcomes:
+            if ok:
+                table_checks[name] = _health_item(True, detail, table_id=table_id)
+                return
+        # Prefer a concrete HTTP status over a transport error in the summary.
+        errors = [d for _, d in outcomes]
+        best = next((d for d in errors if d.startswith("HTTP")), errors[0] if errors else "No successful token")
+        table_checks[name] = _health_item(False, best, table_id=table_id, attempts=errors)
 
     try:
-        await asyncio.gather(*[_check_teable_table(name, table_id) for name, table_id in teable_tables.items()])
-        results["teable"] = _health_item(
-            all(item.get("ok") for item in table_checks.values()),
-            "All configured tables reachable" if all(item.get("ok") for item in table_checks.values()) else "One or more tables failed",
-            tables=table_checks,
+        await asyncio.wait_for(
+            asyncio.gather(*[_check_teable_table(name, table_id) for name, table_id in teable_tables.items()]),
+            timeout=_TEABLE_STAGE_DEADLINE_S,
         )
+    except asyncio.TimeoutError:
+        for name in teable_tables:
+            table_checks.setdefault(name, _health_item(False, f"Timed out after {_TEABLE_STAGE_DEADLINE_S:g}s"))
     except Exception as exc:
-        results["teable"] = _health_item(False, str(exc), tables=table_checks)
+        for name in teable_tables:
+            table_checks.setdefault(name, _health_item(False, str(exc)[:180]))
+
+    all_ok = bool(table_checks) and all(item.get("ok") for item in table_checks.values())
+    results["teable"] = _health_item(
+        all_ok,
+        "All configured tables reachable" if all_ok else "One or more tables failed",
+        tables=table_checks,
+        probe={"tokens": len(tokens), "timeout_s": _TEABLE_PROBE_TIMEOUT_S,
+               "deadline_s": _TEABLE_STAGE_DEADLINE_S, "mode": "parallel"},
+    )
 
     # Email (Brevo)
     results["email"] = {
@@ -1568,6 +1627,8 @@ async def deployment_health(_: str = Depends(require_admin)):
         "frontend_url": s.frontend_url,
         "hf_space_id": s.hf_space_id,
     }
+    # How long the check itself took — the number that used to be ~10,000.
+    results["timing_ms"] = int((asyncio.get_running_loop().time() - _t0) * 1000)
     results["overall"] = all(v.get("ok") for v in results.values() if isinstance(v, dict) and "ok" in v)
     return results
 
