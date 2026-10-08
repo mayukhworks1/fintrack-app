@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
@@ -224,6 +225,12 @@ def _cors_origins() -> list[str]:
     )
     return list(_DEV_CORS_ORIGINS)
 
+
+# Compress responses. Every JSON body — the Dashboard's 400-invoice list, the
+# project mirror, audit pages — went over the wire uncompressed; there is no
+# proxy in front of the HF Space to do it. minimum_size keeps tiny responses
+# (health checks, auth verify) uncompressed, where gzip costs more than it saves.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
