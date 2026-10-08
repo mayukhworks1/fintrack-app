@@ -35,6 +35,7 @@ class TestSourceCachePrefixes:
 
     @pytest.mark.parametrize("source,prefix", [
         ("web_invoices", "webinv:"),
+        ("web_projects", "webproj:"),
         ("invoices",     "invoice:"),
         ("projects",     "project:"),
         ("status",       "status:"),
@@ -43,9 +44,16 @@ class TestSourceCachePrefixes:
         assert cache_prefixes_for(source) == (prefix,)
 
     def test_the_naive_convention_would_still_be_wrong(self):
-        """Guards the regression rather than the fix: three of four disagree."""
-        mismatched = [s for s, p in SOURCE_CACHE_PREFIXES.items() if p != (f"{s}:",)]
-        assert sorted(mismatched) == ["invoices", "projects", "web_invoices"]
+        """Guards the regression rather than the fix.
+
+        Asserts the property — most sources disagree with f"{source}:", so
+        reverting to it would break them — rather than a snapshot of which ones.
+        The previous exact-list form failed the moment web_projects was added,
+        flagging a correctly-registered source as a regression.
+        """
+        mismatched = {s for s, p in SOURCE_CACHE_PREFIXES.items() if p != (f"{s}:",)}
+        assert {"invoices", "projects", "web_invoices"} <= mismatched
+        assert len(mismatched) > len(SOURCE_CACHE_PREFIXES) - len(mismatched)
 
     def test_an_unmapped_source_falls_back_rather_than_raising(self):
         assert cache_prefixes_for("something_new") == ("something_new:",)

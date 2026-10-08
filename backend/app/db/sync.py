@@ -170,6 +170,38 @@ def _extract_web_invoice(fields: dict) -> dict:
     }
 
 
+def _extract_web_project(fields: dict) -> dict:
+    """Extract typed columns from the web projects Teable table.
+
+    Only the columns list_projects filters and sorts on are typed out; the rest
+    of the record stays in the `fields` JSONB, so a new Teable field needs no
+    migration.
+    """
+    def _num(k):
+        v = fields.get(k)
+        try:
+            return float(v) if v not in (None, "", []) else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "project_name":      _coerce_str(fields.get("Project Name"), 255),
+        "client":            _coerce_str(fields.get("Client"),       255),
+        "status":            _coerce_str(fields.get("Status"),        60),
+        "priority":          _coerce_str(fields.get("Priority"),      60),
+        "project_lead":      _coerce_str(fields.get("Project Lead"), 255),
+        "progress_pct":      _num("Progress (%)"),
+        # _parse_date returns datetime.date (or None) — asyncpg needs that for
+        # DATE columns; a string raises "invalid input for $N".
+        "est_start_date":    _parse_date(fields.get("Est. Start Date")),
+        "est_end_date":      _parse_date(fields.get("Est. End Date")),
+        "actual_start_date": _parse_date(fields.get("Actual Start Date")),
+        "actual_end_date":   _parse_date(fields.get("Actual End Date")),
+        "estimated_budget":  _num("Estimated Budget"),
+        "client_charge":     _num("Client Charge"),
+    }
+
+
 def _extract_status(fields: dict) -> dict:
     return {
         "client":        _coerce_str(fields.get("Client"),                    255),
@@ -193,6 +225,7 @@ SOURCE_CACHE_PREFIXES: dict[str, tuple[str, ...]] = {
     "projects":     ("project:",),
     "invoices":     ("invoice:",),
     "web_invoices": ("webinv:",),
+    "web_projects": ("webproj:",),
     "status":       ("status:",),
 }
 
@@ -214,6 +247,8 @@ def _table_config(table_id: str) -> Optional[tuple]:
         return ("invoices", "invoices_mirror", _extract_invoice)
     if table_id == settings.teable_web_invoice_table_id:
         return ("web_invoices", "web_invoices_mirror", _extract_web_invoice)
+    if table_id == settings.teable_web_projects_table_id:
+        return ("web_projects", "web_projects_mirror", _extract_web_project)
     if table_id == settings.teable_status_table_id:
         return ("status", "status_mirror", _extract_status)
     return None
@@ -651,6 +686,9 @@ async def run_sync(incremental: bool = False) -> None:
     if settings.teable_web_invoice_table_id and (web_token or any_token):
         tasks.append(("web_invoices", "web_invoices_mirror",
                        settings.teable_web_invoice_table_id, web_token or any_token, _extract_web_invoice))
+    if settings.teable_web_projects_table_id and (web_token or any_token):
+        tasks.append(("web_projects", "web_projects_mirror",
+                       settings.teable_web_projects_table_id, web_token or any_token, _extract_web_project))
     if settings.teable_status_table_id and (main_token or any_token):
         tasks.append(("status", "status_mirror",
                        settings.teable_status_table_id, main_token or any_token, _extract_status))

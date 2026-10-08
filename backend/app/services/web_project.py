@@ -8,10 +8,12 @@ Accessible only to the "all" role.
 """
 import asyncio
 import json
+import logging
 from typing import Any, Optional
 import httpx
 from ..utils.http import shared_client
 from ..config import settings
+from ..db.postgres import get_pool
 from ..utils.cache import cache
 
 # ── Field IDs ────────────────────────────────────────────────────────────────
@@ -108,6 +110,41 @@ _TTL_ALL     = 30
 _TTL_SUMMARY = 30
 
 
+logger = logging.getLogger("fintrack.web_projects")
+
+
+async def _mirror_write_through(teable_id: str, fields: dict | None, *, deleted: bool = False) -> None:
+    """Apply a just-committed Teable write to the PG mirror immediately.
+
+    Reads are served from web_projects_mirror, which otherwise only catches up
+    via the Teable webhook or the 30 s incremental sync. Without this, saving a
+    project and landing back on the list can read the write back stale, so the
+    change looks lost.
+
+    Best-effort: Teable is the source of truth and the mirror is a replica, so a
+    failure here is logged and swallowed rather than failing a write that has
+    already succeeded. The next sync pass reconciles it.
+    """
+    pool = get_pool()
+    if not pool or not teable_id:
+        return
+    try:
+        if deleted:
+            await pool.execute(
+                "UPDATE web_projects_mirror SET deleted_at = NOW() WHERE teable_id = $1",
+                teable_id,
+            )
+            return
+        if fields is None:
+            return
+        from ..db.sync import upsert_record, _extract_web_project
+        await upsert_record(
+            pool, "web_projects", "web_projects_mirror", teable_id, fields, _extract_web_project
+        )
+    except Exception as exc:
+        logger.warning("mirror write-through failed for %s (sync will reconcile): %s", teable_id, exc)
+
+
 def _bust_project_cache() -> None:
     cache.bust(prefix="webproj:")
 
@@ -179,6 +216,16 @@ class WebProjectService:
         cache_key = f"webproj:list:{status}:{client}:{priority}:{limit}:{skip}:{order_by}:{order}"
 
         async def _load():
+            # Serve from the PG mirror when it is populated. The background sync
+            # and the Teable webhook both keep it current, and it turns a remote
+            # round trip into a local indexed query.
+            mirrored = await self._list_from_pg(
+                status=status, client=client, priority=priority,
+                limit=limit, skip=skip, order_by=order_by, order=order,
+            )
+            if mirrored is not None:
+                return mirrored
+
             params: dict[str, Any] = {
                 "fieldKeyType": "name",
                 "take": limit,
@@ -218,6 +265,83 @@ class WebProjectService:
             return {"records": data.get("records", []), "total": data.get("total", 0)}
 
         return await cache.get_or_set(cache_key, ttl=_TTL_LIST, loader=_load)
+
+    # Teable field name -> web_projects_mirror column, for filtering and ORDER BY.
+    # Fields absent here have no typed column and fall back to the JSONB payload.
+    _PG_SORT_COLUMNS = {
+        "Project Name":      "project_name",
+        "Client":            "client",
+        "Status":            "status",
+        "Priority":          "priority",
+        "Project Lead":      "project_lead",
+        "Progress (%)":      "progress_pct",
+        "Est. Start Date":   "est_start_date",
+        "Est. End Date":     "est_end_date",
+        "Actual Start Date": "actual_start_date",
+        "Actual End Date":   "actual_end_date",
+        "Estimated Budget":  "estimated_budget",
+        "Client Charge":     "client_charge",
+    }
+
+    async def _list_from_pg(
+        self, *, status, client, priority, limit, skip, order_by, order,
+    ) -> dict | None:
+        """One page of projects from the mirror, or None to fall back to Teable.
+
+        Returns None whenever the mirror cannot be trusted to answer — no pool,
+        an empty table (sync has not run yet on a fresh deploy), or a query
+        error — so the caller drops back rather than presenting an incomplete
+        list as a complete one.
+        """
+        pool = get_pool()
+        if not pool:
+            return None
+        try:
+            where = ["deleted_at IS NULL"]
+            params: list[Any] = []
+            for column, value in (("status", status), ("client", client), ("priority", priority)):
+                if value:
+                    params.append(value)
+                    where.append(f"{column} = ${len(params)}")
+
+            direction = "DESC" if str(order).lower() == "desc" else "ASC"
+            sort_col = self._PG_SORT_COLUMNS.get(order_by)
+            if sort_col:
+                order_sql = f"ORDER BY {sort_col} {direction} NULLS LAST, teable_id"
+            else:
+                params.append(order_by)
+                order_sql = f"ORDER BY fields->>${len(params)} {direction} NULLS LAST, teable_id"
+
+            params.extend([limit, skip])
+            rows = await pool.fetch(
+                f"""
+                SELECT teable_id, fields, COUNT(*) OVER() AS total_count
+                FROM web_projects_mirror
+                WHERE {' AND '.join(where)}
+                {order_sql}
+                LIMIT ${len(params) - 1} OFFSET ${len(params)}
+                """,
+                *params,
+            )
+
+            if not rows:
+                # Distinguish "no matches" from "mirror not populated yet";
+                # only the former is a real empty result.
+                has_any = await pool.fetchval(
+                    "SELECT 1 FROM web_projects_mirror WHERE deleted_at IS NULL LIMIT 1"
+                )
+                if not has_any:
+                    return None
+                return {"records": [], "total": 0}
+
+            records = []
+            for row in rows:
+                fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
+                records.append({"id": row["teable_id"], "fields": fields or {}})
+            return {"records": records, "total": rows[0]["total_count"]}
+        except Exception as exc:
+            logger.warning("web_projects_mirror read failed, falling back to Teable: %s", exc)
+            return None
 
     # ── Names (shared dropdown — accessible to web + all roles) ──────────
 
@@ -267,7 +391,9 @@ class WebProjectService:
             res.raise_for_status()
         _bust_project_cache()
         data = res.json()
-        return data.get("records", [{}])[0]
+        created = data.get("records", [{}])[0]
+        await _mirror_write_through(created.get("id"), created.get("fields"))
+        return created
 
     # ── Update ────────────────────────────────────────────────────────────
 
@@ -281,7 +407,9 @@ class WebProjectService:
             res = await client_.patch(url, json=body, headers=self._headers)
             res.raise_for_status()
         _bust_project_cache()
-        return res.json()
+        updated = res.json()
+        await _mirror_write_through(record_id, updated.get("fields"))
+        return updated
 
     # ── Delete ────────────────────────────────────────────────────────────
 
@@ -292,6 +420,7 @@ class WebProjectService:
             res.raise_for_status()
         _bust_project_cache()
         _bust_resource_cache()   # resources for this project are now orphaned
+        await _mirror_write_through(record_id, None, deleted=True)
 
     # ── Summary ───────────────────────────────────────────────────────────
 

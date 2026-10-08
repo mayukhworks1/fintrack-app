@@ -13,6 +13,7 @@ Tables created on first startup:
   projects_mirror  — Teable project records (full replica)
   invoices_mirror  — Teable invoice records (full replica)
   web_invoices_mirror — Teable web invoice records (full replica)
+  web_projects_mirror — Teable web project records (full replica)
   status_mirror    — Teable Current Status table replica (tblgdbV6T4Ly9n6YNCU)
   record_history   — field-level change log for mirrored records
   sync_log         — sync run metadata
@@ -405,6 +406,33 @@ CREATE TABLE IF NOT EXISTS web_invoices_mirror (
 CREATE INDEX IF NOT EXISTS wim_status_idx  ON web_invoices_mirror (payment_status);
 CREATE INDEX IF NOT EXISTS wim_project_idx ON web_invoices_mirror (project);
 CREATE INDEX IF NOT EXISTS wim_date_idx    ON web_invoices_mirror (raised_date DESC);
+
+-- Web projects replica. Typed columns cover only what list_projects filters and
+-- sorts on; everything else is read from the `fields` JSONB, so adding a Teable
+-- field needs no migration here.
+CREATE TABLE IF NOT EXISTS web_projects_mirror (
+    teable_id        VARCHAR(60)   PRIMARY KEY,
+    synced_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    deleted_at       TIMESTAMPTZ,
+    fields           JSONB         NOT NULL DEFAULT '{}'::jsonb,
+
+    project_name     VARCHAR(255),
+    client           VARCHAR(255),
+    status           VARCHAR(60),
+    priority         VARCHAR(60),
+    project_lead     VARCHAR(255),
+    progress_pct     NUMERIC(6,2),
+    est_start_date   DATE,
+    est_end_date     DATE,
+    actual_start_date DATE,
+    actual_end_date  DATE,
+    estimated_budget NUMERIC(15,2),
+    client_charge    NUMERIC(15,2)
+);
+CREATE INDEX IF NOT EXISTS wpm_status_idx   ON web_projects_mirror (status);
+CREATE INDEX IF NOT EXISTS wpm_client_idx   ON web_projects_mirror (client);
+CREATE INDEX IF NOT EXISTS wpm_priority_idx ON web_projects_mirror (priority);
+CREATE INDEX IF NOT EXISTS wpm_name_idx     ON web_projects_mirror (project_name);
 
 -- ── Current Status table mirror (tblgdbV6T4Ly9n6YNCU) ────────────────────────
 CREATE TABLE IF NOT EXISTS status_mirror (
