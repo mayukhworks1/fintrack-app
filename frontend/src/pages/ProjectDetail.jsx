@@ -313,7 +313,7 @@ export default function ProjectDetail() {
 
   // ── View ───────────────────────────────────────────────────────────────
   return (
-    <div className="ft-cascade">
+    <div className="animate-fade-in">
 
       {/* ── Hero header ─────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 pt-5 pb-6"

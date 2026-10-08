@@ -73,8 +73,8 @@ export default function PublicLayout({ children }) {
           borderBottom: '1px solid var(--card-border)',
         }}
       >
-        <nav className="ft-wrap flex items-center gap-2 sm:gap-3"
-             style={{ minHeight: 60 }}>
+        <nav className="mx-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-6"
+             style={{ maxWidth: 1120, minHeight: 60 }}>
           {/* Padded to a real target — as a bare 30px mark plus text this was
               under the ~44px a thumb can hit. */}
           <Link to="/" className="flex items-center gap-2"
@@ -227,7 +227,7 @@ export default function PublicLayout({ children }) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="ft-wrap pb-10">
+      <footer className="mx-auto w-full px-4 sm:px-6 pb-10" style={{ maxWidth: 1120 }}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6"
              style={{ borderTop: '1px solid var(--card-border)' }}>
           <p className="text-xs flex items-center gap-2 flex-wrap justify-center sm:justify-start"

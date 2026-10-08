@@ -331,7 +331,7 @@ export default function Report() {
       ]
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 ft-cascade">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 animate-fade-in">
 
       {/* ── Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">

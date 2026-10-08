@@ -510,7 +510,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
   ]
 
   return (
-    <div className="p-4 md:p-6 pb-24 space-y-5 ft-cascade" ref={printRef}>
+    <div className="p-4 md:p-6 max-w-[1400px] mx-auto pb-24 space-y-5" ref={printRef}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border p-4 sm:p-5" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>

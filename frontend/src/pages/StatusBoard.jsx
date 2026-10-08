@@ -481,7 +481,7 @@ export default function StatusBoard() {
 
   return (
     <div className="relative min-h-screen" style={boardVars}>
-      <div className="p-4 md:p-6 space-y-4 pb-28 ft-cascade">
+      <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 pb-28">
 
         {/* ── Page header ── */}
         <div

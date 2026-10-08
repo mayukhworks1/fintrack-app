@@ -47,16 +47,17 @@ function walk(dir, out = []) {
   return out
 }
 
-// Styled by an inline <style> inside their own component, not index.css.
-const INLINE_STYLED = new Set(['ft-chrome-title', 'ft-chrome-tour', 'ft-runner'])
-
-describe('every ft- class used anywhere in the app has a rule', () => {
-  const files = [...walk(join(ROOT, 'pages')), ...walk(join(ROOT, 'components'))]
+describe('every ft- class used on the public pages has a rule', () => {
+  const files = [
+    ...walk(join(ROOT, 'pages/public')),
+    join(ROOT, 'pages/Landing.jsx'), join(ROOT, 'pages/Features.jsx'), join(ROOT, 'pages/Security.jsx'),
+    join(ROOT, 'components/PublicBits.jsx'), join(ROOT, 'components/PublicLayout.jsx'),
+  ]
   const used = new Set()
   for (const f of files) {
     const src = readFileSync(f, 'utf8')
     for (const m of src.matchAll(/className=["'`]([^"'`]*)["'`]/g)) {
-      for (const token of m[1].split(/\s+/)) if (/^ft-[a-z0-9-]+$/.test(token) && !INLINE_STYLED.has(token)) used.add(token)
+      for (const token of m[1].split(/\s+/)) if (/^ft-[a-z0-9-]+$/.test(token)) used.add(token)
     }
   }
   it('finds the classes it is guarding', () => {

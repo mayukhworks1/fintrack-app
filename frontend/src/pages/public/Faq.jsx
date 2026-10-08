@@ -123,7 +123,7 @@ export default function Faq() {
       </section>
 
       {/* Semantic Search & Quick Topic Chips */}
-      <section className="ft-wrap pt-2 pb-8">
+      <section className="mx-auto px-4 sm:px-6 pt-2 pb-8" style={{ maxWidth: 1120 }}>
         <Reveal className="p-4 sm:p-6 rounded-2xl border transition-all"
                 style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -205,7 +205,8 @@ export default function Faq() {
       </section>
 
       {/* Two columns above 900px: a standing index on the left and the answers on the right. */}
-      <section className="ft-wrap pb-16 sm:pb-24 ft-faq-layout">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24 ft-faq-layout"
+               style={{ maxWidth: 1120 }}>
         <nav className="ft-faq-index" aria-label="Question groups">
           <p className="ft-eyebrow mb-3" style={{ fontSize: '0.6rem' }}>On this page</p>
           <ul className="m-0 p-0 flex flex-col gap-1" style={{ listStyle: 'none' }}>

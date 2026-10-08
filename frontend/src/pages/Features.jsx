@@ -275,8 +275,8 @@ export default function Features() {
     <PublicLayout>
       <section className="relative overflow-hidden">
         <Grain />
-        <div ref={headRef} className="ft-wrap relative pt-12 pb-8 sm:pt-16"
-             style={{ zIndex: 1 }}>
+        <div ref={headRef} className="relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
+             style={{ maxWidth: 1120, zIndex: 1 }}>
           <p className="ft-eyebrow ft-up mb-3">Features</p>
           <h1 className="ft-display mb-4"
               style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
@@ -292,7 +292,7 @@ export default function Features() {
         </div>
       </section>
 
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <div className="grid gap-5 lg:gap-7"
              style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
           <div className="ft-explorer">
@@ -437,7 +437,7 @@ export default function Features() {
           here beside the other working simulators, where someone has already
           decided they want detail. */}
       {/* ── 3D Architecture & Live Motion Showcase ──────────────────────── */}
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Head n="02" eyebrow="3D Architecture & Live Motion" title="Interactive visual blueprint & real-time telemetry">
           Explore FinTrack's single-ledger architecture in 3D. Inspect how natural language queries transpiled into parameterized SQL, how GST/TDS are segregated, and watch live operation streams in action.
         </Head>
@@ -447,7 +447,7 @@ export default function Features() {
       </section>
 
       {/* ── Working Capital & ROI Simulator ─────────────────────────────── */}
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Head n="03" eyebrow="Working Capital & ROI" title="Calculate your capital unlocked and interest saved">
           Simulate how much floating capital is currently locked in aging receivables, and calculate the exact annual interest drag saved when invoices and GST/TDS are reconciled automatically.
         </Head>
@@ -456,7 +456,7 @@ export default function Features() {
         </Reveal>
       </section>
 
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Reveal className="ft-shine rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
                 style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <h2 className="ft-display mb-3"

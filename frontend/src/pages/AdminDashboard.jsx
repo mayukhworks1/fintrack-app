@@ -181,7 +181,7 @@ export default function AdminDashboard({ embedded = false }) {
   /* ── Embedded inside Layout ── */
   if (embedded) {
     return (
-      <div className="p-2 sm:p-4 space-y-4 w-full ft-cascade">
+      <div className="p-2 sm:p-4 space-y-4 max-w-[1400px] mx-auto w-full">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'rgba(220,38,38,0.10)' }}>
@@ -228,7 +228,7 @@ export default function AdminDashboard({ embedded = false }) {
 
       {tabBar}
 
-      <main className="flex-1 p-2 sm:p-4 w-full">
+      <main className="flex-1 p-2 sm:p-4 max-w-[1400px] mx-auto w-full">
         {content}
       </main>
     </div>

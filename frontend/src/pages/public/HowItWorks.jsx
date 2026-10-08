@@ -47,7 +47,7 @@ export default function HowItWorks() {
         </PageHead>
       </section>
 
-      <section className="ft-wrap pb-16 sm:pb-20">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-20" style={{ maxWidth: 1120 }}>
         <Head n="01" eyebrow="The shape of it" title="Three steps, and one set of rows underneath">
           Records stay where they are, a mirror makes them fast, and questions
           are compiled rather than guessed. Everything else in the product is a
@@ -131,7 +131,7 @@ export default function HowItWorks() {
         </div>
       )}
 
-      <section id="trust" className="ft-wrap pb-16 sm:pb-24">
+      <section id="trust" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Rule className="mb-14" />
         <Head n="03" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">

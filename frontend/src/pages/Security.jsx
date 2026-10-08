@@ -74,8 +74,8 @@ export default function Security() {
     <PublicLayout>
       <section className="relative overflow-hidden">
         <Grain />
-        <div ref={head} className="ft-wrap relative pt-12 pb-8 sm:pt-16"
-             style={{ zIndex: 1 }}>
+        <div ref={head} className="relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
+             style={{ maxWidth: 1120, zIndex: 1 }}>
           <p className="ft-eyebrow ft-up mb-3">Security &amp; access</p>
           <h1 className="ft-display mb-4"
               style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
@@ -93,7 +93,7 @@ export default function Security() {
       </section>
 
       {/* ── interactive matrix ── */}
-      <section className="ft-wrap pb-14">
+      <section className="mx-auto px-4 sm:px-6 pb-14" style={{ maxWidth: 1120 }}>
         <Reveal className="rounded-2xl p-4 sm:p-6"
                 style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
           <div role="tablist" aria-label="Roles" className="flex gap-2 overflow-x-auto pb-3">
@@ -166,7 +166,7 @@ export default function Security() {
           split it stopped being rendered anywhere at all, which is a poor
           fate for the one section that tells a visitor none of what they
           are looking at belongs to anyone. */}
-      <section id="privacy" className="ft-wrap pb-16 sm:pb-24">
+      <section id="privacy" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <div className="rounded-xl p-6 sm:p-10"
              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
           <Head eyebrow="Access" title="This page is public. Your data is not.">
@@ -190,7 +190,7 @@ export default function Security() {
           where the model's authority stops and what enforces it, which is the
           same question the rest of this page answers. The narrative that
           introduces them stays there and links across. */}
-      <section id="mechanisms" className="ft-wrap pb-16 sm:pb-24">
+      <section id="mechanisms" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Head n="02" eyebrow="Why you can trust the answer"
               title="Checkable by construction, not by policy">
           Plenty of tools promise not to make things up. These are the four
@@ -206,14 +206,14 @@ export default function Security() {
         </Grid>
       </section>
 
-      <section className="ft-wrap pb-14">
+      <section className="mx-auto px-4 sm:px-6 pb-14" style={{ maxWidth: 1120 }}>
         <Head n="03" eyebrow="Tamper-proof trail" title="Every state change is cryptographically attributed">
           Inspect how role overrides, invoice updates, and query executions produce verifiable SHA-256 event checksums, and test immediate server-side session termination across active devices.
         </Head>
         <AuditTrailSandbox />
       </section>
 
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Stagger className="grid gap-4 sm:gap-5"
                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
           {PILLARS.map(({ icon: Icon, title, body }) => (
@@ -230,7 +230,7 @@ export default function Security() {
         </Stagger>
       </section>
 
-      <section className="ft-wrap pb-16 sm:pb-24">
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Reveal className="ft-shine rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
                 style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
           <ShieldCheck size={26} className="mx-auto mb-3" aria-hidden="true" />

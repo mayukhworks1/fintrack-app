@@ -18,7 +18,7 @@ export default function EmptyState({ icon, title, subtitle, action, compact = fa
     >
       {icon && (
         <div
-          className="ft-empty-icon flex items-center justify-center rounded-2xl mb-4 flex-shrink-0"
+          className="flex items-center justify-center rounded-2xl mb-4 flex-shrink-0"
           style={{
             width: compact ? '2.75rem' : '3.5rem',
             height: compact ? '2.75rem' : '3.5rem',
