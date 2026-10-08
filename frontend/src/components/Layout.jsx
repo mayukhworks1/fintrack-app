@@ -439,7 +439,11 @@ export default function Layout({ children, style }) {
           style={{ background: 'var(--bg-base)' }}
           tabIndex={-1}
         >
-          {children}
+          {/* Keyed on the path: every page arrives the same way, and the
+              sections inside (ft-cascade) follow one after another. */}
+          <div key={location.pathname} className="ft-route ft-page h-full">
+            {children}
+          </div>
         </main>
 
         {/* ── Mobile bottom navigation ── */}

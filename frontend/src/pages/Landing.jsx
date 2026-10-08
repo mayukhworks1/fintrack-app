@@ -83,8 +83,8 @@ export default function Landing() {
       <section ref={heroLight} className="relative" style={{ overflow: 'clip' }}>
         <Grain />
 
-        <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
-             style={{ maxWidth: 1120, zIndex: 1 }}>
+        <div className="ft-wrap relative pt-9 pb-7 sm:pt-14"
+             style={{ zIndex: 1 }}>
           <Rising className="ft-drift" style={{ maxWidth: 820 }}>
             <span className="ft-up inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
                   style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
@@ -140,8 +140,8 @@ export default function Landing() {
         </div>
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
-        <div id="try" className="relative mx-auto px-4 sm:px-6 pb-12 sm:pb-16"
-             style={{ maxWidth: 1120, zIndex: 1 }}>
+        <div id="try" className="ft-wrap relative pb-12 sm:pb-16"
+             style={{ zIndex: 1 }}>
           <Tilted><DemoWorkspace /></Tilted>
         </div>
       </section>
@@ -151,7 +151,7 @@ export default function Landing() {
           questions: the sandbox proves the thing works by letting you drive
           it, and the film says what it is for in the time someone will
           actually give a page they have just landed on. */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 940 }}>
+      <section className="ft-wrap pb-14 sm:pb-20">
         <Reveal>
           <ProductFilm />
         </Reveal>
@@ -160,7 +160,7 @@ export default function Landing() {
       {/* ── Counts ──────────────────────────────────────────────────────
           Product facts — how many modules, how many roles — not workspace
           figures. They describe the software, so they are safe to show. */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+      <section className="ft-wrap pb-14 sm:pb-20">
         <Stagger className="grid gap-4 sm:gap-5"
                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
           {[
@@ -184,7 +184,7 @@ export default function Landing() {
       </section>
 
       {/* ── The problem ─────────────────────────────────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+      <section className="ft-wrap pb-14 sm:pb-20">
         <Head n="01" eyebrow="Why this exists"
               title="Three things go wrong when delivery and money live apart">
           None of them are exotic. They are what happens when the board, the
@@ -207,7 +207,7 @@ export default function Landing() {
           The full cards live on /features, where there is room to say what
           each one does. Here they are a contents page: what ships, at a
           glance, and one link to the detail. */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+      <section className="ft-wrap pb-16 sm:pb-24">
         <Head n="02" eyebrow="What is inside" title="Eleven modules, one source of truth">
           Records live in one place and every module reads the same rows, so a
           number on the dashboard and a number in a report cannot disagree.
@@ -260,7 +260,7 @@ export default function Landing() {
 
       {/* ── Where to go next ─────────────────────────────────────────────
           A short page only works if it hands you somewhere. */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+      <section className="ft-wrap pb-16 sm:pb-24">
         <Rule className="mb-14" />
         <Head n="03" eyebrow="Read on" title="The rest of it, in three pages">
           Split up rather than stacked, because a page that takes seventeen

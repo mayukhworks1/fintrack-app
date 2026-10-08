@@ -2578,7 +2578,7 @@ export default function PagesManager() {
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
   return (
-    <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1240, margin:'0 auto' }}>
+    <div className="ft-cascade" style={{ padding:isMobile?'16px':'28px 32px' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
         <div>

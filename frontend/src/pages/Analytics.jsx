@@ -913,7 +913,7 @@ export default function Analytics() {
 
   return (
     <div
-      className="p-4 sm:p-6 space-y-5 animate-fade-in rounded-[28px]"
+      className="p-4 sm:p-6 space-y-5 ft-cascade rounded-[28px]"
       style={{
         ...executiveVars,
         background: dark

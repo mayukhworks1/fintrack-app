@@ -390,7 +390,7 @@ export default function Dashboard() {
 
   return (
     <div
-      className="p-4 sm:p-5 space-y-5 animate-fade-in rounded-[28px]"
+      className="p-4 sm:p-5 space-y-5 ft-cascade rounded-[28px]"
       style={{
         ...executiveVars,
         background: dark
@@ -474,7 +474,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 ft-cascade">
               {[
                 { label: 'Revenue', value: s?.total_billed, format: inr, tone: 'var(--text-1)' },
                 { label: 'Margin', value: margin, format: v => formatPct(v, 2), tone: margin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)' },

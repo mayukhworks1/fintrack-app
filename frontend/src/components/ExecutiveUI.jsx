@@ -3,7 +3,7 @@ import { useTilt } from '../hooks/useTilt'
 
 export function ExecutiveShell({ children, className = '', flush = false }) {
   return (
-    <div className={clsx('animate-fade-in space-y-5', flush ? '' : 'p-4 sm:p-6', className)}>
+    <div className={clsx('ft-cascade space-y-5', flush ? '' : 'p-4 sm:p-6', className)}>
       {children}
     </div>
   )

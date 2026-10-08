@@ -271,7 +271,7 @@ export default function Profile() {
   const hasPassword = Boolean(profile?.password_changed_at || profile?.email)
 
   return (
-    <div className="p-4 sm:p-6 max-w-2xl mx-auto w-full space-y-4">
+    <div className="p-4 sm:p-6 max-w-2xl mx-auto w-full space-y-4 ft-cascade">
 
       {/* ── Hero header ── */}
       <Card className="flex items-center gap-4">

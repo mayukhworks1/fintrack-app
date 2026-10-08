@@ -58,8 +58,8 @@ export function Rule({ className = '', fromLeft = false, style }) {
  */
 export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 3.2rem)' }) {
   return (
-    <Rising className="relative mx-auto px-4 sm:px-6 pt-10 pb-8 sm:pt-14"
-            style={{ maxWidth: 1120, zIndex: 1 }}>
+    <Rising className="ft-wrap relative pt-10 pb-8 sm:pt-14"
+            style={{ zIndex: 1 }}>
       <p className="ft-eyebrow ft-up mb-3">{eyebrow}</p>
       <h1 className="ft-display mb-4" style={{ fontSize: size, lineHeight: 1.08 }}>
         {lines.map((line, i) => (
@@ -137,7 +137,7 @@ export function Grid({ min = 300, children, className = '', ...rest }) {
  */
 export function Closing({ title, children, cta, to, next }) {
   return (
-    <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+    <section className="ft-wrap pb-16 sm:pb-24">
       {/* It was a flat blue rectangle. A slab that size is the last thing on
           every page, so it is worth more than one colour: a drifting mesh
           behind it, the mark's hairline along the top, and grain over the

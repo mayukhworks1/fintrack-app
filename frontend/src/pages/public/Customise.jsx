@@ -43,7 +43,7 @@ export default function Customise() {
         </PageHead>
       </section>
 
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+      <section className="ft-wrap pb-14 sm:pb-20">
         <Head n="01" eyebrow="Three tiers"
               title="Who does the work, and what it touches">
           In the order a buyer meets them: what you change in the app without
