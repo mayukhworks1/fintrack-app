@@ -244,6 +244,35 @@ def owner_scope_email(request: Request) -> str | None:
     return email if email else None
 
 
+async def _reject_if_legacy_session_revoked(token_hint: str) -> None:
+    """401 when a legacy token's login_sessions row was explicitly deactivated.
+
+    One indexed read (ls_token_idx). Newest row wins because tokens are
+    `expiry:role` with no nonce, so two same-role logins in the same second
+    share a hint; revoking one revokes the other, which is correct — they are
+    the same credential. No pool or no row means allow: this closes the
+    logout gap without turning a database blip into a mass logout.
+    """
+    pool = get_pool()
+    if not pool:
+        return
+    try:
+        active = await pool.fetchval(
+            """
+            SELECT is_active FROM login_sessions
+             WHERE token_hint = $1
+             ORDER BY created_at DESC
+             LIMIT 1
+            """,
+            token_hint,
+        )
+    except Exception as exc:
+        logger.warning("legacy session revocation check failed (allowing): %s", exc)
+        return
+    if active is False:
+        raise HTTPException(status_code=401, detail="Session has been revoked")
+
+
 async def require_auth(request: Request, token: str = Depends(_get_token)) -> str:
     """
     Accepts any valid token (editor / viewer / web / all / admin).
@@ -257,7 +286,18 @@ async def require_auth(request: Request, token: str = Depends(_get_token)) -> st
     request.state.role       = role
     request.state.token_hint = token[:16]
     request.state.is_email_auth = False
-    await _attach_auth_session(request, token[:16])
+    attached = await _attach_auth_session(request, token[:16])
+    if attached is None:
+        # Legacy role token (login(password) / web / all / editor). These have
+        # no auth_sessions row, so the revocation check above never ran for
+        # them: logout flipped login_sessions.is_active, but nothing read it,
+        # and the HMAC token stayed valid for its full 7-day TTL. Email-auth
+        # sessions were already revoked via auth_sessions.revoked_at — this
+        # was the one path left open.
+        #
+        # A missing row means a token issued before session tracking existed;
+        # it is allowed through so the change does not log everyone out.
+        await _reject_if_legacy_session_revoked(token[:16])
     return role
 
 

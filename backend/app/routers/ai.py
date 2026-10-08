@@ -39,6 +39,27 @@ from ..services.openrouter import (
 )
 from ..models import ChatRequest, AutofillRequest, AnalyzeRequest
 from .deps import require_auth, require_permission
+from ..services import ai_usage
+
+
+async def _ai_quota(request: Request) -> None:
+    """Refuse the call once the user's rolling-24h AI allowance is spent.
+
+    This is the same gate Studio enforces. It was never wired to this router,
+    so the six LLM-calling endpoints here — chat, stream, autofill, analyze,
+    report, briefing — had no per-user cap at all, while every call was
+    already being counted into ai_traces. The counter existed; only the check
+    was missing. Metering is per email-auth user; legacy role tokens carry no
+    user id and quota_state reports them as unmetered by design.
+    """
+    user_id = getattr(request.state, "auth_user_id", None)
+    quota = await ai_usage.quota_state(user_id, getattr(request.state, "auth_role", None))
+    if not quota["allowed"]:
+        raise HTTPException(
+            429,
+            f"Daily AI limit reached ({quota['used']}/{quota['limit']} calls). "
+            "It resets on a rolling 24-hour window.",
+        )
 from ..db.postgres import get_pool
 from ..db.valkey import rate_check
 
@@ -1203,6 +1224,7 @@ async def ai_chat(
     body: ChatRequest, request: Request,
     role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Natural language chat about projects + invoices.
@@ -1367,6 +1389,7 @@ async def ai_chat_stream(
     body: ChatRequest, request: Request,
     role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Streaming variant of chat for lower perceived latency."""
     ip = _client_ip(request)
@@ -1525,6 +1548,7 @@ async def ai_autofill(
     body: AutofillRequest,
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Describe a project in plain text, AI extracts structured fields."""
     try:
@@ -1539,6 +1563,7 @@ async def ai_analyze(
     body: AnalyzeRequest,
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Deep AI analysis of a specific project."""
     try:
@@ -2235,6 +2260,7 @@ async def ai_report(
     template: str = Query("board-pack"),
     role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.reports.create")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Generate an executive report for the full portfolio.
@@ -2501,6 +2527,7 @@ async def ai_report_history_delete(
 async def ai_status_briefing(
     request: Request,
     role: str = Depends(require_auth),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Generate a focused status briefing based on the Current Status table.
