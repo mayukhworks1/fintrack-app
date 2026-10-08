@@ -111,6 +111,38 @@ async def upload_bytes(
     return _proxy_url(path_in_repo)
 
 
+async def upload_many(files: list[tuple[bytes, str, str]]) -> list[str]:
+    """Upload several (data, path_in_repo, content_type) as ONE dataset commit.
+
+    Concurrent upload_file calls each make their own commit and the Hub
+    serialises commits per repo, so fifteen images pasted into one page would
+    queue as fifteen commits. One create_commit carrying every operation is a
+    single round trip and cannot half-succeed. Returns the proxy URLs.
+    """
+    if not files:
+        return []
+    from huggingface_hub import CommitOperationAdd
+    api = _hf_api()
+    repo = _repo_id()
+
+    def _sync():
+        _ensure_repo_sync()
+        api.create_commit(
+            repo_id=repo,
+            repo_type="dataset",
+            operations=[
+                CommitOperationAdd(path_in_repo=path, path_or_fileobj=io.BytesIO(data))
+                for data, path, _ in files
+            ],
+            commit_message=f"Upload {len(files)} page asset(s)",
+        )
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _sync)
+    logger.info("storage: uploaded %d file(s) in one commit → %s", len(files), repo)
+    return [_proxy_url(path) for _, path, _ in files]
+
+
 async def read_bytes(path_in_repo: str) -> Optional[bytes]:
     """Download a file from the HF dataset; returns None if not found."""
     from huggingface_hub import hf_hub_download

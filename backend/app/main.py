@@ -180,6 +180,11 @@ async def lifespan(app: FastAPI):
         _embed_task = asyncio.create_task(_embed_loop(), name="embedding-bg")
         logger.info("Background embedding task started")
 
+    # ── Pages: move inline base64 images saved before this build into assets
+    if postgres.get_pool() and settings.hf_token and settings.hf_dataset_repo:
+        from .utils.tasks import spawn as _spawn
+        _spawn(pages_router.sweep_inline_images_once(), name="pages-inline-sweep")
+
     # ── Alerting ─────────────────────────────────────────────────────────
     # Started unconditionally: the monitor decides for itself whether it has
     # anywhere to send to, and exits with one log line if not. It reads the

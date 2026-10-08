@@ -585,7 +585,30 @@ async def verify(authorization: str | None = Header(default=None)):
                             LIMIT 1
                         )
                     ) AS avatar_url,
-                    r.role_key AS auth_role
+                    r.role_key AS auth_role,
+                    -- Effective permissions, in the same round trip. This was
+                    -- a second query (deps.get_effective_permissions) issued
+                    -- only after the session row came back — one more trip
+                    -- to a database ~210 ms away, on every app open. Same
+                    -- rule: a per-user override wins, else any role grants.
+                    (
+                        SELECT COALESCE(array_agg(p.permission_key ORDER BY p.permission_key), '{}'::text[])
+                        FROM auth_permissions p
+                        WHERE COALESCE(
+                            (
+                                SELECT g.granted
+                                FROM auth_user_permission_grants g
+                                WHERE g.user_id = u.id AND g.permission_id = p.id
+                            ),
+                            EXISTS (
+                                SELECT 1
+                                FROM auth_user_roles ur2
+                                JOIN auth_role_permissions rp
+                                  ON rp.role_id = ur2.role_id AND rp.permission_id = p.id
+                                WHERE ur2.user_id = u.id
+                            )
+                        )
+                    ) AS permissions
                 FROM auth_sessions s
                 JOIN auth_users u ON u.id = s.user_id
                 LEFT JOIN auth_user_roles ur ON ur.user_id = u.id
@@ -618,9 +641,15 @@ async def verify(authorization: str | None = Header(default=None)):
                 # Fetch effective permissions for this user (union of role defaults + overrides)
                 permissions: list[str] = []
                 try:
-                    from .deps import get_effective_permissions
-                    perm_set = await get_effective_permissions(user_id_str)
-                    permissions = sorted(perm_set)
+                    from .deps import get_effective_permissions, seed_permission_cache
+                    folded = row.get("permissions") if hasattr(row, "get") else None
+                    if folded is not None:
+                        permissions = sorted(str(k) for k in folded)
+                        # The page requests that follow this call gate on the
+                        # same set; seeding spares each of them the cold read.
+                        seed_permission_cache(user_id_str, set(permissions))
+                    else:
+                        permissions = sorted(await get_effective_permissions(user_id_str))
                 except Exception:
                     pass
                 payload.update({

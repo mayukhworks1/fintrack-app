@@ -9,9 +9,11 @@ Prefixes:
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import string
@@ -32,6 +34,8 @@ from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from .deps import require_auth
+
+logger = logging.getLogger("fintrack.pages")
 
 router = APIRouter()
 
@@ -294,6 +298,118 @@ def _extract_asset_paths(content: str | None) -> list[str]:
     return out
 
 
+# A base64 image pasted or exported into page content. Whitespace is allowed
+# inside the payload (some exporters wrap it) and stripped before decoding; a
+# payload that then fails strict decoding is left exactly as it was.
+_INLINE_IMAGE_RE = re.compile(
+    r"data:(image/(?:png|jpeg|jpg|gif|webp|svg\+xml));base64,([A-Za-z0-9+/=\s]+)",
+    re.IGNORECASE,
+)
+_INLINE_MIME_EXT = {
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
+    "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg",
+}
+_MAX_INLINE_IMAGES_PER_SAVE = 60
+
+
+async def externalise_inline_images(content: str | None) -> tuple[str | None, int]:
+    """Move base64 data-URI images out of page content into page assets.
+
+    One shared page in production was 1.4 MB, of which 1.36 MB was fifteen
+    images embedded as base64. Every visitor pulled all of it through the
+    database and the API before the first paint, and none of it could be
+    cached. Uploaded assets are served from /api/public/pages/asset/ with an
+    immutable cache header, so the page body shrinks to its text and each
+    image is fetched once per browser.
+
+    Identical payloads share one asset. All images in a save go up as ONE
+    storage commit. Any failure leaves the content untouched — nothing is
+    ever lost, it simply stays inline. Returns (content, images_moved).
+    """
+    if not content or "data:image/" not in content.lower():
+        return content, 0
+    matches = list(_INLINE_IMAGE_RE.finditer(content))
+    if not matches:
+        return content, 0
+
+    from ..services import storage
+
+    def _key(payload: str) -> str:
+        return hashlib.sha1(payload.encode("ascii", "ignore")).hexdigest()
+
+    decoded: dict[str, tuple[str, bytes]] = {}
+    for m in matches[:_MAX_INLINE_IMAGES_PER_SAVE]:
+        mime, payload = m.group(1).lower(), m.group(2)
+        key = _key(payload)
+        if key in decoded:
+            continue
+        try:
+            data = base64.b64decode(re.sub(r"\s+", "", payload), validate=True)
+        except Exception:
+            continue
+        if not data or len(data) > storage.MAX_PAGE_FILE_BYTES:
+            continue
+        decoded[key] = (mime, data)
+    if not decoded:
+        return content, 0
+
+    stamp = f"{datetime.now(timezone.utc):%Y/%m}"
+    files: list[tuple[bytes, str, str]] = []
+    url_for: dict[str, str] = {}
+    for key, (mime, data) in decoded.items():
+        path = f"pages/{stamp}/{secrets.token_hex(8)}-inline.{_INLINE_MIME_EXT.get(mime, 'bin')}"
+        files.append((data, path, mime))
+        url_for[key] = f"/api/public/pages/asset/{path}"
+    try:
+        await storage.upload_many(files)
+    except Exception as exc:
+        logger.warning("pages: inline image upload failed; content left as-is: %s", exc)
+        return content, 0
+
+    def _swap(m: re.Match) -> str:
+        return url_for.get(_key(m.group(2))) or m.group(0)
+
+    return _INLINE_IMAGE_RE.sub(_swap, content), len(files)
+
+
+async def sweep_inline_images_once(delay_s: float = 90.0) -> dict[str, int]:
+    """Externalise inline images in pages saved before this existed. Once, at boot.
+
+    Compare-and-set on the content, so an edit made while an upload was in
+    flight is never overwritten; that page is simply picked up next boot.
+    """
+    await asyncio.sleep(delay_s)
+    pool = get_pool()
+    if not pool:
+        return {"pages": 0, "images": 0}
+    try:
+        rows = await pool.fetch(
+            "SELECT id, content FROM published_pages WHERE content ILIKE '%data:image/%'"
+        )
+    except Exception as exc:
+        logger.warning("pages sweep: could not list pages: %s", exc)
+        return {"pages": 0, "images": 0}
+    pages = images = 0
+    for r in rows:
+        try:
+            new_content, moved = await externalise_inline_images(r["content"])
+            if not moved or new_content == r["content"]:
+                continue
+            status = await pool.execute(
+                "UPDATE published_pages SET content = $1 WHERE id = $2 AND content = $3",
+                new_content, r["id"], r["content"],
+            )
+            if str(status).endswith(" 1"):
+                pages += 1
+                images += moved
+        except Exception as exc:
+            logger.warning("pages sweep: page %s skipped: %s", r["id"], exc)
+    if rows:
+        logger.info("pages sweep: %d page(s) found, %d rewritten, %d image(s) moved to assets",
+                    len(rows), pages, images)
+    return {"pages": pages, "images": images}
+
+
 def _word_count(text: str | None) -> int:
     if not text:
         return 0
@@ -476,6 +592,9 @@ async def create_page(
     base_slug = _slugify(body.slug or body.title)
     slug = base_slug
 
+    # Before a connection is held: the upload can take a few seconds.
+    content, _moved = await externalise_inline_images(body.content)
+
     async with pool.acquire() as conn:
         # Check slug uniqueness, append suffix if taken
         existing = await conn.fetchval(
@@ -504,7 +623,7 @@ async def create_page(
             slug,
             body.title,
             body.content_type,
-            body.content,
+            content,
             json.dumps(body.metadata or {}),
             body.is_password_protected,
             pw_hash,
@@ -886,6 +1005,11 @@ async def update_page(
     user_id = getattr(request.state, "auth_user_id", None)
     auth_role = getattr(request.state, "auth_role", role) or role
 
+    # Before a connection is held: the upload can take a few seconds.
+    new_content = body.content
+    if new_content is not None:
+        new_content, _moved = await externalise_inline_images(new_content)
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM published_pages WHERE id = $1", page_id
@@ -904,8 +1028,8 @@ async def update_page(
             updates["title"] = body.title
         if body.content_type is not None:
             updates["content_type"] = body.content_type
-        if body.content is not None:
-            updates["content"] = body.content
+        if new_content is not None:
+            updates["content"] = new_content
         if body.metadata is not None:
             updates["metadata"] = json.dumps(body.metadata)
         if body.is_password_protected is not None:

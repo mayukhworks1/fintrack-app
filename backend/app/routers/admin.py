@@ -1882,7 +1882,7 @@ async def admin_stats(_: str = Depends(require_admin)):
     if not pool:
         return _no_db()
 
-    row = await pool.fetchrow("""
+    _row_q = pool.fetchrow("""
         SELECT
             -- Audit log totals
             (SELECT COUNT(*)           FROM audit_log)                                     AS audit_total,
@@ -1952,7 +1952,7 @@ async def admin_stats(_: str = Depends(require_admin)):
     """)
 
     # Top error paths (24h) — helps diagnose what's causing the error rate
-    top_error_rows = await pool.fetch("""
+    _errors_q = pool.fetch("""
         SELECT
             path,
             COUNT(*)                                                         AS total,
@@ -1967,7 +1967,7 @@ async def admin_stats(_: str = Depends(require_admin)):
     """)
 
     # Top slow paths (24h) — p95-ish by avg; only include paths with >2 requests
-    top_slow_rows = await pool.fetch("""
+    _slow_q = pool.fetch("""
         SELECT
             path,
             ROUND(AVG(duration_ms))::int    AS avg_ms,
@@ -1982,6 +1982,9 @@ async def admin_stats(_: str = Depends(require_admin)):
         ORDER BY avg_ms DESC
         LIMIT 6
     """)
+
+    # Three independent aggregates; the card waited on their sum before.
+    row, top_error_rows, top_slow_rows = await asyncio.gather(_row_q, _errors_q, _slow_q)
 
     result = _row_to_dict(row)
     result["top_error_paths"] = [dict(r) for r in top_error_rows]

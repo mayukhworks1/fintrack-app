@@ -167,3 +167,90 @@ class TestHealthTimings:
         assert body["pg_rtt_ms"] >= 20 and body["valkey_rtt_ms"] >= 20
         assert body["pool"]["size"] == 4 and body["pool"]["idle"] == 3
         assert "keepalive" in body["pool"]
+
+
+# ── permissions: one cold read for a burst, seeded by /verify ────────────────
+
+class TestPermissionReads:
+    def test_a_burst_of_cold_reads_sends_one_query(self, monkeypatch):
+        import app.routers.deps as deps
+        deps.invalidate_permission_cache()
+        calls = []
+        class P:
+            async def fetch(self, sql, *a):
+                calls.append(sql)
+                await asyncio.sleep(0.02)        # a far database; lets the burst overlap
+                return [{"permission_key": "module.x", "from_role": True, "override": None}]
+        monkeypatch.setattr(deps, "get_pool", lambda: P())
+        async def burst():
+            return await asyncio.gather(*(deps.get_effective_permissions("u1") for _ in range(4)))
+        results = asyncio.run(burst())
+        assert all(r == {"module.x"} for r in results)
+        assert len(calls) == 1, f"{len(calls)} identical permission queries for one burst"
+        deps.invalidate_permission_cache()
+
+    def test_a_failed_shared_read_does_not_poison_waiters(self, monkeypatch):
+        import app.routers.deps as deps
+        deps.invalidate_permission_cache()
+        n = {"calls": 0}
+        class P:
+            async def fetch(self, sql, *a):
+                n["calls"] += 1
+                await asyncio.sleep(0.01)
+                if n["calls"] == 1:
+                    raise RuntimeError("blip")
+                return [{"permission_key": "module.y", "from_role": True, "override": None}]
+        monkeypatch.setattr(deps, "get_pool", lambda: P())
+        async def burst():
+            return await asyncio.gather(*(deps.get_effective_permissions("u2") for _ in range(3)),
+                                        return_exceptions=True)
+        results = asyncio.run(burst())
+        assert any(isinstance(r, RuntimeError) for r in results)          # the first saw the error
+        assert any(r == {"module.y"} for r in results)                     # waiters retried on their own
+        deps.invalidate_permission_cache()
+
+    def test_verify_folds_permissions_into_its_one_statement(self, monkeypatch):
+        import app.routers.deps as deps
+        from app.routers import auth as A
+        from app.routers.auth import make_token
+        deps.invalidate_permission_cache()
+        from datetime import datetime, timedelta, timezone
+        calls = []
+        class P:
+            async def fetchrow(self, sql, *a):
+                calls.append(("fetchrow", sql))
+                assert "AS permissions" in sql
+                return {"session_id": "s1", "user_id": "u3", "revoked_at": None,
+                        "expires_at": datetime.now(timezone.utc) + timedelta(days=1), "expired": False,
+                        "metadata": {}, "email": "u@x", "first_name": "U", "last_name": "X",
+                        "full_name": "U X", "status": "active", "avatar_url": None,
+                        "auth_role": "viewer", "permissions": ["module.b", "module.a"]}
+            async def fetch(self, sql, *a):
+                calls.append(("fetch", sql)); return []
+        monkeypatch.setattr(pg, "_pool", P())
+        out = asyncio.run(A.verify(authorization=f"Bearer {make_token('viewer')}"))
+        assert out["permissions"] == ["module.a", "module.b"]
+        assert [c[0] for c in calls] == ["fetchrow"], "permissions must not cost a second query"
+        # and the next gated request finds the cache warm
+        assert asyncio.run(deps.get_effective_permissions("u3")) == {"module.a", "module.b"}
+        assert [c[0] for c in calls] == ["fetchrow"]
+        deps.invalidate_permission_cache()
+
+
+# ── admin stats: three aggregates, one wait ──────────────────────────────────
+
+class TestAdminStats:
+    def test_the_three_queries_run_concurrently(self, monkeypatch):
+        import app.routers.admin as admin
+        class P:
+            async def fetchrow(self, sql, *a):
+                await asyncio.sleep(0.15); return {"audit_total": 1}
+            async def fetch(self, sql, *a):
+                await asyncio.sleep(0.15); return []
+        monkeypatch.setattr(admin, "get_pool", lambda: P())
+        monkeypatch.setattr(admin, "_row_to_dict", lambda r: dict(r))
+        t0 = time.perf_counter()
+        out = asyncio.run(admin.admin_stats(_="admin"))
+        elapsed = time.perf_counter() - t0
+        assert out["audit_total"] == 1 and out["top_error_paths"] == [] and out["top_slow_paths"] == []
+        assert elapsed < 0.3, f"queries ran in sequence: {elapsed:.2f}s"

@@ -18,6 +18,7 @@ Usage:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -38,6 +39,19 @@ _PERM_TTL_SECONDS = 20.0
 
 # user_id -> (expires_at_monotonic, permissions)
 _perm_cache: dict[str, tuple[float, set[str]]] = {}
+# user_id -> the read in flight, so a page that mounts four gated requests at
+# once on a cold cache sends one permission query, not four identical ones.
+_perm_inflight: dict[str, asyncio.Future] = {}
+
+
+def seed_permission_cache(user_id: str | None, permissions: set[str]) -> None:
+    """Install a permission set read elsewhere in the same round trip.
+
+    /verify computes the effective set inside its session lookup and hands it
+    here, so the page requests that follow an app open find the cache warm.
+    """
+    if user_id:
+        _perm_cache[str(user_id)] = (time.monotonic() + _PERM_TTL_SECONDS, set(permissions))
 
 
 def invalidate_permission_cache(user_id: str | None = None) -> None:
@@ -380,10 +394,39 @@ async def get_effective_permissions(user_id: str | None, *, fresh: bool = False)
         hit = _perm_cache.get(key)
         if hit and hit[0] > time.monotonic():
             return hit[1]
+        pending = _perm_inflight.get(key)
+        if pending is not None:
+            shared = await asyncio.shield(pending)
+            if shared is not None:
+                return shared
+            # The read we piggy-backed on failed; fall through and do our own.
 
     pool = get_pool()
     if not pool:
         return set()
+
+    fut: asyncio.Future = asyncio.get_running_loop().create_future()
+    _perm_inflight[key] = fut
+    try:
+        effective = await _read_effective_permissions(pool, user_id)
+        fut.set_result(effective)
+    except BaseException:
+        fut.set_result(None)      # waiters retry on their own; never an unretrieved exception
+        raise
+    finally:
+        _perm_inflight.pop(key, None)
+
+    _perm_cache[key] = (time.monotonic() + _PERM_TTL_SECONDS, effective)
+    # The map is keyed by user and this is a single-worker process, so it stays
+    # small; the sweep only matters over a long uptime with many logins.
+    if len(_perm_cache) > 512:
+        now = time.monotonic()
+        for k in [k for k, (exp, _) in _perm_cache.items() if exp <= now]:
+            _perm_cache.pop(k, None)
+    return effective
+
+
+async def _read_effective_permissions(pool, user_id: str) -> set[str]:
     rows = await pool.fetch(
         """
         SELECT
@@ -405,14 +448,6 @@ async def get_effective_permissions(user_id: str | None, *, fresh: bool = False)
         granted = r["override"] if r["override"] is not None else bool(r["from_role"])
         if granted:
             effective.add(r["permission_key"])
-
-    _perm_cache[key] = (time.monotonic() + _PERM_TTL_SECONDS, effective)
-    # The map is keyed by user and this is a single-worker process, so it stays
-    # small; the sweep only matters over a long uptime with many logins.
-    if len(_perm_cache) > 512:
-        now = time.monotonic()
-        for k in [k for k, (exp, _) in _perm_cache.items() if exp <= now]:
-            _perm_cache.pop(k, None)
     return effective
 
 
