@@ -31,9 +31,32 @@ function setStoredJson(key, value) {
   } catch {}
 }
 
+/**
+ * What to show before /verify answers.
+ *
+ * Every app open used to wait on that round trip — the API is ~200 ms from
+ * the browser and its database ~210 ms further, so the spinner sat there for
+ * a second or more before a single page could mount or fetch anything.
+ *
+ * The role, user and permissions /verify returns are already persisted from
+ * the last answer (see _applyVerifyResponse). When they exist alongside a
+ * token, the app paints with them at once and the pages start their own
+ * requests in parallel with /verify, which then reconciles: a changed role
+ * or permission set is applied the moment it lands, and a rejected token
+ * clears everything and drops to the login screen exactly as before. The
+ * API client also fires `fintrack:auth-expired` on any 401, so a revoked
+ * session cannot keep a page alive on stale local state.
+ */
+export function initialAuthStatus() {
+  if (!getAuthToken()) return 'unauthed'
+  let hasIdentity = false
+  try { hasIdentity = !!(localStorage.getItem(ROLE_KEY) || localStorage.getItem(USER_KEY)) } catch {}
+  return hasIdentity ? 'authed' : 'loading'
+}
+
 export function AuthProvider({ children }) {
   // 'loading' | 'authed' | 'unauthed'
-  const [status, setStatus] = useState(() => (getAuthToken() ? 'loading' : 'unauthed'))
+  const [status, setStatus] = useState(initialAuthStatus)
   // 'editor' | 'viewer'
   const [role, setRole] = useState(() => getStoredRole())
   const [authRole, setAuthRole] = useState(() => {
