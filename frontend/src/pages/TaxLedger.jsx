@@ -645,10 +645,12 @@ export default function TaxLedger({ source = 'main' } = {}) {
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
+      {/* Scrolls sideways on a phone: five tabs do not fit in 375px, and a
+          row that cannot scroll pushed the whole page wider than the screen. */}
+      <div className="flex items-center gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className="px-4 py-2 text-sm font-semibold transition-colors border-b-2 -mb-px"
+            className="px-4 py-2 text-sm font-semibold transition-colors border-b-2 shrink-0 whitespace-nowrap"
             style={{
               color: activeTab === t.id ? 'var(--accent)' : 'var(--text-3)',
               borderBottomColor: activeTab === t.id ? 'var(--accent)' : 'transparent',
