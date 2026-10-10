@@ -16,6 +16,8 @@ from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
+from ..utils.csv_safe import csv_safe_row
+from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
 import csv
 import io
@@ -401,7 +403,7 @@ async def export_invoices(
     writer.writerow([label for _, label in COLS])
     for r in records:
         f = r.get("fields", {})
-        writer.writerow([f.get(key, "") for key, _ in COLS])
+        writer.writerow(csv_safe_row(f.get(key, "") for key, _ in COLS))
 
     filename = f"invoices_{_date.today().isoformat()}.csv"
     return _StreamingResponse(
@@ -703,9 +705,7 @@ async def parse_invoice(
     Uses AI vision/text models to populate as many fields as possible.
     """
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB guard
-    content   = await file.read()
-    if len(content) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    content   = await read_upload(file, upload_limit(MAX_BYTES))
 
     mime = file.content_type or "application/octet-stream"
     fname = file.filename or ""
@@ -750,7 +750,7 @@ async def upload_attachment(
             existing = await service.get_invoice(record_id)
             if not is_record_owner(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
-        content = await file.read()
+        content = await read_upload(file, upload_limit())
         return await service.upload_attachment_to_field(
             record_id=record_id,
             field_name=field_name,

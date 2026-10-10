@@ -12,6 +12,7 @@ from ..config import settings
 from ..db.attribution import empty_actor
 from ..db import valkey as vk
 from ..utils.cache import cache
+from ..utils.sorting import cell_sort_key
 from ..db.postgres import get_pool
 
 # ── Field IDs for filter/sort params (must use IDs, not names) ─────────────
@@ -41,6 +42,10 @@ INVOICE_FIELD_IDS = {
 
 # Single-select fields whose options we expose as picklists
 INVOICE_PICKLIST_FIELDS = {"Project", "Client Name", "Category", "Milestone", "Raised By", "Payment Status"}
+
+# Columns list_invoices sorts by: every invoice field except the attachments.
+# Any other order_by falls back to Raised Date.
+INVOICE_SORT_FIELDS = frozenset(INVOICE_FIELD_IDS) - {"Reference", "Invoice PDF"}
 
 logger = logging.getLogger(__name__)
 
@@ -471,8 +476,11 @@ class InvoiceService:
             email_lc = raised_by.lower()
             records = [r for r in records if str(r.get("fields", {}).get("Raised By", "")).lower() == email_lc]
 
+        if order_by not in INVOICE_SORT_FIELDS:
+            order_by = "Raised Date"
+
         def _sort_key(r):
-            return r.get("fields", {}).get(order_by, "") or ""
+            return cell_sort_key(r.get("fields", {}).get(order_by))
         records.sort(key=_sort_key, reverse=(order == "desc"))
 
         total = len(records)

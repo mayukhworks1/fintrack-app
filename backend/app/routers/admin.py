@@ -2552,6 +2552,21 @@ async def admin_mirror_projects(
     return {"total": total, "limit": limit, "offset": offset, "rows": records}
 
 
+def _mirror_date_param(name: str, value: str):
+    """
+    A from_ts/to_ts query value as a date for the DATE column raised_date.
+
+    asyncpg will not bind a str to a DATE parameter, so passing the raw string
+    failed every filtered request with a 500. A timestamp is accepted and cut to
+    its date; anything else is the caller's mistake and gets a 400.
+    """
+    from datetime import date
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: expected YYYY-MM-DD")
+
+
 @router.get("/mirror/invoices")
 async def admin_mirror_invoices(
     limit:          int           = Query(100, ge=1, le=500),
@@ -2582,9 +2597,9 @@ async def admin_mirror_invoices(
     if teable_id:
         where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
-        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+        where.append(f"raised_date >= ${idx}"); params.append(_mirror_date_param("from_ts", from_ts)); idx += 1
     if to_ts:
-        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
+        where.append(f"raised_date <= ${idx}"); params.append(_mirror_date_param("to_ts", to_ts)); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -2645,9 +2660,9 @@ async def admin_mirror_web_invoices(
     if teable_id:
         where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
-        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+        where.append(f"raised_date >= ${idx}"); params.append(_mirror_date_param("from_ts", from_ts)); idx += 1
     if to_ts:
-        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
+        where.append(f"raised_date <= ${idx}"); params.append(_mirror_date_param("to_ts", to_ts)); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 

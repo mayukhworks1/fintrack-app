@@ -33,6 +33,7 @@ from ..db.postgres import get_pool
 from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
+from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth
 
 logger = logging.getLogger("fintrack.pages")
@@ -803,11 +804,9 @@ async def upload_page_asset(
     """
     from ..services import storage
 
-    data = await file.read()
+    data = await read_upload(file, upload_limit(storage.MAX_PAGE_FILE_BYTES))
     if not data:
         raise HTTPException(400, "Empty file")
-    if len(data) > storage.MAX_PAGE_FILE_BYTES:
-        raise HTTPException(413, f"File exceeds {storage.MAX_PAGE_FILE_BYTES // (1024 * 1024)} MB limit")
 
     content_type = (file.content_type or "application/octet-stream").split(";")[0].strip()
     ext = storage.EXT_FOR_MIME.get(content_type)

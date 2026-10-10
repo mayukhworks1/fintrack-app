@@ -174,6 +174,15 @@ class Settings(BaseSettings):
     scanner_window_seconds: int = 600
     scanner_ban_seconds:    int = 3600
 
+    # ── Upload and retention limits ────────────────────────────────────────
+    # Largest file any upload route accepts (attachments, Studio documents,
+    # page assets), in bytes. Routes with a smaller limit of their own keep it.
+    # Set MAX_UPLOAD_BYTES to change it.
+    max_upload_bytes: int = 15 * 1024 * 1024
+    # sync_log rows older than this many days are pruned hourly by the sync
+    # loop. 0 turns pruning off. Set SYNC_LOG_RETENTION_DAYS to change it.
+    sync_log_retention_days: int = 14
+
     model_config = ConfigDict(env_file=".env")
 
 

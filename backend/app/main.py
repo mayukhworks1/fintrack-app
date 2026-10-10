@@ -23,6 +23,7 @@ from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
+from .utils.uploads import UploadSizeLimitMiddleware
 from .db import postgres, valkey as vk, migrate
 from .db.postgres import get_init_error
 from .db.sync import sync_loop
@@ -262,6 +263,10 @@ def _cors_origins() -> list[str]:
     )
     return list(_DEV_CORS_ORIGINS)
 
+
+# Refuse an oversized multipart upload before its body is spooled. Added first,
+# so it sits inside CORS and its 413 still carries the CORS headers.
+app.add_middleware(UploadSizeLimitMiddleware)
 
 # Compress responses. Every JSON body — the Dashboard's 400-invoice list, the
 # project mirror, audit pages — went over the wire uncompressed; there is no
