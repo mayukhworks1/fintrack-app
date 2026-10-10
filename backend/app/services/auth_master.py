@@ -112,11 +112,20 @@ async def _write_auth_event(
     email: str | None = None,
     status: str | None = None,
     metadata: dict[str, Any] | None = None,
+    db: Any = None,
 ) -> None:
-    pool = get_pool()
-    if not pool:
+    """
+    Insert an auth_events row.
+
+    A caller that holds a pooled connection must pass it as `db` or call this
+    after releasing it. pool.execute takes a second connection, and with every
+    connection held by a request waiting for its second, the pool deadlocked.
+    """
+    if db is None:
+        db = get_pool()
+    if not db:
         return
-    await pool.execute(
+    await db.execute(
         """
         INSERT INTO auth_events (
             event_type, target_user_id, role, email, status, ip, user_agent,
@@ -233,13 +242,17 @@ async def consume_oauth_state(state: str, provider: str, request: Request) -> st
                 _hash_oauth_state(state),
                 provider,
             )
-            if not row:
-                await _write_auth_event(f"{provider}_oauth_state_failed", request, status="invalid_or_expired_state")
-                raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
-            await conn.execute(
-                "UPDATE auth_oauth_states SET used_at = NOW() WHERE state_hash = $1",
-                _hash_oauth_state(state),
-            )
+            if row:
+                await conn.execute(
+                    "UPDATE auth_oauth_states SET used_at = NOW() WHERE state_hash = $1",
+                    _hash_oauth_state(state),
+                )
+    if not row:
+        # Recorded after the connection is released: writing it while holding
+        # one took a second connection, and ten concurrent bad callbacks
+        # deadlocked the pool.
+        await _write_auth_event(f"{provider}_oauth_state_failed", request, status="invalid_or_expired_state")
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
     return _safe_redirect_path(row["redirect_to"])
 
 
@@ -257,7 +270,9 @@ async def _create_session_for_user(
     auth_role = await _primary_role(str(user["id"]))
     legacy_role = _legacy_role_for(auth_role)
     from ..routers.auth import make_token
-    token = make_token(role=legacy_role)
+    # session_bound: without its auth_sessions row (user deleted) this token is
+    # rejected, rather than read as the bare legacy role it carries.
+    token = make_token(role=legacy_role, session_bound=True)
     token_hint = token[:16]
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.app_session_ttl)
 
@@ -339,6 +354,7 @@ async def create_pending_user(email: str, password: str, full_name: str | None, 
             await _write_auth_event(
                 "password_register_duplicate", request,
                 target_user_id=str(existing["id"]), email=email_norm, status=existing["status"],
+                db=conn,
             )
             return {"created": False, "status": "pending_approval"}
         fn = (first_name or "").strip() or None
@@ -1001,7 +1017,7 @@ async def create_password_reset(email: str, request: Request) -> dict[str, Any]:
             )
             reset_user = {"id": str(user["id"]), "email": user["email"], "status": user["status"]}
         else:
-            await _write_auth_event("password_reset_requested_unknown", request, email=email_norm, status=user["status"] if user else "not_found")
+            await _write_auth_event("password_reset_requested_unknown", request, email=email_norm, status=user["status"] if user else "not_found", db=conn)
 
     if reset_user:
         origin = app_origin_from_request(request)
@@ -1054,6 +1070,10 @@ async def reset_password_with_token(token: str, password: str, request: Request)
     token_hash = _hash_reset_token(token)
     password_hash = hash_password(password)
 
+    # A failed attempt is recorded after the connection is released: inside
+    # the transaction the raise would roll the event back, and pool.execute
+    # there took a second connection while holding the first (pool deadlock).
+    failure: tuple[HTTPException, dict[str, Any]] | None = None
     async with pool.acquire() as conn:
         async with conn.transaction():
             reset = await conn.fetchrow(
@@ -1070,41 +1090,49 @@ async def reset_password_with_token(token: str, password: str, request: Request)
                 token_hash,
             )
             if not reset:
-                await _write_auth_event("password_reset_failed", request, metadata={"reason": "invalid_or_expired_token"})
-                raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
-            if reset["status"] != "active":
+                failure = (
+                    HTTPException(status_code=400, detail="Reset link is invalid or expired"),
+                    {"metadata": {"reason": "invalid_or_expired_token"}},
+                )
+            elif reset["status"] != "active":
+                failure = (
+                    HTTPException(status_code=403, detail="User is not active"),
+                    {
+                        "target_user_id": str(reset["user_id"]),
+                        "email": reset["email"],
+                        "status": reset["status"],
+                        "metadata": {"reason": "inactive_user"},
+                    },
+                )
+            else:
+                await conn.execute(
+                    """
+                    UPDATE auth_users
+                    SET password_hash = $2,
+                        password_changed_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = $1
+                    """,
+                    reset["user_id"],
+                    password_hash,
+                )
+                await conn.execute("UPDATE auth_password_resets SET used_at = NOW() WHERE id = $1", reset["id"])
+                await conn.execute(
+                    "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1",
+                    reset["user_id"],
+                )
                 await _write_auth_event(
-                    "password_reset_failed",
+                    "password_reset_completed",
                     request,
                     target_user_id=str(reset["user_id"]),
                     email=reset["email"],
-                    status=reset["status"],
-                    metadata={"reason": "inactive_user"},
+                    status="active",
+                    db=conn,
                 )
-                raise HTTPException(status_code=403, detail="User is not active")
-            await conn.execute(
-                """
-                UPDATE auth_users
-                SET password_hash = $2,
-                    password_changed_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                reset["user_id"],
-                password_hash,
-            )
-            await conn.execute("UPDATE auth_password_resets SET used_at = NOW() WHERE id = $1", reset["id"])
-            await conn.execute(
-                "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1",
-                reset["user_id"],
-            )
-            await _write_auth_event(
-                "password_reset_completed",
-                request,
-                target_user_id=str(reset["user_id"]),
-                email=reset["email"],
-                status="active",
-            )
+    if failure:
+        exc, event = failure
+        await _write_auth_event("password_reset_failed", request, **event)
+        raise exc
     await send_email(
         reset["email"],
         "Your FinTrack password was changed",

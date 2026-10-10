@@ -1182,6 +1182,29 @@ class _NoResetConnection(asyncpg.Connection):
         return ""
 
 
+# asyncpg waits for a free connection forever by default. When every
+# connection was held by a request that was itself waiting for a second one
+# (auth paths writing an event while holding the first), the pool wedged until
+# a restart. With a bound the waiters fail, release what they hold, and the
+# pool recovers. Generous next to normal waits; explicit timeouts still win.
+_POOL_ACQUIRE_TIMEOUT_S: float = 10.0
+
+
+# Built by a factory so the tests can apply it to the installed asyncpg.Pool
+# even when an earlier test module has stubbed `asyncpg` in sys.modules.
+def _bounded_pool_class(base):
+    class _BoundedAcquirePool(base):
+        """asyncpg.Pool whose acquire() — and so execute/fetch* — has a default timeout."""
+        __slots__ = ()
+
+        def acquire(self, *, timeout=None):
+            return super().acquire(timeout=_POOL_ACQUIRE_TIMEOUT_S if timeout is None else timeout)
+    return _BoundedAcquirePool
+
+
+_BoundedAcquirePool = _bounded_pool_class(asyncpg.Pool)
+
+
 async def init_pool() -> None:
     global _pool, _init_error
     if not settings.postgres_url:
@@ -1205,6 +1228,10 @@ async def init_pool() -> None:
             connection_class=_NoResetConnection,
             ssl="require",
         )
+        # create_pool has no pool-class hook; the subclass adds no state, so
+        # its layout matches and the instance can take on its acquire().
+        if type(_pool) is asyncpg.Pool:
+            _pool.__class__ = _BoundedAcquirePool
         async with _pool.acquire() as conn:
             await conn.execute(SCHEMA)
         _init_error = None

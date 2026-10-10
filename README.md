@@ -153,7 +153,7 @@ Used in AI chat context + report generation for reliable structured AI parsing.
 | `all` | `APP_ALL_PASSWORD` | Web projects + resources |
 | `admin` | `APP_ADMIN_PASSWORD` | PostgreSQL admin dashboard |
 
-Token: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL.
+Token: `base64url("{nonce}:{expiry}:{role}[:s]").base64url(HMAC-SHA256)` — 7-day TTL. The random nonce makes each token's 16-character session hint unique; `:s` marks an email/SSO/impersonation token, which is refused once its `auth_sessions` row is gone. Tokens minted before the nonce (`"{expiry}:{role}"`) still verify until they expire.
 
 ---
 
