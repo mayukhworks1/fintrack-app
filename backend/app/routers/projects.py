@@ -8,11 +8,8 @@ from .deps import require_auth, require_editor, require_permission
 
 
 def _ip(request: Request) -> str:
-    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        v = request.headers.get(h, "")
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    from ..utils.client_ip import client_ip
+    return client_ip(request) or "unknown"
 
 
 async def _check_project_rate(request: Request) -> None:

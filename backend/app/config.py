@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     teable_web_api_token: Optional[str] = None
     teable_web_invoice_table_id: str = "tbllkYiaS68BlcOc1Jy"
     # "all" role — web project tracker (Web Projects + Web Resources tables)
-    # APP_ALL_PASSWORD → All@2024 (set via HF Space secret)
+    # APP_ALL_PASSWORD → 'all' role password (set via HF Space secret)
     app_all_password: str = ""
     # Optional dedicated token for the web projects Teable space.
     # Falls back to TEABLE_API_TOKEN (or TEABLE_WEB_API_TOKEN) if not set.
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     teable_web_projects_table_id: str = "tbl4qgQkatguBwrzxtf"
     # Web Resources table (tblMjssDx55GOfLtgqo)
     teable_web_resources_table_id: str = "tblMjssDx55GOfLtgqo"
-    # Current Status table — project-level status updates (Master@2026)
+    # Current Status table — project-level status updates
     teable_status_table_id: str = "tblgdbV6T4Ly9n6YNCU"
     # Signing key for session tokens. This dev default is PUBLIC (the repo is
     # public), so anyone can read it and forge a token for any role, superadmin
@@ -174,6 +174,17 @@ class Settings(BaseSettings):
     scanner_window_seconds: int = 600
     scanner_ban_seconds:    int = 3600
 
+    # ── Client IP (utils/client_ip.py) ─────────────────────────────────────
+    # The IP behind the login rate limit, the scanner ban and the audit trail.
+    # Forwarding headers are client-controlled unless a proxy we trust wrote
+    # them, so by default only the entry the platform's own proxy appended is
+    # used. TRUSTED_PROXY_HOPS = how many proxies append to X-Forwarded-For in
+    # front of the app (1 = take the rightmost entry; 0 = ignore the header).
+    # CF-Connecting-IP / X-Real-IP are honoured only when the API is reachable
+    # solely through Cloudflare; otherwise anyone can set them.
+    trusted_proxy_hops:     int  = 1
+    trust_cf_connecting_ip: bool = False
+
     model_config = ConfigDict(env_file=".env")
 
 
@@ -191,5 +202,10 @@ def is_dev_env() -> bool:
 
 
 def using_insecure_app_secret() -> bool:
-    """True when session tokens are signed with the publicly-known dev key."""
-    return settings.app_secret == DEV_APP_SECRET
+    """True when session tokens are signed with the publicly-known dev key.
+
+    An empty or whitespace-only APP_SECRET counts too: pydantic keeps `APP_SECRET=`
+    as "", and an empty HMAC key lets anyone mint a token for any role.
+    """
+    secret = settings.app_secret or ""
+    return not secret.strip() or secret == DEV_APP_SECRET

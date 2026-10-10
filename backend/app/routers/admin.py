@@ -1,10 +1,10 @@
 """
 Admin dashboard — full PostgreSQL visibility.
 
-Protected by the 'admin' role (password: APP_ADMIN_PASSWORD, default Master@2026).
+Protected by the 'admin' role (password: set via the APP_ADMIN_PASSWORD secret).
 
 Login:
-  POST /api/auth/login  {"password": "Master@2026"}
+  POST /api/auth/login  {"password": "<APP_ADMIN_PASSWORD>"}
   → { "token": "...", "role": "admin" }
 
 Then use the token as a Bearer token for all /api/admin/* endpoints.
@@ -102,11 +102,8 @@ def _no_db():
 
 
 def _client_ip(request: Request) -> str:
-    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        value = request.headers.get(header, "")
-        if value:
-            return value.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 # The commit a process is running cannot change while it runs. Computed once;

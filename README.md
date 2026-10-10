@@ -321,6 +321,8 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 | `POSTGRES_URL` | Aiven PostgreSQL DSN |
 | `VALKEY_URL` | Aiven Valkey DSN |
 | `TEABLE_WEBHOOK_SECRET` | Webhook HMAC auth (optional) |
+| `TRUSTED_PROXY_HOPS` | Proxies appending to `X-Forwarded-For` in front of the API (default `1` = rightmost entry; `0` = ignore). Keys the login rate limit, scanner bans and audit IPs |
+| `TRUST_CF_CONNECTING_IP` | Honour `CF-Connecting-IP` / `X-Real-IP` (default `false`; set only if the API is reachable solely through Cloudflare) |
 
 ---
 

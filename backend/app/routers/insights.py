@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..db.postgres import get_pool
 from ..services.insights import build_excel_xml, build_simple_pdf, default_export_meta
+from ..utils.client_ip import client_ip
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
@@ -81,7 +82,7 @@ async def create_config(body: InsightConfigBody, request: Request, role: str = D
     pool = get_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL unavailable")
-    ip = request.headers.get("cf-connecting-ip") or request.client.host if request.client else None
+    ip = client_ip(request) or None
     row = await pool.fetchrow(
         """
         INSERT INTO insight_configs (page_key, config_kind, title, role, ip, is_active, config)
@@ -104,7 +105,7 @@ async def update_config(config_id: str, body: InsightConfigBody, request: Reques
     pool = get_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL unavailable")
-    ip = request.headers.get("cf-connecting-ip") or request.client.host if request.client else None
+    ip = client_ip(request) or None
     row = await pool.fetchrow(
         """
         UPDATE insight_configs
@@ -149,7 +150,7 @@ async def export_insight(body: ExportBody, request: Request, role: str = Depends
     fmt = body.export_format.lower()
     meta = default_export_meta(body.page_key, body.source_key, len(body.rows))
     meta.update(body.metadata or {})
-    ip = request.headers.get("cf-connecting-ip") or request.client.host if request.client else None
+    ip = client_ip(request) or None
 
     await pool.execute(
         """

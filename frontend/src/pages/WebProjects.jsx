@@ -1,5 +1,5 @@
 /**
- * Web Projects Tracker — for the 'all' role (All@2026)
+ * Web Projects Tracker — for the 'all' role (APP_ALL_PASSWORD)
  *
  * Exports:
  *   ProjectsWorkspace (named) — embeddable inside WebInvoices as a workspace tab

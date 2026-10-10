@@ -81,11 +81,8 @@ def _hash_oauth_state(state: str) -> str:
 
 
 def _client_ip(request: Request) -> str:
-    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        value = request.headers.get(header, "")
-        if value:
-            return value.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 def _legacy_role_for(role_key: str) -> str:

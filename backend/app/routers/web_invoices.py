@@ -1,8 +1,8 @@
 """
 Web Invoice Tracker router — /api/web-invoices
 Routes accept 'web' OR 'all' role (require_web_access).
-'web'  — invoice tracker only (Theworks@2026)
-'all'  — invoice tracker + project tracker (All@2026)
+'web'  — invoice tracker only (APP_WEB_PASSWORD)
+'all'  — invoice tracker + project tracker (APP_ALL_PASSWORD)
 """
 import csv as _csv
 import io as _io

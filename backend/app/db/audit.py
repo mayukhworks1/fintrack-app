@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import re
 import time
 from datetime import datetime, timezone, timedelta
@@ -78,12 +79,80 @@ _MOBILE_UA = re.compile(r"Mobile|Android|iPhone|iPad", re.I)
 _TABLET_UA = re.compile(r"iPad|Tablet", re.I)
 
 
+# Hint fields the rest of this module reads as text, and the two it reads as
+# objects. The header is client-controlled and unauthenticated: any other JSON
+# type in these slots (a number, a list, a bare string for "ch") used to raise
+# deep inside build_device_label or the batch insert and cost audit rows.
+_HINT_TEXT_KEYS    = ("platform", "language", "locale", "timezone", "screen", "viewport", "gpu", "network")
+_HINT_CH_TEXT_KEYS = ("platform", "platformVersion", "model", "arch", "bitness", "fullVersion")
+_HINT_OBJECT_KEYS  = ("ch", "browserGeo")
+_HINT_NUMBER_KEYS  = ("cores", "memoryGb")
+_HINT_MAX_STR      = 500
+# browserGeo numbers and the range a real navigator.geolocation fix stays in.
+# A forged value outside it (lat 5000, accuracyM 1e300) is not a place, and
+# failed the INTEGER accuracy_m / NUMERIC(9,6) lat-lon column it was bound to.
+_HINT_GEO_RANGES   = {"lat": (-90, 90), "lon": (-180, 180), "accuracyM": (0, 2**31 - 1)}
+
+
+def _clean_hint_value(value, depth: int = 0):
+    """Strip NUL bytes (PostgreSQL text and JSONB both reject them), cap strings,
+    and drop non-finite numbers (JSONB has no NaN/Infinity)."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")[:_HINT_MAX_STR]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        if depth >= 4:
+            return None
+        return {
+            str(k).replace("\x00", "")[:100]: _clean_hint_value(v, depth + 1)
+            for k, v in list(value.items())[:100]
+        }
+    if isinstance(value, list):
+        if depth >= 4:
+            return None
+        return [_clean_hint_value(v, depth + 1) for v in value[:100]]
+    return value
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _shape_hint(hint) -> dict:
+    """Force the decoded hint into the shape the readers expect."""
+    if not isinstance(hint, dict):
+        return {}
+    hint = _clean_hint_value(hint)
+    for key in _HINT_OBJECT_KEYS:
+        if key in hint and not isinstance(hint[key], dict):
+            hint[key] = None
+    for key in _HINT_TEXT_KEYS:
+        if key in hint and not isinstance(hint[key], str):
+            hint[key] = None
+    for key in _HINT_NUMBER_KEYS:
+        if key in hint and not _is_number(hint[key]):
+            hint[key] = None
+    ch = hint.get("ch")
+    if isinstance(ch, dict):
+        for key in _HINT_CH_TEXT_KEYS:
+            if key in ch and not isinstance(ch[key], str):
+                ch[key] = None
+    geo = hint.get("browserGeo")
+    if isinstance(geo, dict):
+        for key, (lo, hi) in _HINT_GEO_RANGES.items():
+            if key in geo and not (_is_number(geo[key]) and lo <= geo[key] <= hi):
+                geo[key] = None
+    return hint
+
+
 def parse_client_hint(header_value: str) -> dict:
     """
     Decode the base64-encoded JSON device hint sent by the frontend.
     Returns a dict with extra device signals collected from JavaScript
     (UA Client Hints, GPU via WebGL, screen, timezone, RAM, cores, etc.).
     Returns an empty dict on any decode failure — never raises.
+    The result is always a dict whose known fields have the expected types.
     """
     if not header_value:
         return {}
@@ -92,7 +161,7 @@ def parse_client_hint(header_value: str) -> dict:
         # Add padding if missing (some encoders strip it)
         padding = "=" * (-len(header_value) % 4)
         raw = base64.b64decode(header_value + padding, validate=False)
-        return json.loads(raw.decode("utf-8")) or {}
+        return _shape_hint(json.loads(raw.decode("utf-8")) or {})
     except Exception:
         return {}
 
@@ -290,102 +359,182 @@ async def _enrich_one(item: dict) -> dict:
     return {**item, "os_str": os_str, "browser": browser, "device": device, "geo": geo, "hint": hint, "extra": extra}
 
 
+_AUDIT_INSERT_SQL = """
+    INSERT INTO audit_log (
+        role, token_hint,
+        method, path, status, duration_ms, request_id,
+        ip, user_agent, os, browser, device,
+        country, country_code, region, city, isp,
+        lat, lon, timezone, org,
+        referer, body_size, query_params, resp_size,
+        user_id, user_email, user_name,
+        extra
+    ) VALUES (
+        $1,  $2,
+        $3,  $4,  $5,  $6,  $7,
+        $8,  $9,  $10, $11, $12,
+        $13, $14, $15, $16, $17,
+        $18, $19, $20, $21,
+        $22, $23, $24, $25,
+        $26::uuid, $27, $28,
+        $29::jsonb
+    )
+"""
+
+
+def _text(value, limit: int) -> str | None:
+    """A text-column value: NUL bytes stripped (PostgreSQL rejects them in text,
+    and uvicorn decodes a requested `/api/%00` into one), capped, '' → None."""
+    if value is None:
+        return None
+    return str(value).replace("\x00", "")[:limit] or None
+
+
+def _int_in_range(value, lo: int, hi: int) -> int | None:
+    """An integer-column value, or None when it is not an int in [lo, hi] —
+    e.g. a forged Content-Length beyond INTEGER range."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if lo <= value <= hi else None
+
+
+def _finite(value) -> float | int | None:
+    if not _is_number(value):
+        return None
+    return value if math.isfinite(value) else None
+
+
+_INT4_MAX = 2**31 - 1
+
+
+def _audit_record(item: dict) -> tuple:
+    """Build the bind tuple for one audit row. Every client-controlled value is
+    sanitised here so no single request can make the INSERT fail."""
+    geo   = item.get("geo", {}) or {}
+    extra = item.get("extra", {}) or {}
+    bg    = extra.get("browser_geo", {}) or {}
+    if not isinstance(geo, dict):
+        geo = {}
+    if not isinstance(bg, dict):
+        bg = {}
+
+    def _coord(d, key, fallback):
+        v = _finite(d.get(key))
+        return v if v is not None else fallback
+
+    # Prefer browser geo over IP geo for lat/lon
+    lat = _coord(bg, "lat", _coord(geo, "lat", None))
+    lon = _coord(bg, "lon", _coord(geo, "lon", None))
+
+    # Identity fields — populated for email-auth sessions
+    raw_uid = extra.get("auth_user_id")
+    user_id = None
+    if raw_uid:
+        try:
+            import uuid as _uuid
+            user_id = str(_uuid.UUID(str(raw_uid)))
+        except Exception:
+            user_id = None
+
+    return (
+        _text(item.get("role"), 20),
+        _text(item.get("token_hint"), 20),
+        _text(item.get("method"), 10) or "",
+        _text(item.get("path"), 500) or "",
+        _int_in_range(item.get("status"), -32768, 32767),
+        _int_in_range(item.get("duration_ms"), -_INT4_MAX - 1, _INT4_MAX),
+        _text(item.get("request_id"), 50),
+        _text(item.get("ip"), 45),
+        _text(item.get("user_agent"), 500),
+        _text(item.get("os_str", "Unknown"), 100) or "Unknown",
+        _text(item.get("browser", "Unknown"), 100) or "Unknown",
+        _text(item.get("device", "desktop"), 20) or "desktop",
+        _text(geo.get("country"), 80),
+        _text(geo.get("country_code"), 4),
+        _text(geo.get("region"), 100),
+        _text(geo.get("city"), 100),
+        _text(geo.get("isp"), 150),
+        lat, lon,
+        _text(geo.get("timezone"), 50),
+        _text(geo.get("org"), 200),
+        _text(item.get("referer"), 500),
+        _int_in_range(item.get("body_size"), 0, _INT4_MAX),
+        _text(item.get("query_params"), 500),
+        _int_in_range(item.get("resp_size"), 0, _INT4_MAX),
+        user_id,
+        _text(extra.get("auth_user_email"), 320),
+        _text(extra.get("auth_user_name"), 255),
+        # JSONB — must be a JSON string. Its client-supplied parts come from
+        # parse_client_hint, which already strips NULs and NaN/Infinity.
+        json.dumps(extra, default=str),
+    )
+
+
+# asyncpg errors that mean the database, not the row, is the problem.
+_DB_UNREACHABLE_ERRORS = {"PostgresConnectionError", "CannotConnectNowError", "TooManyConnectionsError"}
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """True when the database is unreachable, as opposed to one row being bad.
+
+    asyncpg's classes are matched by name, so this never imports anything or
+    raises: it runs inside the insert's own error handling.
+    """
+    if isinstance(exc, (OSError, asyncio.TimeoutError)):
+        return True
+    names = {c.__name__ for c in type(exc).__mro__ if c.__module__.startswith("asyncpg")}
+    if names & _DB_UNREACHABLE_ERRORS:
+        return True
+    # InterfaceError covers "pool is closing" and the like; its DataError
+    # subclass (also a ValueError) is a per-row encoding failure.
+    return "InterfaceError" in names and not isinstance(exc, ValueError)
+
+
 async def _batch_insert_audit(pool, items: list[dict]) -> None:
     """
     Bulk-insert N audit rows in one executemany call.
     This is ~N× faster than individual pool.execute calls and reduces
     connection-pool contention under load.
+
+    executemany is atomic, so one bad row used to discard the whole batch —
+    up to 100 rows of every concurrent user's activity. Rows are sanitised
+    first, and if the batch still fails each row is retried on its own —
+    unless the database itself is unreachable, when retrying cannot help.
     """
     if not items or not pool:
         return
+    records = []
+    for item in items:
+        try:
+            records.append(_audit_record(item))
+        except Exception as exc:
+            logger.warning("audit row skipped (could not build bind values): %s", exc)
+    if not records:
+        return
     try:
-        records = []
-        for item in items:
-            geo   = item.get("geo", {}) or {}
-            extra = item.get("extra", {}) or {}
-            bg    = extra.get("browser_geo", {}) or {}
-
-            def _lat(d, fallback):
-                v = d.get("lat")
-                return v if isinstance(v, (int, float)) else fallback
-
-            def _lon(d, fallback):
-                v = d.get("lon")
-                return v if isinstance(v, (int, float)) else fallback
-
-            # Prefer browser geo over IP geo for lat/lon
-            lat = _lat(bg, _lat(geo, None))
-            lon = _lon(bg, _lon(geo, None))
-
-            # Identity fields — populated for email-auth sessions
-            raw_uid = extra.get("auth_user_id")
-            user_id = None
-            if raw_uid:
-                try:
-                    import uuid as _uuid
-                    user_id = str(_uuid.UUID(str(raw_uid)))
-                except Exception:
-                    user_id = None
-            user_email = (extra.get("auth_user_email") or "")[:320] or None
-            user_name  = (extra.get("auth_user_name")  or "")[:255] or None
-
-            records.append((
-                item.get("role"),
-                (item.get("token_hint") or "")[:20] or None,
-                (item.get("method")     or "")[:10],
-                (item.get("path")       or "")[:500],
-                item.get("status"),
-                item.get("duration_ms"),
-                (item.get("request_id") or "")[:50]  or None,
-                (item.get("ip")         or "")[:45]  or None,
-                (item.get("user_agent") or "")[:500] or None,
-                item.get("os_str",  "Unknown")[:100],
-                item.get("browser", "Unknown")[:100],
-                item.get("device",  "desktop")[:20],
-                (geo.get("country",      "") or "")[:80]  or None,
-                (geo.get("country_code", "") or "")[:4]   or None,
-                (geo.get("region",       "") or "")[:100] or None,
-                (geo.get("city",         "") or "")[:100] or None,
-                (geo.get("isp",          "") or "")[:150] or None,
-                lat, lon,
-                (geo.get("timezone") or "")[:50]  or None,
-                (geo.get("org")      or "")[:200] or None,
-                (item.get("referer")      or "")[:500] or None,
-                item.get("body_size"),
-                (item.get("query_params") or "")[:500] or None,
-                item.get("resp_size"),
-                user_id,
-                user_email,
-                user_name,
-                json.dumps(extra),   # JSONB — must be JSON string
-            ))
-
-        await pool.executemany(
-            """
-            INSERT INTO audit_log (
-                role, token_hint,
-                method, path, status, duration_ms, request_id,
-                ip, user_agent, os, browser, device,
-                country, country_code, region, city, isp,
-                lat, lon, timezone, org,
-                referer, body_size, query_params, resp_size,
-                user_id, user_email, user_name,
-                extra
-            ) VALUES (
-                $1,  $2,
-                $3,  $4,  $5,  $6,  $7,
-                $8,  $9,  $10, $11, $12,
-                $13, $14, $15, $16, $17,
-                $18, $19, $20, $21,
-                $22, $23, $24, $25,
-                $26::uuid, $27, $28,
-                $29::jsonb
-            )
-            """,
-            records,
-        )
+        await pool.executemany(_AUDIT_INSERT_SQL, records)
+        return
     except Exception as exc:
-        logger.warning("audit batch insert failed (%d rows): %s", len(items), exc)
+        if _is_connection_error(exc):
+            # Every single-row retry would fail the same way, each after its
+            # own connect timeout and with its own warning line.
+            logger.warning("audit batch insert failed (%d rows): %s", len(records), exc)
+            return
+        logger.warning("audit batch insert failed (%d rows), retrying row by row: %s", len(records), exc)
+
+    failed = 0
+    for i, record in enumerate(records):
+        try:
+            await pool.execute(_AUDIT_INSERT_SQL, *record)
+        except Exception as exc:
+            if _is_connection_error(exc):
+                failed += len(records) - i
+                logger.warning("audit row insert failed, database unreachable: %s", exc)
+                break
+            failed += 1
+            logger.warning("audit row insert failed: %s", exc)
+    if failed:
+        logger.warning("audit fallback: %d of %d rows could not be inserted", failed, len(records))
 
 
 async def audit_worker() -> None:
@@ -433,6 +582,10 @@ async def audit_worker() -> None:
             return_exceptions=True,
         )
         good = [e for e in enriched if isinstance(e, dict)]
+        if len(good) < len(enriched):
+            first_err = next(e for e in enriched if not isinstance(e, dict))
+            logger.warning("audit: %d row(s) dropped, enrichment failed: %r",
+                           len(enriched) - len(good), first_err)
 
         pool = get_pool()
         if good and pool:

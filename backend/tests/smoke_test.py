@@ -97,10 +97,14 @@ class TestAuthUtils:
             headers = FakeHeaders()
             client = None
 
-        monkeypatch.setattr(auth.settings, "app_password", "Master@2026", raising=False)
-        monkeypatch.setattr(auth.settings, "app_admin_password", "Master@2026", raising=False)
+        # Both secrets hold the same value, to simulate the collision. The value
+        # comes from the environment so no real password is committed here.
+        import os
+        shared_pw = os.environ.get("SMOKE_TEST_OVERLAP_PASSWORD", "overlap-test-password")
+        monkeypatch.setattr(auth.settings, "app_password", shared_pw, raising=False)
+        monkeypatch.setattr(auth.settings, "app_admin_password", shared_pw, raising=False)
 
-        res = await auth.login(auth.LoginRequest(password="Master@2026"), FakeRequest())
+        res = await auth.login(auth.LoginRequest(password=shared_pw), FakeRequest())
         assert res["role"] == "admin"
         assert auth.verify_token(res["token"]) == "admin"
 

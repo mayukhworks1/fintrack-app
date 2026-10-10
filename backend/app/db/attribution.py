@@ -34,6 +34,8 @@ mutation handlers with the sync internals.
 from __future__ import annotations
 
 import logging
+import math
+import uuid
 from typing import Optional
 
 from fastapi import Request
@@ -46,12 +48,74 @@ logger = logging.getLogger("fintrack.db.attribution")
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract the real client IP from common proxy headers."""
-    for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
-        v = request.headers.get(header, "")
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    """The real client IP — only proxy headers we trust (utils/client_ip.py)."""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
+
+
+# record_history column widths for the actor fields. Values are capped to these
+# so a long client-supplied value can never fail the insert.
+_ACTOR_TEXT_LIMITS = {
+    "change_source": 10, "actor_role": 20, "actor_ip": 45,
+    "actor_country": 80, "actor_city": 100, "actor_region": 100, "actor_isp": 150,
+    "actor_os": 100, "actor_browser": 100, "actor_device": 20,
+    "actor_user_agent": 1000, "actor_path": 200, "actor_method": 10,
+    "actor_device_label": 255, "actor_device_model": 120, "actor_platform_version": 40,
+    "actor_arch": 40, "actor_gpu": 200, "actor_screen": 40, "actor_timezone": 60,
+    "actor_language": 20, "actor_network": 20,
+}
+_SMALLINT_MAX = 32767
+
+
+def _uuid_or_none(value) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _small_int(value) -> Optional[int]:
+    """A SMALLINT value or None. navigator.deviceMemory can be 0.5, and a forged
+    hint can say cores=99999; both used to fail the record_history insert.
+    A fractional value is dropped rather than truncated: 0.5 GB stored as 0
+    would read "Memory 0 GB" in the History tab."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not (math.isfinite(value) and value.is_integer()):
+        return None
+    n = int(value)
+    return n if 0 <= n <= _SMALLINT_MAX else None
+
+
+def _finite_float(value) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    f = float(value)
+    return f if math.isfinite(f) else None
+
+
+def sanitize_actor(actor: dict) -> dict:
+    """Coerce every actor field to something its record_history column accepts.
+
+    The values come from client-controlled headers (X-Client-Hint,
+    X-Session-Id, the path, the user agent), and the history insert runs after
+    the mirror write has committed — so a value that fails the insert loses the
+    record of the change for good. Text loses NUL bytes and is capped, the
+    session id must be a UUID, and the numeric fields must fit their columns.
+    """
+    out = dict(actor)
+    for key, limit in _ACTOR_TEXT_LIMITS.items():
+        v = out.get(key)
+        if v is not None:
+            out[key] = str(v).replace("\x00", "").strip()[:limit] or None
+    out["actor_session_id"] = _uuid_or_none(out.get("actor_session_id"))
+    out["actor_cpu_cores"]  = _small_int(out.get("actor_cpu_cores"))
+    out["actor_memory_gb"]  = _small_int(out.get("actor_memory_gb"))
+    out["actor_lat"]        = _finite_float(out.get("actor_lat"))
+    out["actor_lon"]        = _finite_float(out.get("actor_lon"))
+    return out
 
 
 def empty_actor() -> dict:
@@ -112,10 +176,19 @@ async def build_actor_context(
     except Exception as exc:
         logger.debug("geo_lookup(%s) failed: %s", ip, exc)
 
-    session_id = (
-        getattr(request.state, "session_id", None)
-        or request.headers.get("x-session-id")
-        or None
+    # actor_session_id is a UUID column. Nothing sets state.session_id, so this
+    # was the raw X-Session-Id header, and any non-UUID value failed the
+    # record_history insert. The real auth session id comes next; every
+    # candidate must parse as a UUID (see sanitize_actor).
+    session_id = next(
+        (
+            sid for sid in (
+                _uuid_or_none(getattr(request.state, "session_id", None)),
+                _uuid_or_none(getattr(request.state, "auth_session_id", None)),
+                _uuid_or_none(request.headers.get("x-session-id")),
+            ) if sid
+        ),
+        None,
     )
 
     # ── Build the friendly device label (e.g. "MacBook · macOS 14.5 (arm64) · 8 cores · M2 Pro · Chrome 131") ──
@@ -124,10 +197,10 @@ async def build_actor_context(
     def _trunc(v, n: int):
         if v is None:
             return None
-        s = str(v).strip()
+        s = str(v).replace("\x00", "").strip()
         return (s[:n] or None) if s else None
 
-    return {
+    return sanitize_actor({
         "change_source":           "user",
         "actor_role":              (role or "")[:20] or None,
         "actor_ip":                (ip or "")[:45] or None,
@@ -159,7 +232,7 @@ async def build_actor_context(
         "actor_timezone":          _trunc(hint.get("timezone"), 60),
         "actor_language":          _trunc(hint.get("language") or hint.get("locale"), 20),
         "actor_network":           _trunc(hint.get("network"), 20),
-    }
+    })
 
 
 async def record_user_attribution(
@@ -193,7 +266,8 @@ async def pop_attribution(teable_id: str) -> dict:
     if not actor or not isinstance(actor, dict):
         return empty_actor()
     # Defensive merge — guarantee all keys are present even if the cached
-    # entry was written by an older code version.
+    # entry was written by an older code version — then re-sanitise, since an
+    # entry cached by an older build may still hold an unvalidated value.
     merged = empty_actor()
     merged.update(actor)
-    return merged
+    return sanitize_actor(merged)
