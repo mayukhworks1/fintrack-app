@@ -968,9 +968,11 @@ async def run_sync(incremental: bool = False) -> None:
             )
             if reconcile_skipped:
                 # Its own row, after the stats row: that one has already busted
-                # the caches for what the upserts changed, and this one is the
-                # latest for the source, so the admin health check flags it
-                # until a pass reconciles cleanly.
+                # the caches for what the upserts changed. This one is the
+                # source's latest only until the next incremental pass writes
+                # its stats (about 30 s); it stays in the sync log and as the
+                # admin overview's last sync error, and a skip repeats every
+                # full pass until the cause is fixed.
                 await _write_sync_log(pool, source, 0, 0, 0, 0, 0, reconcile_skipped[:500])
         except Exception as exc:
             logger.error("[%s] Upsert error for %s: %s", label, source, exc)

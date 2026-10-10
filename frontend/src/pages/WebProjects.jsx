@@ -1852,7 +1852,22 @@ export function AllResourcesView() {
         await api.webProjects.resources.create(payload)
         toast('Resource added!', 'success')
       } else {
-        await api.webProjects.resources.update(editingRec.id, payload)
+        // The picker shows one link, the first. A PATCH's lone project_id only
+        // adds a link, so a changed pick goes as the full list with the shown
+        // project swapped for the new one (a move, other links kept), and an
+        // unchanged pick sends no link change at all.
+        const { project_id: picked, ...fields } = payload
+        const shown = editingRec.initial?.project_id || ''
+        if (picked && picked !== shown) {
+          const rec = resources.find(r => r.id === editingRec.id)
+          const linked = (Array.isArray(rec?.fields?.Project) ? rec.fields.Project : [])
+            .map(p => p?.id).filter(Boolean)
+          const next = shown && linked.includes(shown)
+            ? linked.map(id => (id === shown ? picked : id))
+            : [...linked, picked]
+          fields.project_ids = [...new Set(next)]
+        }
+        await api.webProjects.resources.update(editingRec.id, fields)
         toast('Resource updated!', 'success')
       }
       setDrawer(null); setEditingRec(null)
