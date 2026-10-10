@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as M
+import app.routers.ai as A
 import app.routers.deps as D
 import app.routers.invoices as INV
 import app.routers.pages as P
@@ -82,6 +83,13 @@ def quota(monkeypatch):
                 "limit": 200, "metered": True}
 
     monkeypatch.setattr(U, "quota_state", quota_state)
+
+    # These routes are called with legacy password tokens, which carry no user
+    # id and are metered by the per-role shared budget instead.
+    async def rate_check(key, limit=60, window_sec=60, bucket="ratelimit"):
+        return state["allowed"], 0
+
+    monkeypatch.setattr(A, "rate_check", rate_check)
     return state
 
 

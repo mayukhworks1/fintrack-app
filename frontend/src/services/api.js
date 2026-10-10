@@ -232,8 +232,11 @@ async function _doRequest(path, options = {}, retries = 2) {
       ...rest,
     })
 
-    // Auto-logout on 401 from a protected endpoint (token expired / revoked)
-    if (res.status === 401 && token) {
+    // Auto-logout on 401 from a protected endpoint (token expired / revoked).
+    // Only when the rejected token is still the stored one: a request sent with
+    // an older token (an impersonation that was just exited, a session already
+    // logged out) must not wipe the token that replaced it.
+    if (res.status === 401 && token && getAuthToken() === token) {
       clearAuthToken()
       window.dispatchEvent(new CustomEvent('fintrack:auth-expired'))
       // Redirect to login with message after a brief delay to allow context cleanup

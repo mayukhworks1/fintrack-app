@@ -91,7 +91,10 @@ _PUBLIC_COLUMN_FIELDS = {
 }
 # What the page shows when the link carries no columns (RESOURCE_META.defaultColumns).
 _PUBLIC_DEFAULT_COLUMNS = {
-    "status": ("Client", "Project", "Status", "Short Status", "Current Status (Detailed)", "Last Modified"),
+    # "Share selected" status links carry no column config; they have always
+    # shown the records' files, so the default keeps them. Links that set their
+    # own columns show files only when the Files column is on.
+    "status": ("Client", "Project", "Status", "Short Status", "Current Status (Detailed)", "Attachments", "Last Modified"),
     "projects": ("Client", "Project Name", "Project Status", "Health", "Amount Billed So far"),
     "invoices": (
         "Invoice Number", "Client Name", "Project", "Category", "Payment Status", "Amount Raised",

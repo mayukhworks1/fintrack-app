@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useDialog } from '../../hooks/useDialog'
+import { liveFiltersDropped } from '../../components/SharedLinks'
 import { ComboBox, StatusAttachmentField } from './StatusFields'
 import { ALL_COLUMNS, EXPIRY_OPTS, MAX_SHARED_VIEW_RECORDS, THEME_PRESETS, fmtDate, isExpired, parseAttachments, statusStyle, summarizeShareScope } from './utils'
 
@@ -706,7 +707,15 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
   async function patchView(token, patch, onRollback) {
     setSavingTokens(s => new Set(s).add(token))
     try {
-      await api.sharedViews.update(token, patch)
+      const updated = await api.sharedViews.update(token, patch)
+      const live = Array.isArray(patch.record_ids) && patch.record_ids.length === 1 && patch.record_ids[0] === '__dynamic__'
+      if (live && patch.view_config && updated && liveFiltersDropped(patch.view_config, updated)) {
+        // An older server kept the link but not its filters; never leave it publishing everything.
+        await api.sharedViews.update(token, { is_active: false }).catch(() => {})
+        setViews(vs => vs.map(v => v.token === token ? { ...v, is_active: false } : v))
+        showToast('The server is mid-update and did not keep this view’s filters, so the link has been switched off. Try again in a few minutes.', 'error')
+        return
+      }
       setSavedTokens(s => new Set(s).add(token))
       setTimeout(() => setSavedTokens(s => { const n = new Set(s); n.delete(token); return n }), 2200)
     } catch (e) {

@@ -146,6 +146,11 @@ class Settings(BaseSettings):
     # Optional per-role ceilings, e.g. {"viewer": 50, "admin": 1000}. Read on
     # every check, so a change takes effect on restart rather than redeploy.
     ai_daily_limit_by_role: dict[str, int] = {}
+    # Shared-password sessions carry no user id, so the per-user quota above
+    # cannot meter them. Each legacy role instead shares one rolling-24h budget
+    # (everyone on the viewer password together, and so on). Override a single
+    # role with ai_daily_limit_by_role {"legacy:viewer": 50}; 0 blocks AI for it.
+    legacy_ai_daily_call_limit: int = 1000
 
     langchain_api_key:    Optional[str] = None
     langchain_tracing_v2: bool = False
@@ -168,7 +173,8 @@ class Settings(BaseSettings):
     # Largest file any upload route accepts (attachments, Studio documents,
     # page assets), in bytes. Routes with a smaller limit of their own keep it.
     # Set MAX_UPLOAD_BYTES to change it.
-    max_upload_bytes: int = 15 * 1024 * 1024
+    # 25 MB keeps the limit page assets always had; attachments had none.
+    max_upload_bytes: int = 25 * 1024 * 1024
     # sync_log rows older than this many days are pruned hourly by the sync
     # loop. 0 turns pruning off. Set SYNC_LOG_RETENTION_DAYS to change it.
     sync_log_retention_days: int = 14

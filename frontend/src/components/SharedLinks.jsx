@@ -76,6 +76,20 @@ export function activeRuleCount(viewConfig) {
   return rules.filter(c => c?.field && c?.op && (['is_empty', 'is_not_empty'].includes(c.op) || (c.value ?? '') !== '')).length
 }
 
+// During a deploy this app can briefly talk to an older server, which drops
+// filter rules it does not know. A live link saved that way publishes every
+// record instead of the filtered view, so compare what was saved with what
+// was sent. view_config may come back as a JSON string.
+export function liveFiltersDropped(sentConfig, savedView) {
+  let saved = savedView?.view_config
+  if (typeof saved === 'string') {
+    try { saved = JSON.parse(saved) } catch { saved = null }
+  }
+  return activeRuleCount(sentConfig) > activeRuleCount(saved || {})
+}
+
+const FILTERS_DROPPED_MESSAGE = 'The server is mid-update and did not keep this view’s filters. Try again in a few minutes.'
+
 function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
   const noun = DEFAULT_LABELS[resourceType] || 'record'
   const vc = view?.view_config || {}
@@ -184,6 +198,10 @@ export function ShareLinkModal({
       }
       if (viewConfig) payload.view_config = { ...viewConfig, highlightColumns, utcOffsetMinutes: ownerUtcOffsetMinutes() }
       const data = await api.sharedViews.create(payload)
+      if (isLive && liveFiltersDropped(payload.view_config, data)) {
+        if (data?.token) await api.sharedViews.delete(data.token).catch(() => {})
+        throw new Error(`${FILTERS_DROPPED_MESSAGE} No link was created.`)
+      }
       setShareData(data)
       setStep('created')
     } catch (e) {
@@ -796,6 +814,12 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
     setViews(vs => vs.map(v => v.token === view.token ? nextView : v))
     try {
       const updated = await api.sharedViews.update(view.token, patch)
+      if (nextView.is_dynamic && patch.view_config && updated && liveFiltersDropped(patch.view_config, updated)) {
+        await api.sharedViews.update(view.token, { is_active: false }).catch(() => {})
+        setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...updated, is_active: false } : v))
+        showToast(`${FILTERS_DROPPED_MESSAGE} The link has been switched off.`, 'error')
+        return
+      }
       setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...(updated || nextView) } : v))
       showToast('Link scope updated', 'success')
     } catch (e) {

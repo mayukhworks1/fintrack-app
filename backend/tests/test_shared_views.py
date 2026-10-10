@@ -169,11 +169,15 @@ class TestPublicFieldProjection:
         assert fields["Remark"] == INVOICE_FIELDS["Remark"]   # editable, so its current value is shown
         assert "Raised By" not in fields
 
-    def test_status_attachments_are_opt_in(self, public):
+    def test_status_attachments_follow_the_links_columns(self, public):
         rec = {"fields": {"Client": "Acme", "Project": "Site", "Status": "In progress",
                           "Attachments": [{"name": "a.png", "presignedUrl": "https://x"}]}}
+        # "Share selected" links carry no column config and have always shown files.
         public["view"] = _view(resource_type="status")
         public["records"] = {"rec1": rec}
+        assert _get(public)["records"][0]["fields"]["Attachments"][0]["name"] == "a.png"
+        # A link that picks its columns shows files only when Files is one of them.
+        public["view"] = _view(resource_type="status", view_config={"columns": ["Client", "Project"]})
         assert "Attachments" not in _get(public)["records"][0]["fields"]
         public["view"] = _view(resource_type="status", view_config={"columns": ["Client", "Attachments"]})
         assert _get(public)["records"][0]["fields"]["Attachments"][0]["name"] == "a.png"

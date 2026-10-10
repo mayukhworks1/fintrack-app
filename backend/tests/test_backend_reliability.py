@@ -305,9 +305,9 @@ class TestReadUpload:
         assert U.upload_limit(10) == 10
         assert U.upload_limit(25) == 15
 
-    def test_default_cap_is_15_mb(self):
+    def test_default_cap_is_25_mb(self):
         from app.config import Settings
-        assert Settings().max_upload_bytes == 15 * 1024 * 1024
+        assert Settings().max_upload_bytes == 25 * 1024 * 1024
 
     def test_a_file_under_the_limit_is_returned_whole(self):
         from app.utils.uploads import read_upload

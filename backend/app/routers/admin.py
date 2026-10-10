@@ -1072,7 +1072,7 @@ async def admin_delete_auth_user(
                 user_id,
                 user["email"],
                 user["status"],
-                request.client.host if request.client else None,
+                _client_ip(request) or None,
                 request.headers.get("user-agent", ""),
                 json.dumps({"deleted_by": actor_role, "forced": force}),
             )
@@ -1325,7 +1325,7 @@ async def admin_resend_invite(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            request.client.host if request.client else None,
+            _client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -1424,7 +1424,7 @@ async def admin_force_password_reset(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            request.client.host if request.client else None,
+            _client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -3250,7 +3250,7 @@ async def admin_impersonate(
             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
             """,
             user_id, token_hint, expires_at,
-            request.client.host if request.client else "unknown",
+            _client_ip(request) or "unknown",
             ua[:500], os_str, browser, device, device_label, metadata,
         )
 

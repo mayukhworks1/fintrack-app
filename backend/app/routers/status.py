@@ -24,7 +24,6 @@ from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor, require_permission
 from .ai import _ai_quota
-from .auth import verify_token
 from ..db.valkey import rate_check, cache_bust
 from ..utils.uploads import read_upload, upload_limit
 
@@ -81,6 +80,8 @@ async def _check_write_rate(request: Request) -> None:
 async def stream_status_changes(
     request: Request,
     token: str = Query(..., description="Bearer token passed as query param (EventSource limitation)"),
+    _auth=Depends(require_auth),
+    _perm: str = Depends(require_permission("module.status.view")),
 ):
     """
     Server-Sent Events endpoint.  The frontend connects once on mount and
@@ -89,12 +90,10 @@ async def stream_status_changes(
     (via webhook).  The frontend then does a silent background reload.
 
     Auth is via ?token= because the browser EventSource API cannot send
-    custom headers.
+    custom headers. require_auth reads it from there, so the stream gets the
+    same session checks as every other route: a revoked session, a deleted
+    user or an exited impersonation no longer keeps it open.
     """
-    role = verify_token(token)
-    if role is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
     queue = subscribe_sse()
 
     async def event_generator():

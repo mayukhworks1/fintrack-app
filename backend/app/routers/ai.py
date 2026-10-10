@@ -49,10 +49,14 @@ async def _ai_quota(request: Request) -> None:
     so the six LLM-calling endpoints here — chat, stream, autofill, analyze,
     report, briefing — had no per-user cap at all, while every call was
     already being counted into ai_traces. The counter existed; only the check
-    was missing. Metering is per email-auth user; legacy role tokens carry no
-    user id and quota_state reports them as unmetered by design.
+    was missing. Metering is per email-auth user. Legacy role tokens carry no
+    user id, so each legacy role shares one rolling-24h budget instead; without
+    it anyone holding the read-only viewer password could loop the models.
     """
     user_id = getattr(request.state, "auth_user_id", None)
+    if not user_id:
+        await _legacy_ai_quota(getattr(request.state, "role", None) or "legacy")
+        return
     quota = await ai_usage.quota_state(user_id, getattr(request.state, "auth_role", None))
     if not quota["allowed"]:
         raise HTTPException(
@@ -60,6 +64,31 @@ async def _ai_quota(request: Request) -> None:
             f"Daily AI limit reached ({quota['used']}/{quota['limit']} calls). "
             "It resets on a rolling 24-hour window.",
         )
+
+
+async def _legacy_ai_quota(role: str) -> None:
+    """One rolling-24h AI budget per legacy role, shared by everyone on that password."""
+    from ..config import settings
+    limit = settings.legacy_ai_daily_call_limit
+    override = (settings.ai_daily_limit_by_role or {}).get(f"legacy:{role}")
+    if override is not None:
+        try:
+            limit = int(override)
+        except (TypeError, ValueError):
+            pass
+    limit = max(0, int(limit))
+    if limit == 0:
+        raise HTTPException(403, "AI features are not available for this sign-in.")
+    # Fails open when Valkey is down, like every other limiter here.
+    allowed, _remaining = await rate_check(role, limit=limit, window_sec=86400, bucket="aiquota:legacy")
+    if not allowed:
+        raise HTTPException(
+            429,
+            f"Daily AI limit reached for this shared sign-in ({limit} calls). "
+            "It resets on a rolling 24-hour window.",
+        )
+
+
 from ..db.postgres import get_pool
 from ..db.valkey import rate_check
 

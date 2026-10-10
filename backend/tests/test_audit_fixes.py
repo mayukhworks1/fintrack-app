@@ -168,7 +168,7 @@ class TestAIQuotaCoverage:
             asyncio.run(AI._ai_quota(R()))
         assert e.value.status_code == 429
 
-    def test_gate_passes_when_allowed_and_for_unmetered_legacy_tokens(self, monkeypatch):
+    def test_gate_passes_when_allowed_and_meters_legacy_tokens_per_role(self, monkeypatch):
         import app.routers.ai as AI
         import app.services.ai_usage as U
         seen = {}
@@ -176,13 +176,21 @@ class TestAIQuotaCoverage:
             seen["uid"] = uid
             return {"allowed": True, "used": 0, "limit": 200}
         monkeypatch.setattr(U, "quota_state", fine)
+        buckets = []
+        async def rate_check(key, limit=60, window_sec=60, bucket="ratelimit"):
+            buckets.append(f"{bucket}:{key}")
+            return True, limit
+        monkeypatch.setattr(AI, "rate_check", rate_check)
         class R:
             class state: auth_user_id = "u1"; auth_role = "viewer"
         asyncio.run(AI._ai_quota(R()))
+        assert seen["uid"] == "u1" and buckets == []
+        # A legacy password session has no user id: it draws on its role's
+        # shared budget instead of passing unmetered.
         class Legacy:
-            class state: auth_role = "editor"
+            class state: role = "editor"
         asyncio.run(AI._ai_quota(Legacy()))
-        assert seen["uid"] is None
+        assert buckets == ["aiquota:legacy:editor"]
 
     # The list above names routers.ai only, so model calls made from other
     # routers went ungated without this test noticing: page generation,
