@@ -225,10 +225,21 @@ def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
 
 
 def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 60) -> str:
-    """Compact invoice context for interactive chat."""
+    """Compact invoice context for interactive chat.
+
+    `summary` covers every invoice; `records` are itemised only up to `limit`,
+    and the header says so, so a model counting the lines does not take the
+    sample for the whole book.
+    """
+    total = summary["total_invoices"]
+    shown = records[:limit]
+    active = summary.get("active_invoices")
     lines = [
         "=== INVOICE TRACKING SUMMARY ===",
-        f"Total Invoices: {summary['total_invoices']}",
+        f"Total Invoices: {total}" + (
+            f" (Active: {active}; the amounts below exclude Cancelled invoices)"
+            if active is not None else ""
+        ),
         f"Total Raised (pre-tax): ₹{summary['total_raised']:,.0f}",
         f"Total with GST: ₹{summary['total_with_tax']:,.0f}",
         f"Total Received: ₹{summary['total_received']:,.0f}",
@@ -236,9 +247,11 @@ def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 6
         f"Collection Rate: {summary['collection_rate']:.1f}%",
         f"By Status: {summary['by_status']}",
         "",
-        "=== LIVE INVOICE RECORDS ===",
+        "=== LIVE INVOICE RECORDS ===" if len(shown) >= total else
+        f"=== LIVE INVOICE RECORDS (sample: the {len(shown)} most recent of {total}; "
+        f"the totals above cover all {total}) ===",
     ]
-    for r in records[:limit]:
+    for r in shown:
         f = r.get("fields", {})
         lines.append(
             f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
@@ -972,10 +985,19 @@ async def _build_context_pg(pool) -> str:
         return cached
 
     # ── 2. Build from PG mirrors ─────────────────────────────────────────
-    proj_rows, inv_rows, last_sync_row = await asyncio.gather(
-        pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 120"),
-        pool.fetch("SELECT fields FROM invoices_mirror  ORDER BY raised_date DESC NULLS LAST LIMIT 60"),
-        pool.fetchrow("SELECT MAX(synced_at) AS last_sync FROM projects_mirror"),
+    # Mirror deletes are soft, so every read filters deleted_at. The invoice
+    # totals come from every live invoice (the typed columns only, so this
+    # stays cheap); the 60 newest are fetched in full only for the itemised
+    # sample. Totals computed from that sample covered whichever 60 invoices
+    # were newest, Cancelled and deleted ones included.
+    proj_rows, inv_rows, inv_total_rows, last_sync_row = await asyncio.gather(
+        pool.fetch("SELECT fields FROM projects_mirror WHERE deleted_at IS NULL ORDER BY synced_at DESC LIMIT 120"),
+        pool.fetch("SELECT fields FROM invoices_mirror  WHERE deleted_at IS NULL ORDER BY raised_date DESC NULLS LAST LIMIT 60"),
+        pool.fetch(
+            "SELECT payment_status, amount_raised, amount_with_tax, amount_received "
+            "FROM invoices_mirror WHERE deleted_at IS NULL"
+        ),
+        pool.fetchrow("SELECT MAX(synced_at) AS last_sync FROM projects_mirror WHERE deleted_at IS NULL"),
     )
 
     # asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
@@ -1031,25 +1053,20 @@ async def _build_context_pg(pool) -> str:
     records_text = format_chat_records_context([{"fields": f} for f in proj_fields], limit=120)
 
     # ── 4. Compute invoice summary ───────────────────────────────────────
-    total_raised   = sum(_safe_float(f.get("Amount Raised"))    for f in inv_fields)
-    total_with_tax = sum(_safe_float(f.get("Amount with Tax"))  for f in inv_fields)
-    total_received = sum(_safe_float(f.get("Amount Received"))  for f in inv_fields)
-    outstanding    = total_with_tax - total_received
-    coll_rate      = (total_received / total_with_tax * 100) if total_with_tax > 0 else 0.0
-    inv_by_status: dict = {}
-    for f in inv_fields:
-        s = f.get("Payment Status", "Unknown")
-        inv_by_status[s] = inv_by_status.get(s, 0) + 1
-
-    inv_summary = {
-        "total_invoices":    len(inv_fields),
-        "total_raised":      total_raised,
-        "total_with_tax":    total_with_tax,
-        "total_received":    total_received,
-        "total_outstanding": outstanding,
-        "collection_rate":   coll_rate,
-        "by_status":         inv_by_status,
+    # The Invoices page's own summary (InvoiceService._compute_summary, which
+    # the Teable fallback below also uses), so chat answers agree with the page
+    # and do not depend on whether Postgres is up: Cancelled excluded from the
+    # amounts, outstanding the pre-tax raised amount of unpaid invoices.
+    _col_to_field = {
+        "payment_status":  "Payment Status",
+        "amount_raised":   "Amount Raised",
+        "amount_with_tax": "Amount with Tax",
+        "amount_received": "Amount Received",
     }
+    inv_summary = InvoiceService()._compute_summary([
+        {"fields": {name: r[col] for col, name in _col_to_field.items() if r[col] is not None}}
+        for r in inv_total_rows
+    ])
     invoice_text = _fmt_chat_invoice_context(inv_summary, [{"fields": f} for f in inv_fields], limit=60)
 
     context = project_text + "\n" + records_text + "\n\n" + invoice_text
@@ -1656,6 +1673,13 @@ def _pct(value, decimals: int = 1) -> str:
     return f"{_safe_num(value):.{decimals}f}%"
 
 
+def _margin_pct(value) -> float:
+    """Teable's "Profit percentage" in percent. It is stored as a decimal
+    fraction (0.4479 = 44.79%), losses included (-0.25 = -25%)."""
+    pct = _safe_num(value)
+    return pct * 100 if -2.0 < pct < 2.0 else pct
+
+
 def _project_label(fields: dict) -> str:
     return f"{_field(fields, 'Client', default='?')} / {_field(fields, 'Project Name', default='?')}"
 
@@ -1786,7 +1810,7 @@ def _build_board_pack_report(
         health_bullets.append(
             f"{_project_label(f)}: Status={_field(f, 'Project Status', default='?')}, "
             f"Health={_field(f, 'Health', default='N/A')}, Billed={_money_inr(_field(f, 'Amount Billed So far', default=0))}, "
-            f"Profit={_money_inr(_field(f, 'Actual Profit', default=0))} ({_pct(_field(f, 'Profit percentage', default=0))}), "
+            f"Profit={_money_inr(_field(f, 'Actual Profit', default=0))} ({_pct(_margin_pct(_field(f, 'Profit percentage', default=0)))}), "
             f"InputCost={_money_inr(_field(f, 'Input Cost', 'Input cost so far', default=0))}, "
             f"Overhead={_money_inr(_field(f, 'Overhead Cost', 'Total Overhead Cost', default=0))}, "
             f"TargetAchieved={'YES' if _field(f, 'Target Achieved ', default=False) else 'no'}."
@@ -1813,16 +1837,43 @@ def _build_board_pack_report(
         risk_bullets.append("Pending invoices: none.")
     add_section(parts, "Risks & Concerns:", risk_bullets)
 
-    recommendations = [
-        "Keep project delivery controls unchanged because project health is currently green across the tracked portfolio.",
-        "Prioritise collections on every named pending invoice before adding new billing exposure on PMS.",
-        "Use the report history panel to compare week-on-week changes in outstanding invoices, margin, and delivery status.",
-    ]
+    # Recommendations and action items come from the figures above. They were
+    # fixed text: every board pack called portfolio health green and named the
+    # same two PMS invoices, beside red projects in Risks & Concerns and long
+    # after those invoices were settled.
+    recommendations = []
+    if at_risk:
+        names = "; ".join(str(p.get("name", "?")) for p in at_risk[:5])
+        more = f"; and {len(at_risk) - 5} more" if len(at_risk) > 5 else ""
+        recommendations.append(
+            f"Review cost and delivery on the {len(at_risk)} at-risk project(s) ({names}{more}) "
+            f"before adding scope there."
+        )
+    else:
+        recommendations.append(
+            "No tracked project has a negative margin or a red health flag; keep delivery controls under review."
+        )
+    if pending:
+        recommendations.append(
+            "Prioritise collections on the pending invoices listed above, oldest first; "
+            f"{_money_inr((invoice_summary or {}).get('total_outstanding'))} is outstanding."
+        )
+    recommendations.append(
+        "Use the report history panel to compare week-on-week changes in outstanding invoices, margin, and delivery status."
+    )
     add_section(parts, "Recommendations:", recommendations)
 
     action_bullets = [
-        "Follow up on [WM/26-27/009] PMS and record the next collection outcome.",
-        "Follow up on [WM/26-27/020] PMS and record the next collection outcome.",
+        f"Follow up on [{inv.get('invoice_no') or '?'}] {inv.get('project', '?')} "
+        f"({_money_inr(inv.get('amount'))}, {int(_safe_num(inv.get('aging')))}d"
+        f"{'' if inv.get('followup') else ', no follow-up date set'}) and record the next collection outcome."
+        for inv in pending[:5]
+    ]
+    action_bullets += [
+        f"Agree a recovery plan for {p.get('name', '?')} (margin {p.get('pct')}%, health {p.get('health') or 'N/A'})."
+        for p in at_risk[:5]
+    ]
+    action_bullets += [
         "Update every project status row where client dependency, hold state, or credential wait has changed.",
         "Review the latest stored report against this one after the next sync to confirm collections and project health movement.",
     ]
@@ -1871,8 +1922,8 @@ async def _build_report_payload_pg(pool) -> dict:
     so the PG fast-path produces an identical-quality report to the Teable path.
     """
     proj_rows, inv_rows = await asyncio.gather(
-        pool.fetch("SELECT fields FROM projects_mirror ORDER BY synced_at DESC LIMIT 300"),
-        pool.fetch("SELECT fields FROM invoices_mirror ORDER BY raised_date DESC NULLS LAST LIMIT 500"),
+        pool.fetch("SELECT fields FROM projects_mirror WHERE deleted_at IS NULL ORDER BY synced_at DESC LIMIT 300"),
+        pool.fetch("SELECT fields FROM invoices_mirror WHERE deleted_at IS NULL ORDER BY raised_date DESC NULLS LAST LIMIT 500"),
     )
 
     def _to_dict(v) -> dict:  # noqa: E306
@@ -1913,8 +1964,10 @@ async def _build_report_payload_pg(pool) -> dict:
     for f in proj_fields:
         billed     = _safe_float(f.get("Amount Billed So far"))
         profit     = _safe_float(f.get("Actual Profit"))
-        inp_cost   = _safe_float(f.get("Input Cost"))
-        overhead   = _safe_float(f.get("Overhead Cost"))
+        # The Teable field names, as teable.py and toon.py read them; "Input
+        # Cost" and "Overhead Cost" do not exist, so the cost base read ₹0.
+        inp_cost   = _safe_float(f.get("Input cost so far"))
+        overhead   = _safe_float(f.get("Total Overhead Cost"))
 
         total_billed     += billed
         total_profit     += profit
@@ -1925,8 +1978,9 @@ async def _build_report_payload_pg(pool) -> dict:
         if pct_raw is not None and pct_raw != "":
             try:
                 pct_f = float(pct_raw)
-                # Teable stores Profit % as decimal fraction (0.4479 = 44.79%)
-                if 0 < pct_f < 2.0:
+                # Teable stores Profit % as decimal fraction (0.4479 = 44.79%),
+                # losses included: -0.25 is -25%, not -0.25%.
+                if -2.0 < pct_f < 2.0:
                     pct_f = pct_f * 100
                 profit_pcts.append(pct_f)
                 label = f"{f.get('Client', '?')} / {f.get('Project Name', '?')}"
@@ -1954,7 +2008,7 @@ async def _build_report_payload_pg(pool) -> dict:
     at_risk = []
     for f in proj_fields:
         pct_v  = _safe_float(f.get("Profit percentage"))
-        if 0 < pct_v < 2.0:
+        if -2.0 < pct_v < 2.0:   # a fraction, negative ones too (see above)
             pct_v = pct_v * 100
         health = f.get("Health") or ""
         if pct_v < 0 or "🔴" in health:
@@ -2168,7 +2222,7 @@ def _build_template_report(template: str, payload: dict, status_records: list[di
             fields = record.get("fields", {})
             client = fields.get("Client") or "Unknown"
             billed = float(fields.get("Amount Billed So far") or 0)
-            profit = float(fields.get("Profit Amount") or 0)
+            profit = float(fields.get("Actual Profit") or 0)
             stats = by_client.setdefault(client, {"billed": 0.0, "profit": 0.0, "projects": 0})
             stats["billed"] += billed
             stats["profit"] += profit
