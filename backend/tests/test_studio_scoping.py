@@ -35,6 +35,7 @@ _IDS = re.compile(r"c\.document_id = ANY\(\$(\d+)::uuid\[\]\)")
 class FakeDB:
     def __init__(self, full_text=True):
         self.full_text = full_text
+        self.fail_threads = False
         self.docs = {
             A_DOC: {"owner_email": ALICE, "status": "ready", "title": "Alice - Britannia MSA", "filename": "a.pdf"},
             B_DOC: {"owner_email": BOB, "status": "ready", "title": "Bob - vendor notes", "filename": "b.pdf"},
@@ -89,10 +90,15 @@ class FakeDB:
     # -- threads ------------------------------------------------------------
     async def fetchval(self, sql, *args):
         assert "FROM studio_threads" in sql
-        thread_id, scope = args
+        if self.fail_threads:
+            raise ConnectionError("connection was closed in the middle of operation")
+        thread_id, scope, *rest = args          # rest: the caller's login email
+        login = rest[0] if rest else None
         uuid.UUID(thread_id)                     # asyncpg rejects a malformed uuid
         owner = self.threads.get(thread_id)
-        if owner is None or (scope is not None and owner.lower() != scope.lower()):
+        if owner is None:
+            return None
+        if scope is not None and owner.lower() not in {scope.lower(), (login or "").lower()}:
             return None
         return 1
 
@@ -196,6 +202,35 @@ class TestThreadOwnership:
     def test_privileged_roles_keep_reaching_every_thread(self, env):
         out = _ask(_req("ops@example.com", role="admin"), thread_id=A_THREAD)
         assert out["thread_id"] == A_THREAD
+
+    @staticmethod
+    def _overridden():
+        """A scoped user whose admin-set teable_email differs from the login:
+        the scope uses the override, new threads are stamped with the login."""
+        req = _req("carol@example.com")
+        req.state.auth_teable_email = "carol.raisedby@example.com"
+        return req
+
+    def test_a_teable_email_override_still_continues_its_own_conversation(self, env):
+        first = _ask(self._overridden())
+        follow = _ask(self._overridden(), question="And the vendor terms?", thread_id=first["thread_id"])
+        assert follow["thread_id"] == first["thread_id"]
+        assert [t["question"] for t in env.db.turns if t["thread_id"] == first["thread_id"]] == [
+            "What are the payment terms?", "And the vendor terms?",
+        ]
+
+    def test_the_override_does_not_open_someone_elses_thread(self, env):
+        with pytest.raises(HTTPException) as e:
+            _ask(self._overridden(), thread_id=B_THREAD)
+        assert e.value.status_code == 404
+
+    def test_a_failed_ownership_read_is_not_reported_as_not_found(self, env):
+        """The client forgets a conversation that answers 404; a database
+        blip must not make it do that."""
+        env.db.fail_threads = True
+        with pytest.raises(HTTPException) as e:
+            _ask(_req(BOB), thread_id=B_THREAD)
+        assert e.value.status_code == 503 and env.model_calls == []
 
     def test_analyze_refuses_someone_elses_thread_before_the_model_runs(self, env, monkeypatch):
         analysed = []

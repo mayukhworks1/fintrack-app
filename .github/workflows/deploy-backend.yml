@@ -13,7 +13,8 @@ run-name: Deploy backend ${{ github.event.workflow_run.head_sha || github.sha }}
 # file) is applied by the "changes" step instead. It compares against the
 # commit of the last successful deploy rather than the previous push, so a
 # backend change whose CI failed, or whose deploy was cancelled or failed, is
-# deployed by the next green run instead of being skipped for good. A manual
+# deployed by the next green run instead of being skipped for good. Re-running
+# an older commit's CI deploys nothing once a newer commit is live. A manual
 # run always deploys, and only from main: there is one production Space.
 on:
   workflow_run:
@@ -90,6 +91,12 @@ jobs:
           done <<< "$runs"
 
           if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null &&
+             git merge-base --is-ancestor "$DEPLOY_SHA" "$base"; then
+            # A re-run of an older commit's CI: deploying it would roll the
+            # Space back behind what is live.
+            echo "${DEPLOY_SHA} is not newer than ${base}, which is already live — nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null &&
              git diff --quiet "$base" "$DEPLOY_SHA" -- backend .github/workflows/deploy-backend.yml; then
             echo "backend/ is unchanged since ${base}, which is already live — nothing to deploy."
             echo "deploy=false" >> "$GITHUB_OUTPUT"

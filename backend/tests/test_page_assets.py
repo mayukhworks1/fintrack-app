@@ -182,6 +182,20 @@ class TestDeleteAsset:
             _delete(monkeypatch, FakePool([]), bad, _req(ALICE, "user"))
         assert e.value.status_code == 400 and deleted == []
 
+    @pytest.mark.parametrize("alias", [
+        "pages/2026/10//0123456789abcdef-hero.png",
+        "pages/2026/./10/0123456789abcdef-hero.png",
+        "pages/2026\\10/0123456789abcdef-hero.png",
+        "pages/2026/10/0123456789abcdef-hero.png/",
+    ])
+    def test_a_spelling_no_page_uses_cannot_pass_for_an_unused_file(self, monkeypatch, deleted, alias):
+        """Each matches no reference in Alice's page, so the ownership check
+        would wave it through as an unsaved upload."""
+        pool = FakePool([_page("p1", ALICE, ASSET)])
+        with pytest.raises(HTTPException) as e:
+            _delete(monkeypatch, pool, alias, _req(BOB, "user"))
+        assert e.value.status_code == 400 and deleted == []
+
 
 class TestDeletePageKeepsSharedAssets:
     def test_deleting_your_page_does_not_take_another_pages_files(self, monkeypatch, deleted):

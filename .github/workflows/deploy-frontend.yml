@@ -15,7 +15,8 @@ run-name: Deploy frontend ${{ github.event.workflow_run.head_sha || github.sha }
 # compares against the commit of the last successful deploy rather than the
 # previous push, so a frontend change whose CI failed, or whose deploy was
 # cancelled or failed, is deployed by the next green run instead of being
-# skipped for good. A manual run always deploys, and only from main.
+# skipped for good. Re-running an older commit's CI deploys nothing once a
+# newer commit is live. A manual run always deploys, and only from main.
 on:
   workflow_run:
     workflows: [CI]
@@ -94,6 +95,12 @@ jobs:
           done <<< "$runs"
 
           if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null &&
+             git merge-base --is-ancestor "$DEPLOY_SHA" "$base"; then
+            # A re-run of an older commit's CI: deploying it would roll Pages
+            # back behind what is live.
+            echo "${DEPLOY_SHA} is not newer than ${base}, which is already live — nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null &&
              git diff --quiet "$base" "$DEPLOY_SHA" -- frontend vercel.json .github/workflows/deploy-frontend.yml; then
             echo "frontend/ is unchanged since ${base}, which is already live — nothing to deploy."
             echo "deploy=false" >> "$GITHUB_OUTPUT"

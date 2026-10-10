@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import secrets
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -120,9 +121,17 @@ async def _require_own_thread(request: Request, thread_id: str | None) -> None:
     transcript into this answer and wrote this user's question into their
     history. Scoped like the thread routes: privileged roles reach every
     thread, everyone else only their own.
+
+    A thread is stamped with the login email (_persist_turn), while the scope
+    prefers an admin-set teable_email override; either one makes it the
+    caller's, or every follow-up of such a user would be refused.
     """
     if not thread_id:
         return
+    try:
+        uuid.UUID(str(thread_id))
+    except ValueError:
+        raise HTTPException(404, "Conversation not found")
     pool = get_pool()
     if not pool:
         return  # without a database no thread is read or written
@@ -130,12 +139,17 @@ async def _require_own_thread(request: Request, thread_id: str | None) -> None:
         owned = await pool.fetchval(
             """
             SELECT 1 FROM studio_threads
-             WHERE id = $1::uuid AND ($2::text IS NULL OR LOWER(owner_email) = LOWER($2))
+             WHERE id = $1::uuid
+               AND ($2::text IS NULL OR LOWER(owner_email) IN (LOWER($2), LOWER($3::text)))
             """,
             thread_id, owner_scope_email(request),
+            getattr(request.state, "auth_user_email", None),
         )
-    except Exception:
-        owned = None  # a malformed id, or a failed read, proves no ownership
+    except Exception as exc:
+        # Not a 404: the client forgets a conversation that answers 404, and
+        # a failed read says nothing about whether it exists.
+        logger.warning("studio: could not check thread ownership: %s", exc)
+        raise HTTPException(503, "Could not open that conversation. Try again in a moment.")
     if not owned:
         raise HTTPException(404, "Conversation not found")
 

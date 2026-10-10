@@ -925,6 +925,11 @@ async def delete_page_asset(path: str, request: Request, role: str = Depends(req
     p = p.split("?")[0].split("#")[0]
     if ".." in p or p.startswith("/") or not p.startswith("pages/"):
         raise HTTPException(400, "Invalid asset path")
+    # Only the form a page refers to. "pages/a//b" or "pages/a/./b" match no
+    # reference below, so they would pass as unused, yet storage may resolve
+    # them to the same file.
+    if "\\" in p or any(seg in ("", ".") for seg in p.split("/")):
+        raise HTTPException(400, "Invalid asset path")
 
     auth_role = getattr(request.state, "auth_role", role) or role
     if not _can_see_all(auth_role):

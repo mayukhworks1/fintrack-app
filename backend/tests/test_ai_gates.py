@@ -117,7 +117,7 @@ def email_user(monkeypatch):
     """An email-auth session for a non-privileged user, with a chosen permission set."""
     granted: set[str] = set()
 
-    async def attach(request, token_hint):
+    async def attach(request, token_hint, **_kw):
         request.state.is_email_auth = True
         request.state.auth_user_id = "00000000-0000-0000-0000-0000000000aa"
         request.state.auth_user_email = "maker@example.com"
@@ -129,7 +129,26 @@ def email_user(monkeypatch):
 
     monkeypatch.setattr(D, "_attach_auth_session", attach)
     monkeypatch.setattr(D, "get_effective_permissions", perms)
+    monkeypatch.setattr(INV, "get_effective_permissions", perms)   # _require_invoice_write
     return granted
+
+
+class TestInvoiceParseNeedsWriteAccess:
+    """The quota does not meter legacy tokens and require_permission waves
+    them through, so the read-only viewer password could loop the model via
+    /api/invoices/parse. It now takes the same gate as creating an invoice."""
+
+    @pytest.mark.parametrize("legacy_role", ["viewer", "web", "all", "admin"])
+    def test_a_legacy_token_that_cannot_create_invoices_is_refused(self, client, model, quota, legacy_role):
+        r = _call(client, "/api/invoices/parse", role=legacy_role)
+        assert r.status_code == 403, r.text
+        assert model == []
+
+    def test_a_scoped_email_user_who_may_create_invoices_gets_through(self, client, model, quota, email_user):
+        email_user.add("module.invoices.create")
+        r = _call(client, "/api/invoices/parse", role="viewer")
+        assert r.status_code == 200, r.text
+        assert model == ["parse_invoice"]
 
 
 class TestPagesNeedAiPermission:
