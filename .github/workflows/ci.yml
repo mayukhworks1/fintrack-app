@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# Checkout is all CI needs; the token gets nothing more. The deploy workflows
+# start from this one's result (workflow_run), so keep its name "CI".
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

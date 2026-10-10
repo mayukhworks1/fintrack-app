@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useDialog } from '../../hooks/useDialog'
+import { liveFiltersDropped } from '../../components/SharedLinks'
 import { ComboBox, StatusAttachmentField } from './StatusFields'
 import { ALL_COLUMNS, EXPIRY_OPTS, MAX_SHARED_VIEW_RECORDS, THEME_PRESETS, fmtDate, isExpired, parseAttachments, statusStyle, summarizeShareScope } from './utils'
 
@@ -333,12 +334,15 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
   const [error,     setError]     = useState(null)
   const [shareData, setShareData] = useState(null)
   const [copied,    setCopied]    = useState(false)
+  // Set when the server refused a live link it could not re-apply: offer the visible records instead.
+  const [snapshotOffer, setSnapshotOffer] = useState(false)
   const shareUrl = shareData ? `${window.location.origin}/view/${shareData.token}` : ''
 
-  async function createShare() {
-    setSaving(true); setError(null)
+  async function createShare(asSnapshot = false) {
+    setSaving(true); setError(null); setSnapshotOffer(false)
+    const live = isViewShare && !asSnapshot
     try {
-      if (isViewShare) {
+      if (live) {
         // Dynamic live link — always fetches all matching records from Teable,
         // so new projects added after the link is created appear automatically.
         const payload = {
@@ -349,8 +353,9 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
           resource_type: 'status',
         }
         if (viewConfig) {
-          const { advancedConditions: _stripped, ...safeConfig } = viewConfig
-          payload.view_config = safeConfig
+          // The whole filter state travels, advanced rules included: the server
+          // re-applies it on every open, with this browser's UTC offset for dates.
+          payload.view_config = { ...viewConfig, utcOffsetMinutes: -new Date().getTimezoneOffset() || 0 }
         }
         const data = await api.sharedViews.create(payload)
         setShareData(data); setStep('created')
@@ -367,10 +372,16 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
           access_mode: accessMode,
           resource_type: 'status',
         }
+        if (viewConfig) payload.view_config = viewConfig   // layout and theme for a snapshot of this view
         const data = await api.sharedViews.create(payload)
         setShareData(data); setStep('created')
       }
-    } catch (e) { setError(e.message || 'Failed to create share link') }
+    } catch (e) {
+      setError(e.message || 'Failed to create share link')
+      if (live && e?.status === 422 && selectedRecords.length > 0 && selectedRecords.length <= MAX_SHARED_VIEW_RECORDS) {
+        setSnapshotOffer(true)
+      }
+    }
     finally { setSaving(false) }
   }
   function copyUrl() { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2500) }
@@ -455,6 +466,13 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                 </div>
               )}
               {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>{error}</p>}
+              {snapshotOffer && (
+                <button type="button" onClick={() => createShare(true)} disabled={saving}
+                  className="btn-ghost w-full text-xs px-3 py-2 flex items-center justify-center gap-2"
+                  style={{ border: '1px solid var(--border)' }}>
+                  <Link2 size={12} /> Share a snapshot of the {selectedRecords.length} visible project{selectedRecords.length !== 1 ? 's' : ''} instead
+                </button>
+              )}
               <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
                 <Shield size={13} style={{ color: '#0ea5e9', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
@@ -469,13 +487,13 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
               {isViewShare && (
                 <div className="space-y-1">
                   <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                    Current filters, layout, theme, density, dashboard preferences, and card expansion state will travel with this link.
+                    Current filters (advanced rules included), layout, theme, density, dashboard preferences, and card expansion state will travel with this link. Files are shared only when the Files column is on in list view.
                   </p>
                 </div>
               )}
               <div className="flex items-center justify-end gap-2">
                 <button onClick={onClose} className="btn-ghost text-sm px-4 py-2">Cancel</button>
-                <button onClick={createShare} disabled={saving || (!isViewShare && (selectedRecords.length === 0 || selectedRecords.length > MAX_SHARED_VIEW_RECORDS))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
+                <button onClick={() => createShare()} disabled={saving || (!isViewShare && (selectedRecords.length === 0 || selectedRecords.length > MAX_SHARED_VIEW_RECORDS))} className="btn-primary flex items-center gap-2 text-sm px-4 py-2">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Generate Link
                 </button>
               </div>
@@ -542,10 +560,11 @@ export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose,
 
   const visibleCount = visibleRecords.length
   const snapshotTooLarge = visibleCount > MAX_SHARED_VIEW_RECORDS
-  const { advancedConditions: _ignored, ...safeConfig } = currentConfig || {}
+  // Advanced rules stay in: the server re-applies them for a live scope.
+  const nextConfig = { ...(currentConfig || {}), utcOffsetMinutes: -new Date().getTimezoneOffset() || 0 }
   const currentScope = summarizeShareScope(view)
   const newScope = mode === 'live'
-    ? summarizeShareScope({ is_dynamic: true, view_config: safeConfig })
+    ? summarizeShareScope({ is_dynamic: true, view_config: nextConfig })
     : `Snapshot · ${visibleCount} project${visibleCount === 1 ? '' : 's'}`
 
   async function handleSave() {
@@ -565,8 +584,8 @@ export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose,
     setSaving(true)
     try {
       const patch = mode === 'live'
-        ? { record_ids: ['__dynamic__'], view_config: safeConfig }
-        : { record_ids: visibleRecords.map(r => r.id), view_config: safeConfig }
+        ? { record_ids: ['__dynamic__'], view_config: nextConfig }
+        : { record_ids: visibleRecords.map(r => r.id), view_config: nextConfig }
       await onSave(patch)
       onClose()
     } finally {
@@ -688,7 +707,15 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
   async function patchView(token, patch, onRollback) {
     setSavingTokens(s => new Set(s).add(token))
     try {
-      await api.sharedViews.update(token, patch)
+      const updated = await api.sharedViews.update(token, patch)
+      const live = Array.isArray(patch.record_ids) && patch.record_ids.length === 1 && patch.record_ids[0] === '__dynamic__'
+      if (live && patch.view_config && updated && liveFiltersDropped(patch.view_config, updated)) {
+        // An older server kept the link but not its filters; never leave it publishing everything.
+        await api.sharedViews.update(token, { is_active: false }).catch(() => {})
+        setViews(vs => vs.map(v => v.token === token ? { ...v, is_active: false } : v))
+        showToast('The server is mid-update and did not keep this view’s filters, so the link has been switched off. Try again in a few minutes.', 'error')
+        return
+      }
       setSavedTokens(s => new Set(s).add(token))
       setTimeout(() => setSavedTokens(s => { const n = new Set(s); n.delete(token); return n }), 2200)
     } catch (e) {

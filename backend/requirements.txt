@@ -5,7 +5,9 @@ python-dotenv==1.0.1
 pydantic==2.10.3
 pydantic-settings==2.6.1
 python-multipart==0.0.18
-pypdf==4.3.1
+# 6.x caps how far one stream may inflate (CVE-2025-55197): 4.3.1 inflated a
+# decompression bomb in an uploaded PDF whole, in the API's only process.
+pypdf==6.19.0
 reportlab==4.2.2
 asyncpg==0.29.0
 redis[asyncio]==5.0.8

@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -27,7 +28,7 @@ from typing import Any
 from fastapi import Depends, Header, HTTPException, Query, Request
 from ..db.postgres import get_pool
 from ..utils.tasks import spawn
-from .auth import verify_token
+from .auth import token_is_session_bound, verify_token
 
 logger = logging.getLogger("fintrack.deps")
 
@@ -113,6 +114,23 @@ def _get_token(
 
 PRIVILEGED_AUTH_ROLES = {"superadmin", "admin", "manager", "finance", "web_admin"}
 
+
+def session_metadata(value: Any) -> dict:
+    """
+    auth_sessions.metadata as a dict. The pool registers no jsonb codec, so
+    asyncpg returns JSONB as a str, and calling .get() on it raised.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (str, bytes)):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 # One statement answers both questions a request has about its token: is
 # there a live email-auth session for it, and — if not — has the legacy
 # login it came from been logged out. These used to be two round trips in
@@ -151,21 +169,33 @@ LIMIT 1
 """
 
 
-async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, Any] | None:
+async def _attach_auth_session(
+    request: Request, token_hint: str, *, session_bound: bool = False,
+) -> dict[str, Any] | None:
     """
     Attach database-backed identity for email/password sessions.
 
     Legacy password tokens do not have an auth_sessions row and remain supported.
     Email-auth tokens must have a live, non-revoked session and an active user.
+
+    session_bound tokens (minted for an auth_sessions row) never fall back to
+    the legacy path: with the row gone (user deleted) they are rejected, and
+    with no database they get 503 — fail closed, but not a 401, so clients
+    keep the token and recover when Postgres is back. Legacy password tokens
+    keep working without a database, as before.
     """
     pool = get_pool()
     if not pool:
+        if session_bound:
+            raise HTTPException(status_code=503, detail="Sign-in service is temporarily unavailable")
         return None
     # Callers pass token[:16]; auth_sessions.token_hint is stored as token[:16]
     # too. Match on the value as-is — the old token_hint[:20] slice was a no-op
     # that implied a 20-char hint and masked the real, shared 16-char length.
     row = await pool.fetchrow(_AUTH_LOOKUP_SQL, token_hint)
     if not row or row.get("session_id") is None:
+        if session_bound:
+            raise HTTPException(status_code=401, detail="Session has been revoked")
         # No email-auth session for this hint: a legacy role token, or one
         # issued before session tracking existed. Logout for those flips
         # login_sessions.is_active, which the same statement already read.
@@ -201,7 +231,7 @@ async def _attach_auth_session(request: Request, token_hint: str) -> dict[str, A
     if row["status"] != "active":
         raise HTTPException(status_code=403, detail=f"User is {row['status']}")
 
-    auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
+    auth_role = row["auth_role"] or session_metadata(row["metadata"]).get("auth_role") or "viewer"
     request.state.auth_session_id  = str(row["session_id"])
     request.state.auth_user_id     = str(row["user_id"])
     request.state.auth_user_email  = row["email"]
@@ -296,10 +326,10 @@ async def require_auth(request: Request, token: str = Depends(_get_token)) -> st
     # row; legacy role tokens — login(password) / web / all / editor — have
     # no auth_sessions row, and the same statement reads login_sessions'
     # is_active for them, so a logout there is honoured too. Newest login
-    # row wins because legacy tokens are `expiry:role` with no nonce: two
-    # same-role logins in the same second share a hint and are, correctly,
-    # the same credential.
-    await _attach_auth_session(request, token[:16])
+    # row wins because tokens issued before the nonce are `expiry:role`: two
+    # same-role logins in the same second share a hint. New tokens lead with
+    # a random nonce, so their hint is unique.
+    await _attach_auth_session(request, token[:16], session_bound=token_is_session_bound(token))
     return role
 
 
@@ -336,7 +366,7 @@ async def require_admin(request: Request, role: str = Depends(require_auth)) -> 
     Admin access gate — hardened to check DB auth_role for email-auth sessions.
 
     Allowed:
-      • Legacy 'admin' password (Master@2026) — HMAC role == 'admin'
+      • Legacy 'admin' password (APP_ADMIN_PASSWORD secret) — HMAC role == 'admin'
       • Email-auth users with auth_role 'superadmin' or 'admin' in the DB
 
     Blocked:

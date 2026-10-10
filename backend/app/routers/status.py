@@ -23,8 +23,9 @@ from pydantic import BaseModel
 from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor, require_permission
-from .auth import verify_token
+from .ai import _ai_quota
 from ..db.valkey import rate_check, cache_bust
+from ..utils.uploads import read_upload, upload_limit
 
 # Valkey is NOT used for status list reads — we go straight to PG mirror
 # (1-3 ms) so there's no stale-cache window to worry about.
@@ -42,11 +43,8 @@ def _svc() -> StatusService:
 
 
 def _ip(request: Request) -> str:
-    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):  # cf-connecting-ip is Cloudflare trusted real-IP
-        v = request.headers.get(h, "")
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
@@ -82,6 +80,8 @@ async def _check_write_rate(request: Request) -> None:
 async def stream_status_changes(
     request: Request,
     token: str = Query(..., description="Bearer token passed as query param (EventSource limitation)"),
+    _auth=Depends(require_auth),
+    _perm: str = Depends(require_permission("module.status.view")),
 ):
     """
     Server-Sent Events endpoint.  The frontend connects once on mount and
@@ -90,12 +90,10 @@ async def stream_status_changes(
     (via webhook).  The frontend then does a silent background reload.
 
     Auth is via ?token= because the browser EventSource API cannot send
-    custom headers.
+    custom headers. require_auth reads it from there, so the stream gets the
+    same session checks as every other route: a revoked session, a deleted
+    user or an exited impersonation no longer keeps it open.
     """
-    role = verify_token(token)
-    if role is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
     queue = subscribe_sse()
 
     async def event_generator():
@@ -176,10 +174,12 @@ async def generate_ai_status_update(
     body: AIUpdateRequest,
     role: str = Depends(require_editor),
     _perm: str = Depends(require_permission("module.status.edit")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Generate an AI-written status update narrative for selected records.
-    Rate-limited: shared with status mutation pool (30/min/IP).
+    Rate-limited: shared with status mutation pool (30/min/IP), and counted
+    against the rolling-24h AI quota like every model-calling route.
     """
     await _check_write_rate(request)
 
@@ -356,8 +356,9 @@ async def upload_status_attachment(
 ):
     await _check_write_rate(request)
     svc = _svc()
+    # Outside the try: its 413 must not be turned into a 500 below.
+    content = await read_upload(file, upload_limit())
     try:
-        content = await file.read()
         result = await svc.upload_attachment_to_field(
             record_id=record_id,
             field_name=field_name,

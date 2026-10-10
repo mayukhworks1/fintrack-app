@@ -22,6 +22,7 @@ from ..config import settings
 from ..models import STATUS_TABLE_FIELD_IDS
 from ..utils.cache import cache
 from ..db.postgres import get_pool
+from ..db.sync import fields_with_lmt
 
 logger = logging.getLogger("fintrack.status")
 
@@ -446,7 +447,7 @@ class StatusService:
         # Immediately reflect the new record in the PG mirror so the next
         # list_all() call sees it without waiting for the 30 s incremental sync.
         if new_record.get("id") and new_record.get("fields"):
-            await self._sync_to_pg(new_record["id"], new_record["fields"])
+            await self._sync_to_pg(new_record["id"], fields_with_lmt(new_record))
 
         _bust_all_status_caches()
         await _bust_valkey_status()   # await so cache is empty before SSE fires
@@ -477,7 +478,7 @@ class StatusService:
             data = res.json()
 
         if data.get("id") and data.get("fields"):
-            await self._sync_to_pg(data["id"], data["fields"])
+            await self._sync_to_pg(data["id"], fields_with_lmt(data))
 
         _bust_all_status_caches()
         await _bust_valkey_status()
@@ -526,7 +527,7 @@ class StatusService:
         # Teable returns the full record on PATCH with fieldKeyType=name.
         # If the response is missing fields (unlikely), we still have `fields`
         # as a partial update — good enough until the 30 s sync runs.
-        resp_fields = updated.get("fields") or fields
+        resp_fields = fields_with_lmt(updated) or fields
         await self._sync_to_pg(record_id, resp_fields)
 
         _bust_all_status_caches()

@@ -13,7 +13,9 @@ from ..config import settings
 from ..db.attribution import empty_actor
 from ..db import valkey as vk
 from ..db.postgres import get_pool
+from ..db.sync import fields_with_lmt
 from ..utils.cache import cache
+from ..utils.sorting import cell_sort_key
 from ..utils.tasks import spawn
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
@@ -326,8 +328,10 @@ class WebInvoiceService:
         content: bytes,
         content_type: str,
     ) -> dict:
+        # Only the attachment columns, as in the main invoice service: any other
+        # field id let an upload overwrite a cell such as "Amount Raised".
         field_id = WEB_INVOICE_FIELD_IDS.get(field_name)
-        if not field_id:
+        if field_name not in {"Reference", "Invoice PDF"} or not field_id:
             raise ValueError(f"Unknown attachment field: {field_name}")
 
         url = f"{self._record_url}/{record_id}/{field_id}/uploadAttachment"
@@ -449,8 +453,7 @@ class WebInvoiceService:
 
             # Python-side sorting
             def _sort_key(r):
-                v = r.get("fields", {}).get(order_by, "")
-                return v or ""
+                return cell_sort_key(r.get("fields", {}).get(order_by))
             records.sort(key=_sort_key, reverse=(order == "desc"))
 
             total = len(records)
@@ -613,7 +616,7 @@ class WebInvoiceService:
             records = [r for r in records if r.get("fields", {}).get("Project") == project]
 
         def _sort_key(r):
-            return r.get("fields", {}).get(order_by, "") or ""
+            return cell_sort_key(r.get("fields", {}).get(order_by))
         records.sort(key=_sort_key, reverse=(order == "desc"))
         return records
 
@@ -635,7 +638,7 @@ class WebInvoiceService:
             _bust_web_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
-            await _mirror_write_through(created.get("id"), created.get("fields"))
+            await _mirror_write_through(created.get("id"), fields_with_lmt(created))
             if created.get("id"):
                 # Same reasoning as update_invoice: a second external round
                 # trip the caller never reads, moved off the response.
@@ -667,7 +670,7 @@ class WebInvoiceService:
                 raise RuntimeError(f"{_teable_error(res)}; fields={safe_fields}") from exc
             _bust_web_cache()
             updated = _apply_runtime_invoice_derivatives(res.json())
-            await _mirror_write_through(record_id, updated.get("fields"))
+            await _mirror_write_through(record_id, fields_with_lmt(updated))
             # Off the request path. This is a second round trip to Teable
             # refreshing a derived aging field; its result was never returned
             # to the caller and its failure was already only a log line, so

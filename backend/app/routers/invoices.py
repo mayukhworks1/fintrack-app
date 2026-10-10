@@ -16,7 +16,10 @@ from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
+from ..utils.csv_safe import csv_safe_row
+from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
+from .ai import _ai_quota
 import csv
 import io
 from fastapi.responses import StreamingResponse as _StreamingResponse
@@ -27,11 +30,8 @@ router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
 
 def _ip(request: Request) -> str:
-    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        v = request.headers.get(h, "")
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    from ..utils.client_ip import client_ip
+    return client_ip(request) or "unknown"
 
 
 async def _check_mutation_rate(request: Request) -> None:
@@ -401,7 +401,7 @@ async def export_invoices(
     writer.writerow([label for _, label in COLS])
     for r in records:
         f = r.get("fields", {})
-        writer.writerow([f.get(key, "") for key, _ in COLS])
+        writer.writerow(csv_safe_row(f.get(key, "") for key, _ in COLS))
 
     filename = f"invoices_{_date.today().isoformat()}.csv"
     return _StreamingResponse(
@@ -694,18 +694,24 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
 
 @router.post("/parse")
 async def parse_invoice(
+    request: Request,
     file: UploadFile = File(...),
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.invoices.create")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
-    Uses AI vision/text models to populate as many fields as possible.
+    Uses AI vision/text models to populate as many fields as possible, so it
+    counts against the same rolling-24h AI quota as the assistant.
+
+    Open to whoever may create an invoice, the only use of the result. Legacy
+    tokens skip both gates above (unmetered, no permission matrix), so without
+    this the read-only viewer password could loop the model here.
     """
+    await _require_invoice_write(request, _role, "module.invoices.create")
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB guard
-    content   = await file.read()
-    if len(content) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    content   = await read_upload(file, upload_limit(MAX_BYTES))
 
     mime = file.content_type or "application/octet-stream"
     fname = file.filename or ""
@@ -750,7 +756,7 @@ async def upload_attachment(
             existing = await service.get_invoice(record_id)
             if not is_record_owner(existing, scoped_email):
                 raise HTTPException(status_code=404, detail="Invoice not found")
-        content = await file.read()
+        content = await read_upload(file, upload_limit())
         return await service.upload_attachment_to_field(
             record_id=record_id,
             field_name=field_name,

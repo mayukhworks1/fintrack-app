@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import secrets
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 
 from ..db.postgres import get_pool
 from ..services import ai_usage, storage, studio_analyst, studio_ask, studio_data, studio_docs
+from ..utils.uploads import read_upload, upload_limit
 from .deps import (require_auth, require_permission, owner_scope_email,
                    get_effective_permissions)
 
@@ -110,6 +112,61 @@ def _payload_of(result: dict) -> dict:
     return {k: v for k, v in result.items() if k not in _TURN_COLUMNS}
 
 
+def _studio_scope(request: Request) -> str | None:
+    """
+    The owner a scoped user's Studio documents and threads are filtered by.
+
+    Uploads and threads are stamped with the login email, so that is what they
+    are matched on. owner_scope_email prefers an admin-set teable_email, which
+    exists to widen a user's view of invoices "Raised By" someone else; used
+    here it showed that other person's private documents and threads and hid
+    the user's own. None (privileged roles and legacy sessions) still means
+    unscoped, exactly as owner_scope_email decides.
+    """
+    scope = owner_scope_email(request)
+    if scope is None:
+        return None
+    return getattr(request.state, "auth_user_email", None) or scope
+
+
+async def _require_own_thread(request: Request, thread_id: str | None) -> None:
+    """
+    Refuse a thread_id that is not the caller's, before anything reads or
+    writes it.
+
+    /ask feeds a thread's recent turns into the prompt, and both /ask and
+    /analyze append to it. Unchecked, another user's thread id pulled their
+    transcript into this answer and wrote this user's question into their
+    history. Scoped like the thread routes: privileged roles reach every
+    thread, everyone else only their own (see _studio_scope).
+    """
+    if not thread_id:
+        return
+    try:
+        uuid.UUID(str(thread_id))
+    except ValueError:
+        raise HTTPException(404, "Conversation not found")
+    pool = get_pool()
+    if not pool:
+        return  # without a database no thread is read or written
+    try:
+        owned = await pool.fetchval(
+            """
+            SELECT 1 FROM studio_threads
+             WHERE id = $1::uuid
+               AND ($2::text IS NULL OR LOWER(owner_email) = LOWER($2))
+            """,
+            thread_id, _studio_scope(request),
+        )
+    except Exception as exc:
+        # Not a 404: the client forgets a conversation that answers 404, and
+        # a failed read says nothing about whether it exists.
+        logger.warning("studio: could not check thread ownership: %s", exc)
+        raise HTTPException(503, "Could not open that conversation. Try again in a moment.")
+    if not owned:
+        raise HTTPException(404, "Conversation not found")
+
+
 async def _persist_turn(request: Request, thread_id: str | None,
                         question: str, result: dict) -> None:
     """
@@ -179,9 +236,9 @@ async def list_documents(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    # Scoped users see only what they uploaded. owner_scope_email returns None
+    # Scoped users see only what they uploaded. _studio_scope returns None
     # for privileged roles, which is what widens this to everything.
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     rows = await pool.fetch(
         """
         SELECT id, title, filename, mime_type, byte_size, page_count, chunk_count,
@@ -233,14 +290,9 @@ async def upload_document(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    data = await file.read()
+    data = await read_upload(file, upload_limit(studio_docs.MAX_UPLOAD_BYTES))
     if not data:
         raise HTTPException(400, "That file is empty.")
-    if len(data) > studio_docs.MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            413,
-            f"Files must be under {studio_docs.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        )
 
     filename = file.filename or "document"
     content_type = (file.content_type or "").split(";")[0].strip()
@@ -295,7 +347,7 @@ async def get_document(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     row = await pool.fetchrow(
         """
         SELECT id, title, filename, status, error, page_count, chunk_count, ingested_at
@@ -331,7 +383,7 @@ async def delete_document(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     row = await pool.fetchrow(
         """
         DELETE FROM studio_documents
@@ -379,6 +431,7 @@ async def ask(
             "It resets on a rolling 24-hour window.",
         )
 
+    await _require_own_thread(request, body.thread_id)
     pool = get_pool()
 
     # Prior turns of this conversation, so a follow-up is answered in context
@@ -400,7 +453,10 @@ async def ask(
             logger.debug("studio: could not load thread history: %s", exc)
 
     try:
-        result = await studio_ask.ask(body.question, body.document_ids or None, history)
+        # Retrieval gets the same owner scope as the document list, so a
+        # question searches only what this user can open there.
+        result = await studio_ask.ask(body.question, body.document_ids or None, history,
+                                      owner_email=_studio_scope(request))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
@@ -511,6 +567,9 @@ async def analyze(
             "It resets on a rolling 24-hour window.",
         )
 
+    # Checked before the model call: the turn is appended to this thread.
+    await _require_own_thread(request, body.thread_id)
+
     try:
         result = await studio_analyst.analyze(body.question, owner_scope_email(request))
     except studio_data.SpecError as exc:
@@ -548,7 +607,7 @@ async def list_threads(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     rows = await pool.fetch(
         """
         SELECT t.id, t.title, t.updated_at, t.created_at,
@@ -597,7 +656,7 @@ async def delete_thread(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     deleted = await pool.fetchval(
         """
         DELETE FROM studio_threads
@@ -623,7 +682,7 @@ async def get_thread(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    scope = owner_scope_email(request)
+    scope = _studio_scope(request)
     thread = await pool.fetchrow(
         """
         SELECT id, title FROM studio_threads

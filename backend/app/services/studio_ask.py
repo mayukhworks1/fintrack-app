@@ -83,7 +83,8 @@ def _terms(query: str, limit: int = 12) -> list[str]:
     return out
 
 
-async def _text_search(pool, query: str, document_ids: list[str] | None, limit: int) -> list[dict]:
+async def _text_search(pool, query: str, document_ids: list[str] | None, limit: int,
+                       owner_email: str | None = None) -> list[dict]:
     """
     Postgres full-text search over the GIN-indexed tsvector.
 
@@ -119,11 +120,12 @@ async def _text_search(pool, query: str, document_ids: list[str] | None, limit: 
                    to_tsquery('english', $1) AS q
              WHERE d.status = 'ready'
                AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
+               AND ($4::text IS NULL OR LOWER(d.owner_email) = LOWER($4))
                AND c.content_tsv @@ q
              ORDER BY rank DESC
              LIMIT $3
             """,
-            tsquery, document_ids, limit,
+            tsquery, document_ids, limit, owner_email,
         )
     except Exception as exc:
         # The tsvector column is created behind an exception guard, so it can be
@@ -134,7 +136,8 @@ async def _text_search(pool, query: str, document_ids: list[str] | None, limit: 
     return [dict(r) | {"method": "lexical", "score": float(r["rank"])} for r in rows]
 
 
-async def _keyword_fallback(pool, terms: list[str], document_ids: list[str] | None) -> list[dict]:
+async def _keyword_fallback(pool, terms: list[str], document_ids: list[str] | None,
+                            owner_email: str | None = None) -> list[dict]:
     """
     Last resort for a question full-text search cannot parse into a query —
     all stopwords, or a bare identifier like an invoice number that the English
@@ -151,10 +154,11 @@ async def _keyword_fallback(pool, terms: list[str], document_ids: list[str] | No
           JOIN studio_documents d ON d.id = c.document_id
          WHERE d.status = 'ready'
            AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
+           AND ($4::text IS NULL OR LOWER(d.owner_email) = LOWER($4))
            AND c.content ~* $1
          LIMIT $3
         """,
-        pattern, document_ids, TOP_K * 2,
+        pattern, document_ids, TOP_K * 2, owner_email,
     )
     return [dict(r) | {"method": "lexical", "score": 0.5} for r in rows]
 
@@ -201,7 +205,8 @@ async def _cosine_rerank(pool, query: str, candidates: list[dict]) -> list[dict]
     return candidates
 
 
-async def _vector(pool, query: str, document_ids: list[str] | None) -> list[dict]:
+async def _vector(pool, query: str, document_ids: list[str] | None,
+                  owner_email: str | None = None) -> list[dict]:
     """Semantic neighbours — finds the passage that means the same thing in
     different words, which is exactly what keyword matching misses."""
     if not await embeddings.is_pgvector_available():
@@ -219,11 +224,12 @@ async def _vector(pool, query: str, document_ids: list[str] | None) -> list[dict
              WHERE d.status = 'ready'
                AND c.embedding IS NOT NULL
                AND ($2::uuid[] IS NULL OR c.document_id = ANY($2::uuid[]))
+               AND ($5::text IS NULL OR LOWER(d.owner_email) = LOWER($5))
                AND 1 - (c.embedding <=> $1::vector) > $3
              ORDER BY c.embedding <=> $1::vector
              LIMIT $4
             """,
-            embeddings._vec_literal(vec), document_ids, MIN_SIMILARITY, TOP_K * 2,
+            embeddings._vec_literal(vec), document_ids, MIN_SIMILARITY, TOP_K * 2, owner_email,
         )
         return [dict(r) | {"method": "vector", "score": float(r["similarity"])} for r in rows]
     except Exception as exc:
@@ -261,7 +267,8 @@ def _merge(lexical: list[dict], vector: list[dict]) -> list[dict]:
 RERANK_CANDIDATES = 40
 
 
-async def retrieve(query: str, document_ids: list[str] | None = None) -> list[dict]:
+async def retrieve(query: str, document_ids: list[str] | None = None,
+                   owner_email: str | None = None) -> list[dict]:
     """
     Full-text search first, then semantic re-ranking of what it found.
 
@@ -269,18 +276,25 @@ async def retrieve(query: str, document_ids: list[str] | None = None) -> list[di
     here: without pgvector there is no index to search vectors with, so the
     candidate set has to be narrowed by something that *is* indexed before
     similarity is computed.
+
+    `owner_email` confines every search to that owner's documents — the scope
+    the document list already applies, from owner_scope_email. None searches
+    the whole corpus, which is what privileged roles see. Without it a scoped
+    user's question was answered, with cited excerpts, from other users'
+    private documents; and `document_ids` alone is no fence, since any id can
+    be sent.
     """
     pool = get_pool()
     if not pool:
         return []
 
-    candidates = await _text_search(pool, query, document_ids, RERANK_CANDIDATES)
+    candidates = await _text_search(pool, query, document_ids, RERANK_CANDIDATES, owner_email)
     if not candidates:
-        candidates = await _keyword_fallback(pool, _terms(query), document_ids)
+        candidates = await _keyword_fallback(pool, _terms(query), document_ids, owner_email)
 
     # When the extension does exist, its index finds passages full-text search
     # missed entirely, so those are merged in rather than replaced.
-    native = await _vector(pool, query, document_ids)
+    native = await _vector(pool, query, document_ids, owner_email)
     if native:
         return _merge(candidates[:TOP_K * 2], native)
 
@@ -343,6 +357,7 @@ async def ask(
     question: str,
     document_ids: list[str] | None = None,
     history: list[dict] | None = None,
+    owner_email: str | None = None,
 ) -> dict:
     """
     Answer a question from the corpus.
@@ -350,6 +365,8 @@ async def ask(
     `history` is the recent turns of the same conversation. Without it every
     question is answered in isolation, which makes ordinary follow-ups
     ("and the payment schedule?") unanswerable.
+
+    `owner_email` scopes retrieval to one owner's documents; see retrieve().
 
     Returns {answer, sources, model, verdict, latency_ms, retrieval}.
     """
@@ -360,7 +377,7 @@ async def ask(
         raise ValueError("That question is too long — try asking it more directly.")
 
     started = time.time()
-    chunks = await retrieve(expand_query(question, history), document_ids)
+    chunks = await retrieve(expand_query(question, history), document_ids, owner_email)
 
     if not chunks:
         # Say which words were searched for. "Nothing matched" invites the user

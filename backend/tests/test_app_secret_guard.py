@@ -61,6 +61,41 @@ class TestRefusesTheDevSecretOutsideDevelopment:
         assert _would_refuse(_reload_config(monkeypatch, app_env=value)) is True
 
 
+class TestRefusesAnEmptySecret:
+    # `APP_SECRET=` reaches pydantic as "", which signed every token with an
+    # empty HMAC key while the guard (an equality check on the dev default)
+    # still passed.
+    @pytest.mark.parametrize("value", ["", " ", "\t\n  "])
+    def test_empty_or_whitespace_secret_is_insecure(self, monkeypatch, value):
+        cfg = _reload_config(monkeypatch, app_secret=value)
+        assert cfg.settings.app_secret == value
+        assert cfg.using_insecure_app_secret() is True
+        assert _would_refuse(cfg) is True
+
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_empty_secret_may_still_run_in_development(self, monkeypatch, value):
+        cfg = _reload_config(monkeypatch, app_secret=value, app_env="development")
+        assert cfg.using_insecure_app_secret() is True
+        assert _would_refuse(cfg) is False
+
+    def test_lifespan_refuses_to_boot_on_an_empty_secret(self, monkeypatch):
+        # The guard in main.lifespan, not just the helper: startup must raise.
+        # Put the original config module back first, so importing app.main
+        # here cannot bind the routers to a reloaded settings object.
+        import asyncio
+        monkeypatch.setitem(sys.modules, "app.config", _ORIGINAL_CONFIG)
+        main = importlib.import_module("app.main")
+        monkeypatch.setattr(_ORIGINAL_CONFIG.settings, "app_secret", "", raising=False)
+        monkeypatch.setattr(_ORIGINAL_CONFIG.settings, "app_env", "production", raising=False)
+
+        async def _boot():
+            async with main.lifespan(main.app):
+                pass
+
+        with pytest.raises(RuntimeError, match="APP_SECRET"):
+            asyncio.run(_boot())
+
+
 class TestAllowsLocalDevelopment:
     @pytest.mark.parametrize("value", ["development", "dev", "local", "test", "DEV", " Development "])
     def test_dev_env_names_may_run_on_the_dev_secret(self, monkeypatch, value):

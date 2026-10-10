@@ -46,7 +46,7 @@ export function StatusAttachmentField({ value, onChange, recordId }) {
   return (
     <div>
       <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>
-        Attachments <span className="font-normal" style={{ color: 'var(--text-3)' }}>· shared with public views</span>
+        Attachments <span className="font-normal" style={{ color: 'var(--text-3)' }}>· visible on share links that include files</span>
       </label>
       {attachments.length > 0 && (
         <div className="space-y-1.5 mb-2">

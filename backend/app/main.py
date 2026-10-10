@@ -10,6 +10,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
+from starlette.middleware.gzip import GZipResponder
+from starlette.types import Message, Receive, Scope, Send
 
 from .config import settings
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
@@ -23,6 +26,7 @@ from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
+from .utils.client_ip import client_ip
 from .db import postgres, valkey as vk, migrate
 from .db.postgres import get_init_error
 from .db.sync import sync_loop
@@ -31,6 +35,7 @@ from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
 from .services import alerts, scanner_trap
 from .routers.deps import require_auth, require_admin
+from .utils.uploads import UploadSizeLimitMiddleware
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -49,6 +54,7 @@ _alert_task:      Optional[asyncio.Task] = None
 async def lifespan(app: FastAPI):
     global _sync_task, _audit_task, _aging_refresh_task, _embed_task, _duration_refresh_task, _alert_task
     logger.info("FinTrack API starting (version=%s)", app.version)
+    _install_access_log_redaction()
 
     # ── LangChain / LangSmith observability ─────────────────────────────────
     if settings.langchain_tracing_v2 and settings.langchain_api_key:
@@ -72,14 +78,14 @@ async def lifespan(app: FastAPI):
         # outlier.
         if is_dev_env():
             logger.warning(
-                "APP_SECRET is the public dev default. Allowed because APP_ENV=%s, "
+                "APP_SECRET is empty or the public dev default. Allowed because APP_ENV=%s, "
                 "but tokens signed now are forgeable by anyone with the repo.",
                 settings.app_env,
             )
         else:
             raise RuntimeError(
-                "SECURITY: refusing to start — APP_SECRET is still the public dev "
-                "default, so session tokens for any role (superadmin included) can "
+                "SECURITY: refusing to start — APP_SECRET is empty or still the public "
+                "dev default, so session tokens for any role (superadmin included) can "
                 "be forged by anyone who reads the repo. Set a strong APP_SECRET in "
                 "the deployment secrets (`openssl rand -base64 48`) and restart. "
                 "For local development set APP_ENV=development instead."
@@ -230,6 +236,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Refuse an oversized multipart upload before its body is spooled. Added before
+# every other middleware, so it sits innermost: inside CORS, so its 413 still
+# carries the CORS headers, and inside the request-ID middleware.
+app.add_middleware(UploadSizeLimitMiddleware)
+
 # Localhost origins allowed when FRONTEND_URL is not configured (dev default).
 _DEV_CORS_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",  # Vite dev server
@@ -263,17 +274,61 @@ def _cors_origins() -> list[str]:
     return list(_DEV_CORS_ORIGINS)
 
 
+def _is_event_stream(content_type: str) -> bool:
+    return content_type.split(";", 1)[0].strip().lower() == "text/event-stream"
+
+
+class _SSEPassthroughGZipResponder(GZipResponder):
+    """GZipResponder that sends a text/event-stream response through untouched.
+
+    Starlette 0.41's responder writes each streamed chunk into a GzipFile and
+    never flushes it, so every SSE frame (AI chat, Pages generation, the status
+    board's 'changed' events) was held back until the stream ended. Marking the
+    response as already encoded takes the responder's own passthrough branch.
+    """
+
+    async def send_with_gzip(self, message: Message) -> None:
+        if message["type"] == "http.response.start":
+            if _is_event_stream(Headers(raw=message["headers"]).get("content-type", "")):
+                self.initial_message = message
+                self.content_encoding_set = True
+                return
+        await super().send_with_gzip(message)
+
+
+class SSEAwareGZipMiddleware(GZipMiddleware):
+    """GZipMiddleware that never compresses Server-Sent Events.
+
+    A request that asks for an event stream (EventSource always sends
+    `Accept: text/event-stream`) skips compression outright; any other request
+    whose response turns out to be text/event-stream is passed through by the
+    responder above, which covers the fetch()-based POST streams.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            headers = Headers(scope=scope)
+            if "gzip" in headers.get("Accept-Encoding", "") and "text/event-stream" not in headers.get("Accept", ""):
+                responder = _SSEPassthroughGZipResponder(self.app, self.minimum_size, compresslevel=self.compresslevel)
+                await responder(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 # Compress responses. Every JSON body — the Dashboard's 400-invoice list, the
 # project mirror, audit pages — went over the wire uncompressed; there is no
 # proxy in front of the HF Space to do it. minimum_size keeps tiny responses
 # (health checks, auth verify) uncompressed, where gzip costs more than it saves.
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Event streams are never compressed (see SSEAwareGZipMiddleware).
+app.add_middleware(SSEAwareGZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    # PUT is used by PUT /api/pages/{id} and the permission-matrix toggles;
+    # leaving it out made the browser's preflight fail for both.
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-Response-Time-Ms"],
 )
@@ -302,7 +357,8 @@ _SKIP_AUDIT_PATHS = {"/", "/health", "/health/live"}
 # Query-string keys whose values must never be persisted to the audit log.
 # Tokens (SSE EventSource passes ?token=), passwords, and reset tokens are all
 # secrets that would otherwise sit in plaintext in audit_log / DB backups.
-_SENSITIVE_QUERY_KEYS = {"token", "pw", "password", "secret", "reset_token", "api_key", "apikey"}
+# "t" is the render token that unlocks a password-protected public page.
+_SENSITIVE_QUERY_KEYS = {"token", "pw", "password", "secret", "reset_token", "api_key", "apikey", "t"}
 
 
 def _redact_query(raw_query: str) -> str | None:
@@ -322,13 +378,52 @@ def _redact_query(raw_query: str) -> str | None:
     return out[:500] or None
 
 
+class _AccessLogQueryRedactor(logging.Filter):
+    """Mask sensitive query values in uvicorn's access log lines.
+
+    uvicorn logs `'%s - "%s %s HTTP/%s" %d'` with args
+    (client_addr, method, full_path, http_version, status_code), and full_path
+    carries the raw query string, so `?token=` (the status board's EventSource)
+    landed in the HF run log that admins can read. The audit-log redaction
+    above never covered this logger.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if not (isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str)):
+            return True
+        path, sep, query = args[2].partition("?")
+        if not sep or not query:
+            return True
+        try:
+            from urllib.parse import parse_qsl
+            keys = {k.lower() for k, _ in parse_qsl(query, keep_blank_values=True)}
+        except Exception:
+            keys = set()
+        if keys & _SENSITIVE_QUERY_KEYS:
+            redacted = _redact_query(query) or "[REDACTED]"
+            record.args = (args[0], args[1], f"{path}?{redacted}", args[3], args[4])
+        return True
+
+
+_ACCESS_LOG_REDACTOR = _AccessLogQueryRedactor()
+
+
+def _install_access_log_redaction() -> None:
+    """Attach the redactor to uvicorn's access logger (idempotent)."""
+    access_logger = logging.getLogger("uvicorn.access")
+    if _ACCESS_LOG_REDACTOR not in access_logger.filters:
+        access_logger.addFilter(_ACCESS_LOG_REDACTOR)
+
+
+# Installed at import (uvicorn has already configured its loggers by the time it
+# imports the app) and again at startup, in case logging was reconfigured.
+_install_access_log_redaction()
+
+
 def _get_client_ip(request: Request) -> str:
-    """Real client IP — respects Cloudflare / nginx proxy headers."""
-    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        val = request.headers.get(header, "")
-        if val:
-            return val.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    """Real client IP — only proxy headers we trust (see utils/client_ip.py)."""
+    return client_ip(request)
 
 
 # ── Request ID + audit middleware ────────────────────────────────────────────
@@ -508,24 +603,9 @@ async def health():
     }
 
 
-@app.get("/api/smtp-test", tags=["health"])
-async def smtp_test(pw: str = "", to: str = ""):
-    """Email diagnostic — pass ?pw=<admin_password>&to=<your_email> to send a real test."""
-    import hmac as _hmac
-    from .services.emailer import is_email_configured, send_email
-    # Fail closed if no admin password is configured, and use a constant-time compare.
-    if not settings.app_admin_password or not _hmac.compare_digest(pw, settings.app_admin_password):
-        raise HTTPException(status_code=403, detail="Wrong password")
-    cfg = {
-        "configured": is_email_configured(),
-        "brevo_key_set": bool(settings.brevoapikey),
-        "from_email": settings.smtp_from_email or settings.smtp_username,
-    }
-    if not to:
-        return {"config": cfg, "hint": "Add &to=youremail@example.com to send a real test"}
-    result = await send_email(to, "FinTrack email test", "This is a test email from FinTrack.")
-    return {"result": result, "config": cfg}
-
+# The old unauthenticated GET /api/smtp-test (admin password in ?pw=) is gone:
+# it was an unthrottled password oracle. Admins test email delivery through
+# POST /api/admin/auth/email/test, which uses the normal token.
 
 
 @app.post("/api/admin/alerts/test", tags=["health"])

@@ -153,7 +153,7 @@ Used in AI chat context + report generation for reliable structured AI parsing.
 | `all` | `APP_ALL_PASSWORD` | Web projects + resources |
 | `admin` | `APP_ADMIN_PASSWORD` | PostgreSQL admin dashboard |
 
-Token: `base64url("{expiry}:{role}").base64url(HMAC-SHA256)` — 7-day TTL.
+Token: `base64url("{nonce}:{expiry}:{role}[:s]").base64url(HMAC-SHA256)` — 7-day TTL. The random nonce makes each token's 16-character session hint unique; `:s` marks an email/SSO/impersonation token, which is refused once its `auth_sessions` row is gone. Tokens minted before the nonce (`"{expiry}:{role}"`) still verify until they expire.
 
 ---
 
@@ -321,6 +321,8 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 | `POSTGRES_URL` | Aiven PostgreSQL DSN |
 | `VALKEY_URL` | Aiven Valkey DSN |
 | `TEABLE_WEBHOOK_SECRET` | Webhook HMAC auth (optional) |
+| `TRUSTED_PROXY_HOPS` | Proxies appending to `X-Forwarded-For` in front of the API (default `1` = rightmost entry; `0` = ignore). Keys the login rate limit, scanner bans and audit IPs |
+| `TRUST_CF_CONNECTING_IP` | Honour `CF-Connecting-IP` / `X-Real-IP` (default `false`; set only if the API is reachable solely through Cloudflare) |
 
 ---
 

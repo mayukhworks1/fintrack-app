@@ -4,6 +4,7 @@ import {
   AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck,
 } from 'lucide-react'
 import { api } from '../services/api'
+import { csvRow } from '../utils/csv'
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts'
@@ -124,9 +125,9 @@ function downloadBlob(filename, content, type = 'text/plain;charset=utf-8') {
 function dashboardToCsv(dashboard) {
   const rows = dashboard?.table?.rows || []
   const columns = dashboard?.table?.columns || []
-  const csvRows = [columns.join(',')]
+  const csvRows = [csvRow(columns)]
   for (const row of rows) {
-    csvRows.push((row || []).map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    csvRows.push(csvRow(row || []))
   }
   return csvRows.join('\n')
 }
@@ -134,9 +135,9 @@ function dashboardToCsv(dashboard) {
 function detailTableToCsv(dashboard) {
   const table = dashboard?.detailTable
   if (!table?.columns?.length) return ''
-  const csvRows = [table.columns.join(',')]
+  const csvRows = [csvRow(table.columns)]
   for (const row of table.rows || []) {
-    csvRows.push((row || []).map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    csvRows.push(csvRow(row || []))
   }
   return csvRows.join('\n')
 }

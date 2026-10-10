@@ -6,7 +6,7 @@ committed; these pin them so they cannot quietly regress.
 
   * mirror writes never move backwards (upsert_record stale-skip)
   * legacy role tokens are revoked by logout (deps.require_auth)
-  * the AI quota gates exactly the LLM-calling endpoints (routers.ai)
+  * the AI quota gates exactly the LLM-calling endpoints (every router)
   * a failing cold-start sync does not kill the sync loop (db.sync)
   * responses over the wire are gzip-compressed (main)
 """
@@ -168,7 +168,7 @@ class TestAIQuotaCoverage:
             asyncio.run(AI._ai_quota(R()))
         assert e.value.status_code == 429
 
-    def test_gate_passes_when_allowed_and_for_unmetered_legacy_tokens(self, monkeypatch):
+    def test_gate_passes_when_allowed_and_meters_legacy_tokens_per_role(self, monkeypatch):
         import app.routers.ai as AI
         import app.services.ai_usage as U
         seen = {}
@@ -176,13 +176,77 @@ class TestAIQuotaCoverage:
             seen["uid"] = uid
             return {"allowed": True, "used": 0, "limit": 200}
         monkeypatch.setattr(U, "quota_state", fine)
+        buckets = []
+        async def rate_check(key, limit=60, window_sec=60, bucket="ratelimit"):
+            buckets.append(f"{bucket}:{key}")
+            return True, limit
+        monkeypatch.setattr(AI, "rate_check", rate_check)
         class R:
             class state: auth_user_id = "u1"; auth_role = "viewer"
         asyncio.run(AI._ai_quota(R()))
+        assert seen["uid"] == "u1" and buckets == []
+        # A legacy password session has no user id: it draws on its role's
+        # shared budget instead of passing unmetered.
         class Legacy:
-            class state: auth_role = "editor"
+            class state: role = "editor"
         asyncio.run(AI._ai_quota(Legacy()))
-        assert seen["uid"] is None
+        assert buckets == ["aiquota:legacy:editor"]
+
+    # The list above names routers.ai only, so model calls made from other
+    # routers went ungated without this test noticing: page generation,
+    # invoice parsing and the status-board update. They are named here, and the
+    # route walk below catches the next one before it ships.
+    OTHER_LLM_ENDPOINTS = [
+        ("pages", "ai_generate_page"), ("pages", "ai_interview"), ("pages", "ai_stream_page"),
+        ("pages", "ai_section_edit"), ("pages", "ai_fix_error"),
+        ("invoices", "parse_invoice"), ("web_invoices", "parse_web_invoice"),
+        ("status", "generate_ai_status_update"),
+    ]
+
+    @pytest.mark.parametrize("module,name", OTHER_LLM_ENDPOINTS)
+    def test_llm_callers_in_other_routers_are_gated(self, module, name):
+        import importlib
+        fn = getattr(importlib.import_module(f"app.routers.{module}"), name)
+        assert _gated(fn), f"{module}.{name} calls the LLM but has no quota gate"
+
+    # What a route calls to reach the model. Studio's /ask and /analyze check
+    # the same quota inline and are covered in test_studio_scoping.
+    LLM_ENTRY_POINTS = {
+        "generate_page", "analyze_prompt_needs", "stream_generate_page",
+        "edit_page_section", "fix_page_script_error",
+        "_try_chat", "chat_with_ai", "chat_with_ai_tuned", "stream_chat_with_ai",
+        "judge_answer", "autofill_project", "analyze_project", "generate_report",
+        "generate_status_briefing", "ai_status_update", "parse_invoice_document",
+    }
+
+    def test_no_registered_route_reaches_the_model_without_the_gate(self):
+        import app.main as M
+        import app.routers.ai as AI
+        from fastapi.routing import APIRoute
+
+        def referenced(code):
+            # A streaming route calls the model from a generator nested inside it.
+            names = set(code.co_names)
+            for const in code.co_consts:
+                if inspect.iscode(const):
+                    names |= referenced(const)
+            return names
+
+        def gated(dependant):
+            return any(d.call is AI._ai_quota or gated(d) for d in dependant.dependencies)
+
+        callers = {
+            r.path: gated(r.dependant)
+            for r in M.app.routes
+            if isinstance(r, APIRoute)
+            and r.endpoint.__module__ != "app.routers.studio"
+            and referenced(r.endpoint.__code__) & self.LLM_ENTRY_POINTS
+        }
+        # The walk must actually find the callers it exists to police.
+        assert {"/api/pages/ai/stream", "/api/invoices/parse", "/api/web-invoices/parse",
+                "/api/status/ai-update"} <= set(callers)
+        ungated = sorted(path for path, ok in callers.items() if not ok)
+        assert ungated == [], f"these routes call the model without the AI quota: {ungated}"
 
 
 # ── 4. a failing cold-start sync no longer kills the loop ────────────────────
@@ -230,7 +294,8 @@ class TestGzip:
         from fastapi.testclient import TestClient
         from fastapi.middleware.gzip import GZipMiddleware
         import app.main as M
-        assert any(m.cls is GZipMiddleware for m in M.app.user_middleware)
+        # A subclass that also passes event streams through untouched.
+        assert any(issubclass(m.cls, GZipMiddleware) for m in M.app.user_middleware)
         c = TestClient(M.app)
         big = c.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
         small = c.get("/health/live", headers={"Accept-Encoding": "gzip"})

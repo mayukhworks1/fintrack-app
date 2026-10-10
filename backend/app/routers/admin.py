@@ -1,10 +1,10 @@
 """
 Admin dashboard — full PostgreSQL visibility.
 
-Protected by the 'admin' role (password: APP_ADMIN_PASSWORD, default Master@2026).
+Protected by the 'admin' role (password: set via the APP_ADMIN_PASSWORD secret).
 
 Login:
-  POST /api/auth/login  {"password": "Master@2026"}
+  POST /api/auth/login  {"password": "<APP_ADMIN_PASSWORD>"}
   → { "token": "...", "role": "admin" }
 
 Then use the token as a Bearer token for all /api/admin/* endpoints.
@@ -45,7 +45,7 @@ from ..config import settings, using_insecure_app_secret
 from ..db.postgres import get_pool
 from ..services.shared_views import SharedViewService
 from .deps import (invalidate_permission_cache, require_admin, require_auth,
-                   require_permission, require_superadmin)
+                   require_permission, require_superadmin, session_metadata)
 
 logger = logging.getLogger("fintrack.admin")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -102,11 +102,8 @@ def _no_db():
 
 
 def _client_ip(request: Request) -> str:
-    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        value = request.headers.get(header, "")
-        if value:
-            return value.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 # The commit a process is running cannot change while it runs. Computed once;
@@ -526,9 +523,11 @@ async def admin_create_auth_user(
     body: AuthUserCreate,
     request: Request,
     actor_role: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
     from ..services.auth_master import create_admin_invited_user
 
+    _guard_superadmin_role(request, body.role_key)
     result = await create_admin_invited_user(
         email=body.email,
         full_name=body.full_name,
@@ -553,6 +552,64 @@ async def _get_role_id(conn, role_key: str):
     return role_id
 
 
+# ── Role hierarchy ────────────────────────────────────────────────────────────
+#
+# require_admin admits the shared legacy admin password and email admins, and
+# require_permission waves legacy tokens through, so neither stops an admin
+# from minting a superadmin or locking one out. Granting the superadmin role,
+# and acting on an account that holds it, is reserved to an email-authenticated
+# superadmin. The legacy admin password counts as an admin here.
+#
+# That also means nothing below a superadmin can restore one, and bootstrap
+# refuses once any user exists. So a superadmin may not demote, disable,
+# reject or delete the last active superadmin (in practice, themself).
+
+def _actor_is_superadmin(request: Request) -> bool:
+    return bool(getattr(request.state, "is_email_auth", False)) and (
+        (getattr(request.state, "auth_role", "") or "") == "superadmin"
+    )
+
+
+def _guard_superadmin_role(request: Request, role_key: str | None) -> None:
+    if (role_key or "").strip().lower() == "superadmin" and not _actor_is_superadmin(request):
+        raise HTTPException(status_code=403, detail="Only a superadmin can grant the superadmin role")
+
+
+async def _guard_superadmin_target(
+    conn, request: Request, user_id: str, *, removes_superadmin: bool = False,
+) -> None:
+    actor_is_superadmin = _actor_is_superadmin(request)
+    if actor_is_superadmin and not removes_superadmin:
+        return
+    is_superadmin = await conn.fetchval(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM auth_user_roles ur
+            JOIN auth_roles r ON r.id = ur.role_id
+            WHERE ur.user_id = $1::uuid AND r.role_key = 'superadmin'
+        )
+        """,
+        user_id,
+    )
+    if not is_superadmin:
+        return
+    if not actor_is_superadmin:
+        raise HTTPException(status_code=403, detail="Only a superadmin can manage a superadmin account")
+    another_remains = await conn.fetchval(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM auth_users u
+            JOIN auth_user_roles ur ON ur.user_id = u.id
+            JOIN auth_roles r ON r.id = ur.role_id
+            WHERE r.role_key = 'superadmin' AND u.status = 'active' AND u.id <> $1::uuid
+        )
+        """,
+        user_id,
+    )
+    if not another_remains:
+        raise HTTPException(status_code=409, detail="Cannot remove the last active superadmin")
+
+
 @router.patch("/auth/users/{user_id}/approve")
 async def admin_approve_auth_user(
     user_id: str,
@@ -565,8 +622,10 @@ async def admin_approve_auth_user(
     if not pool:
         return _no_db()
     role_key = body.role_key or "user"
+    _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=role_key.strip().lower() != "superadmin")
             role_id = await _get_role_id(conn, role_key)
             user = await conn.fetchrow(
                 """
@@ -629,6 +688,7 @@ async def admin_reject_auth_user(
         return _no_db()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             user = await conn.fetchrow(
                 """
                 UPDATE auth_users
@@ -670,6 +730,7 @@ async def admin_disable_auth_user(
         return _no_db()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             user = await conn.fetchrow(
                 """
                 UPDATE auth_users
@@ -710,8 +771,13 @@ async def admin_reactivate_auth_user(
     if not pool:
         return _no_db()
     role_key = body.role_key
+    _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await _guard_superadmin_target(
+                conn, request, user_id,
+                removes_superadmin=bool(role_key) and role_key.strip().lower() != "superadmin",
+            )
             role_id = await _get_role_id(conn, role_key) if role_key else None
             user = await conn.fetchrow(
                 """
@@ -774,8 +840,10 @@ async def admin_update_auth_user_role(
     if not pool:
         return _no_db()
     role_key = (body.role_key or "").strip().lower()
+    _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=role_key != "superadmin")
             role_id = await _get_role_id(conn, role_key)
             user = await conn.fetchrow(
                 "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
@@ -843,6 +911,7 @@ async def admin_revoke_auth_user_sessions(
         user = await conn.fetchrow("SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid", user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Auth user not found")
+        await _guard_superadmin_target(conn, request, user_id)
         count = await conn.fetchval(
             """
             WITH changed AS (
@@ -985,6 +1054,7 @@ async def admin_delete_auth_user(
             )
             if not user:
                 raise HTTPException(status_code=404, detail="Auth user not found")
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             if user["status"] == "active" and not force:
                 raise HTTPException(
                     status_code=409,
@@ -1002,9 +1072,19 @@ async def admin_delete_auth_user(
                 user_id,
                 user["email"],
                 user["status"],
-                request.client.host if request.client else None,
+                _client_ip(request) or None,
                 request.headers.get("user-agent", ""),
                 json.dumps({"deleted_by": actor_role, "forced": force}),
+            )
+            # Tokens minted since the session marker are refused once their
+            # auth_sessions row is gone. Older ones would verify as a bare,
+            # unscoped legacy role, so end their login rows: the legacy path
+            # rejects a hint whose newest login_sessions row is inactive.
+            await conn.execute(
+                """UPDATE login_sessions SET is_active = false, expires_at = NOW()
+                   WHERE is_active = true
+                     AND token_hint IN (SELECT token_hint FROM auth_sessions WHERE user_id = $1::uuid)""",
+                user_id,
             )
             # Cascade delete in dependency order
             await conn.execute("DELETE FROM auth_sessions         WHERE user_id = $1::uuid", user_id)
@@ -1160,13 +1240,15 @@ async def admin_user_timeline_export(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    # CSV
+    # CSV. email and ip arrive from login and registration attempts, so each
+    # cell is neutralised before a spreadsheet can run it as a formula.
     import csv, io
+    from ..utils.csv_safe import csv_safe_row
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["timestamp", "event_type", "role", "email", "status", "ip", "actor_email", "metadata"])
     for e in events:
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             e["created_at"].isoformat() if e["created_at"] else "",
             e["event_type"] or "",
             e["role"] or "",
@@ -1175,7 +1257,7 @@ async def admin_user_timeline_export(
             e["ip"] or "",
             e["actor_email"] or "",
             e["metadata"] or "",
-        ])
+        ]))
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
@@ -1192,7 +1274,14 @@ async def admin_resend_invite(
     actor_role: str = Depends(require_admin),
     _perm: str = Depends(require_permission("module.admin.users.manage")),
 ):
-    """Generate a fresh invite link and email it to the user."""
+    """
+    Generate a fresh invite link and email it to the user.
+
+    Only for accounts that have not activated (no password set, never signed
+    in): the link sets a password, so on an active account it was a takeover
+    link. When the email is not delivered the link is returned to a
+    superadmin only; anyone else is told to fix delivery.
+    """
     pool = get_pool()
     if not pool:
         return _no_db()
@@ -1204,13 +1293,25 @@ async def admin_resend_invite(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id::text AS id, email, first_name, last_name, full_name, status FROM auth_users WHERE id = $1::uuid",
+            """
+            SELECT u.id::text AS id, u.email, u.first_name, u.last_name, u.full_name, u.status,
+                   (u.password_hash IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM auth_sessions s WHERE s.user_id = u.id)) AS not_activated
+            FROM auth_users u
+            WHERE u.id = $1::uuid
+            """,
             user_id,
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        await _guard_superadmin_target(conn, request, user_id)
         if user["status"] not in ("active", "pending_approval"):
             raise HTTPException(status_code=409, detail="Can only resend invite to active or pending users")
+        if not user["not_activated"]:
+            raise HTTPException(
+                status_code=409,
+                detail="This account is already activated. Use force password reset instead.",
+            )
 
         # Revoke old reset tokens and create a fresh one
         await conn.execute(
@@ -1224,7 +1325,7 @@ async def admin_resend_invite(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            request.client.host if request.client else None,
+            _client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -1263,7 +1364,22 @@ async def admin_resend_invite(
             ),
         ),
     )
-    return {"ok": True, "delivery": delivery, "invite_url": invite_url if not delivery.get("sent") else None}
+    if delivery.get("sent"):
+        return {"ok": True, "delivery": delivery, "invite_url": None}
+    reason = delivery.get("reason") or delivery.get("detail") or "unknown"
+    if _actor_is_superadmin(request):
+        return {
+            "ok": True,
+            "delivery": delivery,
+            "invite_url": invite_url,
+            "message": f"Invite email not delivered ({reason}). Share the invite link with the user directly.",
+        }
+    return {
+        "ok": True,
+        "delivery": delivery,
+        "invite_url": None,
+        "message": f"Invite email not delivered ({reason}). Fix email delivery and resend.",
+    }
 
 
 # ── Force password reset ──────────────────────────────────────────────────────
@@ -1292,6 +1408,7 @@ async def admin_force_password_reset(
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        await _guard_superadmin_target(conn, request, user_id)
         if user["status"] != "active":
             raise HTTPException(status_code=409, detail="Can only force reset for active users")
 
@@ -1307,7 +1424,7 @@ async def admin_force_password_reset(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            request.client.host if request.client else None,
+            _client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -2552,6 +2669,21 @@ async def admin_mirror_projects(
     return {"total": total, "limit": limit, "offset": offset, "rows": records}
 
 
+def _mirror_date_param(name: str, value: str):
+    """
+    A from_ts/to_ts query value as a date for the DATE column raised_date.
+
+    asyncpg will not bind a str to a DATE parameter, so passing the raw string
+    failed every filtered request with a 500. A timestamp is accepted and cut to
+    its date; anything else is the caller's mistake and gets a 400.
+    """
+    from datetime import date
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: expected YYYY-MM-DD")
+
+
 @router.get("/mirror/invoices")
 async def admin_mirror_invoices(
     limit:          int           = Query(100, ge=1, le=500),
@@ -2582,9 +2714,9 @@ async def admin_mirror_invoices(
     if teable_id:
         where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
-        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+        where.append(f"raised_date >= ${idx}"); params.append(_mirror_date_param("from_ts", from_ts)); idx += 1
     if to_ts:
-        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
+        where.append(f"raised_date <= ${idx}"); params.append(_mirror_date_param("to_ts", to_ts)); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -2645,9 +2777,9 @@ async def admin_mirror_web_invoices(
     if teable_id:
         where.append(f"teable_id = ${idx}"); params.append(teable_id); idx += 1
     if from_ts:
-        where.append(f"raised_date >= ${idx}"); params.append(from_ts); idx += 1
+        where.append(f"raised_date >= ${idx}"); params.append(_mirror_date_param("from_ts", from_ts)); idx += 1
     if to_ts:
-        where.append(f"raised_date <= ${idx}"); params.append(to_ts); idx += 1
+        where.append(f"raised_date <= ${idx}"); params.append(_mirror_date_param("to_ts", to_ts)); idx += 1
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -3093,7 +3225,9 @@ async def admin_impersonate(
             "viewer": "viewer", "web": "web", "all": "all",
         }
         legacy_role = legacy_role_map.get(auth_role, "viewer")
-        token = make_token(role=legacy_role)
+        # Session-bound: once the session row is revoked or gone, the token is
+        # refused instead of read as a bare legacy role.
+        token = make_token(role=legacy_role, session_bound=True)
         token_hint = token[:16]
         expires_at = datetime.now(timezone.utc) + timedelta(hours=2)
 
@@ -3116,7 +3250,7 @@ async def admin_impersonate(
             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
             """,
             user_id, token_hint, expires_at,
-            request.client.host if request.client else "unknown",
+            _client_ip(request) or "unknown",
             ua[:500], os_str, browser, device, device_label, metadata,
         )
 
@@ -3175,7 +3309,9 @@ async def admin_impersonate_exit(
         if not row:
             raise HTTPException(status_code=404, detail="Session not found or already expired")
 
-        meta = row["metadata"] or {}
+        # JSONB comes back from asyncpg as a str; .get() on it raised, so exit
+        # 500'd before the revoke and the session lived out its 2 h.
+        meta = session_metadata(row["metadata"])
         impersonated_by = meta.get("impersonated_by")
         if not impersonated_by:
             raise HTTPException(status_code=400, detail="This session is not an impersonation session")
@@ -3218,34 +3354,48 @@ async def admin_set_password(
     validate_password(body.password)
     new_hash = hash_password(body.password)
 
+    # One transaction: the new password, the revocation and the audit row land
+    # together or not at all. The revoke used `RETURNING COUNT(*)`, which
+    # Postgres rejects, after the password had already autocommitted — so the
+    # endpoint 500'd, sessions stayed live and nothing was audited.
     async with pool.acquire() as conn:
-        user = await conn.fetchrow(
-            "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
-            user_id,
-        )
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        async with conn.transaction():
+            user = await conn.fetchrow(
+                "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
+                user_id,
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
 
-        await conn.execute(
-            "UPDATE auth_users SET password_hash = $1, updated_at = NOW() WHERE id = $2::uuid",
-            new_hash, user_id,
-        )
-        revoked = await conn.fetchval(
-            "UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL RETURNING COUNT(*)",
-            user_id,
-        )
-        await conn.execute(
-            """
-            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
-            VALUES ($1::uuid, 'admin_set_password', $2::uuid, $3::jsonb)
-            """,
-            user_id, actor_user_id,
-            _json.dumps({"sessions_revoked": revoked or 0}),
-        )
+            await conn.execute(
+                "UPDATE auth_users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2::uuid",
+                new_hash, user_id,
+            )
+            revoked = await conn.fetchval(
+                """
+                WITH changed AS (
+                  UPDATE auth_sessions
+                  SET revoked_at = NOW()
+                  WHERE user_id = $1::uuid
+                    AND revoked_at IS NULL
+                  RETURNING id
+                )
+                SELECT COUNT(*) FROM changed
+                """,
+                user_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
+                VALUES ($1::uuid, 'admin_set_password', $2::uuid, $3::jsonb)
+                """,
+                user_id, actor_user_id,
+                _json.dumps({"sessions_revoked": int(revoked or 0)}),
+            )
 
     return {
         "ok": True,
         "user_id": user_id,
         "email": user["email"],
-        "sessions_revoked": revoked or 0,
+        "sessions_revoked": int(revoked or 0),
     }

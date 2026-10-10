@@ -1,5 +1,5 @@
 /**
- * Web Projects Tracker — for the 'all' role (All@2026)
+ * Web Projects Tracker — for the 'all' role (APP_ALL_PASSWORD)
  *
  * Exports:
  *   ProjectsWorkspace (named) — embeddable inside WebInvoices as a workspace tab
@@ -541,7 +541,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
 
 // ── Resource Drawer (polished portal, same style as ProjectDrawer) ─────────────
 
-function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [] }) {
+function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [], deleteLabel = 'Delete' }) {
   const dialog = useDialog({ label: 'Resource', onClose, active: open })
   const EMPTY = {
     resource_name: '', role: '', type_: 'Employee',
@@ -774,7 +774,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
                 color: '#f87171',
               }}>
               <Trash2 size={13} className="inline mr-1" />
-              {confirmDel ? 'Confirm?' : 'Delete'}
+              {confirmDel ? 'Confirm?' : deleteLabel}
             </button>
           ) : <div />}
           <div className="flex gap-2 ml-auto">
@@ -1515,11 +1515,16 @@ export function ProjectsWorkspace() {
   const handleSaveResource = async (payload) => {
     setSaving(true)
     try {
-      payload.project_id = selectedProjectId
       if (drawer === 'new-resource') {
+        // The drawer's picker starts on this project; keep a different pick.
+        payload.project_id = payload.project_id || selectedProjectId
         await api.webProjects.resources.create(payload)
         toast('Resource added!', 'success')
       } else {
+        // An update carrying project_id replaces the resource's whole Project
+        // link list, unassigning it from every other project it is on. Links
+        // change only through assign/unassign.
+        delete payload.project_id
         await api.webProjects.resources.update(editingRecord.id, payload)
         toast('Resource updated!', 'success')
       }
@@ -1530,11 +1535,14 @@ export function ProjectsWorkspace() {
     finally { setSaving(false) }
   }
 
+  // Removing a resource here takes it off this project only. Deleting the
+  // record, as this used to, also took it — with its hours and cost — off
+  // every other project it was assigned to.
   const handleDeleteResource = async (resourceId) => {
     setDeletingResourceId(resourceId)
     try {
-      await api.webProjects.resources.delete(resourceId)
-      toast('Resource removed', 'info')
+      await api.webProjects.resources.unassign(resourceId, selectedProjectId)
+      toast('Resource removed from this project', 'info')
       setResources(prev => prev.filter(r => r.id !== resourceId))
       await loadProjects()
       const proj = await api.webProjects.get(selectedProjectId)
@@ -1808,7 +1816,10 @@ export function ProjectsWorkspace() {
         onDelete={drawer === 'edit-resource' ? () => handleDeleteResource(editingRecord?.id) : undefined}
         saving={saving}
         isEdit={drawer === 'edit-resource'}
-        projectNames={projectNames}
+        deleteLabel="Remove"
+        // No project picker when editing: a choice there was never saved
+        // (links change through Assign), so offering one misleads.
+        projectNames={drawer === 'edit-resource' ? [] : projectNames}
       />
     </div>
   )
@@ -1852,7 +1863,22 @@ export function AllResourcesView() {
         await api.webProjects.resources.create(payload)
         toast('Resource added!', 'success')
       } else {
-        await api.webProjects.resources.update(editingRec.id, payload)
+        // The picker shows one link, the first. A PATCH's lone project_id only
+        // adds a link, so a changed pick goes as the full list with the shown
+        // project swapped for the new one (a move, other links kept), and an
+        // unchanged pick sends no link change at all.
+        const { project_id: picked, ...fields } = payload
+        const shown = editingRec.initial?.project_id || ''
+        if (picked && picked !== shown) {
+          const rec = resources.find(r => r.id === editingRec.id)
+          const linked = (Array.isArray(rec?.fields?.Project) ? rec.fields.Project : [])
+            .map(p => p?.id).filter(Boolean)
+          const next = shown && linked.includes(shown)
+            ? linked.map(id => (id === shown ? picked : id))
+            : [...linked, picked]
+          fields.project_ids = [...new Set(next)]
+        }
+        await api.webProjects.resources.update(editingRec.id, fields)
         toast('Resource updated!', 'success')
       }
       setDrawer(null); setEditingRec(null)

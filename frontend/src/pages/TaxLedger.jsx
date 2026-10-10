@@ -19,6 +19,7 @@ import {
   ReceiptText, Building2, RefreshCw, Search, X, Share2, Link2,
 } from 'lucide-react'
 import { api } from '../services/api'
+import { csvRow } from '../utils/csv'
 import { useAuth } from '../context/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
@@ -154,11 +155,12 @@ function exportCSV(rows, filename) {
   const cols = ['Invoice No', 'Date', 'Project', 'Client', 'Taxable Value', 'GST Amount', 'GST %', 'Gross', 'TDS Amount', 'TDS %', 'Received', 'Status']
   const lines = [cols.join(',')]
   for (const r of rows) {
-    lines.push([
-      `"${r.invoiceNo}"`, `"${r.date}"`, `"${r.project}"`, `"${r.client}"`,
+    // csvRow quotes as needed and neutralises formula-looking text.
+    lines.push(csvRow([
+      r.invoiceNo, r.date, r.project, r.client,
       r.base, r.gstAmt, FMT_PCT(r.gstPct).replace('%',''), r.gross,
-      r.tdsAmt, FMT_PCT(r.tdsPct).replace('%',''), r.received, `"${r.status}"`,
-    ].join(','))
+      r.tdsAmt, FMT_PCT(r.tdsPct).replace('%',''), r.received, r.status,
+    ]))
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
@@ -367,7 +369,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
     periodFrom: period.from,
     periodTo: period.to,
     invoiceScope,
-    search,
+    search: search.trim(),   // the page searches the trimmed term
     filterClient: '',
     filterProject: '',
     filterStatus: '',

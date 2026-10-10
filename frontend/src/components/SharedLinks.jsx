@@ -21,6 +21,11 @@ const EXPIRY_OPTS = [
 
 const MAX_SHARED_VIEW_RECORDS = 50
 
+// Stable default: the modals reset their highlight state whenever this prop
+// changes, so a fresh [] on every render re-rendered them in an endless loop
+// on pages that pass no highlightable columns (Tax Ledger, Projects).
+const NO_COLUMNS = []
+
 const DEFAULT_LABELS = {
   status: 'project',
   projects: 'project',
@@ -56,6 +61,35 @@ function defaultRecordChip(record, resourceType) {
   return `${f['Client'] || 'No client'} · ${f['Project'] || 'No project'}`
 }
 
+// The owner's UTC offset travels with a link so the server reads months and
+// local date-times the way this browser did when it drew the view.
+export function ownerUtcOffsetMinutes() {
+  return -new Date().getTimezoneOffset() || 0
+}
+
+// Advanced FilterBuilder rules that actually filter (applyConditions skips the rest).
+export function activeRuleCount(viewConfig) {
+  const rules = [
+    ...(Array.isArray(viewConfig?.filterConditions) ? viewConfig.filterConditions : []),
+    ...(Array.isArray(viewConfig?.advancedConditions) ? viewConfig.advancedConditions : []),
+  ]
+  return rules.filter(c => c?.field && c?.op && (['is_empty', 'is_not_empty'].includes(c.op) || (c.value ?? '') !== '')).length
+}
+
+// During a deploy this app can briefly talk to an older server, which drops
+// filter rules it does not know. A live link saved that way publishes every
+// record instead of the filtered view, so compare what was saved with what
+// was sent. view_config may come back as a JSON string.
+export function liveFiltersDropped(sentConfig, savedView) {
+  let saved = savedView?.view_config
+  if (typeof saved === 'string') {
+    try { saved = JSON.parse(saved) } catch { saved = null }
+  }
+  return activeRuleCount(sentConfig) > activeRuleCount(saved || {})
+}
+
+const FILTERS_DROPPED_MESSAGE = 'The server is mid-update and did not keep this view’s filters. Try again in a few minutes.'
+
 function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
   const noun = DEFAULT_LABELS[resourceType] || 'record'
   const vc = view?.view_config || {}
@@ -81,6 +115,8 @@ function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
     if (vc.followupDueOnly) parts.push('Follow-up due')
     const safeSearch = normalizeSearchSummary(vc.search)
     if (safeSearch) parts.push(`Search: "${safeSearch}"`)
+    const rules = activeRuleCount(vc)
+    if (rules) parts.push(`${rules} advanced rule${rules === 1 ? '' : 's'}`)
   } else {
     const count = Array.isArray(view?.record_ids) ? view.record_ids.length : fallbackCount
     parts.push(`Snapshot · ${count} ${noun}${count === 1 ? '' : 's'}`)
@@ -109,7 +145,7 @@ export function ShareLinkModal({
   viewConfig = null,
   title: defaultTitle = '',
   recordLabel,
-  highlightableColumns = [],
+  highlightableColumns = NO_COLUMNS,
   enableLiveMode = false,
   allowEdit = true,
   onClose,
@@ -147,8 +183,8 @@ export function ShareLinkModal({
   async function createShare() {
     setSaving(true)
     setError(null)
+    const isLive = enableLiveMode && mode === 'live'
     try {
-      const isLive = enableLiveMode && mode === 'live'
       if (!isLive && !selectedRecords.length) throw new Error(`No ${noun}s selected to share.`)
       if (!isLive && selectedRecords.length > MAX_SHARED_VIEW_RECORDS) {
         throw new Error(`Public sharing is limited to ${MAX_SHARED_VIEW_RECORDS} records. Narrow the current view first.`)
@@ -160,12 +196,24 @@ export function ShareLinkModal({
         access_mode: accessMode,
         resource_type: resourceType,
       }
-      if (viewConfig) payload.view_config = { ...viewConfig, highlightColumns }
+      if (viewConfig) payload.view_config = { ...viewConfig, highlightColumns, utcOffsetMinutes: ownerUtcOffsetMinutes() }
       const data = await api.sharedViews.create(payload)
+      if (isLive && liveFiltersDropped(payload.view_config, data)) {
+        if (data?.token) await api.sharedViews.delete(data.token).catch(() => {})
+        throw new Error(`${FILTERS_DROPPED_MESSAGE} No link was created.`)
+      }
       setShareData(data)
       setStep('created')
     } catch (e) {
-      setError(e.message || 'Failed to create share link')
+      // 422 on a live link: the server cannot re-apply this view's filters, so
+      // it refused rather than publish more than is on screen. Offer the snapshot.
+      const count = selectedRecords.length
+      if (isLive && e?.status === 422 && count > 0 && count <= MAX_SHARED_VIEW_RECORDS) {
+        setMode('snapshot')
+        setError(`${e.message || 'This view cannot be shared live.'} Switched to a snapshot of the ${count} visible ${noun}${count === 1 ? '' : 's'}: press Generate Link to share exactly those.`)
+      } else {
+        setError(e.message || 'Failed to create share link')
+      }
     } finally {
       setSaving(false)
     }
@@ -393,7 +441,7 @@ export function ShareLinkModal({
   )
 }
 
-function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecords, recordLabel, highlightableColumns = [], onClose, onSave }) {
+function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecords, recordLabel, highlightableColumns = NO_COLUMNS, onClose, onSave }) {
   const dialog = useDialog({ label: 'Edit share scope', onClose })
   const [mode, setMode] = useState(view?.is_dynamic ? 'live' : 'snapshot')
   const [highlightColumns, setHighlightColumns] = useState(() => normalizeHighlightColumns(view?.view_config?.highlightColumns || currentViewConfig?.highlightColumns, highlightableColumns))
@@ -433,7 +481,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
     }
     setSaving(true)
     try {
-      const nextViewConfig = { ...(currentViewConfig || {}), highlightColumns }
+      const nextViewConfig = { ...(currentViewConfig || {}), highlightColumns, utcOffsetMinutes: ownerUtcOffsetMinutes() }
       const patch = mode === 'live'
         ? { record_ids: ['__dynamic__'], view_config: nextViewConfig }
         : { record_ids: visibleRecords.map(r => r.id), view_config: nextViewConfig }
@@ -556,7 +604,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   )
 }
 
-export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = [], onClose }) {
+export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = NO_COLUMNS, onClose }) {
   const dialog = useDialog({ label: 'Manage share links' })
   const confirm = useConfirm()
   const { showToast } = useToast()
@@ -766,6 +814,12 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
     setViews(vs => vs.map(v => v.token === view.token ? nextView : v))
     try {
       const updated = await api.sharedViews.update(view.token, patch)
+      if (nextView.is_dynamic && patch.view_config && updated && liveFiltersDropped(patch.view_config, updated)) {
+        await api.sharedViews.update(view.token, { is_active: false }).catch(() => {})
+        setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...updated, is_active: false } : v))
+        showToast(`${FILTERS_DROPPED_MESSAGE} The link has been switched off.`, 'error')
+        return
+      }
       setViews(vs => vs.map(v => v.token === view.token ? { ...v, ...(updated || nextView) } : v))
       showToast('Link scope updated', 'success')
     } catch (e) {
