@@ -1515,11 +1515,15 @@ export function ProjectsWorkspace() {
   const handleSaveResource = async (payload) => {
     setSaving(true)
     try {
-      payload.project_id = selectedProjectId
       if (drawer === 'new-resource') {
+        payload.project_id = selectedProjectId
         await api.webProjects.resources.create(payload)
         toast('Resource added!', 'success')
       } else {
+        // An update carrying project_id replaces the resource's whole Project
+        // link list, unassigning it from every other project it is on. Links
+        // change only through assign/unassign.
+        delete payload.project_id
         await api.webProjects.resources.update(editingRecord.id, payload)
         toast('Resource updated!', 'success')
       }
@@ -1530,11 +1534,14 @@ export function ProjectsWorkspace() {
     finally { setSaving(false) }
   }
 
+  // Removing a resource here takes it off this project only. Deleting the
+  // record, as this used to, also took it — with its hours and cost — off
+  // every other project it was assigned to.
   const handleDeleteResource = async (resourceId) => {
     setDeletingResourceId(resourceId)
     try {
-      await api.webProjects.resources.delete(resourceId)
-      toast('Resource removed', 'info')
+      await api.webProjects.resources.unassign(resourceId, selectedProjectId)
+      toast('Resource removed from this project', 'info')
       setResources(prev => prev.filter(r => r.id !== resourceId))
       await loadProjects()
       const proj = await api.webProjects.get(selectedProjectId)
@@ -1808,7 +1815,9 @@ export function ProjectsWorkspace() {
         onDelete={drawer === 'edit-resource' ? () => handleDeleteResource(editingRecord?.id) : undefined}
         saving={saving}
         isEdit={drawer === 'edit-resource'}
-        projectNames={projectNames}
+        // No project picker when editing: a choice there was never saved
+        // (links change through Assign), so offering one misleads.
+        projectNames={drawer === 'edit-resource' ? [] : projectNames}
       />
     </div>
   )
