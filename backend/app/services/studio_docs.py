@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from typing import Iterable
 
 from ..db.postgres import get_pool
@@ -43,6 +44,11 @@ MAX_CHUNKS_PER_DOC = 400
 # text), so reading further only burns CPU on text that is thrown away.
 MAX_PDF_PAGES = 1000
 MAX_EXTRACT_CHARS = MAX_CHUNKS_PER_DOC * CHUNK_CHARS
+# A page of drawing operators yields no text, so it never draws on the text
+# budget, yet parsing it is slow: 20 MB of decoded operators took about 30 s.
+# The clock caps how many such pages one document can make the thread parse.
+# A real 1,000-page PDF extracts in a few seconds.
+MAX_EXTRACT_SECONDS = 60
 
 SUPPORTED_MIME = {
     "application/pdf": "pdf",
@@ -96,10 +102,11 @@ def extract_pages(data: bytes, kind: str) -> list[str]:
         reader = PdfReader(BytesIO(data))
         pages: list[str] = []
         remaining = MAX_EXTRACT_CHARS
+        deadline = time.monotonic() + MAX_EXTRACT_SECONDS
         for index in range(min(len(reader.pages), MAX_PDF_PAGES)):
-            if remaining <= 0:
-                # Past the text budget the page is counted but not read, so the
-                # page count stays true and citations keep their numbering.
+            if remaining <= 0 or time.monotonic() > deadline:
+                # Past the text or time budget the page is counted but not read,
+                # so the page count stays true and citations keep their numbering.
                 pages.append("")
                 continue
             text = _tidy(reader.pages[index].extract_text() or "")[:remaining]

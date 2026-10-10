@@ -23,7 +23,6 @@ from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
-from .utils.uploads import UploadSizeLimitMiddleware
 from .db import postgres, valkey as vk, migrate
 from .db.postgres import get_init_error
 from .db.sync import sync_loop
@@ -32,6 +31,7 @@ from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
 from .services import alerts, scanner_trap
 from .routers.deps import require_auth, require_admin
+from .utils.uploads import UploadSizeLimitMiddleware
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -231,6 +231,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Refuse an oversized multipart upload before its body is spooled. Added before
+# every other middleware, so it sits innermost: inside CORS, so its 413 still
+# carries the CORS headers, and inside the request-ID middleware.
+app.add_middleware(UploadSizeLimitMiddleware)
+
 # Localhost origins allowed when FRONTEND_URL is not configured (dev default).
 _DEV_CORS_ORIGINS = [
     "http://localhost:5173", "http://127.0.0.1:5173",  # Vite dev server
@@ -263,10 +268,6 @@ def _cors_origins() -> list[str]:
     )
     return list(_DEV_CORS_ORIGINS)
 
-
-# Refuse an oversized multipart upload before its body is spooled. Added first,
-# so it sits inside CORS and its 413 still carries the CORS headers.
-app.add_middleware(UploadSizeLimitMiddleware)
 
 # Compress responses. Every JSON body — the Dashboard's 400-invoice list, the
 # project mirror, audit pages — went over the wire uncompressed; there is no

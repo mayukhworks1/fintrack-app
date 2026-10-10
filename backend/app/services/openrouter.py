@@ -968,6 +968,10 @@ async def analyze_project(project_fields: dict) -> dict:
 # the prompt. A real invoice is a few thousand characters; anything past this
 # bound is ignored rather than handed to the regexes.
 _MAX_INVOICE_TEXT_CHARS = 20_000
+# Pages are not read past this many seconds. A page of drawing operators yields
+# no text, so the character cap never stops it, and parsing one is slow. A real
+# invoice extracts in well under a second.
+_MAX_INVOICE_EXTRACT_SECONDS = 15
 
 
 def _extract_pdf_text(content: bytes) -> str:
@@ -981,7 +985,10 @@ def _extract_pdf_text(content: bytes) -> str:
         reader = PdfReader(io.BytesIO(content))
         parts: list[str] = []
         size = 0
+        deadline = time.monotonic() + _MAX_INVOICE_EXTRACT_SECONDS
         for page in reader.pages[:8]:  # cap at 8 pages
+            if time.monotonic() > deadline:
+                break
             t = page.extract_text()
             if t:
                 parts.append(t)

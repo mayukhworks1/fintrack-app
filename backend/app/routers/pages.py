@@ -30,10 +30,10 @@ from pydantic import BaseModel
 from ..config import settings
 from ..db import valkey as vk
 from ..db.postgres import get_pool
+from ..utils.uploads import read_upload, upload_limit
 from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
-from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth
 
 logger = logging.getLogger("fintrack.pages")

@@ -1160,13 +1160,15 @@ async def admin_user_timeline_export(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    # CSV
+    # CSV. email and ip arrive from login and registration attempts, so each
+    # cell is neutralised before a spreadsheet can run it as a formula.
     import csv, io
+    from ..utils.csv_safe import csv_safe_row
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["timestamp", "event_type", "role", "email", "status", "ip", "actor_email", "metadata"])
     for e in events:
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             e["created_at"].isoformat() if e["created_at"] else "",
             e["event_type"] or "",
             e["role"] or "",
@@ -1175,7 +1177,7 @@ async def admin_user_timeline_export(
             e["ip"] or "",
             e["actor_email"] or "",
             e["metadata"] or "",
-        ])
+        ]))
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
