@@ -88,6 +88,21 @@ def _expiry(hours: Optional[int]) -> Optional[datetime]:
     return datetime.now(timezone.utc) + timedelta(hours=hours)
 
 
+# Tax ledger shares need module.tax.share; every other module uses module.shared.manage.
+# Keys are SharedViewService's resource types — what the pages actually send.
+_SHARE_PERMISSIONS = {"tax-ledger": "module.tax.share"}
+
+
+async def _require_share_permission(request: Request, resource_type: Optional[str]) -> None:
+    perm_key = _SHARE_PERMISSIONS.get(resource_type or "status", "module.shared.manage")
+    if getattr(request.state, "is_email_auth", False):
+        auth_role = getattr(request.state, "auth_role", "") or ""
+        if auth_role != "superadmin":
+            effective = await get_effective_permissions(getattr(request.state, "auth_user_id", None))
+            if perm_key not in effective:
+                raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
+
+
 # ── Editor CRUD ────────────────────────────────────────────────────────────────
 
 @router.post("/api/shared-views", status_code=201)
@@ -97,14 +112,7 @@ async def create_shared_view(
     role: str = Depends(require_editor),
 ):
     """Create a shared link for selected records."""
-    # Tax ledger shares need module.tax.share; every other module uses module.shared.manage
-    perm_key = "module.tax.share" if (body.resource_type or "") in ("tax", "gst") else "module.shared.manage"
-    if getattr(request.state, "is_email_auth", False):
-        auth_role = getattr(request.state, "auth_role", "") or ""
-        if auth_role != "superadmin":
-            effective = await get_effective_permissions(getattr(request.state, "auth_user_id", None))
-            if perm_key not in effective:
-                raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
+    await _require_share_permission(request, body.resource_type)
     if not body.record_ids:
         raise HTTPException(status_code=422, detail="At least one record must be selected")
     if len(body.record_ids) > 50:
@@ -156,6 +164,7 @@ async def get_shared_view(
 
 @router.patch("/api/shared-views/{token}")
 async def update_shared_view(
+    request: Request,
     token: str,
     body: SharedViewUpdate,
     _: str = Depends(require_editor),
@@ -163,6 +172,10 @@ async def update_shared_view(
 ):
     """Update title, active state, or expiry of a shared view."""
     svc = SharedViewService()
+    # Re-scoping or re-enabling a tax ledger link is as sensitive as creating one.
+    existing = await svc.get(token)
+    if existing and existing.get("resource_type") in _SHARE_PERMISSIONS:
+        await _require_share_permission(request, existing.get("resource_type"))
 
     data: dict = {}
     if body.title is not None:
@@ -207,6 +220,7 @@ async def get_shared_view_accesses(
     token: str,
     limit: int = Query(200, ge=1, le=500),
     _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
 ):
     """Full access log for a shared view (IP, geo, device, browser)."""
     svc = SharedViewService()
@@ -219,6 +233,7 @@ async def delete_shared_view_accesses(
     token: str,
     body: SharedViewAccessDelete,
     _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
 ):
     svc = SharedViewService()
     if not body.access_ids:
@@ -228,7 +243,11 @@ async def delete_shared_view_accesses(
 
 
 @router.get("/api/shared-views/{token}/stats")
-async def get_shared_view_stats(token: str, _: str = Depends(require_editor)):
+async def get_shared_view_stats(
+    token: str,
+    _: str = Depends(require_editor),
+    _perm: str = Depends(require_permission("module.shared.manage")),
+):
     """Aggregated analytics: unique visitors, event breakdown, locations, devices, timeline."""
     svc = SharedViewService()
     return await svc.get_accesses_stats(token)

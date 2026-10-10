@@ -12,8 +12,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
+import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from ..db.audit import build_device_label, parse_client_hint, parse_ua
@@ -32,6 +34,87 @@ _COLUMN_ALIASES = {
     "Detailed Status": "Current Status (Detailed)",
     "Current Status (Detailed)": "Current Status (Detailed)",
 }
+
+# FilterBuilder (frontend/src/components/FilterBuilder.jsx) operators. A live
+# link re-applies the owner's advanced rules on every open, so an operator the
+# server does not know is refused rather than skipped, which would widen it.
+_FILTER_CONDITION_OPS = {
+    "contains", "not_contains", "is", "is_not", "starts_with", "ends_with",
+    "is_empty", "is_not_empty",
+    "eq", "neq", "gt", "gte", "lt", "lte",
+    "date_is", "date_is_not", "date_before", "date_after",
+}
+_FILTER_NO_VALUE_OPS = {"is_empty", "is_not_empty"}
+_MAX_FILTER_CONDITIONS = 20
+_LIVE_UNSUPPORTED_MESSAGE = (
+    "This view uses a filter a live link cannot re-apply on the server. "
+    "Share a snapshot of the visible records instead."
+)
+# view_config keys the public page never needs: the owner's advanced rules can
+# name internal fields and values (e.g. "Actual Profit > 100000").
+_PRIVATE_VIEW_CONFIG_KEYS = {"filterConditions", "liveUnsupported"}
+
+# Fields the public page renders for every link of a type: card, board,
+# grouping, sorting, the tax dashboard and the status filters.
+_PUBLIC_BASE_FIELDS = {
+    "status": ("Client", "Project", "Status", "Short Status", "Current Status (Detailed)", "lastModifiedTime"),
+    "projects": ("Client", "Project Name", "Project Status", "Health", "lastModifiedTime"),
+    "invoices": (
+        "Invoice Number", "Client Name", "Client", "Project", "Category", "Payment Status",
+        "Amount Raised", "Amount Received", "Outstanding Amount", "Agening (Days)", "Raised Date",
+        "lastModifiedTime",
+    ),
+    "tax-ledger": (
+        "Invoice Number", "Client Name", "Client", "Project", "Category", "Payment Status",
+        "Amount Raised", "Amount with Tax", "Amount Received", "Raised Date", "lastModifiedTime",
+    ),
+}
+# Columns the owner can choose to show (SharedView.jsx RESOURCE_META.columns).
+# Anything else — costs, profit, salaries, internal notes — never leaves.
+_PUBLIC_COLUMN_FIELDS = {
+    "status": ("Client", "Project", "Status", "Short Status", "Current Status (Detailed)", "Attachments", "Last Modified"),
+    "projects": (
+        "Client", "Project Name", "Project Status", "Health", "Amount Billed So far",
+        "Actual Profit", "Profit percentage", "Last Modified",
+    ),
+    "invoices": (
+        "Invoice Number", "Client Name", "Project", "Category", "Payment Status", "Milestone", "Raised By",
+        "Amount Raised", "Amount with Tax", "Amount Received", "Outstanding Amount", "Agening (Days)",
+        "Raised Date", "Cleared Date", "Next followup", "Description", "Remark", "Reference", "Invoice PDF",
+        "Last Modified",
+    ),
+    "tax-ledger": (
+        "Invoice Number", "Client Name", "Project", "Payment Status", "Amount Raised", "Amount with Tax",
+        "GST Amount", "TDS Amount", "TDS %", "Amount Received", "Outstanding Amount", "Raised Date",
+        "Cleared Date",
+    ),
+}
+# What the page shows when the link carries no columns (RESOURCE_META.defaultColumns).
+_PUBLIC_DEFAULT_COLUMNS = {
+    "status": ("Client", "Project", "Status", "Short Status", "Current Status (Detailed)", "Last Modified"),
+    "projects": ("Client", "Project Name", "Project Status", "Health", "Amount Billed So far"),
+    "invoices": (
+        "Invoice Number", "Client Name", "Project", "Category", "Payment Status", "Amount Raised",
+        "Amount Received", "Outstanding Amount", "Agening (Days)", "Raised Date", "Cleared Date",
+        "Next followup",
+    ),
+    "tax-ledger": (
+        "Invoice Number", "Client Name", "Project", "Payment Status", "Amount Raised", "Amount with Tax",
+        "GST Amount", "TDS Amount", "TDS %", "Amount Received", "Outstanding Amount", "Raised Date",
+    ),
+}
+# An edit link shows the current value of every field it lets the holder change
+# (mirrors _public_edit_fields), so a save never blanks a field it could not see.
+_PUBLIC_EDIT_FIELDS = {
+    "status": ("Status", "Short Status", "Current Status (Detailed)"),
+    "projects": ("Client", "Project Name", "Project Status", "Amount Billed So far"),
+    "invoices": ("Invoice Number", "Payment Status", "Amount Received", "Cleared Date", "Remark", "Next followup"),
+}
+# Search fields of the page each live link is made from.
+_STATUS_SEARCH_FIELDS = ("Client", "Project", "Short Status", "Current Status (Detailed)", "Status")  # StatusBoard.jsx
+_PROJECT_SEARCH_FIELDS = ("Client", "Project Name", "Project Status", "Health")
+_INVOICE_SEARCH_FIELDS = ("Invoice Number", "Client Name", "Client", "Project", "Description", "Category", "Milestone")  # Invoices.jsx
+_TAX_SEARCH_FIELDS = ("Invoice Number", "Project", "Client Name", "Client", "Payment Status")  # TaxLedger.jsx
 
 
 def _new_token() -> str:
@@ -165,8 +248,28 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     if isinstance(card_record_sort, str) and card_record_sort.strip():
         clean["cardRecordSort"] = card_record_sort.strip()[:120]
 
-    if isinstance(search, str) and search.strip():
-        clean["search"] = search.strip()[:255]
+    if isinstance(search, str) and search:
+        # Kept verbatim: the status board matches the untrimmed term, and a
+        # cut-down term is a prefix that matches more than the owner saw.
+        if len(search) > 255:
+            clean["liveUnsupported"] = True
+        clean["search"] = search[:255]
+
+    raw_conditions = view_config.get("filterConditions")
+    advanced = view_config.get("advancedConditions")   # the status board's name for them
+    if isinstance(raw_conditions, list) and isinstance(advanced, list):
+        raw_conditions = raw_conditions + advanced
+    elif raw_conditions is None:
+        raw_conditions = advanced
+    conditions, faithful = _sanitize_filter_conditions(raw_conditions)
+    if conditions:
+        clean["filterConditions"] = conditions
+    if not faithful or view_config.get("liveUnsupported") is True:
+        clean["liveUnsupported"] = True
+
+    utc_offset = view_config.get("utcOffsetMinutes")
+    if isinstance(utc_offset, int) and not isinstance(utc_offset, bool) and -840 <= utc_offset <= 840:
+        clean["utcOffsetMinutes"] = utc_offset
 
     if isinstance(theme, str) and theme in _ALLOWED_THEMES:
         clean["theme"] = theme
@@ -208,6 +311,76 @@ def _sanitize_view_config(view_config: Optional[dict]) -> Optional[dict]:
     return clean or None
 
 
+def _sanitize_filter_conditions(raw: Any) -> tuple[list[dict[str, Any]], bool]:
+    """
+    Keep the FilterBuilder rules a live link has to re-apply.
+
+    Returns (conditions, faithful). Incomplete rows are dropped exactly as
+    applyConditions skips them. A row the server cannot evaluate the way the
+    browser did (unknown operator, non-scalar or overlong value) makes the set
+    unfaithful: a live link built on it is refused instead of silently widened.
+    """
+    if raw is None:
+        return [], True
+    if not isinstance(raw, list):
+        return [], False
+    clean: list[dict[str, Any]] = []
+    faithful = True
+    for cond in raw:
+        if not isinstance(cond, dict):
+            faithful = False
+            continue
+        field, op, value = cond.get("field"), cond.get("op"), cond.get("value")
+        if _js_falsy(field) or _js_falsy(op):
+            continue
+        if op not in _FILTER_NO_VALUE_OPS and (value is None or value == ""):
+            continue
+        if not isinstance(field, str) or len(field) > 120 or op not in _FILTER_CONDITION_OPS:
+            faithful = False
+            continue
+        if op in _FILTER_NO_VALUE_OPS:
+            value = ""
+        elif not isinstance(value, (str, int, float)) or (isinstance(value, str) and len(value) > 255) \
+                or (isinstance(value, float) and not math.isfinite(value)):
+            faithful = False
+            continue
+        clean.append({"field": field, "op": op, "value": value})
+    if len(clean) > _MAX_FILTER_CONDITIONS:
+        return clean[:_MAX_FILTER_CONDITIONS], False
+    return clean, faithful
+
+
+def _parse_view_config(view: dict) -> Optional[dict]:
+    """A stored view's view_config (asyncpg may hand JSONB back as str), sanitised."""
+    vc = view.get("view_config")
+    if isinstance(vc, str):
+        try:
+            vc = json.loads(vc)
+        except Exception:
+            vc = None
+    return _sanitize_view_config(vc)
+
+
+def _public_fields(resource_type: str, vc: Optional[dict], access_mode: str) -> set[str]:
+    """Fields a public link may carry: the type's base set, the owner's columns, and its edit fields."""
+    allowed = set(_PUBLIC_BASE_FIELDS[resource_type])
+    columns = (vc or {}).get("columns") or _PUBLIC_DEFAULT_COLUMNS[resource_type]
+    selectable = _PUBLIC_COLUMN_FIELDS[resource_type]
+    allowed.update(c for c in columns if c in selectable)
+    if access_mode == "edit":
+        allowed.update(_PUBLIC_EDIT_FIELDS.get(resource_type, ()))
+    return allowed
+
+
+def _project_public_record(record: dict, allowed: set[str]) -> dict[str, Any]:
+    """Only {id, fields}, and only the allowed fields — never the raw Teable record."""
+    fields = record.get("fields") or {}
+    out = {k: v for k, v in fields.items() if k in allowed}
+    if "lastModifiedTime" in allowed and "lastModifiedTime" not in out and record.get("lastModifiedTime"):
+        out["lastModifiedTime"] = record["lastModifiedTime"]
+    return {"id": record.get("id"), "fields": out}
+
+
 class SharedViewService:
 
     # ── Write ─────────────────────────────────────────────────────────────────
@@ -238,6 +411,8 @@ class SharedViewService:
 
         token = _new_token()
         safe_view_config = _sanitize_view_config(view_config)
+        if is_dynamic and safe_view_config and safe_view_config.get("liveUnsupported"):
+            raise ValueError(_LIVE_UNSUPPORTED_MESSAGE)
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -266,6 +441,22 @@ class SharedViewService:
         parts: list[str] = []
         params: list = []
         idx = 1
+
+        if "record_ids" in data or "view_config" in data:
+            # The link ends up live with these filters: refuse any it cannot re-apply.
+            existing = await self.get(token)
+            if not existing:
+                return None
+            if "record_ids" in data:
+                ends_dynamic = (data["record_ids"] or []) == ["__dynamic__"]
+            else:
+                ends_dynamic = bool(existing.get("is_dynamic"))
+            if "view_config" in data:
+                ends_view_config = _sanitize_view_config(data["view_config"])
+            else:
+                ends_view_config = _parse_view_config(existing)
+            if ends_dynamic and ends_view_config and ends_view_config.get("liveUnsupported"):
+                raise ValueError(_LIVE_UNSUPPORTED_MESSAGE)
 
         if "record_ids" in data:
             record_ids = data["record_ids"] or []
@@ -424,15 +615,10 @@ class SharedViewService:
             record_ids = json.loads(record_ids)
 
         # Parse view_config early so we can use filters for dynamic fetch
-        vc = view.get("view_config")
-        if isinstance(vc, str):
-            try:
-                vc = json.loads(vc)
-            except Exception:
-                vc = None
-        vc = _sanitize_view_config(vc)
+        vc = _parse_view_config(view)
 
         is_dynamic = record_ids == ["__dynamic__"]
+        access_mode = view.get("access_mode") or "read"
 
         if is_dynamic:
             # Dynamic live view — always fetch directly from Teable so that
@@ -441,6 +627,11 @@ class SharedViewService:
         else:
             # Fixed snapshot — Teable remains the source of truth.
             records = await _fetch_snapshot_records(resource_type, record_ids)
+
+        # Column choice is not only visual: send just the fields this link shows.
+        shared_fields = _public_fields(resource_type, vc, access_mode)
+        records = [_project_public_record(r, shared_fields) for r in records]
+        public_vc = {k: v for k, v in (vc or {}).items() if k not in _PRIVATE_VIEW_CONFIG_KEYS} or None
 
         # Log access asynchronously
         ip = _extract_ip(request)
@@ -460,12 +651,13 @@ class SharedViewService:
             "title": view.get("title"),
             "created_at": view.get("created_at"),
             "expires_at": view.get("expires_at"),
-            "access_mode": view.get("access_mode") or "read",
+            "access_mode": access_mode,
             "resource_type": resource_type,
             "is_dynamic": is_dynamic,
             "records": records,
             "total": len(records),
-            "view_config": vc,
+            "view_config": public_vc,
+            "shared_fields": sorted(shared_fields),
         }
 
     async def update_public_record(self, token: str, record_id: str, fields: dict, request=None) -> dict[str, Any]:
@@ -484,6 +676,9 @@ class SharedViewService:
         cleaned = _public_edit_fields(resource_type, fields)
         if not cleaned:
             raise ValueError("No editable fields provided")
+        # A live link covers only the records its filters match right now.
+        if is_dynamic and not await _dynamic_view_contains(resource_type, _parse_view_config(view), record_id):
+            raise ValueError("Record is not part of this shared view")
 
         updated = await _live_update_record(resource_type, record_id, cleaned, request)
 
@@ -729,44 +924,137 @@ def _extract_ip(request) -> str:
     return request.client.host if request.client else ""
 
 
-def _date_only_value(value: Any) -> str:
+# ── Owner-page filter semantics ───────────────────────────────────────────────
+# A live link re-runs the owner's filters on every open, so these mirror the
+# browser code that drew the owner's view (each page's filters and search, and
+# FilterBuilder.applyConditions) value for value, JavaScript coercions included.
+# Where the browser's answer cannot be reproduced, they answer "no match".
+
+_ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_INSTANT_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?"
+)
+_JS_NUMBER_RE = re.compile(r"[+-]?(?:Infinity|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)")
+
+
+def _js_falsy(value: Any) -> bool:
+    """`!value` in JavaScript, for JSON values ([] and {} are truthy there)."""
+    if value is None or value is False or value == "":
+        return True
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and (value == 0 or value != value)
+
+
+def _js_string(value: Any) -> str:
+    """String(value) for a JSON value, with null as '' (Array.join's rule)."""
     if value is None:
         return ""
-    text = str(value).strip()
-    if not text:
-        return ""
-    return text[:10]
-
-
-def _month_key(value: Any) -> str:
-    date_only = _date_only_value(value)
-    return date_only[:7] if len(date_only) >= 7 else ""
-
-
-def _parse_attachments(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value:
+            return "NaN"
+        if math.isinf(value):
+            return "Infinity" if value > 0 else "-Infinity"
+        return str(int(value)) if value.is_integer() and abs(value) < 1e21 else repr(value)
+    if isinstance(value, str):
+        return value
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
-    return []
+        return ",".join(_js_string(v) for v in value)
+    return "[object Object]"
 
 
-def _effective_aging(fields: dict[str, Any]) -> int:
+def _js_to_number(value: Any) -> float:
+    """Number(value) for a JSON value; NaN where JavaScript gives NaN."""
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, list):
+        return _js_to_number(_js_string(value))
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0.0
+        if _JS_NUMBER_RE.fullmatch(text):
+            return float(text.replace("Infinity", "inf"))
+        if re.fullmatch(r"0[xX][0-9a-fA-F]+", text):
+            return float(int(text, 16))
+    return math.nan
+
+
+def _js_instant(value: Any, utc_offset_minutes: Optional[int] = None) -> Optional[datetime]:
+    """
+    new Date(value) as an aware UTC datetime, for the ISO shapes Teable and
+    <input type="date"> produce. Date-only strings are UTC, as in JavaScript; a
+    date-time without an offset is the owner's local time, so it needs the
+    offset their browser sent. Anything else is None (treated as unparseable).
+    """
+    if _js_falsy(value):
+        return None
+    text = _js_string(value).strip()
+    if not _ISO_INSTANT_RE.fullmatch(text):
+        return None
     try:
-        aging = int(fields.get("Agening (Days)") or fields.get("Aging") or 0)
-        if aging > 0:
-            return aging
-    except Exception:
-        pass
-    date_only = _date_only_value(fields.get("Raised Date"))
-    if date_only:
-        try:
-            target = datetime.fromisoformat(date_only)
-            return max(0, (datetime.now() - target).days)
-        except Exception:
-            pass
-    return 0
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc)
+    if _ISO_DATE_RE.fullmatch(text):
+        return parsed.replace(tzinfo=timezone.utc)
+    if utc_offset_minutes is None:
+        return None
+    return parsed.replace(tzinfo=timezone(timedelta(minutes=utc_offset_minutes))).astimezone(timezone.utc)
 
 
-def _classify_aging_band(days: int) -> str:
+def _date_only_value(value: Any) -> str:
+    """dateOnlyValue() in invoices/utils.js: the first ten characters, as text."""
+    return "" if _js_falsy(value) else _js_string(value)[:10]
+
+
+def _month_key(value: Any, utc_offset_minutes: Optional[int] = None) -> str:
+    """
+    monthKey() in invoices/utils.js reads the month in the owner's local time;
+    links saved before the offset was sent fall back to the stored text.
+    """
+    if utc_offset_minutes is None:
+        date_only = _date_only_value(value)
+        return date_only[:7] if len(date_only) >= 7 else ""
+    instant = _js_instant(value, utc_offset_minutes)
+    if instant is None:
+        return ""
+    return (instant + timedelta(minutes=utc_offset_minutes)).strftime("%Y-%m")
+
+
+def _attachment_count(value: Any) -> int:
+    """parseAttachments(cell).length in invoices/utils.js."""
+    if _js_falsy(value):
+        return 0
+    if isinstance(value, list):
+        return len(value)
+    parts = re.split(r"\s+", _js_string(value))
+    return sum(1 for i in range(0, len(parts), 2) if i + 1 < len(parts) and parts[i + 1])
+
+
+def _effective_aging(fields: dict[str, Any], now: datetime, utc_offset_minutes: Optional[int] = None) -> float:
+    """effectiveAging() in invoices/utils.js."""
+    status = fields.get("Payment Status")
+    if not _js_falsy(status) and status != "Pending":
+        return 0
+    teable_val = fields.get("Agening (Days)")
+    if teable_val is not None and teable_val != "" and _js_to_number(teable_val) > 0:
+        return _js_to_number(teable_val)
+    raised = _js_instant(fields.get("Raised Date"), utc_offset_minutes)
+    if raised is None:
+        return 0
+    return math.floor((now - raised).total_seconds() / 86400)
+
+
+def _classify_aging_band(days: float) -> str:
     if days <= 14:
         return "0-14d"
     if days <= 30:
@@ -774,6 +1062,204 @@ def _classify_aging_band(days: int) -> str:
     if days <= 60:
         return "31-60d"
     return "60d+"
+
+
+def _filter_text(value: Any) -> str:
+    """normalizeTextValue() in FilterBuilder.jsx."""
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return " · ".join(t for t in (_filter_text(v) for v in value) if t)
+    if isinstance(value, dict):
+        return " · ".join(t for t in (_filter_text(v) for v in value.values()) if t)
+    return _js_string(value).strip()
+
+
+def _filter_number(value: Any) -> Optional[float]:
+    """normalizeNumberValue() in FilterBuilder.jsx."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value) if math.isfinite(value) else None
+    text = re.sub(r"[^0-9.\-]", "", _filter_text(value))
+    if not text:
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _filter_date(value: Any, utc_offset_minutes: Optional[int]) -> str:
+    """normalizeDateValue() in FilterBuilder.jsx: the UTC calendar date."""
+    if value is None or value == "":
+        return ""
+    text = _filter_text(value)
+    if not text:
+        return ""
+    instant = _js_instant(text, utc_offset_minutes)
+    if instant is not None:
+        return instant.date().isoformat()
+    if _ISO_INSTANT_RE.fullmatch(text):
+        return ""   # a local date-time with no known offset: refuse to guess
+    direct = text[:10]
+    return direct if _ISO_DATE_RE.fullmatch(direct) else ""
+
+
+def _match_condition(raw: Any, op: str, cond_value: Any, utc_offset_minutes: Optional[int]) -> bool:
+    """matchCondition() in FilterBuilder.jsx."""
+    if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
+        left, right = _filter_number(raw), _filter_number(cond_value)
+        if left is None or right is None:
+            return False
+        return {
+            "eq": left == right, "neq": left != right, "gt": left > right,
+            "gte": left >= right, "lt": left < right, "lte": left <= right,
+        }[op]
+    if op in ("date_is", "date_is_not", "date_before", "date_after"):
+        left, right = _filter_date(raw, utc_offset_minutes), _filter_date(cond_value, utc_offset_minutes)
+        if not left or not right:
+            return False
+        return {
+            "date_is": left == right, "date_is_not": left != right,
+            "date_before": left < right, "date_after": left > right,
+        }[op]
+    fv = _filter_text(raw)
+    if op == "is_empty":
+        return fv == ""
+    if op == "is_not_empty":
+        return fv != ""
+    fv, cv = fv.lower(), _filter_text(cond_value).lower()
+    return {
+        "is": fv == cv, "is_not": fv != cv, "contains": cv in fv, "not_contains": cv not in fv,
+        "starts_with": fv.startswith(cv), "ends_with": fv.endswith(cv),
+    }.get(op, False)   # unknown operators are refused at save time; never match one here
+
+
+def _view_fields(record: dict) -> dict[str, Any]:
+    """A record's fields, with Teable's record-level timestamps folded in as the app's mirror does."""
+    fields = dict(record.get("fields") or {})
+    for key in ("lastModifiedTime", "createdTime"):
+        if key not in fields and record.get(key):
+            fields[key] = record[key]
+    return fields
+
+
+def _record_matches_view(resource_type: str, cfg: dict, record: dict, now: Optional[datetime] = None) -> bool:
+    """
+    True when `record` is in the live view `cfg` describes: the filters of the
+    page the link was made from (StatusBoard, Projects, Invoices, TaxLedger),
+    then the owner's advanced FilterBuilder rules.
+    """
+    f = _view_fields(record)
+    now = now or datetime.now(timezone.utc)
+    offset = cfg.get("utcOffsetMinutes")
+    filter_client = cfg.get("filterClient")
+    filter_status = cfg.get("filterStatus")
+    filter_project = cfg.get("filterProject")
+    search = cfg.get("search") or ""
+
+    if resource_type == "status":
+        if filter_client and f.get("Client") != filter_client:
+            return False
+        if filter_project and (f.get("Project") or "") != filter_project:
+            return False
+        if filter_status and (f.get("Status") or "Not started") != filter_status:
+            return False
+        if search:
+            haystack = " ".join(_js_string(f.get(k)) for k in _STATUS_SEARCH_FIELDS).lower()
+            if search.lower() not in haystack:
+                return False
+
+    elif resource_type == "projects":
+        if filter_client and f.get("Client") != filter_client:
+            return False
+        if filter_project and f.get("Project Name") != filter_project:
+            return False
+        if filter_status and f.get("Project Status") != filter_status:
+            return False
+        q = search.strip().lower()
+        if q and q not in " ".join(_js_string(f.get(k)) for k in _PROJECT_SEARCH_FIELDS).lower():
+            return False
+
+    elif resource_type in ("invoices", "tax-ledger"):
+        if filter_status and f.get("Payment Status") != filter_status:
+            return False
+        if filter_project and f.get("Project") != filter_project:
+            return False
+        if filter_client and (f.get("Client Name") or f.get("Client")) != filter_client:
+            return False
+        billing = cfg.get("billingFilter") or "all"
+        is_retainer = "retainer" in ("" if _js_falsy(f.get("Category")) else _js_string(f.get("Category"))).lower()
+        if (billing == "retainer" and not is_retainer) or (billing == "project" and is_retainer):
+            return False
+        if cfg.get("filterCategory") and f.get("Category") != cfg["filterCategory"]:
+            return False
+        if cfg.get("raisedByFilter") and f.get("Raised By") != cfg["raisedByFilter"]:
+            return False
+        if cfg.get("monthFilter") and _month_key(f.get("Raised Date"), offset) != cfg["monthFilter"]:
+            return False
+        date_from, date_to = cfg.get("dateFrom"), cfg.get("dateTo")
+        if date_from or date_to:
+            candidate = _date_only_value(f.get(cfg.get("dateFieldFilter") or "Raised Date"))
+            if not candidate or (date_from and candidate < date_from) or (date_to and candidate > date_to):
+                return False
+        if cfg.get("overdueOnly") is True and not (
+            f.get("Payment Status") == "Pending" or _js_to_number(f.get("Outstanding Amount") or 0) > 0
+        ):
+            return False
+        if cfg.get("followupDueOnly") is True:
+            followup = _date_only_value(f.get("Next followup"))
+            if not followup or followup > now.date().isoformat():
+                return False
+        if cfg.get("hasDocsOnly") is True and _attachment_count(f.get("Reference")) + _attachment_count(f.get("Invoice PDF")) == 0:
+            return False
+        if cfg.get("agingBandFilter") and (
+            f.get("Payment Status") != "Pending"
+            or _classify_aging_band(_effective_aging(f, now, offset)) != cfg["agingBandFilter"]
+        ):
+            return False
+
+        if resource_type == "tax-ledger":
+            # TaxLedger.jsx: the period's INR invoices, minus cancelled ones, in the chosen scope.
+            if f.get("Payment Status") == "Cancelled":
+                return False
+            currency = ("RS" if _js_falsy(f.get("Currency")) else _js_string(f.get("Currency"))).strip().upper()
+            if currency not in ("RS", "INR"):
+                return False
+            period_from, period_to = cfg.get("periodFrom"), cfg.get("periodTo")
+            if period_from or period_to:
+                raised = _date_only_value(f.get("Raised Date"))
+                if not raised or (period_from and raised < period_from) or (period_to and raised > period_to):
+                    return False
+            status = ("" if _js_falsy(f.get("Payment Status")) else _js_string(f.get("Payment Status"))).strip()
+            scope = cfg.get("invoiceScope") or "tax"
+            if scope == "tax" and status != "Paid":
+                return False
+            if scope == "open" and status in ("Paid", "Cancelled"):
+                return False
+            q = search.strip().lower()
+            if q and not any(
+                q in ("" if _js_falsy(f.get(k)) else _js_string(f.get(k))).lower() for k in _TAX_SEARCH_FIELDS
+            ):
+                return False
+        else:
+            q = search.strip().lower()
+            if q and not any(
+                q in ("" if _js_falsy(f.get(k)) else _js_string(f.get(k))).lower() for k in _INVOICE_SEARCH_FIELDS
+            ):
+                return False
+
+    else:
+        raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")
+
+    return all(
+        _match_condition(f.get(c["field"]), c["op"], c["value"], offset)
+        for c in cfg.get("filterConditions") or []
+    )
 
 
 def _live_service_for(resource_type: str):
@@ -841,185 +1327,47 @@ def _public_edit_fields(resource_type: str, fields: dict) -> dict[str, Any]:
 
 async def _fetch_dynamic_records(resource_type: str, vc: Optional[dict]) -> list[dict[str, Any]]:
     """
-    Fetch ALL live records from Teable for a dynamic shared view, then apply
-    the view_config filters (filterClient, filterStatus, filterProject) so the
-    link only shows the same subset the owner intended, while automatically
-    including any new records that match those filters.
+    Fetch ALL live records from Teable for a dynamic shared view, then keep the
+    ones the owner's view matches (_record_matches_view) — the same subset the
+    owner saw, plus any new records that match the same filters.
     """
     cfg = vc or {}
-    filter_client = cfg.get("filterClient")
-    filter_status = cfg.get("filterStatus")
-    filter_project = cfg.get("filterProject")
-    filter_category = cfg.get("filterCategory")
-    raised_by_filter = cfg.get("raisedByFilter")
-    month_filter = cfg.get("monthFilter")
-    date_field_filter = cfg.get("dateFieldFilter") or "Raised Date"
-    date_from = cfg.get("dateFrom")
-    date_to = cfg.get("dateTo")
-    aging_band_filter = cfg.get("agingBandFilter")
-    billing_filter = cfg.get("billingFilter") or "all"
-    overdue_only = cfg.get("overdueOnly") is True
-    has_docs_only = cfg.get("hasDocsOnly") is True
-    followup_due_only = cfg.get("followupDueOnly") is True
-    search = (cfg.get("search") or "").strip().lower()
+    if cfg.get("liveUnsupported"):
+        # Saved before such filters were refused: show nothing rather than more.
+        return []
 
     if resource_type == "status":
         from ..services.status import StatusService
         records = await StatusService()._list_from_teable(
-            client=filter_client or None,
-            project=filter_project or None,
+            client=cfg.get("filterClient") or None,
+            project=cfg.get("filterProject") or None,
         )
-        if filter_status:
-            records = [r for r in records if (r.get("fields") or {}).get("Status") == filter_status]
-        if search:
-            records = [
-                r for r in records
-                if search in " ".join([
-                    str((r.get("fields") or {}).get("Client", "")),
-                    str((r.get("fields") or {}).get("Project", "")),
-                    str((r.get("fields") or {}).get("Short Status", "")),
-                    str((r.get("fields") or {}).get("Current Status (Detailed)", "")),
-                    str((r.get("fields") or {}).get("Status", "")),
-                ]).lower()
-            ]
-        return records
-
-    if resource_type == "projects":
+    elif resource_type == "projects":
         from ..services.teable import TeableService
         records = await TeableService().get_all_records()
-        if filter_client:
-            records = [r for r in records if (r.get("fields") or {}).get("Client") == filter_client]
-        if filter_project:
-            records = [r for r in records if (r.get("fields") or {}).get("Project Name") == filter_project]
-        if filter_status:
-            records = [r for r in records if (r.get("fields") or {}).get("Project Status") == filter_status]
-        if search:
-            records = [
-                r for r in records
-                if search in " ".join([
-                    str((r.get("fields") or {}).get("Client", "")),
-                    str((r.get("fields") or {}).get("Project Name", "")),
-                    str((r.get("fields") or {}).get("Project Status", "")),
-                    str((r.get("fields") or {}).get("Health", "")),
-                ]).lower()
-            ]
-        return records
-
-    if resource_type in {"invoices", "tax-ledger"}:
+    elif resource_type in {"invoices", "tax-ledger"}:
         from ..services.invoice import InvoiceService
         records = await InvoiceService().get_all_invoices()
-        if filter_client:
-            records = [
-                r for r in records
-                if ((r.get("fields") or {}).get("Client Name") or (r.get("fields") or {}).get("Client")) == filter_client
-            ]
-        if filter_project:
-            records = [r for r in records if (r.get("fields") or {}).get("Project") == filter_project]
-        if filter_status:
-            records = [r for r in records if (r.get("fields") or {}).get("Payment Status") == filter_status]
-        if filter_category:
-            records = [r for r in records if (r.get("fields") or {}).get("Category") == filter_category]
-        if raised_by_filter:
-            records = [r for r in records if (r.get("fields") or {}).get("Raised By") == raised_by_filter]
-        if billing_filter == "retainer":
-            records = [
-                r for r in records
-                if "retainer" in str((r.get("fields") or {}).get("Category") or "").lower()
-            ]
-        elif billing_filter == "project":
-            records = [
-                r for r in records
-                if "retainer" not in str((r.get("fields") or {}).get("Category") or "").lower()
-            ]
-        if month_filter:
-            records = [
-                r for r in records
-                if _month_key((r.get("fields") or {}).get("Raised Date")) == month_filter
-            ]
-        if date_from or date_to:
-            filtered_records = []
-            for r in records:
-                candidate = _date_only_value((r.get("fields") or {}).get(date_field_filter))
-                if not candidate:
-                    continue
-                if date_from and candidate < date_from:
-                    continue
-                if date_to and candidate > date_to:
-                    continue
-                filtered_records.append(r)
-            records = filtered_records
-        if resource_type == "tax-ledger":
-            period_from = cfg.get("periodFrom")
-            period_to = cfg.get("periodTo")
-            if period_from or period_to:
-                filtered_records = []
-                for r in records:
-                    candidate = _date_only_value((r.get("fields") or {}).get("Raised Date"))
-                    if not candidate:
-                        continue
-                    if period_from and candidate < period_from:
-                        continue
-                    if period_to and candidate > period_to:
-                        continue
-                    filtered_records.append(r)
-                records = filtered_records
+    else:
+        raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")
 
-            invoice_scope = cfg.get("invoiceScope") or "tax"
-            scoped_records = []
-            for r in records:
-                f = r.get("fields") or {}
-                status = str(f.get("Payment Status") or "").strip()
-                if status == "Cancelled":
-                    continue
-                if invoice_scope == "tax" and status != "Paid":
-                    continue
-                if invoice_scope == "open" and status == "Paid":
-                    continue
-                scoped_records.append(r)
-            records = scoped_records
-        if aging_band_filter:
-            records = [
-                r for r in records
-                if (r.get("fields") or {}).get("Payment Status") == "Pending"
-                and _classify_aging_band(_effective_aging(r.get("fields") or {})) == aging_band_filter
-            ]
-        if overdue_only:
-            records = [
-                r for r in records
-                if (r.get("fields") or {}).get("Payment Status") == "Pending"
-                or float((r.get("fields") or {}).get("Outstanding Amount") or 0) > 0
-            ]
-        if has_docs_only:
-            records = [
-                r for r in records
-                if _parse_attachments((r.get("fields") or {}).get("Reference"))
-                or _parse_attachments((r.get("fields") or {}).get("Invoice PDF"))
-            ]
-        if followup_due_only:
-            today_iso = datetime.now().date().isoformat()
-            records = [
-                r for r in records
-                if (candidate := _date_only_value((r.get("fields") or {}).get("Next followup")))
-                and candidate <= today_iso
-            ]
-        if search:
-            records = [
-                r for r in records
-                if search in " ".join([
-                    str((r.get("fields") or {}).get("Invoice Number", "")),
-                    str((r.get("fields") or {}).get("Client Name", "")),
-                    str((r.get("fields") or {}).get("Client", "")),
-                    str((r.get("fields") or {}).get("Project", "")),
-                    str((r.get("fields") or {}).get("Category", "")),
-                    str((r.get("fields") or {}).get("Raised By", "")),
-                    str((r.get("fields") or {}).get("Milestone", "")),
-                    str((r.get("fields") or {}).get("Remark", "")),
-                    str((r.get("fields") or {}).get("Payment Status", "")),
-                ]).lower()
-            ]
-        return records
+    now = datetime.now(timezone.utc)
+    return [r for r in records if _record_matches_view(resource_type, cfg, r, now)]
 
-    raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")
+
+async def _dynamic_view_contains(resource_type: str, vc: Optional[dict], record_id: str) -> bool:
+    """Whether a live link's filters match `record_id` right now (fetched fresh, never trusted from the caller)."""
+    cfg = vc or {}
+    if cfg.get("liveUnsupported"):
+        return False
+    try:
+        record = await _live_get_record(resource_type, _live_service_for(resource_type), record_id)
+    except Exception as exc:
+        logger.debug("shared view live %s membership fetch failed for %s: %s", resource_type, record_id, exc)
+        return False
+    if not record or record.get("id") != record_id:
+        return False
+    return _record_matches_view(resource_type, cfg, record)
 
 
 async def _fetch_snapshot_records(resource_type: str, record_ids: list[str]) -> list[dict[str, Any]]:
