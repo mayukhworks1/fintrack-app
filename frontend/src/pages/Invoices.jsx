@@ -14,6 +14,7 @@ import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import clsx from 'clsx'
+import { csvCell } from '../utils/csv'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
@@ -677,8 +678,10 @@ export default function Invoices() {
         milestone: base['Milestone'] || null,
         raised_by: base['Raised By'] || null,
         raised_date: firstDayIso(retainerMonth),
-        amount_raised: isPause ? 0 : Number(base['Amount Raised'] || 0),
-        amount_with_tax: isPause ? 0 : Number(base['Amount with Tax'] || 0),
+        // A pause carries no amount. The API rejects 0 (an invoice amount must
+        // be positive) and both fields are optional, so leave them out.
+        amount_raised: isPause ? undefined : Number(base['Amount Raised'] || 0),
+        amount_with_tax: isPause ? undefined : Number(base['Amount with Tax'] || 0),
         amount_received: isPause ? 0 : undefined,
         payment_status: isPause ? 'Cancelled' : 'Pending',
         remark: isPause
@@ -735,15 +738,12 @@ export default function Invoices() {
       'Raised By', 'Milestone', 'Currency', 'Amount Raised', 'Amount with Tax',
       'Amount Received', 'Outstanding Amount', 'Cleared Date', 'Remark',
     ]
-    const escape = (v) => {
-      const s = v == null ? '' : String(v)
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-    }
     const data = useFiltered ? records : allRecords
     const header = CSV_FIELDS.join(',')
     const body = data.map(r => {
       const f = r.fields || {}
-      return CSV_FIELDS.map(k => escape(f[k])).join(',')
+      // csvCell also neutralises formula-looking text (=, +, -, @ …).
+      return CSV_FIELDS.map(k => csvCell(f[k])).join(',')
     }).join('\n')
     const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

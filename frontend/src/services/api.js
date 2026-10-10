@@ -87,6 +87,46 @@ function bustWebProjectReads() {
   clientCacheBust('/api/web-projects')
 }
 
+// ── Error bodies ──────────────────────────────────────────────────────────
+// Errors arrive in four shapes: the backend's envelope { error: { message } },
+// a few admin routes' { error: "..." }, older { detail: "..." }, and FastAPI's
+// 422 { detail: [{ loc, msg }, ...] }. Handing that array to new Error()
+// showed users "[object Object]"; ignoring a string `error` showed "HTTP 503".
+function _validationIssue(item) {
+  if (typeof item === 'string') return item
+  if (!item || typeof item !== 'object') return ''
+  const msg = String(item.msg || item.message || '').replace(/^Value error, /, '')
+  const loc = Array.isArray(item.loc) ? item.loc.filter(p => !['body', 'query', 'path'].includes(p)) : []
+  const field = loc.join('.').replace(/_/g, ' ')
+  return field && msg ? `${field}: ${msg}` : msg
+}
+
+export function apiErrorMessage(body, status) {
+  const error = body?.error
+  if (error && typeof error === 'object' && error.message) return String(error.message)
+  if (typeof error === 'string' && error.trim()) return error
+  const detail = body?.detail
+  if (Array.isArray(detail)) {
+    const issues = detail.map(_validationIssue).filter(Boolean)
+    if (issues.length) return issues.join('; ')
+  } else if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  } else if (detail && typeof detail === 'object' && detail.message) {
+    return String(detail.message)
+  }
+  if (typeof body?.message === 'string' && body.message.trim()) return body.message
+  return `HTTP ${status}`
+}
+
+// Worth another attempt: no HTTP response at all (network failure), a 5xx
+// other than 501, or 429. Any other 4xx is an answer, and asking again cannot
+// change it.
+function _isRetryable(err) {
+  const status = err?.status
+  if (status == null) return true
+  return status === 429 || (status >= 500 && status !== 501)
+}
+
 // ── Retry-capable fetch with timeout ──────────────────────────────────────
 // If options.signal is provided (external AbortController), the caller owns
 // cancellation — retries are disabled and the timeout is extended.
@@ -133,7 +173,7 @@ async function requestBlob(path, options = {}) {
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }))
-      throw new Error(err?.error?.message || err?.detail || err?.message || `HTTP ${res.status}`)
+      throw new Error(apiErrorMessage(err, res.status))
     }
     const blob = await res.blob()
     return {
@@ -207,13 +247,8 @@ async function _doRequest(path, options = {}, retries = 2) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }))
       // Backend wraps errors as { error: { code, type, message, request_id } }
-      // Older endpoints return { detail: "..." }
-      const msg =
-        err?.error?.message ||
-        err?.detail ||
-        err?.message ||
-        `HTTP ${res.status}`
-      const e = new Error(msg)
+      // Older endpoints return { detail: "..." }; see apiErrorMessage.
+      const e = new Error(apiErrorMessage(err, res.status))
       e.status     = res.status
       e.requestId  = err?.error?.request_id
       e.errorType  = err?.error?.type
@@ -234,9 +269,13 @@ async function _doRequest(path, options = {}, retries = 2) {
       }
       throw new Error('Request timed out — check your connection')
     }
-    if (retries > 0 && !err.message?.startsWith('HTTP 4')) {
+    // Retry inside this attempt, not through request(): a GET is registered in
+    // _inflight until its promise settles, so request() would hand the retry
+    // its own pending promise to await — it never settled, and every later
+    // identical GET joined it until a page reload.
+    if (retries > 0 && _isRetryable(err)) {
       await new Promise(r => setTimeout(r, 600))
-      return request(path, options, retries - 1)
+      return _doRequest(path, options, retries - 1)
     }
     throw err
   } finally {
@@ -303,7 +342,7 @@ export const api = {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        const error = new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+        const error = new Error(apiErrorMessage(err, res.status))
         error.status = res.status
         throw error
       }
@@ -353,7 +392,7 @@ export const api = {
       }).then(async res => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }))
-          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          const e = new Error(apiErrorMessage(err, res.status))
           e.status = res.status
           throw e
         }
@@ -416,18 +455,8 @@ export const api = {
       }).then(async res => {
         if (!res.ok) {
           const body = await res.json().catch(() => null)
-          // FastAPI validation errors (422) have detail = [{loc,msg,type}] array.
-          // Our own errors (400/500) have detail = string.
-          // Never let an array reach Error() constructor — it prints as [object Object].
-          let msg
-          if (body?.detail) {
-            msg = Array.isArray(body.detail)
-              ? (body.detail[0]?.msg || 'Request validation failed')
-              : String(body.detail)
-          } else {
-            msg = `HTTP ${res.status}`
-          }
-          const e = new Error(msg)
+          // Never let a 422 detail array reach Error() — see apiErrorMessage.
+          const e = new Error(apiErrorMessage(body, res.status))
           e.status = res.status
           throw e
         }
@@ -451,7 +480,7 @@ export const api = {
       }).then(async res => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }))
-          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          const e = new Error(apiErrorMessage(err, res.status))
           e.status = res.status
           throw e
         }
@@ -507,7 +536,7 @@ export const api = {
       }).then(async res => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }))
-          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          const e = new Error(apiErrorMessage(err, res.status))
           e.status = res.status
           throw e
         }
@@ -591,7 +620,7 @@ export const api = {
       }).then(async res => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }))
-          const e = new Error(err?.detail || `HTTP ${res.status}`)
+          const e = new Error(apiErrorMessage(err, res.status))
           e.status = res.status
           throw e
         }
@@ -770,7 +799,8 @@ export const api = {
         let body = {}
         try { body = JSON.parse(xhr.responseText || '{}') } catch { /* handled below */ }
         if (xhr.status >= 200 && xhr.status < 300) return resolve(body)
-        reject(new Error(body?.detail || body?.error?.message || `Upload failed (${xhr.status})`))
+        const msg = apiErrorMessage(body, xhr.status)
+        reject(new Error(msg === `HTTP ${xhr.status}` ? `Upload failed (${xhr.status})` : msg))
       }
       xhr.onerror   = () => reject(new Error('Upload failed — check your connection.'))
       xhr.ontimeout = () => reject(new Error('Upload timed out. Try a smaller file.'))
@@ -849,7 +879,7 @@ export const api = {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }))
-        const error = new Error(err?.detail || err?.message || `HTTP ${res.status}`)
+        const error = new Error(apiErrorMessage(err, res.status))
         error.status = res.status
         throw error
       }

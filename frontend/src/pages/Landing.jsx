@@ -19,6 +19,7 @@ import { ArrowRight, Check } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { useTilt } from '../hooks/useTilt'
 import { useReveal } from '../hooks/useReveal'
 import { Grain, CountUp, MiniBars, MiniDocs } from '../components/LandingVisuals'
@@ -142,7 +143,8 @@ export default function Landing() {
         {/* ── The sandbox ──────────────────────────────────────────────── */}
         <div id="try" className="relative mx-auto px-4 sm:px-6 pb-12 sm:pb-16"
              style={{ maxWidth: 1120, zIndex: 1 }}>
-          <Tilted><DemoWorkspace /></Tilted>
+          {/* Its own boundary: a fault in the sandbox must not take the page down. */}
+          <Tilted><ErrorBoundary><DemoWorkspace /></ErrorBoundary></Tilted>
         </div>
       </section>
 

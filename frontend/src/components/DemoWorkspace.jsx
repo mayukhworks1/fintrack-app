@@ -37,7 +37,9 @@ import {
   // and the assistant answered "across 0 pending invoices".
   open,
   ask, bandOf, monthly, inr, inrShort, shortDate, GST_RATE, TDS_RATE,
-  DELIVERY, LANES, boardBy, TAX_SUMMARY, TAX_CLIENTS, PAGES_MOCK,
+  // CLIENTS backs the generated report's Risk tab. It was referenced there and
+  // never imported, so opening that tab threw and took the landing page down.
+  CLIENTS, DELIVERY, LANES, boardBy, TAX_SUMMARY, TAX_CLIENTS, PAGES_MOCK,
   PAGE_TEMPLATES, STUDIO_DOCS, STUDIO_RAG_PRESETS, AI_CHAT_PRESETS,
   REPORT_TEMPLATES, CUSTOM_DASHBOARD_WIDGETS,
 } from './demoData'

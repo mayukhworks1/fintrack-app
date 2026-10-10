@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BarChart3, Download, GripVertical, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useDialog } from '../hooks/useDialog'
+
+const NO_SOURCE_ROWS = {}
 
 function downloadFile(blob, filename) {
   const url = URL.createObjectURL(blob)
@@ -56,6 +58,9 @@ export default function InsightWorkbench({
   factoryWidgetIds = [],
   sourceOptions = [],
   currentFilters = {},
+  // What the sources' rows depend on, when that is not simply currentFilters
+  // (Dashboard's filters carry its poll time, which moves every 5 s).
+  rowsKey,
   onApplyWidgets,
   onApplyCustomBlocks,
 }) {
@@ -77,7 +82,18 @@ export default function InsightWorkbench({
   const [selectedColumns, setSelectedColumns] = useState(sourceOptions[0]?.defaultColumns || [])
   const [exporting, setExporting] = useState(false)
   const [savingReport, setSavingReport] = useState(false)
-  const [sourceRowsByKey, setSourceRowsByKey] = useState({})
+  // Loaded rows are cached per source, but only for the filters they were
+  // loaded under. The parent rebuilds its loaders when its period changes, and
+  // a cache keyed by source alone kept serving the old period's rows to
+  // exports and custom blocks labelled with the new one.
+  const filtersKey = JSON.stringify(rowsKey === undefined ? (currentFilters || {}) : rowsKey)
+  const filtersKeyRef = useRef(filtersKey)
+  filtersKeyRef.current = filtersKey
+  const [sourceRowsCache, setSourceRowsCache] = useState({ filtersKey, rows: NO_SOURCE_ROWS })
+  const sourceRowsByKey = sourceRowsCache.filtersKey === filtersKey ? sourceRowsCache.rows : NO_SOURCE_ROWS
+  // The filters the rows last handed to onApplyCustomBlocks were loaded under
+  // ('' when none were handed over).
+  const blockRowsKeyRef = useRef('')
   const [sourceLoadingKey, setSourceLoadingKey] = useState('')
   const [customBlocks, setCustomBlocks] = useState([])
   const [editingBlockId, setEditingBlockId] = useState('')
@@ -109,24 +125,33 @@ export default function InsightWorkbench({
     setSelectedWidgets(defaultWidgetIds)
   }, [defaultWidgetIds.join('|')])
 
-  const ensureSourceRows = useCallback(async (key) => {
+  const ensureSourceRows = useCallback(async (key, { fresh = false } = {}) => {
     const source = sourceOptions.find((item) => item.key === key)
     if (!source) return []
-    if (sourceRowsByKey[key]) return sourceRowsByKey[key]
+    if (!fresh && sourceRowsByKey[key]) return sourceRowsByKey[key]
+    const loadedUnder = filtersKey
+    const remember = (rows) => {
+      // Rows that finish loading after the filters have moved on are not cached.
+      if (filtersKeyRef.current !== loadedUnder) return
+      setSourceRowsCache((curr) => ({
+        filtersKey: loadedUnder,
+        rows: { ...(curr.filtersKey === loadedUnder ? curr.rows : {}), [key]: rows },
+      }))
+    }
     if (!source.loadRows) {
       const fallbackRows = source.getRows ? source.getRows() : []
-      setSourceRowsByKey((curr) => ({ ...curr, [key]: fallbackRows }))
+      remember(fallbackRows)
       return fallbackRows
     }
     setSourceLoadingKey(key)
     try {
       const rows = await source.loadRows()
-      setSourceRowsByKey((curr) => ({ ...curr, [key]: rows || [] }))
+      remember(rows || [])
       return rows || []
     } finally {
       setSourceLoadingKey('')
     }
-  }, [sourceOptions, sourceRowsByKey])
+  }, [sourceOptions, sourceRowsByKey, filtersKey])
 
   useEffect(() => {
     if ((showDashboards || showExport) && sourceKey) ensureSourceRows(sourceKey)
@@ -184,8 +209,20 @@ export default function InsightWorkbench({
 
   function applyCustomBlockSelection(nextBlocks) {
     setCustomBlocks(nextBlocks)
+    blockRowsKeyRef.current = Object.keys(sourceRowsByKey).length ? filtersKey : ''
     onApplyCustomBlocks?.(nextBlocks, sourceRowsByKey)
   }
+
+  // The parent renders custom blocks from the rows it was handed. Once the
+  // filters move on those rows belong to the old period, so take them back and
+  // let the blocks read the parent's live rows for the current filters.
+  useEffect(() => {
+    if (!blockRowsKeyRef.current || blockRowsKeyRef.current === filtersKey) return
+    blockRowsKeyRef.current = ''
+    onApplyCustomBlocks?.(customBlocks, {})
+  // intentionally keyed only to the filters
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersKey])
 
   function resetDashboardBuilder() {
     setEditingDashboardId('')
@@ -334,7 +371,9 @@ export default function InsightWorkbench({
 
   async function runExport() {
     if (!currentSource) return
-    const exportRows = await ensureSourceRows(currentSource.key)
+    // Always load afresh: a file is a record of the data as it is now, not as
+    // it was when the preview first loaded.
+    const exportRows = await ensureSourceRows(currentSource.key, { fresh: true })
     const selectedColumnDefs = exportableColumns.filter(col => selectedColumns.includes(col.key))
     const rows = exportRows.map((row) => selectedColumns.map((key) => row[key] ?? ''))
     const summaryCards = selectedColumnDefs.slice(0, 4).map((column) => {
