@@ -7,7 +7,10 @@ const ROLE_KEY = 'fintrack-auth-role'
 const USER_KEY = 'fintrack-auth-user'
 const AUTH_ROLE_KEY = 'fintrack-auth-master-role'
 const PERMS_KEY = 'fintrack-auth-permissions'
-const IMPERSONATION_KEY = 'fintrack-impersonation'  // stores { originalToken, user }
+const IMPERSONATION_KEY = 'fintrack-impersonation'  // stores { originalToken, impersonationToken, targetUser }
+
+// Back-off between /verify retries after a network error, timeout or 5xx.
+const VERIFY_RETRY_MS = [2000, 5000, 15000, 30000]
 
 function getStoredRole() {
   try { return localStorage.getItem(ROLE_KEY) || 'editor' } catch { return 'editor' }
@@ -29,6 +32,22 @@ function setStoredJson(key, value) {
     if (value) localStorage.setItem(key, JSON.stringify(value))
     else localStorage.removeItem(key)
   } catch {}
+}
+
+/**
+ * The stored impersonation, but only while the session it describes is the
+ * one signed in. The record holds the superadmin's own token; one left behind
+ * by an expired impersonation (or by a build that did not record which token
+ * it belonged to) would hand that token to whoever signs in next through
+ * "Exit impersonation". Anything that does not match is dropped.
+ */
+function loadImpersonation() {
+  const imp = getStoredJson(IMPERSONATION_KEY, null)
+  if (!imp) return null
+  const current = getAuthToken()
+  if (imp.originalToken && imp.impersonationToken && current && imp.impersonationToken === current) return imp
+  setStoredJson(IMPERSONATION_KEY, null)
+  return null
 }
 
 /**
@@ -69,7 +88,7 @@ export function AuthProvider({ children }) {
     return Array.isArray(stored) ? new Set(stored) : null
   })
   // Impersonation state — persisted in localStorage so refresh survives
-  const [impersonation, setImpersonation] = useState(() => getStoredJson(IMPERSONATION_KEY, null))
+  const [impersonation, setImpersonation] = useState(loadImpersonation)
 
   function _applyVerifyResponse(res) {
     const r = res?.role || 'editor'
@@ -92,27 +111,50 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // A sign-in, sign-out or rejected token ends any impersonation: the record
+  // holds the superadmin's token and must never outlive the session it was for.
+  function _clearImpersonation() {
+    setStoredJson(IMPERSONATION_KEY, null)
+    setImpersonation(null)
+  }
+
   // Verify stored token on mount — also refreshes the role from server
   useEffect(() => {
-    if (!getAuthToken()) return
+    const token = getAuthToken()
+    if (!token) return
     let cancelled = false
-    ;(async () => {
+    let timer = null
+    const attempt = async (n) => {
+      // Signed out, or signed in afresh, since this check was scheduled
+      if (getAuthToken() !== token) return
       try {
         const res = await api.auth.verify()
         if (!cancelled) {
           _applyVerifyResponse(res)
           setStatus('authed')
         }
-      } catch {
-        clearAuthToken()
-        setStoredRole(null)
-        setStoredJson(USER_KEY, null)
-        setStoredJson(PERMS_KEY, null)
-        try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
-        if (!cancelled) setStatus('unauthed')
+      } catch (err) {
+        if (cancelled) return
+        if (err?.status === 401 || err?.status === 403) {
+          // The server rejected the token: sign out.
+          clearAuthToken()
+          setStoredRole(null)
+          setStoredJson(USER_KEY, null)
+          setStoredJson(PERMS_KEY, null)
+          try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
+          _clearImpersonation()
+          setStatus('unauthed')
+          return
+        }
+        // Network error, timeout or 5xx — a cold start, a redeploy, a phone
+        // between cells. That says nothing about the token, so keep the
+        // identity the app already painted from and ask again shortly. Any
+        // real request that gets a 401 meanwhile still signs out.
+        timer = setTimeout(() => attempt(n + 1), VERIFY_RETRY_MS[Math.min(n, VERIFY_RETRY_MS.length - 1)])
       }
-    })()
-    return () => { cancelled = true }
+    }
+    attempt(0)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [])
 
   // Listen for 401s from anywhere in the app
@@ -122,6 +164,7 @@ export function AuthProvider({ children }) {
       setStoredJson(USER_KEY, null)
       setStoredJson(PERMS_KEY, null)
       try { localStorage.removeItem(AUTH_ROLE_KEY) } catch {}
+      _clearImpersonation()
       setUser(null)
       setAuthRole('')
       setPermissions(null)
@@ -138,6 +181,7 @@ export function AuthProvider({ children }) {
       ? await api.auth.emailLogin(email, password)
       : await api.auth.login(password)
     if (!res?.token) throw new Error('Login failed')
+    _clearImpersonation()
     setAuthToken(res.token)
     _applyVerifyResponse(res)
     setStatus('authed')
@@ -145,6 +189,7 @@ export function AuthProvider({ children }) {
 
   const acceptToken = useCallback(async (token) => {
     if (!token) throw new Error('Missing login token')
+    _clearImpersonation()
     try {
       setAuthToken(token)
       const res = await api.auth.verify()
@@ -168,7 +213,8 @@ export function AuthProvider({ children }) {
   // Start impersonating a user — swap to their token, save admin's original token
   const startImpersonation = useCallback(async (impersonationToken, targetUser) => {
     const originalToken = getAuthToken()
-    const imp = { originalToken, targetUser }
+    // impersonationToken ties the record to this session (see loadImpersonation)
+    const imp = { originalToken, impersonationToken, targetUser }
     // Persist FIRST before any async work so a reload never loses the state
     setStoredJson(IMPERSONATION_KEY, imp)
     setImpersonation(imp)
@@ -183,16 +229,25 @@ export function AuthProvider({ children }) {
     setStatus('authed')
   }, [])
 
-  // Exit impersonation — restore admin token immediately (optimistic), revoke server-side in bg
+  // Exit impersonation — end the impersonation session, then restore the admin token
   const exitImpersonation = useCallback(async () => {
-    const imp = getStoredJson(IMPERSONATION_KEY, null)
-    if (!imp?.originalToken) return
-    // 1. Update UI immediately — no waiting for network
-    setStoredJson(IMPERSONATION_KEY, null)
-    setImpersonation(null)
+    const imp = loadImpersonation()
+    // 1. Hide the banner at once
+    _clearImpersonation()
+    if (!imp) return
+    // 2. Revoke the impersonation session with ITS token. Sent with the admin
+    //    token (as it used to be), the server found the admin's own session
+    //    and refused, so impersonation tokens lived out their full 2 hours.
+    try {
+      await api.admin.exitImpersonation(imp.impersonationToken)
+    } catch (err) {
+      // 401: the impersonation session is already over and the API client
+      // has signed out. Do not hand the stored admin token back to whoever
+      // is at the keyboard.
+      if (err?.status === 401) return
+      console.warn('Ending the impersonation session failed:', err?.message || err)
+    }
     setAuthToken(imp.originalToken)
-    // 2. Revoke server session in background (fire-and-forget)
-    api.admin.exitImpersonation().catch(() => {})
     // 3. Re-verify to get the correct admin role/permissions
     try {
       const res = await api.auth.verify()
@@ -214,7 +269,11 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
-    api.auth.logout().catch(() => {})
+    // Signing out mid-impersonation signs the superadmin out too: their own
+    // session is revoked along with the impersonation one, not left live.
+    const imp = getStoredJson(IMPERSONATION_KEY, null)
+    api.auth.logout(getAuthToken()).catch(() => {})
+    if (imp?.originalToken) api.auth.logout(imp.originalToken).catch(() => {})
     clearAuthToken()
     setStoredRole(null)
     setStoredJson(USER_KEY, null)

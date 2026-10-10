@@ -683,7 +683,8 @@ export const api = {
     forcePasswordReset:   (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/force-password-reset`, { method: 'POST' }),
     setUserPassword:      (id, password) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/set-password`, { method: 'POST', body: JSON.stringify({ password }) }),
     impersonate:          (id)           => request(`/api/admin/impersonate/${encodeURIComponent(id)}`, { method: 'POST' }),
-    exitImpersonation:    ()             => request('/api/admin/impersonate/exit', { method: 'POST' }),
+    // Pass the impersonation token: the server ends the session the request is authenticated with.
+    exitImpersonation:    (token)        => request('/api/admin/impersonate/exit', { method: 'POST', ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) }),
     deploymentHealth:     (opts = {})   => request('/api/admin/deployment-health', opts),
     testEmail: (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }),
     testSmtp:  (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }), // alias
@@ -734,7 +735,8 @@ export const api = {
     forgotPassword: (email) => request('/api/auth/email/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
     resetPassword: (token, password) => request('/api/auth/email/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
     verify: ()         => request('/api/auth/verify', {}, 0),
-    logout: ()         => request('/api/auth/logout', { method: 'POST' }, 0),
+    // An explicit token ends that session (e.g. a superadmin's own while impersonating).
+    logout: (token)    => request('/api/auth/logout', { method: 'POST', ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) }, 0),
     getProfile:      ()       => request('/api/auth/profile'),
     updateProfile:   (data)   => request('/api/auth/profile', { method: 'PATCH', body: JSON.stringify(data) }),
     changePassword:  (data)   => request('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),

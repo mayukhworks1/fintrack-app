@@ -9,7 +9,11 @@ Roles:
   admin  — PostgreSQL dashboard        (APP_ADMIN_PASSWORD)
 
 Token format:
-  base64url("{expiry_ts}:{role}").base64url(hmac_sha256("{expiry_ts}:{role}", secret))
+  base64url(payload).base64url(hmac_sha256(payload, secret))
+  payload = "{nonce}:{expiry_ts}:{role}" or "{nonce}:{expiry_ts}:{role}:s"
+  Tokens issued before the nonce carry "{expiry_ts}:{role}" and still verify.
+  The trailing "s" marks a token backed by an auth_sessions row (email/SSO
+  login, impersonation); it is rejected when that row is gone.
 
 On every successful login a row is inserted into login_sessions (async,
 fire-and-forget) with IP, user-agent, OS, browser, geo, and expiry.
@@ -21,6 +25,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import secrets
 import time
 from ..utils.tasks import spawn
 from urllib.parse import urlencode
@@ -55,7 +60,7 @@ async def _require_email_auth(
     # Local import — deps imports verify_token from this module so we cannot
     # import deps at module level without creating a circular dependency.
     from .deps import _attach_auth_session
-    await _attach_auth_session(request, token[:16])
+    await _attach_auth_session(request, token[:16], session_bound=token_is_session_bound(token))
     if not getattr(request.state, "is_email_auth", False):
         raise HTTPException(status_code=403, detail="This endpoint requires email authentication")
     return role
@@ -132,20 +137,28 @@ def _sign(payload: bytes) -> bytes:
     ).digest()
 
 
-def make_token(role: str = "editor", ttl: int | None = None) -> str:
-    """Build a signed token that embeds expiry + role."""
+def make_token(role: str = "editor", ttl: int | None = None, *, session_bound: bool = False) -> str:
+    """
+    Build a signed token that embeds a nonce, expiry and role.
+
+    The nonce comes first so the 16-character hint every session table is
+    keyed on (token[:16]) is random. It used to be the expiry second plus the
+    role's first letter, so two same-role logins in one second got the same
+    token and shared one identity.
+
+    session_bound marks a token whose identity lives in an auth_sessions row;
+    deps rejects it when that row is missing instead of downgrading it to a
+    legacy role token.
+    """
     expiry = int(time.time()) + (ttl if ttl is not None else settings.app_session_ttl)
-    payload = f"{expiry}:{role}".encode()
+    nonce = secrets.token_urlsafe(12)   # 16 chars of [A-Za-z0-9_-], never ':'
+    payload = f"{nonce}:{expiry}:{role}{':s' if session_bound else ''}".encode()
     sig = _sign(payload)
     return f"{_b64url(payload)}.{_b64url(sig)}"
 
 
-def verify_token(token: str) -> str | None:
-    """
-    Verify token signature and expiry.
-    Returns the role string on success, None on failure.
-    Old tokens without a role field default to "editor".
-    """
+def _token_claims(token: str) -> dict | None:
+    """Verify signature and expiry; return the payload's fields, or None."""
     if not token or "." not in token:
         return None
     try:
@@ -158,12 +171,19 @@ def verify_token(token: str) -> str | None:
     if not hmac.compare_digest(sig, _sign(payload)):
         return None
 
+    session_bound = False
     try:
-        decoded = payload.decode()
-        if ":" in decoded:
-            expiry_str, role = decoded.split(":", 1)
+        parts = payload.decode().split(":")
+        if len(parts) == 1:
+            # Oldest tokens: "{expiry}" with no role
+            expiry_str, role = parts[0], "editor"
+        elif len(parts) == 2:
+            # Pre-nonce tokens: "{expiry}:{role}"
+            expiry_str, role = parts
         else:
-            expiry_str, role = decoded, "editor"
+            # "{nonce}:{expiry}:{role}" plus optional flags
+            expiry_str, role = parts[1], parts[2]
+            session_bound = "s" in parts[3:]
         expiry = int(expiry_str)
     except (ValueError, AttributeError):
         return None
@@ -171,7 +191,23 @@ def verify_token(token: str) -> str | None:
     if time.time() >= expiry:
         return None
 
-    return role
+    return {"role": role, "expiry": expiry, "session_bound": session_bound}
+
+
+def verify_token(token: str) -> str | None:
+    """
+    Verify token signature and expiry.
+    Returns the role string on success, None on failure.
+    Old tokens without a role field default to "editor".
+    """
+    claims = _token_claims(token)
+    return claims["role"] if claims else None
+
+
+def token_is_session_bound(token: str) -> bool:
+    """True for a valid token that must resolve to a live auth_sessions row."""
+    claims = _token_claims(token)
+    return bool(claims and claims["session_bound"])
 
 
 def _get_client_ip(request: Request) -> str:
@@ -545,9 +581,14 @@ async def verify(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     payload: dict = {"valid": True, "role": role}
+    # A session-bound (email/SSO/impersonation) token is only as good as its
+    # auth_sessions row; it must never come back as a bare legacy role.
+    session_bound = token_is_session_bound(token)
     try:
         from ..db.postgres import get_pool
         pool = get_pool()
+        if not pool and session_bound:
+            raise HTTPException(status_code=503, detail="Sign-in service is temporarily unavailable")
         if pool:
             row = await pool.fetchrow(
                 """
@@ -617,6 +658,8 @@ async def verify(authorization: str | None = Header(default=None)):
                 """,
                 token[:16],
             )
+            if not row and session_bound:
+                raise HTTPException(status_code=401, detail="Session has been revoked")
             if row:
                 if row["revoked_at"] is not None:
                     raise HTTPException(status_code=401, detail="Session has been revoked")
@@ -634,7 +677,8 @@ async def verify(authorization: str | None = Header(default=None)):
                 # from this module, so a top-level import would be circular.
                 from .deps import _touch_auth_session
                 spawn(_touch_auth_session(str(row["session_id"])), name="touch-auth-session")
-                auth_role = row["auth_role"] or (row["metadata"] or {}).get("auth_role") or "viewer"
+                from .deps import session_metadata
+                auth_role = row["auth_role"] or session_metadata(row["metadata"]).get("auth_role") or "viewer"
                 user_id_str = str(row["user_id"])
                 # Fetch effective permissions for this user (union of role defaults + overrides)
                 permissions: list[str] = []
@@ -667,7 +711,11 @@ async def verify(authorization: str | None = Header(default=None)):
     except HTTPException:
         raise
     except Exception:
-        pass
+        # A database blip. Legacy tokens still verify on their signature; a
+        # session-bound one cannot be checked, so say so rather than return it
+        # as an unscoped legacy role. 503, not 401: the client keeps its token.
+        if session_bound:
+            raise HTTPException(status_code=503, detail="Sign-in service is temporarily unavailable")
 
     return payload
 
@@ -691,6 +739,14 @@ async def logout(authorization: str | None = Header(default=None)):
 
     if not token:
         return {"logged_out": False, "reason": "no_token"}
+
+    # The hint is just the token's first 16 characters — not a secret, and
+    # for pre-nonce tokens it is guessable from the login second. Revoking by
+    # hint is only safe once the signature proves the caller holds the token.
+    # 200 rather than 401, as for a missing token: the client is discarding
+    # its token either way, and a 401 would trip its session-expired redirect.
+    if verify_token(token) is None:
+        return {"logged_out": False, "reason": "invalid_token"}
 
     token_hint = token[:16]
 
