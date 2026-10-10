@@ -6,7 +6,7 @@ Roles:
   viewer — read-only                   (APP_VIEW_PASSWORD)
   web    — web invoice tracker only    (APP_WEB_PASSWORD)
   all    — web projects + invoices     (APP_ALL_PASSWORD)
-  admin  — PostgreSQL dashboard        (APP_ADMIN_PASSWORD, default Master@2026)
+  admin  — PostgreSQL dashboard        (APP_ADMIN_PASSWORD)
 
 Token format:
   base64url("{expiry_ts}:{role}").base64url(hmac_sha256("{expiry_ts}:{role}", secret))
@@ -175,11 +175,9 @@ def verify_token(token: str) -> str | None:
 
 
 def _get_client_ip(request: Request) -> str:
-    for header in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        val = request.headers.get(header, "")
-        if val:
-            return val.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    # The rate limit below keys on this, so it must not trust client-set headers.
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 async def _auth_rate_limit(request: Request) -> None:
@@ -257,8 +255,8 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
     admin_pw  = (settings.app_admin_password or "").strip()
 
     # Case-SENSITIVE constant-time comparisons. Lowercasing both sides (the old
-    # behaviour) silently threw away password entropy — `MASTER@2026` would match
-    # `Master@2026`. Passwords must match exactly.
+    # behaviour) silently threw away password entropy — an all-caps guess would
+    # match a mixed-case secret. Passwords must match exactly.
     p = provided
     is_editor = bool(editor_pw) and hmac.compare_digest(p, editor_pw)
     is_viewer = bool(viewer_pw) and hmac.compare_digest(p, viewer_pw)
@@ -267,7 +265,7 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
     is_admin  = bool(admin_pw)  and hmac.compare_digest(p, admin_pw)
 
     # Dedicated admin password must win if secrets accidentally overlap.
-    # Production previously had legacy passwords collide, causing Master@2026
+    # Production previously had legacy passwords collide, causing the admin password
     # to log in as "editor" and then fail every /api/admin/* request.
     if is_admin:
         role = "admin"

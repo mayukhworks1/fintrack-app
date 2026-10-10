@@ -230,7 +230,8 @@ class TestGzip:
         from fastapi.testclient import TestClient
         from fastapi.middleware.gzip import GZipMiddleware
         import app.main as M
-        assert any(m.cls is GZipMiddleware for m in M.app.user_middleware)
+        # A subclass that also passes event streams through untouched.
+        assert any(issubclass(m.cls, GZipMiddleware) for m in M.app.user_middleware)
         c = TestClient(M.app)
         big = c.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
         small = c.get("/health/live", headers={"Accept-Encoding": "gzip"})

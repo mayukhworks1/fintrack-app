@@ -126,10 +126,8 @@ def _hash_password(password: str) -> str:
 
 
 def _get_client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 async def _geo_lookup(ip: str) -> dict:

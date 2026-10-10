@@ -722,11 +722,8 @@ class SharedViewService:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _extract_ip(request) -> str:
-    for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
-        v = request.headers.get(h, "")
-        if v:
-            return v.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    from ..utils.client_ip import client_ip
+    return client_ip(request)
 
 
 def _date_only_value(value: Any) -> str:

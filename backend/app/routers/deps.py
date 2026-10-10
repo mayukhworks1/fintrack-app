@@ -336,7 +336,7 @@ async def require_admin(request: Request, role: str = Depends(require_auth)) -> 
     Admin access gate — hardened to check DB auth_role for email-auth sessions.
 
     Allowed:
-      • Legacy 'admin' password (Master@2026) — HMAC role == 'admin'
+      • Legacy 'admin' password (APP_ADMIN_PASSWORD secret) — HMAC role == 'admin'
       • Email-auth users with auth_role 'superadmin' or 'admin' in the DB
 
     Blocked:
