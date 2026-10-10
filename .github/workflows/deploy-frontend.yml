@@ -1,32 +1,65 @@
 name: Deploy Frontend → Cloudflare Pages
+# The commit a run deploys goes in its title; a later run reads it back to see
+# what is already live (the "changes" step). Keep the 40-hex SHA at the end.
+run-name: Deploy frontend ${{ github.event.workflow_run.head_sha || github.sha }}
 
+# Deploys only a commit that CI passed. This used to run on every push to main
+# that touched frontend/**, in parallel with CI and without the test suite, so
+# a commit that turned vitest red still went live. It now starts when the "CI"
+# workflow completes for main, goes ahead only if that run was a push and
+# succeeded — CI runs `npm test` before its build — and deploys exactly the
+# commit CI tested.
+#
+# workflow_run has no `paths:` filter, so the old one (frontend/**,
+# vercel.json or this file) is applied by the "changes" step instead. It
+# compares against the commit of the last successful deploy rather than the
+# previous push, so a frontend change whose CI failed, or whose deploy was
+# cancelled or failed, is deployed by the next green run instead of being
+# skipped for good. A manual run always deploys, and only from main.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'vercel.json'
-      - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read   # the "changes" step lists this workflow's earlier runs
+
+# One deploy at a time, and a running one is never cancelled: every green CI
+# run starts this workflow, and one with nothing to deploy must not abort one
+# that is mid-upload.
 concurrency:
-  group: deploy-frontend-${{ github.ref }}
-  cancel-in-progress: true
+  group: deploy-frontend
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Build & Deploy
+    # `branches` above matches the head branch by name only, and a pull
+    # request from a fork can name its branch "main" too. The event and the
+    # repository are checked as well, or a fork's code could be deployed.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     # Promote secret to env so step-level `if:` can reference it.
     # (GitHub forbids `secrets.*` inside `if:` conditions.)
     env:
       HAS_CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     defaults:
       run:
         working-directory: frontend
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0   # the "changes" step diffs against the last deployed commit
 
       - name: Check secrets are configured
         run: |
@@ -37,26 +70,58 @@ jobs:
           fi
           echo "✅ Secrets found, proceeding."
 
+      - name: Did frontend/ change since the last deploy?
+        id: changes
+        if: github.event_name == 'workflow_run' && env.HAS_CF_TOKEN == 'true'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_STEP: Deploy to Cloudflare Pages
+        run: |
+          # What Pages serves is the commit in the title of the newest run
+          # whose deploy step succeeded. Anything unexpected — no such run
+          # yet, an API error, a commit no longer in history — deploys, which
+          # is what this workflow always did before it waited for CI.
+          base=""
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-frontend.yml/runs?status=success&per_page=50" \
+                   --jq '.workflow_runs[] | [.id, .display_title] | @tsv') || runs=""
+          while IFS=$'\t' read -r id title; do
+            sha=$(printf '%s\n' "$title" | sed -n 's/^Deploy frontend \([0-9a-f]\{40\}\)$/\1/p')
+            [ -n "$sha" ] || continue
+            deployed=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs" \
+                         --jq ".jobs[].steps[]? | select(.name == \"${DEPLOY_STEP}\") | .conclusion") || continue
+            if [ "$deployed" = "success" ]; then base="$sha"; break; fi
+          done <<< "$runs"
+
+          if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null &&
+             git diff --quiet "$base" "$DEPLOY_SHA" -- frontend vercel.json .github/workflows/deploy-frontend.yml; then
+            echo "frontend/ is unchanged since ${base}, which is already live — nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploying ${DEPLOY_SHA} (last deployed: ${base:-unknown})."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
-        if: env.HAS_CF_TOKEN == 'true'
+        if: env.HAS_CF_TOKEN == 'true' && steps.changes.outputs.deploy != 'false'
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        if: env.HAS_CF_TOKEN == 'true'
+        if: env.HAS_CF_TOKEN == 'true' && steps.changes.outputs.deploy != 'false'
         run: npm ci
 
       - name: Build
-        if: env.HAS_CF_TOKEN == 'true'
+        if: env.HAS_CF_TOKEN == 'true' && steps.changes.outputs.deploy != 'false'
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://mayukhj24-fintrack-api.hf.space' }}
           VITE_AI_MODEL: Nemotron 120B
         run: npm run build
 
       - name: Deploy to Cloudflare Pages
-        if: env.HAS_CF_TOKEN == 'true'
+        if: env.HAS_CF_TOKEN == 'true' && steps.changes.outputs.deploy != 'false'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
