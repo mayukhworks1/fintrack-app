@@ -14,7 +14,7 @@
  * no visitor stays in.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor, act } from '@testing-library/react'
 import DemoWorkspace, { TABS } from '../components/DemoWorkspace'
 import { INVOICES, TOTALS, inr, inrShort, GST_RATE, TDS_RATE, DELIVERY, LANES } from '../components/demoData'
 
@@ -208,5 +208,119 @@ describe('the sandbox', () => {
   it('never calls the API — it has no workspace to read', () => {
     render(<DemoWorkspace />)
     expect(TOTALS.outstanding).toBeGreaterThan(0)   // computed, not fetched
+  })
+})
+
+/* Every view behind a click, not only each module's front door.
+ *
+ * 'reaches every module' clicks the rail, so it renders each panel's default
+ * view and nothing else. Report → Generate → RISK read an undeclared CLIENTS,
+ * and that ReferenceError replaced the whole public landing page with the
+ * error screen while every test passed. So, per module: click every control
+ * the stage shows, then every control those clicks revealed, until nothing new
+ * appears — running the timers between clicks, because generated reports and
+ * AI answers arrive on a delay. The walk is depth-first: what the last click
+ * revealed comes first, then content before the tab row above it (a sub-tab
+ * click hides the content of the current one), and controls that close things
+ * come last. A click that lands in another module is followed until that view
+ * is exhausted, then the walk returns home. Rows are left to the tests above.
+ * A click that throws, or a frame that disappears, fails the module. */
+const CLOSE_LIKE = /^(close|cancel|dismiss|back|done|×|✕)$/i
+const CLICK_BUDGET = 400
+
+const describeControl = (el) => {
+  const text = el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60)
+  const icon = el.querySelector('svg')?.getAttribute('class') || ''
+  return [el.getAttribute('aria-label'), el.getAttribute('title'), text, text ? '' : icon]
+    .filter(Boolean).join(' | ')
+}
+const isCloseLike = (el) => {
+  const text = el.textContent.trim()
+  if (CLOSE_LIKE.test(text) || CLOSE_LIKE.test(el.getAttribute('aria-label') || '')) return true
+  return !text && /lucide-x\b/.test(el.querySelector('svg')?.getAttribute('class') || '')
+}
+
+function controls(container) {
+  const stage = container.querySelector('.ft-tour-stage')
+  const found = [
+    ...stage.querySelectorAll('button, [role="button"], [role="tab"]'),
+    ...document.querySelectorAll('[role="dialog"] button'),
+  ]
+  return [...new Set(found)].filter(el => !el.disabled && !el.hasAttribute('data-row'))
+}
+
+function crawl(container, homeLabel) {
+  const scopeOf = () => container.querySelector('.ft-chrome-title')?.textContent || ''
+  const goHome = () => {
+    fireEvent.click(within(container.querySelector('.ft-tour-rail')).getByRole('button', { name: homeLabel }))
+    act(() => { vi.advanceTimersByTime(1500) })
+  }
+  const home = scopeOf()
+  const clicked = new Set()
+  const visited = new Set([home])
+  let before = new Set()
+  let clicks = 0
+  while (clicks < CLICK_BUDGET) {
+    const scope = scopeOf()
+    const shown = controls(container).map((el, i) => ({
+      el, i, key: `${scope} :: ${describeControl(el)}`, close: isCloseLike(el),
+    }))
+    const fresh = shown
+      .filter(c => !clicked.has(c.key))
+      .sort((a, b) => (a.close - b.close) || (before.has(a.key) - before.has(b.key)) || (b.i - a.i))
+    if (!fresh.length) {
+      if (scope === home) break
+      goHome()
+      before = new Set()
+      continue
+    }
+    const { el, key } = fresh[0]
+    before = new Set(shown.map(c => c.key))
+    clicked.add(key)
+    try {
+      fireEvent.click(el)
+      act(() => { vi.advanceTimersByTime(1500) })
+    } catch (e) {
+      throw new Error(`clicking "${key}" threw: ${e.message}`)
+    }
+    if (!frame(container)) throw new Error(`clicking "${key}" unmounted the sandbox`)
+    visited.add(scopeOf())
+    clicks++
+  }
+  return { clicks, visited }
+}
+
+describe('every sub-view of the sandbox', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('open', vi.fn(() => null))
+    vi.stubGlobal('print', vi.fn())
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn(() => Promise.resolve()) }, configurable: true,
+    })
+    URL.createObjectURL = vi.fn(() => 'blob:demo')
+    URL.revokeObjectURL = vi.fn()
+    Element.prototype.scrollIntoView = vi.fn()
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  it.each(TABS.map(t => [t.label, t.id]))('%s renders everything a visitor can open', (label) => {
+    const { container } = render(<DemoWorkspace />)
+    fireEvent.click(within(container.querySelector('.ft-tour-rail')).getByRole('button', { name: label }))
+    const { clicks } = crawl(container, label)
+    expect(clicks).toBeGreaterThan(0)
+    expect(frame(container)).toBeInTheDocument()
+  })
+
+  it('reaches the generated report\'s risk tab', () => {
+    // The specific path that shipped broken, asserted directly so a change to
+    // the crawler cannot quietly stop covering it.
+    const { container } = render(<DemoWorkspace />)
+    fireEvent.click(within(container.querySelector('.ft-tour-rail')).getByRole('button', { name: labelFor('reports') }))
+    fireEvent.click(screen.getAllByRole('button', { name: /Generate/i })[0])
+    act(() => { vi.advanceTimersByTime(1500) })
+    fireEvent.click(screen.getByRole('button', { name: /^risk$/i }))
+    expect(screen.getByText(/Active Client Roster/)).toBeInTheDocument()
+    expect(frame(container)).toBeInTheDocument()
   })
 })
