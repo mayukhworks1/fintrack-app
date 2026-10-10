@@ -532,9 +532,10 @@ class _AdminDB:
     """
 
     def __init__(self, *, actor_row, target_is_superadmin=False, not_activated=True,
-                 metadata=None, fail_on=None):
+                 metadata=None, fail_on=None, another_superadmin=True):
         self.actor_row = actor_row
         self.target_is_superadmin = target_is_superadmin
+        self.another_superadmin = another_superadmin
         self.not_activated = not_activated
         self.metadata = metadata
         self.fail_on = fail_on
@@ -583,6 +584,8 @@ class _AdminDB:
         return "OK"
 
     async def fetchval(self, sql, *args):
+        if "u.status = 'active' AND u.id <> $1::uuid" in sql:
+            return self.another_superadmin
         if "r.role_key = 'superadmin'" in sql:
             return self.target_is_superadmin
         if "FROM auth_roles WHERE role_key" in sql:
@@ -703,6 +706,47 @@ class TestRoleHierarchy:
 
     def test_admins_still_manage_ordinary_accounts(self, admin_api):
         client, db = admin_api("email_admin", target_is_superadmin=False)
+        assert client.patch(f"{U}/disable", json={}).status_code == 200
+        assert db.wrote("SET status = 'disabled'")
+
+
+# Admins can no longer restore a superadmin, and bootstrap refuses once users
+# exist, so removing the last active one would be permanent.
+REMOVALS_OF_A_SUPERADMIN = [
+    ("patch", f"{U}/role", {"role_key": "viewer"}),
+    ("patch", f"{U}/approve", {"role_key": "viewer"}),
+    ("patch", f"{U}/reactivate", {"role_key": "viewer"}),
+    ("patch", f"{U}/reject", {}),
+    ("patch", f"{U}/disable", {}),
+    ("delete", f"{U}?force=true", None),
+]
+
+
+class TestLastSuperadmin:
+    @pytest.mark.parametrize("method,path,body", REMOVALS_OF_A_SUPERADMIN)
+    def test_the_last_active_superadmin_cannot_be_removed(self, admin_api, method, path, body):
+        client, db = admin_api("superadmin", target_is_superadmin=True, another_superadmin=False)
+        res = _call(client, method, path, body)
+        assert res.status_code == 409, res.text
+        assert "last active superadmin" in res.text
+        assert db.writes == []
+
+    @pytest.mark.parametrize("method,path,body", REMOVALS_OF_A_SUPERADMIN)
+    def test_a_superadmin_can_be_removed_while_another_remains(self, admin_api, method, path, body):
+        client, _ = admin_api("superadmin", target_is_superadmin=True, another_superadmin=True)
+        assert _call(client, method, path, body).status_code == 200
+
+    @pytest.mark.parametrize("method,path,body", [
+        ("patch", f"{U}/role", {"role_key": "superadmin"}),
+        ("patch", f"{U}/reactivate", {}),
+        ("post", f"{U}/sessions/revoke", None),
+    ])
+    def test_actions_that_keep_the_role_are_not_removals(self, admin_api, method, path, body):
+        client, _ = admin_api("superadmin", target_is_superadmin=True, another_superadmin=False)
+        assert _call(client, method, path, body).status_code == 200
+
+    def test_ordinary_accounts_are_unaffected(self, admin_api):
+        client, db = admin_api("superadmin", target_is_superadmin=False, another_superadmin=False)
         assert client.patch(f"{U}/disable", json={}).status_code == 200
         assert db.wrote("SET status = 'disabled'")
 

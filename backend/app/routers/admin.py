@@ -562,6 +562,10 @@ async def _get_role_id(conn, role_key: str):
 # from minting a superadmin or locking one out. Granting the superadmin role,
 # and acting on an account that holds it, is reserved to an email-authenticated
 # superadmin. The legacy admin password counts as an admin here.
+#
+# That also means nothing below a superadmin can restore one, and bootstrap
+# refuses once any user exists. So a superadmin may not demote, disable,
+# reject or delete the last active superadmin (in practice, themself).
 
 def _actor_is_superadmin(request: Request) -> bool:
     return bool(getattr(request.state, "is_email_auth", False)) and (
@@ -574,8 +578,11 @@ def _guard_superadmin_role(request: Request, role_key: str | None) -> None:
         raise HTTPException(status_code=403, detail="Only a superadmin can grant the superadmin role")
 
 
-async def _guard_superadmin_target(conn, request: Request, user_id: str) -> None:
-    if _actor_is_superadmin(request):
+async def _guard_superadmin_target(
+    conn, request: Request, user_id: str, *, removes_superadmin: bool = False,
+) -> None:
+    actor_is_superadmin = _actor_is_superadmin(request)
+    if actor_is_superadmin and not removes_superadmin:
         return
     is_superadmin = await conn.fetchval(
         """
@@ -587,8 +594,23 @@ async def _guard_superadmin_target(conn, request: Request, user_id: str) -> None
         """,
         user_id,
     )
-    if is_superadmin:
+    if not is_superadmin:
+        return
+    if not actor_is_superadmin:
         raise HTTPException(status_code=403, detail="Only a superadmin can manage a superadmin account")
+    another_remains = await conn.fetchval(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM auth_users u
+            JOIN auth_user_roles ur ON ur.user_id = u.id
+            JOIN auth_roles r ON r.id = ur.role_id
+            WHERE r.role_key = 'superadmin' AND u.status = 'active' AND u.id <> $1::uuid
+        )
+        """,
+        user_id,
+    )
+    if not another_remains:
+        raise HTTPException(status_code=409, detail="Cannot remove the last active superadmin")
 
 
 @router.patch("/auth/users/{user_id}/approve")
@@ -606,7 +628,7 @@ async def admin_approve_auth_user(
     _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=role_key.strip().lower() != "superadmin")
             role_id = await _get_role_id(conn, role_key)
             user = await conn.fetchrow(
                 """
@@ -669,7 +691,7 @@ async def admin_reject_auth_user(
         return _no_db()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             user = await conn.fetchrow(
                 """
                 UPDATE auth_users
@@ -711,7 +733,7 @@ async def admin_disable_auth_user(
         return _no_db()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             user = await conn.fetchrow(
                 """
                 UPDATE auth_users
@@ -755,7 +777,10 @@ async def admin_reactivate_auth_user(
     _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(
+                conn, request, user_id,
+                removes_superadmin=bool(role_key) and role_key.strip().lower() != "superadmin",
+            )
             role_id = await _get_role_id(conn, role_key) if role_key else None
             user = await conn.fetchrow(
                 """
@@ -821,7 +846,7 @@ async def admin_update_auth_user_role(
     _guard_superadmin_role(request, role_key)
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=role_key != "superadmin")
             role_id = await _get_role_id(conn, role_key)
             user = await conn.fetchrow(
                 "SELECT id::text AS id, email, status FROM auth_users WHERE id = $1::uuid",
@@ -1032,7 +1057,7 @@ async def admin_delete_auth_user(
             )
             if not user:
                 raise HTTPException(status_code=404, detail="Auth user not found")
-            await _guard_superadmin_target(conn, request, user_id)
+            await _guard_superadmin_target(conn, request, user_id, removes_superadmin=True)
             if user["status"] == "active" and not force:
                 raise HTTPException(
                     status_code=409,

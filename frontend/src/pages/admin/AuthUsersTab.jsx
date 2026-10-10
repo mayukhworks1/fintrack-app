@@ -373,9 +373,12 @@ export function AuthUsersTab() {
           disabled={rowBusy}
           className="text-[11px] px-2 py-1 rounded-lg border outline-none"
           style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-1)' }}>
-          {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
+          {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']])
+            // Granting superadmin is the API's to refuse; keep it only where it is the current role.
+            .filter(([value]) => value !== 'superadmin' || isSuperAdmin || row.roles?.includes('superadmin'))
+            .map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
         </select>
         {row.status === 'active' && (roleByUser[row.id] || row.roles?.[0] || 'user') !== (row.roles?.[0] || 'user') && (
           <button onClick={() => act(row, 'role')} disabled={rowBusy}
