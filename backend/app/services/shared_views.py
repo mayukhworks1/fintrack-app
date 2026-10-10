@@ -350,6 +350,16 @@ def _sanitize_filter_conditions(raw: Any) -> tuple[list[dict[str, Any]], bool]:
     return clean, faithful
 
 
+def _live_unsupported(resource_type: str, cfg: Optional[dict]) -> bool:
+    """Whether a live link with this config would show more than the owner's page did."""
+    cfg = cfg or {}
+    if cfg.get("liveUnsupported"):
+        return True
+    # The Projects page searches with Teable's full-text search, capped at 20
+    # results and ignoring its client/status filters: the server cannot replay it.
+    return resource_type == "projects" and bool(str(cfg.get("search") or "").strip())
+
+
 def _parse_view_config(view: dict) -> Optional[dict]:
     """A stored view's view_config (asyncpg may hand JSONB back as str), sanitised."""
     vc = view.get("view_config")
@@ -411,7 +421,7 @@ class SharedViewService:
 
         token = _new_token()
         safe_view_config = _sanitize_view_config(view_config)
-        if is_dynamic and safe_view_config and safe_view_config.get("liveUnsupported"):
+        if is_dynamic and _live_unsupported(resource_type, safe_view_config):
             raise ValueError(_LIVE_UNSUPPORTED_MESSAGE)
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -455,7 +465,7 @@ class SharedViewService:
                 ends_view_config = _sanitize_view_config(data["view_config"])
             else:
                 ends_view_config = _parse_view_config(existing)
-            if ends_dynamic and ends_view_config and ends_view_config.get("liveUnsupported"):
+            if ends_dynamic and _live_unsupported(existing.get("resource_type") or "status", ends_view_config):
                 raise ValueError(_LIVE_UNSUPPORTED_MESSAGE)
 
         if "record_ids" in data:
@@ -676,8 +686,9 @@ class SharedViewService:
         cleaned = _public_edit_fields(resource_type, fields)
         if not cleaned:
             raise ValueError("No editable fields provided")
+        vc = _parse_view_config(view)
         # A live link covers only the records its filters match right now.
-        if is_dynamic and not await _dynamic_view_contains(resource_type, _parse_view_config(view), record_id):
+        if is_dynamic and not await _dynamic_view_contains(resource_type, vc, record_id):
             raise ValueError("Record is not part of this shared view")
 
         updated = await _live_update_record(resource_type, record_id, cleaned, request)
@@ -715,7 +726,11 @@ class SharedViewService:
                 record_id=record_id,
             ))
 
-        return updated
+        # Teable answers a PATCH with the whole record: send back only what this link shows.
+        if not isinstance(updated, dict):
+            return {"id": record_id, "fields": {}}
+        shown = _public_fields(resource_type, vc, "edit")
+        return _project_public_record({**updated, "id": updated.get("id") or record_id}, shown)
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

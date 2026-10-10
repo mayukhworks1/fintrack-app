@@ -90,7 +90,7 @@ def public(monkeypatch):
 
     async def live_update(resource_type, record_id, cleaned, request):
         state["updates"].append((record_id, cleaned))
-        return {"id": record_id, "fields": {}}
+        return state.get("update_result") or {"id": record_id, "fields": {}}
 
     async def all_records(*a, **k):
         state["source_calls"] += 1
@@ -261,6 +261,31 @@ class TestPublicEditScope:
         assert res.status_code == 400
         assert public["updates"] == []
 
+    def test_the_edit_response_carries_only_the_links_fields(self, public, monkeypatch):
+        """Teable answers a PATCH with the whole record; the holder must not get it."""
+        from app.routers import shared_views as R
+        import app.db.valkey as vk
+
+        async def allow(*a, **k):
+            return True, 0
+        monkeypatch.setattr(vk, "rate_check", allow)
+        public["view"] = _view(resource_type="projects", access_mode="edit", record_ids=["rec1"])
+        public["records"] = {"rec1": {"fields": dict(PROJECT_FIELDS)}}
+        public["update_result"] = {
+            "id": "rec1", "createdBy": "owner@theworks.in",
+            "fields": {**PROJECT_FIELDS, "Project Status": "Done"},
+        }
+        app = FastAPI()
+        app.include_router(R.router)
+        res = TestClient(app).patch("/api/public/view/tok/records/rec1", json={"project_status": "Done"})
+        assert res.status_code == 200
+        body = res.json()
+        assert set(body) == {"id", "fields"} and body["id"] == "rec1"
+        assert body["fields"]["Project Status"] == "Done"
+        for internal in ("Actual Profit", "Profit percentage", "Input cost so far",
+                         "Combined monthly salary of all the resources"):
+            assert internal not in body["fields"]
+
     def test_public_edit_model_takes_null_for_an_empty_number(self, public, monkeypatch):
         """The public page sends null (not '') for a blank amount; null means 'leave it'."""
         from app.routers import shared_views as R
@@ -422,6 +447,32 @@ class TestLiveViewSaveChecks:
             asyncio.run(SharedViewService().create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="invoices"))
         row = asyncio.run(SharedViewService().create(None, ["rec1"], "editor", view_config=vc, resource_type="invoices"))
         assert row["is_dynamic"] is False
+
+    def test_a_searched_projects_view_is_shared_as_a_snapshot_not_live(self, monkeypatch):
+        # The Projects page's search is Teable full-text, capped at 20 and blind to the
+        # client/status filters; a live link would publish every substring match.
+        monkeypatch.setattr(S, "get_pool", self._pool)
+        svc = SharedViewService()
+        vc = {"type": "card", "filterClient": "", "search": "acme"}
+        with pytest.raises(ValueError, match="snapshot"):
+            asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="projects"))
+        assert asyncio.run(svc.create(None, ["p1"], "editor", view_config=vc, resource_type="projects"))["is_dynamic"] is False
+        for ok_vc in ({**vc, "search": "  "}, {**vc, "search": ""}):
+            assert asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=ok_vc, resource_type="projects"))["is_dynamic"]
+        # other pages' searches are replayed exactly, so they stay live
+        assert asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="invoices"))["is_dynamic"]
+
+    def test_update_refuses_re_scoping_a_searched_projects_link_live(self, monkeypatch):
+        monkeypatch.setattr(S, "get_pool", self._pool)
+
+        async def existing(self, token):
+            return {"token": token, "resource_type": "projects", "is_dynamic": False, "record_ids": ["p1"],
+                    "view_config": {"search": "acme"}}
+        monkeypatch.setattr(SharedViewService, "get", existing)
+        with pytest.raises(ValueError, match="snapshot"):
+            asyncio.run(SharedViewService().update("tok", {"record_ids": ["__dynamic__"]}))
+        with pytest.raises(ValueError, match="snapshot"):
+            asyncio.run(SharedViewService().update("tok", {"record_ids": ["__dynamic__"], "view_config": {"search": "x"}}))
 
     def test_update_refuses_turning_such_a_snapshot_live(self, monkeypatch):
         monkeypatch.setattr(S, "get_pool", self._pool)
