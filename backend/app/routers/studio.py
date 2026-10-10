@@ -110,6 +110,36 @@ def _payload_of(result: dict) -> dict:
     return {k: v for k, v in result.items() if k not in _TURN_COLUMNS}
 
 
+async def _require_own_thread(request: Request, thread_id: str | None) -> None:
+    """
+    Refuse a thread_id that is not the caller's, before anything reads or
+    writes it.
+
+    /ask feeds a thread's recent turns into the prompt, and both /ask and
+    /analyze append to it. Unchecked, another user's thread id pulled their
+    transcript into this answer and wrote this user's question into their
+    history. Scoped like the thread routes: privileged roles reach every
+    thread, everyone else only their own.
+    """
+    if not thread_id:
+        return
+    pool = get_pool()
+    if not pool:
+        return  # without a database no thread is read or written
+    try:
+        owned = await pool.fetchval(
+            """
+            SELECT 1 FROM studio_threads
+             WHERE id = $1::uuid AND ($2::text IS NULL OR LOWER(owner_email) = LOWER($2))
+            """,
+            thread_id, owner_scope_email(request),
+        )
+    except Exception:
+        owned = None  # a malformed id, or a failed read, proves no ownership
+    if not owned:
+        raise HTTPException(404, "Conversation not found")
+
+
 async def _persist_turn(request: Request, thread_id: str | None,
                         question: str, result: dict) -> None:
     """
@@ -379,6 +409,7 @@ async def ask(
             "It resets on a rolling 24-hour window.",
         )
 
+    await _require_own_thread(request, body.thread_id)
     pool = get_pool()
 
     # Prior turns of this conversation, so a follow-up is answered in context
@@ -400,7 +431,10 @@ async def ask(
             logger.debug("studio: could not load thread history: %s", exc)
 
     try:
-        result = await studio_ask.ask(body.question, body.document_ids or None, history)
+        # Retrieval gets the same owner scope as the document list, so a
+        # question searches only what this user can open there.
+        result = await studio_ask.ask(body.question, body.document_ids or None, history,
+                                      owner_email=owner_scope_email(request))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
@@ -510,6 +544,9 @@ async def analyze(
             f"Daily AI limit reached ({quota['used']}/{quota['limit']} calls). "
             "It resets on a rolling 24-hour window.",
         )
+
+    # Checked before the model call: the turn is appended to this thread.
+    await _require_own_thread(request, body.thread_id)
 
     try:
         result = await studio_analyst.analyze(body.question, owner_scope_email(request))

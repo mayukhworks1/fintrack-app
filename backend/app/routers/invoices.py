@@ -17,6 +17,7 @@ from ..db.valkey import rate_check
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
+from .ai import _ai_quota
 import csv
 import io
 from fastapi.responses import StreamingResponse as _StreamingResponse
@@ -697,10 +698,12 @@ async def parse_invoice(
     file: UploadFile = File(...),
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.invoices.create")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
-    Uses AI vision/text models to populate as many fields as possible.
+    Uses AI vision/text models to populate as many fields as possible, so it
+    counts against the same rolling-24h AI quota as the assistant.
     """
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB guard
     content   = await file.read()

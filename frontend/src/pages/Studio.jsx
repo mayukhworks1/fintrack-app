@@ -267,8 +267,19 @@ export default function Studio() {
       const res = await api.studio.thread(id)
       // Newest first, matching how new answers are prepended.
       setTurns([...(res?.turns || [])].reverse())
-    } catch {
+    } catch (err) {
       setTurns([])
+      // Deleted, or never this account's (a pasted link). The server will not
+      // continue a conversation it will not show, so forget the id rather
+      // than have every question after this one refused for it.
+      if (err?.status === 404) {
+        setThreadId(null)
+        try {
+          const url = new URL(window.location.href)
+          url.searchParams.delete('t')
+          window.history.replaceState({}, '', url)
+        } catch { /* URL sync is a convenience, never a blocker */ }
+      }
     }
   }, [])
 
@@ -446,7 +457,14 @@ export default function Studio() {
       if (res?.quota) setQuota(res.quota)
       loadThreads()
     } catch (err) {
-      setError(err?.message || 'Could not answer that. Try again in a moment.')
+      // Only the conversation check answers 404 here: the conversation was
+      // deleted elsewhere, so the next question starts a new one.
+      if (err?.status === 404 && threadId) {
+        selectThread(null)
+        setError('That conversation is no longer available. Ask again to start a new one.')
+      } else {
+        setError(err?.message || 'Could not answer that. Try again in a moment.')
+      }
     } finally {
       setAsking(false)
     }
