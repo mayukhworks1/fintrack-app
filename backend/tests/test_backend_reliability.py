@@ -387,7 +387,7 @@ class TestUploadRoutes:
         monkeypatch.setattr(R, "parse_invoice_document", parse)
         too_big = _upload(b"x" * (10 * 1024 * 1024 + 1))
         with pytest.raises(HTTPException) as e:
-            asyncio.run(R.parse_invoice(too_big, "editor", "ok"))
+            asyncio.run(R.parse_invoice(_request(), too_big, "editor", "ok", None))
         assert e.value.status_code == 413 and e.value.detail == "File too large (max 10 MB)"
         assert parsed == []
 
