@@ -143,6 +143,11 @@ export function AuthUsersTab() {
     () => roles.map(r => [r.role_key, `${r.label || r.role_key}`]),
     [roles],
   )
+  // Only a superadmin may grant superadmin; the API refuses it for anyone else.
+  const grantableRoleOpts = useMemo(
+    () => (isSuperAdmin ? roleOpts : roleOpts.filter(([value]) => value !== 'superadmin')),
+    [roleOpts, isSuperAdmin],
+  )
 
   const loadRoles = useCallback(async () => {
     const res = await api.admin.authRoles()
@@ -303,7 +308,13 @@ export function AuthUsersTab() {
     try {
       const res = await api.admin.resendInvite(row.id)
       if (res.delivery?.sent) toast(`Invite sent to ${row.email}`, 'success')
-      else toast(`Invite failed: ${res.delivery?.reason || res.delivery?.detail || 'unknown'}`, 'error')
+      else if (res.invite_url) {
+        // Only a superadmin gets the link back when the email did not go out.
+        let copied = false
+        try { await navigator.clipboard.writeText(res.invite_url); copied = true } catch {}
+        toast(`${res.message || 'Invite email not delivered.'}${copied ? ' Link copied to clipboard.' : ''}`, 'warning')
+      }
+      else toast(res.message || `Invite failed: ${res.delivery?.reason || res.delivery?.detail || 'unknown'}`, 'error')
     } catch (e) { toast(e.message || 'Resend failed', 'error') }
     finally { setActingId('') }
   }, [])
@@ -503,7 +514,7 @@ export function AuthUsersTab() {
           <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
             Role
             <select value={newUser.role_key} onChange={e => setNewUser(v => ({ ...v, role_key: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
-              {(roleOpts.length ? roleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {(grantableRoleOpts.length ? grantableRoleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
