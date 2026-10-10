@@ -614,8 +614,10 @@ export default function WebInvoices() {
         milestone: base['Milestone'] || null,
         raised_by: base['Raised By'] || null,
         raised_date: firstDayIso(retainerMonth),
-        amount_raised: isPause ? 0 : Number(base['Amount Raised'] || 0),
-        amount_with_tax: isPause ? 0 : Number(base['Amount with Tax'] || 0),
+        // A pause carries no amount. The API rejects 0 (an invoice amount must
+        // be positive) and both fields are optional, so leave them out.
+        amount_raised: isPause ? undefined : Number(base['Amount Raised'] || 0),
+        amount_with_tax: isPause ? undefined : Number(base['Amount with Tax'] || 0),
         amount_received: isPause ? 0 : undefined,
         payment_status: isPause ? 'Cancelled' : 'Pending',
         remark: isPause
