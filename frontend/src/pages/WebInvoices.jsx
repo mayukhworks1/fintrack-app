@@ -18,6 +18,7 @@ import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 
 import clsx from 'clsx'
+import { csvCell } from '../utils/csv'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
 import MonthlyCollectionsChart from '../components/MonthlyCollectionsChart'
@@ -738,15 +739,12 @@ export default function WebInvoices() {
       'Raised By', 'Milestone', 'Currency', 'Amount Raised', 'Amount with Tax',
       'Amount Received', 'Outstanding Amount', 'Cleared Date', 'Remark',
     ]
-    const escape = (v) => {
-      const s = v == null ? '' : String(v)
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-    }
     const data = useFiltered ? records : allRecords
     const header = CSV_FIELDS.join(',')
     const body = data.map(r => {
       const f = r.fields || {}
-      return CSV_FIELDS.map(k => escape(f[k])).join(',')
+      // csvCell also neutralises formula-looking text (=, +, -, @ …).
+      return CSV_FIELDS.map(k => csvCell(f[k])).join(',')
     }).join('\n')
     const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

@@ -7,6 +7,7 @@ import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
+import { csvCell } from '../utils/csv'
 import AgentInterviewCard from '../components/AgentInterviewCard'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
@@ -253,7 +254,9 @@ function exportAnalyticsCSV(items, pageTitle) {
     const b = /EdgA?\/|Edg\//i.test(ua)?'Edge':/OPR\//i.test(ua)?'Opera':/SamsungBrowser/i.test(ua)?'Samsung':/Chrome/i.test(ua)?'Chrome':/Firefox/i.test(ua)?'Firefox':/Safari/i.test(ua)?'Safari':''
     return [m,b].filter(Boolean).join(' ')
   }
-  const esc = v => v==null?'':`"${String(v).replace(/"/g,'""')}"`
+  // Referer, page URL and UTM values are whatever a visitor sent: csvCell
+  // neutralises formula-looking text as well as quoting.
+  const esc = csvCell
   const rows = items.map(v => {
     const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const gps=v.metadata?.gps||{}; const loc=v.metadata?.location||{}
     return [v.viewed_at?new Date(v.viewed_at).toISOString():'',v.viewer_ip,loc.source||(gps.lat?'gps':'ip'),gps.lat,gps.lon,gps.accuracy,gps.city,gps.country,v.country,geo.country_code,geo.region||v.region,v.city,geo.zip,geo.lat,geo.lon,v.isp,geo.org,geo.as,cli.platform,cli.touch_support!=null?(cli.touch_support?'Yes':'No'):'',cli.screen_width?`${cli.screen_width}x${cli.screen_height}`:'',cli.viewport_width?`${cli.viewport_width}x${cli.viewport_height}`:'',cli.pixel_ratio,cli.color_depth,cli.language,cli.timezone||geo.timezone,fmtB(v.user_agent),cli.connection_type,cli.connection_downlink,v.referer,cli.page_url,cli.utm_source,cli.utm_medium,cli.utm_campaign].map(esc).join(',')
