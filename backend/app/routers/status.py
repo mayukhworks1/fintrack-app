@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from ..services.status import StatusService, subscribe_sse, unsubscribe_sse
 from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor, require_permission
+from .ai import _ai_quota
 from .auth import verify_token
 from ..db.valkey import rate_check, cache_bust
 from ..utils.uploads import read_upload, upload_limit
@@ -174,10 +175,12 @@ async def generate_ai_status_update(
     body: AIUpdateRequest,
     role: str = Depends(require_editor),
     _perm: str = Depends(require_permission("module.status.edit")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Generate an AI-written status update narrative for selected records.
-    Rate-limited: shared with status mutation pool (30/min/IP).
+    Rate-limited: shared with status mutation pool (30/min/IP), and counted
+    against the rolling-24h AI quota like every model-calling route.
     """
     await _check_write_rate(request)
 

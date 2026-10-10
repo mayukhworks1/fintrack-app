@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import secrets
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -109,6 +110,49 @@ def _payload_of(result: dict) -> dict:
     supposed to avoid.
     """
     return {k: v for k, v in result.items() if k not in _TURN_COLUMNS}
+
+
+async def _require_own_thread(request: Request, thread_id: str | None) -> None:
+    """
+    Refuse a thread_id that is not the caller's, before anything reads or
+    writes it.
+
+    /ask feeds a thread's recent turns into the prompt, and both /ask and
+    /analyze append to it. Unchecked, another user's thread id pulled their
+    transcript into this answer and wrote this user's question into their
+    history. Scoped like the thread routes: privileged roles reach every
+    thread, everyone else only their own.
+
+    A thread is stamped with the login email (_persist_turn), while the scope
+    prefers an admin-set teable_email override; either one makes it the
+    caller's, or every follow-up of such a user would be refused.
+    """
+    if not thread_id:
+        return
+    try:
+        uuid.UUID(str(thread_id))
+    except ValueError:
+        raise HTTPException(404, "Conversation not found")
+    pool = get_pool()
+    if not pool:
+        return  # without a database no thread is read or written
+    try:
+        owned = await pool.fetchval(
+            """
+            SELECT 1 FROM studio_threads
+             WHERE id = $1::uuid
+               AND ($2::text IS NULL OR LOWER(owner_email) IN (LOWER($2), LOWER($3::text)))
+            """,
+            thread_id, owner_scope_email(request),
+            getattr(request.state, "auth_user_email", None),
+        )
+    except Exception as exc:
+        # Not a 404: the client forgets a conversation that answers 404, and
+        # a failed read says nothing about whether it exists.
+        logger.warning("studio: could not check thread ownership: %s", exc)
+        raise HTTPException(503, "Could not open that conversation. Try again in a moment.")
+    if not owned:
+        raise HTTPException(404, "Conversation not found")
 
 
 async def _persist_turn(request: Request, thread_id: str | None,
@@ -375,6 +419,7 @@ async def ask(
             "It resets on a rolling 24-hour window.",
         )
 
+    await _require_own_thread(request, body.thread_id)
     pool = get_pool()
 
     # Prior turns of this conversation, so a follow-up is answered in context
@@ -396,7 +441,10 @@ async def ask(
             logger.debug("studio: could not load thread history: %s", exc)
 
     try:
-        result = await studio_ask.ask(body.question, body.document_ids or None, history)
+        # Retrieval gets the same owner scope as the document list, so a
+        # question searches only what this user can open there.
+        result = await studio_ask.ask(body.question, body.document_ids or None, history,
+                                      owner_email=owner_scope_email(request))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
@@ -506,6 +554,9 @@ async def analyze(
             f"Daily AI limit reached ({quota['used']}/{quota['limit']} calls). "
             "It resets on a rolling 24-hour window.",
         )
+
+    # Checked before the model call: the turn is appended to this thread.
+    await _require_own_thread(request, body.thread_id)
 
     try:
         result = await studio_analyst.analyze(body.question, owner_scope_email(request))

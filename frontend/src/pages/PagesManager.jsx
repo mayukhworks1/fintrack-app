@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useConfirm } from '../context/ConfirmContext'
+import { useAuth } from '../context/AuthContext'
 import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import StreamingDraft from '../components/StreamingDraft'
 import { api, API_BASE_URL } from '../services/api'
@@ -1777,6 +1778,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
 function PageDrawer({ page, onClose, onSaved, initialType }) {
   const confirm = useConfirm()
+  const { hasPerm } = useAuth()
   const isMobile = useIsMobile()
   const textareaRef = useRef(null)
   // currentId tracks the DB row: starts from the passed page, but auto-save can
@@ -2201,8 +2203,10 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
 
         {!mobileSettingsMode && (<>
         {/* AI composer — Web Page and Document only. Spreadsheet and Plain
-            Text are structured formats the generator has no useful contract for. */}
-        {(isHtml || isMarkdown) && tab === 'edit' && (
+            Text are structured formats the generator has no useful contract for.
+            The server refuses page generation without module.ai.use, as it does
+            the AI Assistant, so the composer is hidden from whoever lacks it. */}
+        {(isHtml || isMarkdown) && tab === 'edit' && hasPerm('module.ai.use') && (
           <AiComposer
             contentType={form.content_type}
             content={form.content}

@@ -19,6 +19,7 @@ from ..utils.teable_errors import translate_teable_error
 from ..utils.csv_safe import csv_safe_row
 from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
+from .ai import _ai_quota
 import csv
 import io
 from fastapi.responses import StreamingResponse as _StreamingResponse
@@ -693,14 +694,22 @@ async def delete_invoice(record_id: str, request: Request, role: str = Depends(r
 
 @router.post("/parse")
 async def parse_invoice(
+    request: Request,
     file: UploadFile = File(...),
     _role: str = Depends(require_auth),
     _perm: str = Depends(require_permission("module.invoices.create")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Upload an invoice image (PNG/JPG) or PDF and get back extracted field values.
-    Uses AI vision/text models to populate as many fields as possible.
+    Uses AI vision/text models to populate as many fields as possible, so it
+    counts against the same rolling-24h AI quota as the assistant.
+
+    Open to whoever may create an invoice, the only use of the result. Legacy
+    tokens skip both gates above (unmetered, no permission matrix), so without
+    this the read-only viewer password could loop the model here.
     """
+    await _require_invoice_write(request, _role, "module.invoices.create")
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB guard
     content   = await read_upload(file, upload_limit(MAX_BYTES))
 

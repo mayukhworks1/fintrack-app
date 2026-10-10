@@ -23,6 +23,7 @@ from ..utils.teable_errors import translate_teable_error
 from ..utils.csv_safe import csv_safe_row
 from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
+from .ai import _ai_quota
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -623,8 +624,10 @@ async def parse_web_invoice(
     file: UploadFile = File(...),
     _role: str = Depends(require_web_access),
     _perm: str = Depends(require_permission("module.invoices.create")),
+    _quota: None = Depends(_ai_quota),
 ):
-    """Upload an invoice PDF or image; returns AI-extracted field values."""
+    """Upload an invoice PDF or image; returns AI-extracted field values.
+    Counts against the rolling-24h AI quota, like every model-calling route."""
     from ..services.openrouter import parse_invoice_document
 
     MAX_BYTES = 10 * 1024 * 1024

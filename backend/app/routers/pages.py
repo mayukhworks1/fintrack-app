@@ -20,6 +20,7 @@ import string
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from ..utils.http import shared_client
@@ -34,7 +35,8 @@ from ..utils.uploads import read_upload, upload_limit
 from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
-from .deps import require_auth
+from .ai import _ai_quota
+from .deps import require_auth, require_permission
 
 logger = logging.getLogger("fintrack.pages")
 
@@ -454,13 +456,64 @@ async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None) -
         pass  # best-effort; never block the actual save
 
 
+_ASSET_URL_PREFIX = "/api/public/pages/asset/"
+
+
+async def _asset_page_owners(pool, paths: list[str]) -> dict[str, set]:
+    """Map each asset path to the owners (created_by) of the pages using it.
+
+    A page uses an asset when its content, or any saved version of it, carries
+    the asset's public URL — as written, or percent-encoded, which is how an
+    editor may have stored a non-ASCII file name. Paths nothing refers to are
+    absent from the result. strpos rather than LIKE, so a `_` or `%` in a file
+    name is matched literally instead of as a wildcard.
+    """
+    needles: dict[str, str] = {}
+    for p in paths:
+        for form in (p, quote(p, safe="/")):
+            needles.setdefault(_ASSET_URL_PREFIX + form, p)
+    rows = await pool.fetch(
+        """
+        SELECT n.needle, p.created_by
+          FROM unnest($1::text[]) AS n(needle)
+          JOIN published_pages p ON strpos(p.content, n.needle) > 0
+        UNION
+        SELECT n.needle, p.created_by
+          FROM unnest($1::text[]) AS n(needle)
+          JOIN page_versions v ON strpos(v.content, n.needle) > 0
+          JOIN published_pages p ON p.id = v.page_id
+        """,
+        list(needles),
+    )
+    owners: dict[str, set] = {}
+    for r in rows:
+        owners.setdefault(needles[r["needle"]], set()).add(r["created_by"])
+    return owners
+
+
 async def _delete_page_assets(content: str | None) -> None:
-    """Best-effort: remove a page's uploaded attachments from HF storage."""
+    """Best-effort: remove a page's uploaded attachments from HF storage.
+
+    Runs after the page row, and with it its versions, is gone, so a reference
+    still found belongs to another page: content copied between pages, or an
+    asset URL lifted from someone else's published page. Those files stay —
+    deleting them would break that page.
+    """
     paths = _extract_asset_paths(content)
     if not paths:
         return
     from ..services import storage
+    pool = get_pool()
+    try:
+        still_used = await _asset_page_owners(pool, paths) if pool else None
+    except Exception as exc:
+        logger.warning("pages: could not check asset references, keeping files: %s", exc)
+        still_used = None
+    if still_used is None:
+        return  # an orphaned file is the safe failure; a deleted one in use is not
     for p in paths:
+        if p in still_used:
+            continue
         try:
             await storage.delete_path(p)
         except Exception:
@@ -638,11 +691,17 @@ async def list_styles(role: str = Depends(require_auth)):
     return {"styles": page_design.catalogue()}
 
 
+# The five model-calling routes below sit behind the same two gates as the AI
+# assistant in routers/ai.py: the module.ai.use permission and the rolling-24h
+# quota. They draw on the same shared model budget; without the gates, a user
+# whose AI access was revoked, or whose allowance was spent, carried on here.
 @router.post("/api/pages/ai-generate")
 async def ai_generate_page(
     body: AIGenerateBody,
     request: Request,
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """
     Generate or revise page content from a prompt.
@@ -680,6 +739,8 @@ async def ai_interview(
     body: AIInterviewBody,
     request: Request,
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Analyse a prompt and return clarifying questions if needed."""
     try:
@@ -699,6 +760,8 @@ async def ai_stream_page(
     body: AIStreamBody,
     request: Request,
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Stream page generation as SSE events."""
     async def event_stream():
@@ -731,6 +794,8 @@ async def ai_section_edit(
     body: AISectionEditBody,
     request: Request,
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Surgically edit a single section of a page."""
     try:
@@ -751,6 +816,8 @@ async def ai_fix_error(
     body: AIFixErrorBody,
     request: Request,
     role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
 ):
     """Attempt to fix a runtime JavaScript error in a page."""
     try:
@@ -835,11 +902,17 @@ async def upload_page_asset(
 
 
 @router.delete("/api/pages/asset")
-async def delete_page_asset(path: str, role: str = Depends(require_auth)):
+async def delete_page_asset(path: str, request: Request, role: str = Depends(require_auth)):
     """Delete a previously-uploaded page attachment from HF storage.
 
     Accepts either the stored repo path (`pages/...`) or the full asset URL.
     Scoped strictly to the `pages/` prefix.
+
+    Asset URLs are public in every published page, so knowing a path proves
+    nothing. A file is deleted only by the owner of every page that uses it
+    (see _asset_page_owners), or by a superadmin, the same rule as the page
+    routes. A file no page refers to yet — uploaded into an editor that has not
+    been saved — is the uploader's to discard.
     """
     from ..services import storage
 
@@ -849,6 +922,24 @@ async def delete_page_asset(path: str, role: str = Depends(require_auth)):
     p = p.split("?")[0].split("#")[0]
     if ".." in p or p.startswith("/") or not p.startswith("pages/"):
         raise HTTPException(400, "Invalid asset path")
+    # Only the form a page refers to. "pages/a//b" or "pages/a/./b" match no
+    # reference below, so they would pass as unused, yet storage may resolve
+    # them to the same file.
+    if "\\" in p or any(seg in ("", ".") for seg in p.split("/")):
+        raise HTTPException(400, "Invalid asset path")
+
+    auth_role = getattr(request.state, "auth_role", role) or role
+    if not _can_see_all(auth_role):
+        pool = get_pool()
+        if not pool:
+            raise HTTPException(503, "Database unavailable")
+        user_id = getattr(request.state, "auth_user_id", None)
+        owners = (await _asset_page_owners(pool, [p])).get(p, set())
+        # A page with no owner (legacy-created, or its creator was deleted)
+        # matches no caller: str(None) == str(None) would let every legacy
+        # session, which has no user id either, strip it.
+        if any(o is None or not user_id or str(o) != str(user_id) for o in owners):
+            raise HTTPException(403, "Access denied")
 
     await storage.delete_path(p)
     return {"ok": True, "deleted": p}
