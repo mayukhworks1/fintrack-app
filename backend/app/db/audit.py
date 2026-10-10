@@ -88,6 +88,10 @@ _HINT_CH_TEXT_KEYS = ("platform", "platformVersion", "model", "arch", "bitness",
 _HINT_OBJECT_KEYS  = ("ch", "browserGeo")
 _HINT_NUMBER_KEYS  = ("cores", "memoryGb")
 _HINT_MAX_STR      = 500
+# browserGeo numbers and the range a real navigator.geolocation fix stays in.
+# A forged value outside it (lat 5000, accuracyM 1e300) is not a place, and
+# failed the INTEGER accuracy_m / NUMERIC(9,6) lat-lon column it was bound to.
+_HINT_GEO_RANGES   = {"lat": (-90, 90), "lon": (-180, 180), "accuracyM": (0, 2**31 - 1)}
 
 
 def _clean_hint_value(value, depth: int = 0):
@@ -134,6 +138,11 @@ def _shape_hint(hint) -> dict:
         for key in _HINT_CH_TEXT_KEYS:
             if key in ch and not isinstance(ch[key], str):
                 ch[key] = None
+    geo = hint.get("browserGeo")
+    if isinstance(geo, dict):
+        for key, (lo, hi) in _HINT_GEO_RANGES.items():
+            if key in geo and not (_is_number(geo[key]) and lo <= geo[key] <= hi):
+                geo[key] = None
     return hint
 
 
@@ -461,6 +470,26 @@ def _audit_record(item: dict) -> tuple:
     )
 
 
+# asyncpg errors that mean the database, not the row, is the problem.
+_DB_UNREACHABLE_ERRORS = {"PostgresConnectionError", "CannotConnectNowError", "TooManyConnectionsError"}
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """True when the database is unreachable, as opposed to one row being bad.
+
+    asyncpg's classes are matched by name, so this never imports anything or
+    raises: it runs inside the insert's own error handling.
+    """
+    if isinstance(exc, (OSError, asyncio.TimeoutError)):
+        return True
+    names = {c.__name__ for c in type(exc).__mro__ if c.__module__.startswith("asyncpg")}
+    if names & _DB_UNREACHABLE_ERRORS:
+        return True
+    # InterfaceError covers "pool is closing" and the like; its DataError
+    # subclass (also a ValueError) is a per-row encoding failure.
+    return "InterfaceError" in names and not isinstance(exc, ValueError)
+
+
 async def _batch_insert_audit(pool, items: list[dict]) -> None:
     """
     Bulk-insert N audit rows in one executemany call.
@@ -469,7 +498,8 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
 
     executemany is atomic, so one bad row used to discard the whole batch —
     up to 100 rows of every concurrent user's activity. Rows are sanitised
-    first, and if the batch still fails each row is retried on its own.
+    first, and if the batch still fails each row is retried on its own —
+    unless the database itself is unreachable, when retrying cannot help.
     """
     if not items or not pool:
         return
@@ -485,13 +515,22 @@ async def _batch_insert_audit(pool, items: list[dict]) -> None:
         await pool.executemany(_AUDIT_INSERT_SQL, records)
         return
     except Exception as exc:
+        if _is_connection_error(exc):
+            # Every single-row retry would fail the same way, each after its
+            # own connect timeout and with its own warning line.
+            logger.warning("audit batch insert failed (%d rows): %s", len(records), exc)
+            return
         logger.warning("audit batch insert failed (%d rows), retrying row by row: %s", len(records), exc)
 
     failed = 0
-    for record in records:
+    for i, record in enumerate(records):
         try:
             await pool.execute(_AUDIT_INSERT_SQL, *record)
         except Exception as exc:
+            if _is_connection_error(exc):
+                failed += len(records) - i
+                logger.warning("audit row insert failed, database unreachable: %s", exc)
+                break
             failed += 1
             logger.warning("audit row insert failed: %s", exc)
     if failed:
@@ -543,6 +582,10 @@ async def audit_worker() -> None:
             return_exceptions=True,
         )
         good = [e for e in enriched if isinstance(e, dict)]
+        if len(good) < len(enriched):
+            first_err = next(e for e in enriched if not isinstance(e, dict))
+            logger.warning("audit: %d row(s) dropped, enrichment failed: %r",
+                           len(enriched) - len(good), first_err)
 
         pool = get_pool()
         if good and pool:

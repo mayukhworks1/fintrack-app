@@ -219,6 +219,7 @@ class TestAccessLogRedaction:
         ("/api/x?%74oken=encoded-key-secret", "encoded-key-secret"),
         ("/api/x?pw=hunter2-value", "hunter2-value"),
         ("/api/auth/reset?reset_token=rt-secret&email=a%40b.c", "rt-secret"),
+        ("/api/public/pages/launch/render?t=1760000000.render-sig", "render-sig"),   # pageRenderUrl
     ])
     def test_sensitive_values_are_masked(self, path, secret):
         record = _access_record(path)
@@ -517,6 +518,21 @@ _HOSTILE = [
 ]
 
 
+@pytest.fixture
+def pg_errors():
+    """The real asyncpg.exceptions, even after smoke_test.py stubbed asyncpg."""
+    import importlib
+    import sys
+    try:
+        return importlib.import_module("asyncpg.exceptions")
+    except ImportError:
+        stub = sys.modules.pop("asyncpg")
+        try:
+            return importlib.import_module("asyncpg.exceptions")
+        finally:
+            sys.modules["asyncpg"] = stub
+
+
 class TestAuditBatch:
     def test_hostile_values_are_sanitised_and_the_batch_lands_whole(self, no_geo):
         from app.db.audit import _enrich_one, _batch_insert_audit
@@ -551,6 +567,128 @@ class TestAuditBatch:
         pool = asyncio.run(run())
         assert pool.batches == []   # the atomic batch failed...
         assert sorted(r[6] for r in pool.rows) == ["req0", "req1", "req2", "req4", "req5"]
+
+    @pytest.mark.parametrize("make_exc", [
+        lambda pg: ConnectionRefusedError(111, "Connect call failed"),
+        lambda pg: asyncio.TimeoutError(),
+        lambda pg: pg.ConnectionDoesNotExistError("connection was closed"),
+        lambda pg: pg.TooManyConnectionsError("too many clients"),
+        lambda pg: pg.InterfaceError("pool is closing"),
+    ])
+    def test_an_unreachable_database_is_not_retried_row_by_row(self, pg_errors, make_exc):
+        # During a Postgres outage each single-row retry would wait out its own
+        # connect timeout and log its own warning: 100 of each per batch.
+        from app.db.audit import _batch_insert_audit
+        calls = []
+
+        class DownPool:
+            async def executemany(self, sql, records):
+                raise make_exc(pg_errors)
+
+            async def execute(self, sql, *record):
+                calls.append(record)
+
+        good = [{**_queued(i), "os_str": "Windows 10", "browser": "Chrome 131", "device": "desktop", "geo": {}}
+                for i in range(5)]
+        asyncio.run(_batch_insert_audit(DownPool(), good))
+        assert calls == []
+
+    def test_the_fallback_stops_when_the_connection_drops_mid_retry(self):
+        from app.db.audit import _batch_insert_audit
+        calls = []
+
+        class FlakyPool:
+            async def executemany(self, sql, records):
+                raise ValueError("one bad row")   # a data error: retry row by row
+
+            async def execute(self, sql, *record):
+                calls.append(record)
+                if len(calls) == 2:
+                    raise ConnectionResetError(104, "Connection reset by peer")
+
+        good = [{**_queued(i), "os_str": "Windows 10", "browser": "Chrome 131", "device": "desktop", "geo": {}}
+                for i in range(6)]
+        asyncio.run(_batch_insert_audit(FlakyPool(), good))
+        assert len(calls) == 2
+
+    def test_a_client_side_encoding_error_is_still_retried_row_by_row(self, pg_errors):
+        # asyncpg's own DataError ("invalid input for query argument") is about
+        # one row's values, even though it subclasses InterfaceError.
+        from app.db.audit import _batch_insert_audit
+        import importlib
+        ClientDataError = importlib.import_module(pg_errors.__name__ + "._base").DataError
+        calls = []
+
+        class Pool:
+            async def executemany(self, sql, records):
+                raise ClientDataError("invalid input for query argument $5")
+
+            async def execute(self, sql, *record):
+                calls.append(record)
+
+        good = [{**_queued(i), "os_str": "Windows 10", "browser": "Chrome 131", "device": "desktop", "geo": {}}
+                for i in range(3)]
+        asyncio.run(_batch_insert_audit(Pool(), good))
+        assert len(calls) == 3
+
+    def test_out_of_range_browser_geo_falls_back_to_ip_geo(self, monkeypatch):
+        # A forged browserGeo of lat 5000 is not a place, and on installs whose
+        # lat/lon columns are NUMERIC(9,6) it failed the sender's own row.
+        import app.db.audit as AU
+        from app.db.audit import parse_client_hint, _enrich_one, _batch_insert_audit
+        forged = _hint({"browserGeo": {"lat": 5000.0, "lon": -1e300, "accuracyM": 1e300}})
+        assert parse_client_hint(forged)["browserGeo"] == {"lat": None, "lon": None, "accuracyM": None}
+
+        async def ip_geo(ip):
+            return {"lat": 12.97, "lon": 77.59}
+        monkeypatch.setattr(AU, "geo_lookup", ip_geo)
+
+        async def run():
+            pool = FakeAuditPool()
+            await _batch_insert_audit(pool, [await _enrich_one(_queued(1, client_hint=forged))])
+            return pool
+
+        record = asyncio.run(run()).batches[0][0]
+        assert (record[17], record[18]) == (12.97, 77.59)
+
+    def test_share_link_access_with_a_forged_accuracy_is_still_logged(self, monkeypatch):
+        # accuracyM 1e300 became int(1e300) for the INTEGER accuracy_m column;
+        # the insert failed and a share-link edit went unlogged.
+        import app.services.shared_views as SV
+        inserted = []
+
+        class Conn:
+            async def fetchval(self, *a):
+                return None
+
+            async def execute(self, sql, *p):
+                if "INSERT INTO shared_view_accesses" in sql:
+                    if p[14] is not None and not -2**31 <= p[14] < 2**31:
+                        raise OverflowError("value out of int32 range")
+                    inserted.append(p)
+
+        class Acquire:
+            async def __aenter__(self):
+                return Conn()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        class Pool:
+            def acquire(self):
+                return Acquire()
+
+        async def no_geo(ip):
+            return {}
+
+        monkeypatch.setattr(SV, "get_pool", lambda: Pool())
+        monkeypatch.setattr(SV, "geo_lookup", no_geo)
+        hint = _hint({"browserGeo": {"lat": 12.97, "lon": 77.59, "accuracyM": 1e300}})
+        asyncio.run(SV.SharedViewService()._log_access(
+            "tok", "198.51.100.4", "Mozilla/5.0", None, client_hint=hint, event_type="edit"))
+        assert len(inserted) == 1
+        assert inserted[0][14] is None                    # accuracy_m
+        assert (inserted[0][10], inserted[0][11]) == (12.97, 77.59)
 
     def test_a_row_that_cannot_be_built_is_skipped_alone(self):
         from app.db.audit import _batch_insert_audit
@@ -608,7 +746,7 @@ class TestRecordHistoryAttribution:
         actor = asyncio.run(build_actor_context(self._hostile_request(), "editor", "rec1"))
         assert actor["actor_session_id"] is None
         assert actor["actor_cpu_cores"] is None
-        assert actor["actor_memory_gb"] == 0
+        assert actor["actor_memory_gb"] is None   # 0.5 GB is not stored as "0 GB"
         assert actor["actor_lat"] is None and actor["actor_lon"] == 77.5
         assert actor["actor_path"] == "/api/status/record"
         assert actor["actor_gpu"] == "GPUX"
@@ -663,6 +801,13 @@ class TestRecordHistoryAttribution:
         assert actor["change_source"] == "user"
         assert len(inserted) == 1
 
+    @pytest.mark.parametrize("value,expected", [(8, 8), (8.0, 8), (0.25, None), (0.5, None), (99999, None)])
+    def test_memory_and_cores_keep_whole_values_only(self, value, expected):
+        from app.db.attribution import sanitize_actor, empty_actor
+        actor = sanitize_actor({**empty_actor(), "actor_memory_gb": value, "actor_cpu_cores": value})
+        assert actor["actor_memory_gb"] == expected
+        assert actor["actor_cpu_cores"] == expected
+
     def test_pop_resanitises_an_entry_cached_by_an_older_build(self, monkeypatch):
         import app.db.attribution as A
 
@@ -675,7 +820,7 @@ class TestRecordHistoryAttribution:
         actor = asyncio.run(A.pop_attribution("rec1"))
         assert actor["actor_session_id"] is None
         assert actor["actor_cpu_cores"] is None
-        assert actor["actor_memory_gb"] == 0
+        assert actor["actor_memory_gb"] is None   # 0.5 GB is not stored as "0 GB"
         assert actor["actor_path"] == "/ab"
         assert len(actor["actor_role"]) == 20
         assert actor["actor_lat"] is None

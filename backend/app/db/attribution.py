@@ -78,10 +78,12 @@ def _uuid_or_none(value) -> Optional[str]:
 
 def _small_int(value) -> Optional[int]:
     """A SMALLINT value or None. navigator.deviceMemory can be 0.5, and a forged
-    hint can say cores=99999; both used to fail the record_history insert."""
+    hint can say cores=99999; both used to fail the record_history insert.
+    A fractional value is dropped rather than truncated: 0.5 GB stored as 0
+    would read "Memory 0 GB" in the History tab."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    if isinstance(value, float) and not math.isfinite(value):
+    if isinstance(value, float) and not (math.isfinite(value) and value.is_integer()):
         return None
     n = int(value)
     return n if 0 <= n <= _SMALLINT_MAX else None

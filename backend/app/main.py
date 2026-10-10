@@ -351,7 +351,8 @@ _SKIP_AUDIT_PATHS = {"/", "/health", "/health/live"}
 # Query-string keys whose values must never be persisted to the audit log.
 # Tokens (SSE EventSource passes ?token=), passwords, and reset tokens are all
 # secrets that would otherwise sit in plaintext in audit_log / DB backups.
-_SENSITIVE_QUERY_KEYS = {"token", "pw", "password", "secret", "reset_token", "api_key", "apikey"}
+# "t" is the render token that unlocks a password-protected public page.
+_SENSITIVE_QUERY_KEYS = {"token", "pw", "password", "secret", "reset_token", "api_key", "apikey", "t"}
 
 
 def _redact_query(raw_query: str) -> str | None:
