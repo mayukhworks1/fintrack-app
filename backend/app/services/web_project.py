@@ -14,6 +14,7 @@ import httpx
 from ..utils.http import shared_client
 from ..config import settings
 from ..db.postgres import get_pool
+from ..db.sync import fields_with_lmt
 from ..utils.cache import cache
 
 # ── Field IDs ────────────────────────────────────────────────────────────────
@@ -392,7 +393,7 @@ class WebProjectService:
         _bust_project_cache()
         data = res.json()
         created = data.get("records", [{}])[0]
-        await _mirror_write_through(created.get("id"), created.get("fields"))
+        await _mirror_write_through(created.get("id"), fields_with_lmt(created))
         return created
 
     # ── Update ────────────────────────────────────────────────────────────
@@ -408,7 +409,7 @@ class WebProjectService:
             res.raise_for_status()
         _bust_project_cache()
         updated = res.json()
-        await _mirror_write_through(record_id, updated.get("fields"))
+        await _mirror_write_through(record_id, fields_with_lmt(updated))
         return updated
 
     # ── Delete ────────────────────────────────────────────────────────────

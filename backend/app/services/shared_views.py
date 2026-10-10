@@ -490,7 +490,9 @@ class SharedViewService:
         try:
             pool = get_pool()
             if pool and isinstance(updated, dict) and updated.get("fields"):
-                from ..db.sync import upsert_record, _extract_invoice, _extract_project, _extract_status
+                from ..db.sync import (
+                    upsert_record, fields_with_lmt, _extract_invoice, _extract_project, _extract_status,
+                )
                 source, mirror_table, extractor = {
                     "status": ("status", "status_mirror", _extract_status),
                     "projects": ("projects", "projects_mirror", _extract_project),
@@ -502,7 +504,7 @@ class SharedViewService:
                     source=source,
                     mirror_table=mirror_table,
                     teable_id=record_id,
-                    fields=updated.get("fields") or {},
+                    fields=fields_with_lmt(updated) or {},
                     extractor=extractor,
                 )
         except Exception as exc:
