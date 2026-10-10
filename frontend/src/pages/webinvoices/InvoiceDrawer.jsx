@@ -94,10 +94,21 @@ export function InvoiceDrawer({
     setInitialForm(next)
   }, [invoice, draft, ownerLocked, userEmail])
 
+  // Reset per-session state on every open, not only when the id changes: the
+  // drawer is not remounted for every entry point (the retainer "Record raised
+  // invoice" flow reuses it), and two "new" sessions share an undefined id, so
+  // a draft id from the previous session turned the next Create into an
+  // update of the earlier invoice.
   useEffect(() => {
+    if (!open) return
     setWorkingRecordId(invoice?.id || null)
     setCategoryLocked(Boolean(invoice?.id))
-  }, [invoice?.id])
+    setConfirmDel(false)
+    setError('')
+    setParseNote('')
+    setParseError('')
+    setParseApplied([])
+  }, [open, invoice?.id])
 
   const set  = k => v  => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev => setForm(f => ({ ...f, [k]: ev.target.value }))

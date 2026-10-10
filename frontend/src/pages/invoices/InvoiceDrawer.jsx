@@ -80,9 +80,20 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
     setInitialForm(next)
   }, [invoice, prefill, ownerLocked, userEmail])
 
+  // The drawer stays mounted between opens (so its exit animation can play),
+  // and every "new" open has invoice?.id undefined. Keying this on the id
+  // alone kept the previous session's draft id, so the next Create updated
+  // the earlier invoice, and an armed Delete carried over to the next record.
+  // Reset everything that belongs to one session whenever a session starts.
   useEffect(() => {
+    if (!open) return
     setWorkingRecordId(invoice?.id || null)
-  }, [invoice?.id])
+    setConfirmDel(false)
+    setError('')
+    setParseNote('')
+    setParseError('')
+    setParseApplied([])
+  }, [open, invoice?.id])
 
   const set  = k => v   => setForm(f => ({ ...f, [k]: v }))
   const setE = k => ev  => setForm(f => ({ ...f, [k]: ev.target.value }))
