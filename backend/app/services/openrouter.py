@@ -757,8 +757,9 @@ def _format_records_context(records: list[dict]) -> str:
         if pct is not None:
             try:
                 raw = float(pct)
-                # Teable stores profit % as a decimal fraction (0.4479 = 44.79%)
-                pct_display = raw * 100 if 0 < raw < 2.0 else raw
+                # Teable stores profit % as a decimal fraction (0.4479 = 44.79%),
+                # losses included (-0.25 = -25%)
+                pct_display = raw * 100 if -2.0 < raw < 2.0 else raw
                 lines.append(f"  Profit %: {pct_display:.2f}%")
             except (ValueError, TypeError): pass
         contrib = f.get('Resource contribution percentage')
@@ -793,7 +794,7 @@ def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
         if margin not in (None, ""):
             try:
                 raw = float(margin)
-                margin_display = raw * 100 if 0 < raw < 2.0 else raw
+                margin_display = raw * 100 if -2.0 < raw < 2.0 else raw
                 parts.append(f"Margin {margin_display:.1f}%")
             except (ValueError, TypeError): pass
         if target not in (None, ""):
@@ -1284,8 +1285,10 @@ async def generate_report(
         billed     = _sf(f.get("Amount Billed So far"))
         profit_abs = _sf(f.get("Actual Profit"))
         profit_pct = _sf(f.get("Profit percentage"))
-        inp_cost   = _sf(f.get("Input Cost"))
-        overhead   = _sf(f.get("Overhead Cost"))
+        if -2.0 < profit_pct < 2.0:   # a decimal fraction (0.4479 = 44.79%)
+            profit_pct *= 100
+        inp_cost   = _sf(f.get("Input cost so far"))
+        overhead   = _sf(f.get("Total Overhead Cost"))
         target     = "YES" if f.get("Target Achieved ") else "no"
         project_lines.append(
             f"- {f.get('Client','?')} / {f.get('Project Name','?')}: "

@@ -144,6 +144,9 @@ def _parse_payload(body: dict) -> list[tuple[str, dict, str]]:
     # Format A: flat  { "id": "rec...", "fields": {...} }
     rid    = body.get("id", "")
     fields = body.get("fields", {})
+    _lmt = body.get("lastModifiedTime")   # same ordering key as Formats B and C
+    if _lmt and isinstance(fields, dict) and "lastModifiedTime" not in fields:
+        fields = {**fields, "lastModifiedTime": _lmt}
     if rid:
         results.append((rid, fields, "delete" if is_delete else "upsert"))
 

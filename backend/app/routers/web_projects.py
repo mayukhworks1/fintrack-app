@@ -75,6 +75,9 @@ class ResourceFields(BaseModel):
     to_date:        Optional[str]   = None
     notes:          Optional[str]   = None
     project_id:     Optional[str]   = None   # Teable record ID of the linked project
+    # The full list of linked projects. On PATCH it replaces the links, where a
+    # lone project_id only adds one: a resource can serve several projects.
+    project_ids:    Optional[list[str]] = None
 
     class Config:
         populate_by_name = True
@@ -96,6 +99,7 @@ class ResourceFields(BaseModel):
             "To Date":          self.to_date,
             "Notes":            self.notes,
             "project_id":       self.project_id,   # handled specially in service
+            "project_ids":      self.project_ids,  # handled specially in service
         }
         return {k: v for k, v in m.items() if v is not None}
 

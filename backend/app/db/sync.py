@@ -44,6 +44,16 @@ _TEABLE_TIMEOUT       = 30
 _PAGE_SIZE            = 500   # Teable enforces a per-page max; 500 is safe for all deployments
 _INCREMENTAL_TAKE     = 200   # most-recently-modified records to check
 
+# Reconcile sanity guard. A full sync soft-deletes every live row Teable did not
+# return, so a short-but-successful fetch reads exactly like mass deletion: an
+# empty list from a re-scoped token, or a per-page cap below _PAGE_SIZE that
+# ends _fetch_all after one page. The pass is skipped (and logged to sync_log)
+# when Teable returned nothing for a table the mirror says is populated, or when
+# more than this share of it would go at once. The floor keeps small tables,
+# where two genuine deletions are already a large share, out of the ratio check.
+_RECONCILE_MAX_MISSING_RATIO = 0.5
+_RECONCILE_RATIO_FLOOR       = 10
+
 # Valkey key for chat context cache — busted after every successful sync so the
 # AI always uses fresh data without making live Teable calls on every chat request.
 _CHAT_CONTEXT_CACHE_KEY = "chat:context"
@@ -313,6 +323,26 @@ def _changed_fields(old: dict, new: dict) -> list[str]:
     return sorted(k for k in keys if old.get(k) != new.get(k))
 
 
+def fields_with_lmt(record: dict | None) -> dict | None:
+    """A Teable record's `fields` with its record-level lastModifiedTime folded in.
+
+    Teable reports lastModifiedTime beside `fields`, not inside it. The sync and
+    the webhook fold it in so upsert_record can refuse an older snapshot, but the
+    request-path write-throughs passed bare `fields`: the row they wrote carried
+    no timestamp, so a full sync holding a snapshot fetched just before the save
+    overwrote the user's change. Returns None when the record has no fields.
+    """
+    if not isinstance(record, dict):
+        return None
+    fields = record.get("fields")
+    if not isinstance(fields, dict):
+        return None
+    lmt = record.get("lastModifiedTime")
+    if lmt and "lastModifiedTime" not in fields:
+        fields = {**fields, "lastModifiedTime": lmt}
+    return fields
+
+
 async def upsert_record(
     pool,
     source: str,        # "projects" | "invoices"
@@ -320,17 +350,24 @@ async def upsert_record(
     teable_id: str,
     fields: dict,
     extractor,
+    fetched_at: Optional[datetime.datetime] = None,
 ) -> str:
     """
     Insert or update one record in the mirror.
-    Returns "created" | "updated" | "unchanged".
-    Writes to record_history on create/update.
+    Returns "created" | "updated" | "restored" | "unchanged" | "stale".
+    Writes to record_history on create/update/restore.
+
+    `fetched_at` is when the caller's Teable snapshot was taken, on the
+    database clock; the sync passes its pass-start time. It only matters for a
+    tombstoned row: a snapshot taken before the tombstone cannot prove the
+    record still exists, so it does not bring the row back. Callers holding a
+    record Teable has just returned (webhook, write-through) leave it None.
     """
     typed = extractor(fields)
 
     async with pool.acquire() as conn:
         existing_row = await conn.fetchrow(
-            f"SELECT fields::text AS fields FROM {mirror_table} WHERE teable_id = $1",
+            f"SELECT fields::text AS fields, deleted_at FROM {mirror_table} WHERE teable_id = $1",
             teable_id,
         )
 
@@ -369,8 +406,20 @@ async def upsert_record(
         if _is_older_than_stored(fields, old_fields):
             return "stale"
 
+        # Seeing a record means Teable has it, so a tombstoned row comes back
+        # even when its fields are identical. The "unchanged" return below used
+        # to skip the UPDATE that clears deleted_at, so a row tombstoned by
+        # mistake (a reconcile racing a create, a short page) stayed hidden from
+        # every mirror read until someone edited it in Teable. The exception is
+        # a snapshot older than the tombstone: a sync that fetched before the
+        # record was deleted must not resurrect it.
+        deleted_at = existing_row.get("deleted_at")
+        restore = deleted_at is not None
+        if restore and fetched_at is not None and deleted_at >= fetched_at:
+            return "stale"
+
         diff = _changed_fields(old_fields, fields)
-        if not diff:
+        if not diff and not restore:
             return "unchanged"
 
         # ── UPDATE ──
@@ -389,12 +438,12 @@ async def upsert_record(
             f"UPDATE {mirror_table} SET {', '.join(set_parts)} WHERE teable_id = ${idx}",
             *set_vals,
         )
-        await _insert_history(conn, source, teable_id, "update",
+        await _insert_history(conn, source, teable_id, "restore" if restore else "update",
                               old_json=json.dumps(old_fields, default=str),
                               new_json=json.dumps(fields, default=str),
                               changed=diff,
                               actor=actor)
-        return "updated"
+        return "restored" if restore else "updated"
 
 
 async def _insert_history(
@@ -486,18 +535,96 @@ async def mark_deleted(pool, source: str, mirror_table: str, teable_id: str) -> 
         )
 
 
-async def reconcile_missing_records(pool, source: str, mirror_table: str, seen_ids: list[str]) -> int:
-    """Full sync healer: mark rows deleted when they no longer exist in Teable."""
+async def _mark_deleted_if_unseen(
+    pool, source: str, mirror_table: str, teable_id: str, started_at: datetime.datetime,
+) -> bool:
+    """mark_deleted for the reconcile pass, only if the row is still live and
+    was last written before the pass started fetching.
+
+    The condition sits on the UPDATE itself rather than on an earlier SELECT,
+    so a write-through landing between the candidate query and this call is
+    left alone, and no 'delete' history row is written for a row not deleted.
+    """
+    from . import attribution as attrib
+
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            f"SELECT teable_id FROM {mirror_table} WHERE deleted_at IS NULL"
+        row = await conn.fetchrow(
+            f"UPDATE {mirror_table} SET synced_at = NOW(), deleted_at = NOW() "
+            f"WHERE teable_id = $1 AND deleted_at IS NULL AND synced_at < $2 "
+            f"RETURNING fields::text AS fields",
+            teable_id, started_at,
         )
+        if not row:
+            return False
+        actor = await attrib.pop_attribution(teable_id)
+        await _insert_history(conn, source, teable_id, "delete",
+                              old_json=row["fields"],
+                              new_json=None,
+                              changed=[],
+                              actor=actor)
+        return True
+
+
+class ReconcileSkipped(Exception):
+    """The reconcile sanity guard refused to soft-delete this pass's missing rows."""
+
+
+def _reconcile_skip_reason(live: int, fetched: int, missing: int) -> Optional[str]:
+    if live and not fetched:
+        return (f"reconcile skipped: Teable returned 0 records but the mirror holds "
+                f"{live} live rows")
+    if missing > _RECONCILE_RATIO_FLOOR and missing > live * _RECONCILE_MAX_MISSING_RATIO:
+        return (f"reconcile skipped: {missing} of {live} live rows are missing from "
+                f"Teable's response, over {_RECONCILE_MAX_MISSING_RATIO:.0%}; refusing "
+                f"to soft-delete them in one pass")
+    return None
+
+
+async def reconcile_missing_records(
+    pool,
+    source: str,
+    mirror_table: str,
+    seen_ids: list[str],
+    started_at: Optional[datetime.datetime] = None,
+) -> int:
+    """Full sync healer: mark rows deleted when they no longer exist in Teable.
+
+    `started_at` is when the pass began fetching, on the database clock. Only
+    rows last written before it are candidates. Teable is fetched for every
+    table up front and reconciled table by table afterwards, so minutes can
+    pass in between; a record created in that window (a write-through insert)
+    is missing from the snapshot only because the snapshot predates it, and was
+    being tombstoned along with its creator's attribution.
+
+    Raises ReconcileSkipped, deleting nothing, when the sanity guard trips.
+    """
+    async with pool.acquire() as conn:
+        if started_at is None:
+            rows = await conn.fetch(
+                f"SELECT teable_id FROM {mirror_table} WHERE deleted_at IS NULL"
+            )
+        else:
+            rows = await conn.fetch(
+                f"SELECT teable_id FROM {mirror_table} "
+                f"WHERE deleted_at IS NULL AND synced_at < $1",
+                started_at,
+            )
     live_ids = {row["teable_id"] for row in rows}
     seen = set(seen_ids)
     missing = sorted(live_ids - seen)
+    if missing:
+        reason = _reconcile_skip_reason(len(live_ids), len(seen), len(missing))
+        if reason:
+            logger.warning("%s: %s", source, reason)
+            raise ReconcileSkipped(reason)
+    deleted = 0
     for teable_id in missing:
-        await mark_deleted(pool, source, mirror_table, teable_id)
-    return len(missing)
+        if started_at is None:
+            await mark_deleted(pool, source, mirror_table, teable_id)
+            deleted += 1
+        elif await _mark_deleted_if_unseen(pool, source, mirror_table, teable_id, started_at):
+            deleted += 1
+    return deleted
 
 
 # ── Teable HTTP helpers ──────────────────────────────────────────────────────
@@ -650,6 +777,18 @@ async def _fetch_recent(table_id: str, token: str, take: int = _INCREMENTAL_TAKE
 
 # ── Batch sync helpers ───────────────────────────────────────────────────────
 
+async def _db_now(pool) -> datetime.datetime:
+    """The database's NOW(), the clock synced_at and deleted_at are written
+    with; the app clock only as a fallback."""
+    try:
+        now = await pool.fetchval("SELECT NOW()")
+        if isinstance(now, datetime.datetime):
+            return now
+    except Exception as exc:
+        logger.debug("SELECT NOW() failed, using the app clock: %s", exc)
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
 async def _sync_records(
     pool,
     source: str,
@@ -657,10 +796,12 @@ async def _sync_records(
     records: list[dict],
     extractor,
     since: float = 0.0,
+    fetched_at: Optional[datetime.datetime] = None,
 ) -> dict:
     """
     Upsert a list of Teable records.  When `since` > 0, skip records
     whose lastModifiedTime is not newer than that epoch timestamp.
+    `fetched_at` is passed through to upsert_record.
     """
     created = updated = unchanged = skipped = 0
     t0 = time.time()
@@ -688,10 +829,11 @@ async def _sync_records(
                 except Exception:
                     pass  # can't parse timestamp → process anyway
 
-        result = await upsert_record(pool, source, mirror_table, tid, fields, extractor)
+        result = await upsert_record(pool, source, mirror_table, tid, fields, extractor,
+                                     fetched_at=fetched_at)
         if result == "created":
             created += 1
-        elif result == "updated":
+        elif result in ("updated", "restored"):
             updated += 1
         else:
             unchanged += 1
@@ -779,6 +921,11 @@ async def run_sync(incremental: bool = False) -> None:
             return recs, token   # _fetch_recent handles its own token fallback
         return await _fetch_all_with_token_fallback(table_id, token)
 
+    # Taken before any fetch, on the database clock that writes synced_at and
+    # deleted_at: reconcile only tombstones rows written before it, and a row
+    # tombstoned after it is not resurrected by this pass's older snapshot.
+    pass_started = await _db_now(pool)
+
     fetched = await asyncio.gather(
         *[_do_fetch(src, tid, tok) for src, _, tid, tok, _ in tasks],
         return_exceptions=True,
@@ -796,12 +943,18 @@ async def run_sync(incremental: bool = False) -> None:
         records, winning_tok = result if isinstance(result, tuple) else (result, preferred_tok)
 
         try:
-            stats = await _sync_records(pool, source, mirror_table, records, extractor, since=since)
+            stats = await _sync_records(pool, source, mirror_table, records, extractor,
+                                        since=since, fetched_at=pass_started)
             deleted = 0
+            reconcile_skipped: Optional[str] = None
             if not incremental:
-                deleted = await reconcile_missing_records(
-                    pool, source, mirror_table, [r.get("id", "") for r in records if r.get("id")]
-                )
+                try:
+                    deleted = await reconcile_missing_records(
+                        pool, source, mirror_table, [r.get("id", "") for r in records if r.get("id")],
+                        started_at=pass_started,
+                    )
+                except ReconcileSkipped as exc:
+                    reconcile_skipped = str(exc)
             logger.info(
                 "[%s] %s: total=%d created=%d updated=%d unchanged=%d skipped=%d deleted=%d (%dms)",
                 label, source,
@@ -813,6 +966,14 @@ async def run_sync(incremental: bool = False) -> None:
                 stats["total"], stats["created"], stats["updated"],
                 stats["unchanged"], stats["duration_ms"], None, deleted,
             )
+            if reconcile_skipped:
+                # Its own row, after the stats row: that one has already busted
+                # the caches for what the upserts changed. This one is the
+                # source's latest only until the next incremental pass writes
+                # its stats (about 30 s); it stays in the sync log and as the
+                # admin overview's last sync error, and a skip repeats every
+                # full pass until the cause is fixed.
+                await _write_sync_log(pool, source, 0, 0, 0, 0, 0, reconcile_skipped[:500])
         except Exception as exc:
             logger.error("[%s] Upsert error for %s: %s", label, source, exc)
             await _write_sync_log(pool, source, 0, 0, 0, 0, 0, str(exc)[:500])

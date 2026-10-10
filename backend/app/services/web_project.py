@@ -14,6 +14,7 @@ import httpx
 from ..utils.http import shared_client
 from ..config import settings
 from ..db.postgres import get_pool
+from ..db.sync import fields_with_lmt
 from ..utils.cache import cache
 
 # ── Field IDs ────────────────────────────────────────────────────────────────
@@ -392,7 +393,7 @@ class WebProjectService:
         _bust_project_cache()
         data = res.json()
         created = data.get("records", [{}])[0]
-        await _mirror_write_through(created.get("id"), created.get("fields"))
+        await _mirror_write_through(created.get("id"), fields_with_lmt(created))
         return created
 
     # ── Update ────────────────────────────────────────────────────────────
@@ -408,7 +409,7 @@ class WebProjectService:
             res.raise_for_status()
         _bust_project_cache()
         updated = res.json()
-        await _mirror_write_through(record_id, updated.get("fields"))
+        await _mirror_write_through(record_id, fields_with_lmt(updated))
         return updated
 
     # ── Delete ────────────────────────────────────────────────────────────
@@ -607,8 +608,11 @@ class WebResourceService:
         the service converts it to the Teable link field format before sending.
         """
         project_id = fields.pop("project_id", None)
+        project_ids = fields.pop("project_ids", None)
         teable_fields = _clean_resource_fields(fields)
-        if project_id:
+        if project_ids:
+            teable_fields["Project"] = [{"id": pid} for pid in dict.fromkeys(project_ids) if pid]
+        elif project_id:
             teable_fields["Project"] = [{"id": project_id}]
 
         body = {
@@ -627,10 +631,26 @@ class WebResourceService:
     # ── Update ────────────────────────────────────────────────────────────
 
     async def update_resource(self, record_id: str, fields: dict) -> dict:
+        """
+        A single `project_id` adds that link and keeps the others; only an
+        explicit `project_ids` list replaces the links. Setting Project to
+        [project_id] silently unlinked a resource shared across projects every
+        time it was edited from one of them, moving the other projects' Teable
+        rollups (input cost, profit, resource count) with no visible action.
+        """
         project_id = fields.pop("project_id", None)
+        project_ids = fields.pop("project_ids", None)
         teable_fields = _clean_resource_fields(fields)
-        if project_id:
-            teable_fields["Project"] = [{"id": project_id}]
+        if project_ids is not None:
+            teable_fields["Project"] = [{"id": pid} for pid in dict.fromkeys(project_ids) if pid]
+        elif project_id:
+            resource = await self.get_resource(record_id)
+            existing = (resource.get("fields") or {}).get("Project") or []
+            linked = [p["id"] for p in existing if isinstance(p, dict) and p.get("id")]
+            if project_id not in linked:
+                teable_fields["Project"] = [{"id": pid} for pid in linked + [project_id]]
+            elif not teable_fields:
+                return resource   # already linked and nothing else to change
 
         url  = f"{self._record_url}/{record_id}"
         body = {
