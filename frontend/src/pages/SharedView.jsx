@@ -155,9 +155,21 @@ function dateOnlyValue(value) {
   if (!value) return ''
   return String(value).slice(0, 10)
 }
-function monthKey(value) {
-  const dateOnly = dateOnlyValue(value)
-  return dateOnly ? dateOnly.slice(0, 7) : ''
+// Months are read in the link owner's local time when the link carries their
+// UTC offset — as the owner's invoice page and the server do — else from the text.
+function monthKey(value, utcOffsetMinutes) {
+  if (typeof utcOffsetMinutes !== 'number') {
+    const dateOnly = dateOnlyValue(value)
+    return dateOnly ? dateOnly.slice(0, 7) : ''
+  }
+  const t = value ? new Date(value).getTime() : NaN
+  return Number.isNaN(t) ? '' : new Date(t + utcOffsetMinutes * 60000).toISOString().slice(0, 7)
+}
+// Fields the server sent for this link. Older servers sent no list (all fields).
+function sharedFieldTest(sharedFields) {
+  if (!Array.isArray(sharedFields)) return () => true
+  const set = new Set(sharedFields)
+  return field => set.has(field)
 }
 function parseAttachments(value) {
   return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : []
@@ -184,6 +196,16 @@ function recordAttachmentSummary(resourceType, fields = {}) {
       : null
   }
   return null
+}
+// Project figures for the card and the detail view. Billed, Profit and Margin
+// appear only when the link shares that column: profit is the agency's own.
+function projectFigures(f, isShared) {
+  return [
+    ['Health', safeStr(f['Health']) || '—'],
+    isShared('Amount Billed So far') ? ['Billed', fmtInr(f['Amount Billed So far'])] : null,
+    isShared('Actual Profit') ? ['Profit', fmtInr(f['Actual Profit'])] : null,
+    isShared('Profit percentage') ? ['Margin', f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'] : null,
+  ].filter(Boolean)
 }
 function effectiveAging(fields = {}) {
   if (fields['Payment Status'] && fields['Payment Status'] !== 'Pending') return 0
@@ -245,7 +267,7 @@ function SnapshotSummary({ viewConfig, accessMode }) {
     viewConfig?.overdueOnly ? 'Outstanding only' : null,
     viewConfig?.hasDocsOnly ? 'With docs only' : null,
     viewConfig?.followupDueOnly ? 'Follow-up due' : null,
-    viewConfig?.search ? `Shared search: "${viewConfig.search}"` : null,
+    viewConfig?.search?.trim() ? `Shared search: "${viewConfig.search.trim()}"` : null,
     accessMode === 'edit' ? 'Link permission: can edit' : 'Link permission: read only',
   ].filter(Boolean)
   return (
@@ -376,7 +398,7 @@ function TaxLedgerDashboard({ records, filterStatus, onFilterStatus, theme }) {
   )
 }
 
-function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true, allExpanded = false }) {
+function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact = false, showClientAccents = true, allExpanded = false, isShared = () => true }) {
   const meta = RESOURCE_META[resourceType]
   const f = record.fields || {}
   const groupValue = f[meta.clientField] || 'Unknown'
@@ -440,10 +462,9 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
         )}
         {resourceType === 'projects' && (
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Health</p><p className="font-semibold text-gray-700">{safeStr(f['Health']) || '—'}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Billed</p><p className="font-semibold text-gray-700">{fmtInr(f['Amount Billed So far'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Profit</p><p className="font-semibold text-gray-700">{fmtInr(f['Actual Profit'])}</p></div>
-            <div><p className="text-gray-400 uppercase tracking-wide mb-1">Margin</p><p className="font-semibold text-gray-700">{f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'}</p></div>
+            {projectFigures(f, isShared).map(([label, value]) => (
+              <div key={label}><p className="text-gray-400 uppercase tracking-wide mb-1">{label}</p><p className="font-semibold text-gray-700">{value}</p></div>
+            ))}
           </div>
         )}
         {resourceType === 'invoices' && (() => {
@@ -511,6 +532,7 @@ function CardView({
   groupSort = 'count-desc',
   recordSort = 'project-asc',
   allExpanded = false,
+  isShared,
 }) {
   const meta = RESOURCE_META[resourceType]
   const groups = new Map()
@@ -575,7 +597,7 @@ function CardView({
               <span className="text-sm text-gray-400">{count} {meta.noun}{count !== 1 ? 's' : ''}</span>
             </div>
             <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 ${compact ? 'gap-3' : 'gap-4'}`}>
-              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} allExpanded={allExpanded} />)}
+              {recs.map(r => <ResourceCard key={r.id} record={r} resourceType={resourceType} canEdit={canEdit} onEdit={onEdit} onDetail={onDetail} compact={compact} showClientAccents={showClientAccents} allExpanded={allExpanded} isShared={isShared} />)}
             </div>
           </section>
         )
@@ -992,7 +1014,7 @@ function BoardView({ records, resourceType, statusOptions, canEdit, onEdit, onDe
   )
 }
 
-function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
+function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = () => true }) {
   const dialog = useDialog({ label: 'Record detail', onClose })
   const meta = RESOURCE_META[resourceType] || RESOURCE_META.status
   const f = record?.fields || {}
@@ -1031,9 +1053,9 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               <h2 className="text-[18px] font-bold text-slate-900 leading-snug">{titleValue}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge value={statusValue} />
-                {f['Last Modified'] && (
+                {(f['Last Modified'] || f.lastModifiedTime) && (
                   <span className="text-[11px] text-slate-400">
-                    Updated {fmtDate(f['Last Modified'])}
+                    Updated {fmtDate(f['Last Modified'] || f.lastModifiedTime)}
                   </span>
                 )}
               </div>
@@ -1084,12 +1106,6 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
                 )
               })()}
               <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
-              {f['Notes'] && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed">{safeStr(f['Notes'])}</p>
-                </div>
-              )}
             </>
           )}
 
@@ -1097,24 +1113,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
           {resourceType === 'projects' && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  ['Health', safeStr(f['Health']) || '—'],
-                  ['Billed', fmtInr(f['Amount Billed So far'])],
-                  ['Profit', fmtInr(f['Actual Profit'])],
-                  ['Margin', f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'],
-                ].map(([label, value]) => (
+                {projectFigures(f, isShared).map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-sm font-bold text-slate-800">{value}</p>
                   </div>
                 ))}
               </div>
-              {f['Notes'] && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Notes</p>
-                  <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Notes'])}</p>
-                </div>
-              )}
             </>
           )}
 
@@ -1124,11 +1129,11 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {/* Financial summary row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  ['Raised', fmtInr(f['Amount Raised'])],
-                  ['With Tax', fmtInr(f['Amount with Tax'])],
-                  ['Received', fmtInr(f['Amount Received'])],
-                  ['Outstanding', fmtInr(f['Outstanding Amount'])],
-                ].map(([label, value]) => (
+                  ['Raised', fmtInr(f['Amount Raised']), 'Amount Raised'],
+                  ['With Tax', fmtInr(f['Amount with Tax']), 'Amount with Tax'],
+                  ['Received', fmtInr(f['Amount Received']), 'Amount Received'],
+                  ['Outstanding', fmtInr(f['Outstanding Amount']), 'Outstanding Amount'],
+                ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-sm font-bold text-slate-800">{value}</p>
@@ -1138,10 +1143,10 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {/* Dates + aging */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
-                  ['Raised Date', fmtDate(f['Raised Date'])],
-                  ['Cleared Date', fmtDate(f['Cleared Date'])],
-                  ['Aging', effectiveAging(f) > 0 ? `${effectiveAging(f)} days` : '—'],
-                ].map(([label, value]) => (
+                  ['Raised Date', fmtDate(f['Raised Date']), 'Raised Date'],
+                  ['Cleared Date', fmtDate(f['Cleared Date']), 'Cleared Date'],
+                  ['Aging', effectiveAging(f) > 0 ? `${effectiveAging(f)} days` : '—', 'Agening (Days)'],
+                ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700">{value}</p>
@@ -1151,13 +1156,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
               {/* Details grid */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  ['Project', safeStr(f['Project']) || '—'],
-                  ['Category', safeStr(f['Category']) || '—'],
-                  ['Milestone', safeStr(f['Milestone']) || '—'],
-                  ['Raised By', safeStr(f['Raised By']) || '—'],
-                  ['Next Follow-up', fmtDate(f['Next followup'])],
-                  ['Reference', safeStr(f['Reference']) || '—'],
-                ].map(([label, value]) => (
+                  ['Project', safeStr(f['Project']) || '—', 'Project'],
+                  ['Category', safeStr(f['Category']) || '—', 'Category'],
+                  ['Milestone', safeStr(f['Milestone']) || '—', 'Milestone'],
+                  ['Raised By', safeStr(f['Raised By']) || '—', 'Raised By'],
+                  ['Next Follow-up', fmtDate(f['Next followup']), 'Next followup'],
+                  ['Reference', safeStr(f['Reference']) || '—', 'Reference'],
+                ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700 break-words">{value}</p>
@@ -1210,7 +1215,21 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent }) {
   )
 }
 
-function EditModal({ resourceType, record, statusOptions, saving, onClose, onSave }) {
+// The public edit API types these as numbers and reads a missing one as "leave
+// it": a blank box is left out of the save, never sent as '' (a 422).
+const PUBLIC_NUMERIC_EDIT_FIELDS = ['amount_billed', 'amount_received']
+export function publicEditPayload(form) {
+  const out = { ...form }
+  for (const key of PUBLIC_NUMERIC_EDIT_FIELDS) {
+    if (!(key in out)) continue
+    const num = out[key] === '' || out[key] == null ? NaN : Number(out[key])
+    if (Number.isFinite(num)) out[key] = num
+    else delete out[key]
+  }
+  return out
+}
+
+function EditModal({ resourceType, record, statusOptions, saving, error = '', onClose, onSave }) {
   const dialog = useDialog({ label: 'Edit record', onClose })
   const f = record?.fields || {}
   const [form, setForm] = useState({})
@@ -1226,13 +1245,13 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
         client: f.Client || '',
         project_name: f['Project Name'] || '',
         project_status: f['Project Status'] || '',
-        amount_billed: f['Amount Billed So far'] || '',
+        amount_billed: f['Amount Billed So far'] ?? '',
       })
     } else {
       setForm({
         invoice_number: f['Invoice Number'] || '',
         payment_status: f['Payment Status'] || '',
-        amount_received: f['Amount Received'] || '',
+        amount_received: f['Amount Received'] ?? '',
         cleared_date: f['Cleared Date'] ? String(f['Cleared Date']).slice(0, 10) : '',
         remark: f.Remark || '',
         next_followup: f['Next followup'] ? String(f['Next followup']).slice(0, 10) : '',
@@ -1256,7 +1275,7 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
           <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600"><X size={16} /></button>
         </div>
         {/* scrollable body */}
-        <form onSubmit={e => { e.preventDefault(); onSave(form) }} className="flex flex-col flex-1 min-h-0">
+        <form onSubmit={e => { e.preventDefault(); onSave(publicEditPayload(form)) }} className="flex flex-col flex-1 min-h-0">
           <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
             {resourceType === 'status' && (
               <>
@@ -1294,7 +1313,7 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Project Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.project_status || ''} onChange={e => setForm(v => ({ ...v, project_status: e.target.value }))} /></div>
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_billed || ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Billed</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_billed ?? ''} onChange={e => setForm(v => ({ ...v, amount_billed: e.target.value }))} /></div>
                 </div>
               </>
             )}
@@ -1305,7 +1324,7 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
                   <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Payment Status</label><input className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.payment_status || ''} onChange={e => setForm(v => ({ ...v, payment_status: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_received || ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Amount Received</label><input type="number" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.amount_received ?? ''} onChange={e => setForm(v => ({ ...v, amount_received: e.target.value }))} /></div>
                   <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Cleared Date</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.cleared_date || ''} onChange={e => setForm(v => ({ ...v, cleared_date: e.target.value }))} /></div>
                 </div>
                 <div><label className="block text-xs font-semibold mb-1.5 text-gray-700">Next Follow-up</label><input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: '#e2e8f0' }} value={form.next_followup || ''} onChange={e => setForm(v => ({ ...v, next_followup: e.target.value }))} /></div>
@@ -1313,6 +1332,9 @@ function EditModal({ resourceType, record, statusOptions, saving, onClose, onSav
               </>
             )}
           </div>
+          {error && (
+            <p role="alert" className="mx-5 mb-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#dc2626' }}>{error}</p>
+          )}
           {/* sticky footer */}
           <div className="flex items-center justify-end gap-2 px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid #e5e7eb' }}>
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border" style={{ borderColor: '#e2e8f0', color: '#475569' }}>Cancel</button>
@@ -1448,6 +1470,9 @@ export default function SharedView() {
 
   const canEdit = (data?.access_mode || 'read') === 'edit'
   const vc = data?.view_config || {}
+  // Filters and controls only use fields this link actually carries.
+  const isShared = useMemo(() => sharedFieldTest(data?.shared_fields), [data?.shared_fields])
+  const utcOffset = typeof vc.utcOffsetMinutes === 'number' ? vc.utcOffsetMinutes : undefined
   const theme = resolveTheme(vc.theme)
   const compact = vc.density === 'compact'
   const showDashboard = vc.showDashboard ?? meta.showDashboardByDefault
@@ -1496,9 +1521,9 @@ export default function SharedView() {
   )
   const monthOptions = useMemo(
     () => isInvoiceLike
-      ? [...new Set(records.map(r => monthKey(r.fields?.['Raised Date'])).filter(Boolean))].sort().reverse()
+      ? [...new Set(records.map(r => monthKey(r.fields?.['Raised Date'], utcOffset)).filter(Boolean))].sort().reverse()
       : [],
-    [records, isInvoiceLike]
+    [records, isInvoiceLike, utcOffset]
   )
 
   const filtered = useMemo(() => {
@@ -1515,11 +1540,11 @@ export default function SharedView() {
           if (invoiceScope === 'open' && (parts.isPaid || parts.isCancelled)) return false
           if (invoiceScope !== 'all' && parts.isCancelled) return false
         }
-        if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
+        if (raisedByFilter && isShared('Raised By') && f['Raised By'] !== raisedByFilter) return false
         if (billingFilter === 'retainer' && !/retainer/i.test(String(f.Category || ''))) return false
         if (billingFilter === 'project' && /retainer/i.test(String(f.Category || ''))) return false
-        if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-        if (dateFrom || dateTo) {
+        if (monthFilter && monthKey(f['Raised Date'], utcOffset) !== monthFilter) return false
+        if ((dateFrom || dateTo) && isShared(dateFieldFilter)) {
           const candidate = dateOnlyValue(f[dateFieldFilter])
           if (!candidate) return false
           if (dateFrom && candidate < dateFrom) return false
@@ -1530,20 +1555,20 @@ export default function SharedView() {
           if (classifyAgingBand(effectiveAging(f)) !== agingBandFilter) return false
         }
         if (overdueOnly && !((f['Payment Status'] || '') === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
-        if (hasDocsOnly && parseAttachments(f['Reference']).length + parseAttachments(f['Invoice PDF']).length === 0) return false
-        if (followupDueOnly) {
+        if (hasDocsOnly && (isShared('Reference') || isShared('Invoice PDF')) && parseAttachments(f['Reference']).length + parseAttachments(f['Invoice PDF']).length === 0) return false
+        if (followupDueOnly && isShared('Next followup')) {
           const followup = dateOnlyValue(f['Next followup'])
           if (!followup || followup > todayIso) return false
         }
       }
-      if (search) {
-        const q = search.toLowerCase()
+      const q = search.trim().toLowerCase()
+      if (q) {
         const hay = meta.searchFields.map(key => f[key] || '').join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType, isInvoiceLike, invoiceScope, raisedByFilter, billingFilter, monthFilter, dateFieldFilter, dateFrom, dateTo, agingBandFilter, overdueOnly, hasDocsOnly, followupDueOnly])
+  }, [recordsForView, filterPrimary, filterStatus, filterCategory, search, meta, resourceType, isInvoiceLike, invoiceScope, raisedByFilter, billingFilter, monthFilter, dateFieldFilter, dateFrom, dateTo, agingBandFilter, overdueOnly, hasDocsOnly, followupDueOnly, isShared, utcOffset])
 
   async function saveRecordChanges(record, patch) {
     setSavingRecordId(record.id)
@@ -1731,7 +1756,7 @@ export default function SharedView() {
                 {categoryOptions.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             )}
-            {isInvoiceLike && (
+            {isInvoiceLike && isShared('Raised By') && (
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={raisedByFilter} onChange={e => setRaisedByFilter(e.target.value)}>
                 <option value="">All owners</option>
                 {raisedByOptions.map(v => <option key={v} value={v}>{v}</option>)}
@@ -1789,9 +1814,9 @@ export default function SharedView() {
                 {monthOptions.map(v => <option key={v} value={v}>{new Date(`${v}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>)}
               </select>
               <select className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} value={dateFieldFilter} onChange={e => setDateFieldFilter(e.target.value)}>
-                <option value="Raised Date">Raised Date</option>
-                <option value="Cleared Date">Cleared Date</option>
-                <option value="Next followup">Next Follow-up</option>
+                {[['Raised Date', 'Raised Date'], ['Cleared Date', 'Cleared Date'], ['Next followup', 'Next Follow-up']]
+                  .filter(([field]) => isShared(field))
+                  .map(([field, label]) => <option key={field} value={field}>{label}</option>)}
               </select>
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-xl border bg-white px-3 py-2 text-sm outline-none" style={{ borderColor: '#e2e8f0' }} />
@@ -1802,12 +1827,12 @@ export default function SharedView() {
               <button onClick={() => setOverdueOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: overdueOnly ? theme.accentSoft : '#e5e7eb', color: overdueOnly ? theme.accent : '#475569', background: overdueOnly ? theme.accentDim : '#fff' }}>
                 Outstanding only
               </button>
-              <button onClick={() => setHasDocsOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: hasDocsOnly ? theme.accentSoft : '#e5e7eb', color: hasDocsOnly ? theme.accent : '#475569', background: hasDocsOnly ? theme.accentDim : '#fff' }}>
+              {(isShared('Reference') || isShared('Invoice PDF')) && <button onClick={() => setHasDocsOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: hasDocsOnly ? theme.accentSoft : '#e5e7eb', color: hasDocsOnly ? theme.accent : '#475569', background: hasDocsOnly ? theme.accentDim : '#fff' }}>
                 With docs only
-              </button>
-              <button onClick={() => setFollowupDueOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: followupDueOnly ? theme.accentSoft : '#e5e7eb', color: followupDueOnly ? theme.accent : '#475569', background: followupDueOnly ? theme.accentDim : '#fff' }}>
+              </button>}
+              {isShared('Next followup') && <button onClick={() => setFollowupDueOnly(v => !v)} className="rounded-xl border px-3 py-2 text-sm font-medium" style={{ borderColor: followupDueOnly ? theme.accentSoft : '#e5e7eb', color: followupDueOnly ? theme.accent : '#475569', background: followupDueOnly ? theme.accentDim : '#fff' }}>
                 Follow-up due
-              </button>
+              </button>}
             </div>
           )}
         </div>
@@ -1841,6 +1866,7 @@ export default function SharedView() {
                 groupSort={vc.cardGroupSort || 'count-desc'}
                 recordSort={vc.cardRecordSort || 'project-asc'}
                 allExpanded={allExpanded}
+                isShared={isShared}
               />
             )}
             {viewType === 'list' && <ListView records={filtered} columns={listColumns} resourceType={resourceType} canEdit={canEdit} onEdit={setEditRecord} onDetail={openDetailRecord} showClientAccents={showClientAccents} highlightColumns={vc.highlightColumns || []} />}
@@ -1863,11 +1889,12 @@ export default function SharedView() {
           record={editRecord}
           statusOptions={resourceType === 'status' ? DEFAULT_BOARD_ORDER : statusOptions}
           saving={savingRecordId === editRecord.id}
-          onClose={() => setEditRecord(null)}
+          error={saveError}
+          onClose={() => { setEditRecord(null); setSaveError('') }}
           onSave={form => saveRecordChanges(editRecord, form)}
         />
       )}
-      {detailRecord && <DetailModal resourceType={resourceType} record={detailRecord} onClose={() => setDetailRecord(null)} onTrackEvent={trackSharedEvent} />}
+      {detailRecord && <DetailModal resourceType={resourceType} record={detailRecord} onClose={() => setDetailRecord(null)} onTrackEvent={trackSharedEvent} isShared={isShared} />}
     </div>
   )
 }

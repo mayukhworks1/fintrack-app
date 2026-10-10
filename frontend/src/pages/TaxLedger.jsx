@@ -369,7 +369,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
     periodFrom: period.from,
     periodTo: period.to,
     invoiceScope,
-    search,
+    search: search.trim(),   // the page searches the trimmed term
     filterClient: '',
     filterProject: '',
     filterStatus: '',

@@ -632,6 +632,8 @@ export default function Invoices() {
     hasDocsOnly,
     followupDueOnly,
     search: typeof search === 'string' ? search.trim() : '',
+    // Advanced FilterBuilder rules narrow `records` too; a live link re-applies them server-side.
+    filterConditions,
     columns: INVOICE_SHARE_COLUMNS,
     highlightColumns: ['Agening (Days)', 'Raised Date', 'Outstanding Amount'],
   }), [
@@ -642,6 +644,7 @@ export default function Invoices() {
     dateFieldFilter,
     dateFrom,
     dateTo,
+    filterConditions,
     followupDueOnly,
     hasDocsOnly,
     monthFilter,

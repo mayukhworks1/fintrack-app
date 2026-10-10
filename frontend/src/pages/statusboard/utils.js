@@ -253,6 +253,10 @@ export function summarizeShareScope(view, fallbackCount = 0) {
     if (vc.filterProject) parts.push(`Project: ${vc.filterProject}`)
     if (vc.filterStatus) parts.push(`Status: ${vc.filterStatus}`)
     if (vc.search) parts.push(`Search: "${vc.search}"`)
+    // Saved links store the rules as filterConditions; the board calls them advancedConditions.
+    const rules = [vc.filterConditions, vc.advancedConditions].flatMap(list => (Array.isArray(list) ? list : []))
+      .filter(c => c?.field && c?.op && (['is_empty', 'is_not_empty'].includes(c.op) || (c.value ?? '') !== '')).length
+    if (rules) parts.push(`${rules} advanced rule${rules === 1 ? '' : 's'}`)
   } else {
     const count = Array.isArray(view?.record_ids) ? view.record_ids.length : fallbackCount
     parts.push(`Snapshot · ${count} project${count === 1 ? '' : 's'}`)
