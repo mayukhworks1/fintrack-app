@@ -25,6 +25,7 @@ from ..models import StatusCreate, StatusUpdate
 from .deps import require_auth, require_editor, require_permission
 from .auth import verify_token
 from ..db.valkey import rate_check, cache_bust
+from ..utils.uploads import read_upload, upload_limit
 
 # Valkey is NOT used for status list reads — we go straight to PG mirror
 # (1-3 ms) so there's no stale-cache window to worry about.
@@ -353,8 +354,9 @@ async def upload_status_attachment(
 ):
     await _check_write_rate(request)
     svc = _svc()
+    # Outside the try: its 413 must not be turned into a 500 below.
+    content = await read_upload(file, upload_limit())
     try:
-        content = await file.read()
         result = await svc.upload_attachment_to_field(
             record_id=record_id,
             field_name=field_name,

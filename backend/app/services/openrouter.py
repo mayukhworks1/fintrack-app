@@ -965,17 +965,38 @@ async def analyze_project(project_fields: dict) -> dict:
     return await _try_chat(messages, max_tokens=1024, temperature=0.5)
 
 
+# Invoice text is read for the regex pre-pass and the first 3,000 characters of
+# the prompt. A real invoice is a few thousand characters; anything past this
+# bound is ignored rather than handed to the regexes.
+_MAX_INVOICE_TEXT_CHARS = 20_000
+# Pages are not read past this many seconds. A page of drawing operators yields
+# no text, so the character cap never stops it, and parsing one is slow. A real
+# invoice extracts in well under a second.
+_MAX_INVOICE_EXTRACT_SECONDS = 15
+
+
 def _extract_pdf_text(content: bytes) -> str:
-    """Extract plain text from a PDF byte-string. Returns '' on failure or scanned PDF."""
+    """Extract plain text from a PDF byte-string. Returns '' on failure or scanned PDF.
+
+    Synchronous and CPU-bound (pypdf is pure Python): parse_invoice_document
+    runs it through asyncio.to_thread.
+    """
     try:
         from pypdf import PdfReader  # type: ignore
         reader = PdfReader(io.BytesIO(content))
         parts: list[str] = []
+        size = 0
+        deadline = time.monotonic() + _MAX_INVOICE_EXTRACT_SECONDS
         for page in reader.pages[:8]:  # cap at 8 pages
+            if time.monotonic() > deadline:
+                break
             t = page.extract_text()
             if t:
                 parts.append(t)
-        return "\n\n".join(parts).strip()
+                size += len(t)
+                if size >= _MAX_INVOICE_TEXT_CHARS:
+                    break
+        return "\n\n".join(parts).strip()[:_MAX_INVOICE_TEXT_CHARS]
     except Exception:
         return ""
 
@@ -1066,10 +1087,14 @@ def _regex_extract_invoice(text: str) -> dict:
 
     # ── Description (first line-item description) ──────────────────────────
     # Format:  1  Website Development\nSome description\n998314  Amount
-    m = re.search(r'\d+\s+([A-Za-z ]+(?:Development|Design|Marketing|SEO|Content|Maintenance|Support)[^\n]*)\n(.+?)(?:\n\d{6}|\n\d+\s+\d)',
+    # (?<!\d) starts \d+ only at the head of a digit run. Without it the engine
+    # retried from every digit inside a long run, which is quadratic: a PDF
+    # holding a 16k-digit table cell took seconds. The matches are unchanged,
+    # because a match starting mid-run also exists from the head of that run.
+    m = re.search(r'(?<!\d)\d+\s+([A-Za-z ]+(?:Development|Design|Marketing|SEO|Content|Maintenance|Support)[^\n]*)\n(.+?)(?:\n\d{6}|\n\d+\s+\d)',
                   text, re.DOTALL | re.IGNORECASE)
     if not m:
-        m = re.search(r'\d+\s+(.{10,80})\n(.{10,120})', text)
+        m = re.search(r'(?<!\d)\d+\s+(.{10,80})\n(.{10,120})', text)
     if m:
         service_type = m.group(1).strip()
         detail = m.group(2).strip()[:120]
@@ -1150,7 +1175,10 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
         specs = _vision_models_first()
 
     elif is_pdf:
-        text = _extract_pdf_text(content)
+        # pypdf is pure Python and slow on large pages: off the loop, other
+        # requests are still served while it runs. The regex pass gets a
+        # thread too, and its input is bounded by _MAX_INVOICE_TEXT_CHARS.
+        text = await asyncio.to_thread(_extract_pdf_text, content)
         if not text:
             raise ValueError(
                 "Could not extract text from this PDF — it may be a scanned/image-only PDF. "
@@ -1158,7 +1186,7 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
             )
 
         # Pre-extract with regex (fast, reliable for known format)
-        regex_fields = _regex_extract_invoice(text)
+        regex_fields = await asyncio.to_thread(_regex_extract_invoice, text)
 
         # Build a structured context block for the AI so it doesn't need to parse layout
         context_lines = ["RAW INVOICE TEXT (may be in draw-order, not reading order):"]

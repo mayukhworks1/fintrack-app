@@ -35,6 +35,7 @@ from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
 from .services import alerts, scanner_trap
 from .routers.deps import require_auth, require_admin
+from .utils.uploads import UploadSizeLimitMiddleware
 
 logger = logging.getLogger("fintrack")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -234,6 +235,11 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# Refuse an oversized multipart upload before its body is spooled. Added before
+# every other middleware, so it sits innermost: inside CORS, so its 413 still
+# carries the CORS headers, and inside the request-ID middleware.
+app.add_middleware(UploadSizeLimitMiddleware)
 
 # Localhost origins allowed when FRONTEND_URL is not configured (dev default).
 _DEV_CORS_ORIGINS = [

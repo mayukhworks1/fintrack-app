@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Optional
 
@@ -13,6 +14,14 @@ from ..utils.client_ip import client_ip
 from .deps import require_auth, require_editor
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+
+# Export bounds. The rows come from the client, and rendering is CPU-bound:
+# reportlab measured about 1.4 s per 1,000 rows. 50,000 rows is the most the
+# admin exporters page in (100 pages of 500); a PDF that long is unreadable, so
+# PDF stops far sooner and Excel carries the large sets.
+MAX_EXPORT_ROWS = 50_000
+MAX_PDF_EXPORT_ROWS = 5_000
+MAX_EXPORT_COLUMNS = 200
 
 
 def _row_to_dict(row) -> dict[str, Any]:
@@ -148,6 +157,18 @@ async def export_insight(body: ExportBody, request: Request, role: str = Depends
     if not pool:
         raise HTTPException(status_code=503, detail="PostgreSQL unavailable")
     fmt = body.export_format.lower()
+    if len(body.columns) > MAX_EXPORT_COLUMNS:
+        raise HTTPException(status_code=413, detail=f"Exports are limited to {MAX_EXPORT_COLUMNS} columns.")
+    if len(body.rows) > MAX_EXPORT_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Exports are limited to {MAX_EXPORT_ROWS:,} rows. Narrow the filters and try again.",
+        )
+    if fmt == "pdf" and len(body.rows) > MAX_PDF_EXPORT_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"PDF exports are limited to {MAX_PDF_EXPORT_ROWS:,} rows. Narrow the filters, or export to Excel.",
+        )
     meta = default_export_meta(body.page_key, body.source_key, len(body.rows))
     meta.update(body.metadata or {})
     ip = client_ip(request) or None
@@ -172,15 +193,17 @@ async def export_insight(body: ExportBody, request: Request, role: str = Depends
     )
 
     filename_base = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in (body.title or "report")).strip("_") or "report"
+    # Rendering runs in a worker thread: on the loop, a large export stalled
+    # every other request until the file was built.
     if fmt in {"excel", "xls"}:
-        content = build_excel_xml(body.title, body.columns, body.rows, meta)
+        content = await asyncio.to_thread(build_excel_xml, body.title, body.columns, body.rows, meta)
         return Response(
             content=content,
             media_type="application/vnd.ms-excel",
             headers={"Content-Disposition": f'attachment; filename="{filename_base}.xls"'},
         )
     if fmt == "pdf":
-        content = build_simple_pdf(body.title, body.columns, body.rows, meta)
+        content = await asyncio.to_thread(build_simple_pdf, body.title, body.columns, body.rows, meta)
         return Response(
             content=content,
             media_type="application/pdf",

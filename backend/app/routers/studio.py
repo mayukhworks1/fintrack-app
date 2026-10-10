@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from ..db.postgres import get_pool
 from ..services import ai_usage, storage, studio_analyst, studio_ask, studio_data, studio_docs
+from ..utils.uploads import read_upload, upload_limit
 from .deps import (require_auth, require_permission, owner_scope_email,
                    get_effective_permissions)
 
@@ -233,14 +234,9 @@ async def upload_document(
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
-    data = await file.read()
+    data = await read_upload(file, upload_limit(studio_docs.MAX_UPLOAD_BYTES))
     if not data:
         raise HTTPException(400, "That file is empty.")
-    if len(data) > studio_docs.MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            413,
-            f"Files must be under {studio_docs.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        )
 
     filename = file.filename or "document"
     content_type = (file.content_type or "").split(";")[0].strip()

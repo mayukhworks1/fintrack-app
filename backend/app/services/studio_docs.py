@@ -19,8 +19,10 @@ Two decisions worth stating, because both are load-bearing:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import time
 from typing import Iterable
 
 from ..db.postgres import get_pool
@@ -36,6 +38,17 @@ CHUNK_OVERLAP = 400
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_CHUNKS_PER_DOC = 400
+
+# Extraction stops at these bounds. No text past MAX_EXTRACT_CHARS can reach the
+# first MAX_CHUNKS_PER_DOC chunks (each chunk carries at most CHUNK_CHARS of new
+# text), so reading further only burns CPU on text that is thrown away.
+MAX_PDF_PAGES = 1000
+MAX_EXTRACT_CHARS = MAX_CHUNKS_PER_DOC * CHUNK_CHARS
+# A page of drawing operators yields no text, so it never draws on the text
+# budget, yet parsing it is slow: 20 MB of decoded operators took about 30 s.
+# The clock caps how many such pages one document can make the thread parse.
+# A real 1,000-page PDF extracts in a few seconds.
+MAX_EXTRACT_SECONDS = 60
 
 SUPPORTED_MIME = {
     "application/pdf": "pdf",
@@ -78,30 +91,45 @@ def extract_pages(data: bytes, kind: str) -> list[str]:
     """
     Return one string per page. A plain-text file is a single page — it has no
     pagination to report, and inventing one would make citations lie.
+
+    Synchronous and CPU-bound: callers on the event loop run it through
+    asyncio.to_thread.
     """
     if kind == "pdf":
         from io import BytesIO
         from pypdf import PdfReader
 
         reader = PdfReader(BytesIO(data))
-        return [_tidy(page.extract_text() or "") for page in reader.pages]
+        pages: list[str] = []
+        remaining = MAX_EXTRACT_CHARS
+        deadline = time.monotonic() + MAX_EXTRACT_SECONDS
+        for index in range(min(len(reader.pages), MAX_PDF_PAGES)):
+            if remaining <= 0 or time.monotonic() > deadline:
+                # Past the text or time budget the page is counted but not read,
+                # so the page count stays true and citations keep their numbering.
+                pages.append("")
+                continue
+            text = _tidy(reader.pages[index].extract_text() or "")[:remaining]
+            remaining -= len(text)
+            pages.append(text)
+        return pages
 
     # UTF-16 is tried only behind its BOM. Without that check it wins on almost
     # any even-length byte string — decoding "café terms" into CJK mojibake
     # rather than raising — and the file is silently ingested as nonsense.
     if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
         try:
-            return [_tidy(data.decode("utf-16"))]
+            return [_tidy(data.decode("utf-16"))[:MAX_EXTRACT_CHARS]]
         except UnicodeDecodeError:
             pass
     for encoding in ("utf-8-sig", "utf-8"):
         try:
-            return [_tidy(data.decode(encoding))]
+            return [_tidy(data.decode(encoding))[:MAX_EXTRACT_CHARS]]
         except UnicodeDecodeError:
             continue
     # latin-1 maps every byte to a character, so it cannot fail — a last resort
     # that keeps the words readable even when the encoding was never declared.
-    return [_tidy(data.decode("latin-1"))]
+    return [_tidy(data.decode("latin-1"))[:MAX_EXTRACT_CHARS]]
 
 
 # --- chunking --------------------------------------------------------------
@@ -201,7 +229,9 @@ async def ingest_document(document_id: str) -> None:
         if not kind:
             return await fail("This file type cannot be read as text.")
 
-        pages = extract_pages(data, kind)
+        # pypdf is pure Python: run on the loop, a large or hostile PDF froze
+        # every request for as long as extraction took.
+        pages = await asyncio.to_thread(extract_pages, data, kind)
         chunks = chunk_pages(pages)
         if not chunks:
             return await fail(

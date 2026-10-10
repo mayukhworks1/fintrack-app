@@ -1076,3 +1076,64 @@ async def sync_loop() -> None:
                 await run_sync(incremental=True)
         except Exception as exc:
             logger.error("sync_loop unhandled error: %s", exc)
+        await _maybe_prune_sync_log()
+
+
+# ── sync_log retention ───────────────────────────────────────────────────────
+#
+# run_sync writes a sync_log row per table on every 30 s pass, changed or not:
+# about 14,400 rows a day, which nothing ever deleted, on a 1 GB Postgres that
+# the mirrors and the audit log share. Rows past the retention window are
+# deleted in batches so no single statement runs long, and a large backlog
+# clears over a few hourly passes instead of in one.
+
+_SYNC_LOG_PRUNE_INTERVAL    = 3600     # seconds between prunes
+_SYNC_LOG_PRUNE_BATCH       = 10_000   # rows per DELETE
+_SYNC_LOG_PRUNE_MAX_BATCHES = 50       # per prune
+_last_sync_log_prune_at: Optional[float] = None
+
+
+async def prune_sync_log(pool, retention_days: int) -> int:
+    """Delete sync_log rows older than `retention_days`. Returns the number deleted."""
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)
+    deleted = 0
+    for _ in range(_SYNC_LOG_PRUNE_MAX_BATCHES):
+        status = await pool.execute(
+            """
+            DELETE FROM sync_log
+             WHERE id IN (SELECT id FROM sync_log WHERE synced_at < $1 LIMIT $2)
+            """,
+            cutoff, _SYNC_LOG_PRUNE_BATCH,
+        )
+        count = int(str(status or "DELETE 0").rsplit(" ", 1)[-1])
+        deleted += count
+        if count < _SYNC_LOG_PRUNE_BATCH:
+            break
+    return deleted
+
+
+async def _maybe_prune_sync_log() -> None:
+    """
+    Prune sync_log at most once per _SYNC_LOG_PRUNE_INTERVAL.
+
+    Never raises: retention is housekeeping, and a failed prune must not take
+    the sync loop down with it. A failure waits for the next interval too,
+    rather than retrying every 30 s against a database that is struggling.
+    """
+    global _last_sync_log_prune_at
+    now = time.monotonic()
+    if _last_sync_log_prune_at is not None and now - _last_sync_log_prune_at < _SYNC_LOG_PRUNE_INTERVAL:
+        return
+    _last_sync_log_prune_at = now
+    pool = get_pool()
+    if not pool:
+        return
+    days = settings.sync_log_retention_days
+    try:
+        deleted = await prune_sync_log(pool, days)
+        if deleted:
+            logger.info("sync_log retention: deleted %d rows older than %d days", deleted, days)
+    except Exception as exc:
+        logger.warning("sync_log retention prune failed: %s", exc)

@@ -20,6 +20,8 @@ from ..db.postgres import get_pool
 from ..config import settings
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
+from ..utils.csv_safe import csv_safe_row
+from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
@@ -309,7 +311,7 @@ async def upload_attachment(
     try:
         await _require_web_permission(request, "module.invoices.edit")
         await _assert_web_invoice_owner(service, record_id, request)
-        content = await file.read()
+        content = await read_upload(file, upload_limit())
         return await service.upload_attachment_to_field(
             record_id=record_id,
             field_name=field_name,
@@ -424,7 +426,7 @@ async def export_web_invoices(
     writer.writerow([label for _, label in COLS])
     for r in records:
         f = r.get("fields", {})
-        writer.writerow([f.get(key, "") for key, _ in COLS])
+        writer.writerow(csv_safe_row(f.get(key, "") for key, _ in COLS))
 
     filename = f"web_invoices_{_date.today().isoformat()}.csv"
     return _StreamingResponse(
@@ -626,9 +628,7 @@ async def parse_web_invoice(
     from ..services.openrouter import parse_invoice_document
 
     MAX_BYTES = 10 * 1024 * 1024
-    content = await file.read()
-    if len(content) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    content = await read_upload(file, upload_limit(MAX_BYTES))
     mime = file.content_type or "application/octet-stream"
     fname = file.filename or ""
     if mime in ("application/octet-stream", "binary/octet-stream"):
