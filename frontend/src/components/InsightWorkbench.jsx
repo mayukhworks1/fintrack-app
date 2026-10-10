@@ -58,6 +58,9 @@ export default function InsightWorkbench({
   factoryWidgetIds = [],
   sourceOptions = [],
   currentFilters = {},
+  // What the sources' rows depend on, when that is not simply currentFilters
+  // (Dashboard's filters carry its poll time, which moves every 5 s).
+  rowsKey,
   onApplyWidgets,
   onApplyCustomBlocks,
 }) {
@@ -83,7 +86,7 @@ export default function InsightWorkbench({
   // loaded under. The parent rebuilds its loaders when its period changes, and
   // a cache keyed by source alone kept serving the old period's rows to
   // exports and custom blocks labelled with the new one.
-  const filtersKey = JSON.stringify(currentFilters || {})
+  const filtersKey = JSON.stringify(rowsKey === undefined ? (currentFilters || {}) : rowsKey)
   const filtersKeyRef = useRef(filtersKey)
   filtersKeyRef.current = filtersKey
   const [sourceRowsCache, setSourceRowsCache] = useState({ filtersKey, rows: NO_SOURCE_ROWS })

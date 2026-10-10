@@ -27,6 +27,17 @@ describe('neutralizeCsvValue', () => {
     expect(neutralizeCsvValue('-12.5')).toBe('-12.5')
     expect(neutralizeCsvValue('+18')).toBe('+18')
     expect(neutralizeCsvValue('1e3')).toBe('1e3')
+    // Formatted figures (AI dashboard cells, published sheets) are numbers too.
+    expect(neutralizeCsvValue('-12.5%')).toBe('-12.5%')
+    expect(neutralizeCsvValue('-1,500.25')).toBe('-1,500.25')
+    expect(csvCell('-1,500')).toBe('"-1,500"')
+  })
+
+  it('does not let a numeric-looking prefix smuggle a formula through', () => {
+    expect(neutralizeCsvValue('-1,500+cmd|\' /C calc\'!A0')).toBe(`'-1,500+cmd|' /C calc'!A0`)
+    expect(neutralizeCsvValue('-12%+HYPERLINK("x")')).toBe(`'-12%+HYPERLINK("x")`)
+    expect(neutralizeCsvValue('-')).toBe(`'-`)
+    expect(neutralizeCsvValue('+91 98765 43210')).toBe(`'+91 98765 43210`)
   })
 
   it('leaves ordinary text alone', () => {

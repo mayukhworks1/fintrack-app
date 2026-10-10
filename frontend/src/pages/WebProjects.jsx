@@ -541,7 +541,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
 
 // ── Resource Drawer (polished portal, same style as ProjectDrawer) ─────────────
 
-function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [] }) {
+function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving, isEdit, projectNames = [], deleteLabel = 'Delete' }) {
   const dialog = useDialog({ label: 'Resource', onClose, active: open })
   const EMPTY = {
     resource_name: '', role: '', type_: 'Employee',
@@ -774,7 +774,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
                 color: '#f87171',
               }}>
               <Trash2 size={13} className="inline mr-1" />
-              {confirmDel ? 'Confirm?' : 'Delete'}
+              {confirmDel ? 'Confirm?' : deleteLabel}
             </button>
           ) : <div />}
           <div className="flex gap-2 ml-auto">
@@ -1516,7 +1516,8 @@ export function ProjectsWorkspace() {
     setSaving(true)
     try {
       if (drawer === 'new-resource') {
-        payload.project_id = selectedProjectId
+        // The drawer's picker starts on this project; keep a different pick.
+        payload.project_id = payload.project_id || selectedProjectId
         await api.webProjects.resources.create(payload)
         toast('Resource added!', 'success')
       } else {
@@ -1815,6 +1816,7 @@ export function ProjectsWorkspace() {
         onDelete={drawer === 'edit-resource' ? () => handleDeleteResource(editingRecord?.id) : undefined}
         saving={saving}
         isEdit={drawer === 'edit-resource'}
+        deleteLabel="Remove"
         // No project picker when editing: a choice there was never saved
         // (links change through Assign), so offering one misleads.
         projectNames={drawer === 'edit-resource' ? [] : projectNames}

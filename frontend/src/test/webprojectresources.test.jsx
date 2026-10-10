@@ -97,6 +97,30 @@ describe('project-scoped resource actions', () => {
     expect(api.webProjects.resources.create.mock.calls[0][0]).toMatchObject({ resource_name: 'Priya', project_id: 'recProjA' })
   })
 
+  it('a new resource goes to the project picked in the drawer, not always the open one', async () => {
+    render(<ProjectsWorkspace />)
+    fireEvent.click(await screen.findByRole('button', { name: /Atlas Rebuild/ }))
+    await screen.findByText('Rahul Sharma')
+    fireEvent.click(screen.getByRole('button', { name: /New/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByPlaceholderText('e.g. Rahul Sharma'), { target: { value: 'Priya' } })
+    fireEvent.change(within(dialog).getByDisplayValue('Atlas Rebuild'), { target: { value: 'recProjB' } })
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: /Add Resource/ })) })
+    await waitFor(() => expect(api.webProjects.resources.create).toHaveBeenCalledTimes(1))
+    expect(api.webProjects.resources.create.mock.calls[0][0]).toMatchObject({ resource_name: 'Priya', project_id: 'recProjB' })
+  })
+
+  it("the edit drawer's remove button unlinks from this project and says so", async () => {
+    const [edit] = await openResourceRow()
+    fireEvent.click(edit)
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Remove$/ }))
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: /Confirm\?/ })) })
+
+    await waitFor(() => expect(api.webProjects.resources.unassign).toHaveBeenCalledWith('recRes1', 'recProjA'))
+    expect(api.webProjects.resources.delete).not.toHaveBeenCalled()
+  })
+
   it('removing a resource from the list unlinks it from this project only', async () => {
     const [, remove] = await openResourceRow()
     fireEvent.click(remove)

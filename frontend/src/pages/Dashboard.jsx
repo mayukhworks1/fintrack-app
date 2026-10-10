@@ -423,6 +423,8 @@ export default function Dashboard() {
               factoryWidgetIds={DASHBOARD_DEFAULT_WIDGET_IDS}
               sourceOptions={dashboardSourceOptions}
               currentFilters={{ updated_at: lastUpdated || null }}
+              // lastUpdated moves on every poll; key loaded rows to real changes.
+              rowsKey={changeCount}
               onApplyWidgets={setActiveWidgetIds}
               onApplyCustomBlocks={(blocks, rowsByKey) => {
                 setActiveCustomBlocks(blocks)

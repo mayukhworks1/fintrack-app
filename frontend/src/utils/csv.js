@@ -14,7 +14,9 @@
  * Pages storage format, not an export, and deliberately keeps formulas.)
  */
 const FORMULA_START = /^[=+\-@\t\r]/
-const PLAIN_NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/
+// Digits only (grouping commas and a trailing % allowed): no function, cell
+// reference or DDE call fits in that, so "-1,500" and "-12%" stay numbers.
+const PLAIN_NUMBER = /^[+-]?(\d[\d,]*(\.\d*)?|\.\d+)([eE][+-]?\d+)?%?$/
 
 /** The cell's text, with formula-starting text neutralised. Not yet quoted. */
 export function neutralizeCsvValue(value) {

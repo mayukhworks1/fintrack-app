@@ -99,6 +99,32 @@ describe('InsightWorkbench source rows', () => {
     expect(onApply.mock.calls.at(-1)[0]).toEqual(blocks)
   })
 
+  it('keys rows to rowsKey when the page passes one, not to a ticking filter', async () => {
+    // Dashboard's filters are { updated_at: <poll time> }, which moves every
+    // 5 s. Keyed on that, an open modal reloaded 500 projects on every poll
+    // and a freshly added block lost its rows a few seconds later.
+    const onApply = vi.fn()
+    const base = propsFor('all', onApply)
+    const at = (t, rowsKey) => ({ ...base, currentFilters: { updated_at: t }, rowsKey })
+    const { rerender } = render(<InsightWorkbench {...at('10:00:00', 0)} />)
+    fireEvent.click(screen.getByRole('button', { name: /Custom dashboards/ }))
+    await waitFor(() => expect(screen.getByText('2 rows loaded')).toBeInTheDocument())
+    fireEvent.change(screen.getByDisplayValue('KPI'), { target: { value: 'table' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add block/ }))
+    const applied = onApply.mock.calls.length
+
+    rerender(<InsightWorkbench {...at('10:00:05', 0)} />)
+    rerender(<InsightWorkbench {...at('10:00:10', 0)} />)
+    await act(async () => {})
+    expect(base.sourceOptions[0].loadRows).toHaveBeenCalledTimes(1)
+    expect(onApply).toHaveBeenCalledTimes(applied)
+
+    // A real change does move the rows on.
+    rerender(<InsightWorkbench {...at('10:00:15', 1)} />)
+    await waitFor(() => expect(base.sourceOptions[0].loadRows).toHaveBeenCalledTimes(2))
+    expect(onApply.mock.calls.at(-1)[1]['period-invoices']).toBeUndefined()
+  })
+
   it('reloads the preview for the new period while a modal stays open', async () => {
     const { rerender } = render(<InsightWorkbench {...propsFor('all')} />)
     fireEvent.click(screen.getByRole('button', { name: /Custom dashboards/ }))
