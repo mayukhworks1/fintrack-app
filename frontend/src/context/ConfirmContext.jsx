@@ -87,9 +87,10 @@ export function ConfirmProvider({ children }) {
         onClose={() => settle(false)}
         title={state?.title}
         width={440}
-        /* Above Drawer/overlay z-indexes so a confirmation raised from inside
-           another dialog is not painted behind it. */
-        zIndex={120}
+        /* Above every drawer and overlay in the app (Pages panels sit at
+           1000-2000, invoice detail at 9999) so a confirmation raised from
+           inside one of them is never painted behind it. */
+        zIndex={10000}
         footer={
           <>
             <button className="btn-ghost" onClick={() => settle(false)}>

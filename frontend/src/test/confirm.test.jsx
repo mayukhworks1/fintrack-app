@@ -105,3 +105,13 @@ describe('confirm dialog', () => {
     expect(screen.getByRole('button', { name: 'Delete user' })).toBeInTheDocument()
   })
 })
+
+describe('confirm dialog stacking', () => {
+  it('sits above the Pages analytics drawer and other full-screen overlays', async () => {
+    setup()
+    await open()
+    const z = Number(screen.getByRole('dialog').style.zIndex)
+    // PagesManager drawers use 1000/2000, InvoiceDetail uses 9999.
+    expect(z).toBeGreaterThan(9999)
+  })
+})
