@@ -1,11 +1,23 @@
-# FinTrack is a private finance workspace, not a public site.
-#
-# Disallow is deliberately total. Beyond the signed-in app, /view/<token> and
-# /p/<slug> serve real client invoice and project data to anyone holding the
-# link — those links are unguessable, but an indexed one stops being private.
-# There is nothing here that benefits from being crawled.
+# FinTrack's public pages (overview, features, how it works, security,
+# customise, FAQ, privacy, terms) may be indexed. Everything else is a private
+# workspace: the signed-in app, and the /p/<slug> and /view/<token> links,
+# which serve real client data to anyone holding the link — an indexed one
+# would stop being private. Google applies the most specific rule, so each
+# Allow below wins over the blanket Disallow only for its exact path.
 
 User-agent: *
+Allow: /$
+Allow: /features$
+Allow: /how-it-works$
+Allow: /security$
+Allow: /customise$
+Allow: /faq$
+Allow: /privacy$
+Allow: /terms$
+Allow: /assets/
+Allow: /media/
+Allow: /og-image.png
+Allow: /favicon.svg
 Disallow: /
 
-# No sitemap: nothing on this domain is meant to be discovered by search.
+Sitemap: https://twfintracker.worksmayukh.space/sitemap.xml

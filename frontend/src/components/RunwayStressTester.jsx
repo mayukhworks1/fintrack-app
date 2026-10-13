@@ -109,7 +109,7 @@ export default function RunwayStressTester() {
             {/* Slider 1: Cash Reserve */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                <label htmlFor="runway-slider-0" className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                   Opening Cash Reserve
                 </label>
                 <span className="font-extrabold text-xs sm:text-sm tabular-nums" style={{ color: 'var(--accent)' }}>
@@ -117,6 +117,7 @@ export default function RunwayStressTester() {
                 </span>
               </div>
               <input
+                id="runway-slider-0"
                 type="range"
                 min="1000000"
                 max="10000000"
@@ -131,7 +132,7 @@ export default function RunwayStressTester() {
             {/* Slider 2: Monthly Burn */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                <label htmlFor="runway-slider-1" className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                   Monthly Operating Burn
                 </label>
                 <span className="font-extrabold text-xs sm:text-sm tabular-nums text-rose-500">
@@ -139,6 +140,7 @@ export default function RunwayStressTester() {
                 </span>
               </div>
               <input
+                id="runway-slider-1"
                 type="range"
                 min="200000"
                 max="2000000"
@@ -153,7 +155,7 @@ export default function RunwayStressTester() {
             {/* Slider 3: Delay Days */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                <label htmlFor="runway-slider-2" className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                   Average Client Delay Window
                 </label>
                 <span className="font-extrabold text-xs sm:text-sm tabular-nums text-amber-500">
@@ -161,6 +163,7 @@ export default function RunwayStressTester() {
                 </span>
               </div>
               <input
+                id="runway-slider-2"
                 type="range"
                 min="0"
                 max="90"

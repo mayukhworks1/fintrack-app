@@ -146,7 +146,7 @@ export default function RoiCalculator() {
           {/* Monthly Invoicing Volume Slider */}
           <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+              <label htmlFor="roi-slider-0" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                 <IndianRupee size={12} className="text-[var(--accent)]" />
                 Monthly Billed Turnover
               </label>
@@ -155,6 +155,7 @@ export default function RoiCalculator() {
               </span>
             </div>
             <input
+              id="roi-slider-0"
               type="range"
               min={500000}
               max={50000000}
@@ -173,7 +174,7 @@ export default function RoiCalculator() {
           {/* Payment Delay Days Slider */}
           <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+              <label htmlFor="roi-slider-1" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                 <Clock size={12} className="text-[var(--warn)]" />
                 Average Payment Lag (DSO)
               </label>
@@ -183,6 +184,7 @@ export default function RoiCalculator() {
               </span>
             </div>
             <input
+              id="roi-slider-1"
               type="range"
               min={10}
               max={90}
@@ -201,7 +203,7 @@ export default function RoiCalculator() {
           {/* Cost of Working Capital Overdraft */}
           <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+              <label htmlFor="roi-slider-2" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                 <Zap size={12} className="text-emerald-500" />
                 Overdraft / Credit Line APR
               </label>
@@ -210,6 +212,7 @@ export default function RoiCalculator() {
               </span>
             </div>
             <input
+              id="roi-slider-2"
               type="range"
               min={8}
               max={20}
@@ -228,7 +231,7 @@ export default function RoiCalculator() {
           {/* Invoices per month */}
           <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+              <label htmlFor="roi-slider-3" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                 <Activity size={12} className="text-[var(--accent)]" />
                 Invoices Processed Per Month
               </label>
@@ -237,6 +240,7 @@ export default function RoiCalculator() {
               </span>
             </div>
             <input
+              id="roi-slider-3"
               type="range"
               min={10}
               max={400}

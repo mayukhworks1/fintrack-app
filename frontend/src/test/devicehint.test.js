@@ -20,6 +20,7 @@ describe('device hint', () => {
       value: { getCurrentPosition: (ok) => { deliver = ok } },   // never answers on its own
       configurable: true,
     })
+    localStorage.setItem('fintrack-auth-token', 't')
     const mod = await import('../utils/deviceInfo')
 
     const t0 = performance.now()
@@ -32,6 +33,18 @@ describe('device hint', () => {
     deliver({ coords: { latitude: 12.9716, longitude: 77.5946, accuracy: 20 } })
     expect(decode(mod.currentDeviceHint()).browserGeo).toEqual({ lat: 12.9716, lon: 77.5946, accuracyM: 20 })
     expect(decode(await mod.getDeviceHintHeader()).browserGeo).not.toBeNull()
+  })
+
+  it('never asks a visitor who is not signed in for their location', async () => {
+    vi.resetModules()
+    localStorage.removeItem('fintrack-auth-token')
+    const ask = vi.fn()
+    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
+    Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition: ask }, configurable: true })
+    const mod = await import('../utils/deviceInfo')
+    await mod.getDeviceHintHeader()
+    await mod.getDeviceHintHeader()
+    expect(ask).not.toHaveBeenCalled()
   })
 
   it('is empty, not a wait, before the first collection completes', async () => {

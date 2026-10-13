@@ -397,7 +397,7 @@ export default function Features() {
               <div className="rounded-xl overflow-hidden mb-5 relative"
                    style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
                 {viewMode === 'demo' && (
-                  <div aria-hidden="true">
+                  <div role="group" aria-label={`${f.title}: interactive demo with illustrative figures`}>
                     {DEMOS[f.demo]}
                   </div>
                 )}

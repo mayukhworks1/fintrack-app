@@ -32,11 +32,11 @@ const ROUTES = [
   // PageViewer replaces both of these with the page's own title and summary
   // once it loads; this is only what the tab reads in the meantime.
   ['/p/:slug',      'Page',          'A page shared with you from FinTrack.'],
-  ['/features',     'Features',      'Explore FinTrack modules, single-ledger architecture, and live sandboxes.'],
-  ['/security',     'Security',      'Enterprise security, cryptographic access controls, and zero-retention policies.'],
-  ['/how-it-works', 'How It Works',  'How FinTrack synchronizes operations, invoices, and tax on one set of records.'],
-  ['/customise',    'Customise',     'White-label branding, custom domains, and theme configuration.'],
-  ['/faq',          'FAQ',           'Frequently asked questions about FinTrack, self-hosting, and compliance.'],
+  ['/features',     'Features',      'Eleven modules on one set of records: invoices with ageing bands, projects and margin, GST and TDS ledger, analytics, reports, document search and an AI financial query engine.'],
+  ['/security',     'Security',      'Invitation-only access with administrator approval, permissions down to the action, data scoped at the query, and every request recorded.'],
+  ['/how-it-works', 'How It Works',  'FinTrack sits on the records your team already keeps, mirrors them into Postgres for speed, and compiles plain-language questions into SQL you can read.'],
+  ['/customise',    'Customise',     'Per-person permissions, brand colours, your own domain and invoice numbering, and modules built for your process.'],
+  ['/faq',          'FAQ',           'Answers about how FinTrack handles invoices, GST and TDS, where your data lives, how the AI analyst works, and getting started.'],
   ['/terms',        'Terms of Service', 'FinTrack platform terms of service, governance, and institutional SLA.'],
   ['/privacy',      'Privacy Policy',   'FinTrack data isolation, zero foundation model training guarantee, and privacy policy.'],
   ['/',             'Dashboard',     'Receivables, project health and invoice activity at a glance.'],

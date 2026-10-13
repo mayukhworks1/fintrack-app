@@ -123,7 +123,7 @@ export default function TaxFlowSimulator() {
             {/* Monthly Billed Slider */}
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                <label htmlFor="taxflow-slider-0" className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
                   Monthly Billed (Pre-Tax)
                 </label>
                 <span className="font-extrabold text-sm tabular-nums" style={{ color: 'var(--accent)' }}>
@@ -131,6 +131,7 @@ export default function TaxFlowSimulator() {
                 </span>
               </div>
               <input
+                id="taxflow-slider-0"
                 type="range"
                 min={500000}
                 max={10000000}

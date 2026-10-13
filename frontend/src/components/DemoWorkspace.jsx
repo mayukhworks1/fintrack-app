@@ -156,12 +156,15 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid }) {
 
   useEffect(() => {
     const node = panelRef.current
-    node?.focus()
+    // preventScroll: the guided tour opens this panel on its own, and a plain
+    // focus() scrolled the whole landing page down to it while someone was
+    // still reading the headline.
+    node?.focus({ preventScroll: true })
     const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
     node?.addEventListener('keydown', onKey)
     return () => {
       node?.removeEventListener('keydown', onKey)
-      returnFocusRef?.current?.focus?.()
+      returnFocusRef?.current?.focus?.({ preventScroll: true })
     }
   }, [onClose, returnFocusRef])
 

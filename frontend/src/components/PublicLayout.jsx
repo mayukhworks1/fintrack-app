@@ -245,7 +245,7 @@ export default function PublicLayout({ children }) {
 
       <CommandPalette />
 
-      <main className="flex-1">{children}</main>
+      <main key={pathname} className="flex-1 ft-page-enter">{children}</main>
 
       <footer className="mx-auto w-full px-4 sm:px-6 pb-10" style={{ maxWidth: 1120 }}>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6"

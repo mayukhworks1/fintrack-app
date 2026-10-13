@@ -35,6 +35,7 @@ import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
 } from '../content/publicContent'
 import ScreenGallery from '../components/ScreenGallery'
+import ModuleMarquee from '../components/ModuleMarquee'
 
 const LD = graph(APP_LD, FAQ_LD)
 
@@ -84,12 +85,14 @@ export default function Landing() {
           never move. Clip cuts the grain off at the edges just the same. */}
       <section ref={heroLight} className="relative" style={{ overflow: 'clip' }}>
         <Grain />
+        <div className="ft-aurora" aria-hidden="true"><span /><span /><span /></div>
 
         <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
           <Rising className="ft-drift" style={{ maxWidth: 820 }}>
             <span className="ft-up inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
                   style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+              <span className="ft-live-dot" aria-hidden="true" />
               Institutional Financial Control Platform
             </span>
 
@@ -102,7 +105,7 @@ export default function Landing() {
               <span className="ft-rise"><span>The delivery and the money,</span></span>
               <span className="ft-rise">
                 <span style={{ transitionDelay: '110ms', color: 'var(--accent)' }}>
-                  <em>on one set of records</em>.
+                  <em className="ft-shine">on one set of records</em>.
                 </span>
               </span>
             </h1>
@@ -184,6 +187,13 @@ export default function Landing() {
             </div>
           ))}
         </Stagger>
+      </section>
+
+      {/* ── Modules, moving ─────────────────────────────────────────────── */}
+      <section className="pb-14 sm:pb-20" aria-label="Modules">
+        <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: 1240 }}>
+          <Reveal><ModuleMarquee /></Reveal>
+        </div>
       </section>
 
       {/* ── Every screen ────────────────────────────────────────────────

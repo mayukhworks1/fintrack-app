@@ -168,14 +168,21 @@ export function currentDeviceHint() {
  * Async because UA Client Hints high-entropy resolution is async, but the
  * result is cached so subsequent calls are synchronous-fast.
  */
+// Only a signed-in user is asked for their location (it feeds the audit and
+// login records). A visitor reading the public site must never see a
+// permission prompt for it.
+function _signedIn() {
+  try { return !!localStorage.getItem('fintrack-auth-token') } catch { return false }
+}
+
 export async function getDeviceHintHeader() {
+  if (_signedIn()) _startGeo()          // no-op after the first call
   if (_cached) return _cached
   if (_cachedPromise) return _cachedPromise
   _cachedPromise = (async () => {
     try {
       _baseInfo = await _collect()
       _cached = _encode({ ..._baseInfo, browserGeo: _geo })
-      _startGeo()                       // background; never awaited
       return _cached
     } catch {
       _cached = ''
