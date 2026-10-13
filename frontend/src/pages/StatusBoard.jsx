@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
-import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, Loader2, ClipboardList, Sparkles, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
+import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Sparkles, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -27,6 +27,7 @@ import { AIUpdateModal, AppearancePanel, ColumnSelector, ConfirmModal, ManageSha
 import { DetailPanel, KanbanColumn, ListViewRow, StatusCard, StatusDashboard } from './statusboard/StatusViews'
 import { useRecordMotion } from '../hooks/useRecordMotion'
 import { BOARD_GROUP_OPTIONS, CARD_GROUP_OPTIONS, CARD_GROUP_SORT_OPTIONS, CARD_RECORD_SORT_OPTIONS, DEFAULT_COLUMNS, EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT, LIST_COLUMN_META, STATUS_FILTER_FIELDS, STATUS_OPTIONS_FALLBACK, clientColor, encodeViewConfig, getListLayout, getViewConfigFromUrl, hexToRgba, resolveTheme, sanitizeAttachmentsForSave, statusStyle } from './statusboard/utils'
+import SkeletonList from '../components/SkeletonList'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 // Fallback only — real options are fetched dynamically from the picklist API
@@ -825,9 +826,7 @@ export default function StatusBoard() {
 
         {/* ── Loading ── */}
         {loading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-3)' }} />
-          </div>
+          <div className="card p-5"><SkeletonList rows={6} label="Loading status board" /></div>
         )}
 
         {/* ── Error ── */}

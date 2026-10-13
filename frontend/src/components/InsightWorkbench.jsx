@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BarChart3, Download, GripVertical, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useDialog } from '../hooks/useDialog'
+import SkeletonList from './SkeletonList'
 
 const NO_SOURCE_ROWS = {}
 
@@ -564,7 +565,7 @@ export default function InsightWorkbench({
             >
               <div className="space-y-2">
                 {loadingDashboards ? (
-                  <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
+                  <SkeletonList rows={3} compact />
                 ) : dashboardConfigs.length === 0 ? (
                   <p className="text-sm" style={{ color: 'var(--text-3)' }}>No saved dashboards yet.</p>
                 ) : dashboardConfigs.map(config => (
@@ -906,7 +907,7 @@ export default function InsightWorkbench({
             >
               <div className="space-y-2 mb-4">
                 {loadingReports ? (
-                  <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
+                  <SkeletonList rows={3} compact />
                 ) : reportConfigs.length === 0 ? (
                   <p className="text-sm" style={{ color: 'var(--text-3)' }}>No saved report presets yet.</p>
                 ) : reportConfigs.map(config => (

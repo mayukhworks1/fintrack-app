@@ -20,6 +20,7 @@ import {
   MoreHorizontal, EyeOff, Check, ArrowUpDown,
 } from 'lucide-react'
 import Modal from '../components/Modal'
+import SkeletonList from '../components/SkeletonList'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -517,7 +518,7 @@ function AnalyticsDrawer({ page, onClose }) {
 
         <div style={{ flex:1, padding:isMobile?'12px 16px':'16px 24px', overflow:'auto' }}>
           {loading ? (
-            <div style={{ color:'var(--text-2)', fontSize:14, padding:40, textAlign:'center' }}>Loading…</div>
+            <SkeletonList rows={6} label="Loading views" />
           ) : !data?.items?.length ? (
             <div style={{ color:'var(--text-2)', fontSize:14, padding:'60px 0', textAlign:'center' }}>
               <div style={{ fontSize:40, marginBottom:12 }}>👁</div>No views yet.
@@ -1239,7 +1240,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
             style={{ fontSize:12, color:'var(--accent)', border:'none', background:'none', cursor:'pointer', padding:'2px 4px' }}>↻</button>
         </div>
         {loading ? (
-          <div style={{ padding:20, fontSize:13, color:'var(--text-2)', textAlign:'center' }}>Loading…</div>
+          <div style={{ padding:'12px 16px' }}><SkeletonList rows={4} compact label="Loading history" /></div>
         ) : !versions?.length ? (
           <div style={{ padding:'24px 16px', fontSize:13, color:'var(--text-2)', textAlign:'center' }}>
             <div style={{ fontSize:28, marginBottom:8 }}>📭</div>

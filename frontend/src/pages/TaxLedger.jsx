@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
+import SkeletonList from '../components/SkeletonList'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GST_RATE   = 0.18   // 18%
@@ -930,7 +931,10 @@ export default function TaxLedger({ source = 'main' } = {}) {
                 </div>
               )
             })}
-            {clientRows.length === 0 && (
+            {clientRows.length === 0 && loading && !listData && (
+              <SkeletonList rows={5} label="Loading tax ledger" />
+            )}
+            {clientRows.length === 0 && !(loading && !listData) && (
               <div className="text-center py-12" style={{ color: 'var(--text-3)' }}>
                 <ReceiptText size={32} className="mx-auto mb-2 opacity-30" />
                 <p>No invoices in this period</p>

@@ -7,6 +7,7 @@ import {
 import { api } from '../services/api'
 import { DocPreviewModal, AttachmentList, fileTypeInfo } from '../components/DocPreviewModal'
 import { useDialog } from '../hooks/useDialog'
+import SkeletonList from '../components/SkeletonList'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -1631,10 +1632,13 @@ export default function SharedView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f1f5f9' }}>
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin" style={{ color: '#3b82f6' }} />
-          <p className="text-sm font-medium" style={{ color: '#64748b' }}>Loading shared view…</p>
+      <div className="min-h-screen" style={{ background: '#f1f5f9' }}>
+        <div className="max-w-5xl mx-auto px-4 py-10">
+          <div className="skeleton" style={{ height: 28, width: '40%', marginBottom: 10 }} />
+          <div className="skeleton" style={{ height: 12, width: '22%', marginBottom: 28 }} />
+          <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+            <SkeletonList rows={7} label="Loading shared view" />
+          </div>
         </div>
       </div>
     )
