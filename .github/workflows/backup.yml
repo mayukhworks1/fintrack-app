@@ -1,0 +1,79 @@
+name: Nightly database backup
+
+# A full copy of the PostgreSQL database, compressed, saved to Google Drive
+# through the Apps Script in scripts/backup/drive-upload.gs. Setup and restore
+# steps: docs/BACKUPS.md. A failed run emails the repository owner.
+#
+# The dump is never stored as a workflow artifact: it holds login accounts and
+# page content, and artifacts are readable by anyone who can read the repo.
+
+on:
+  schedule:
+    - cron: '30 20 * * *'   # 02:00 IST every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      DRIVE_URL: ${{ secrets.BACKUP_DRIVE_URL }}
+      BACKUP_SECRET: ${{ secrets.BACKUP_SECRET }}
+    steps:
+      - name: Check settings
+        run: |
+          missing=""
+          [ -n "$DATABASE_URL" ]  || missing="$missing BACKUP_DATABASE_URL"
+          [ -n "$DRIVE_URL" ]     || missing="$missing BACKUP_DRIVE_URL"
+          [ -n "$BACKUP_SECRET" ] || missing="$missing BACKUP_SECRET"
+          if [ -n "$missing" ]; then
+            echo "::error::Backup is not set up yet. Missing repository secrets:$missing. See docs/BACKUPS.md."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 client
+        # The server runs PostgreSQL 17; an older pg_dump refuses to dump it.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common > /dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17 > /dev/null
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Dump database
+        run: |
+          set -euo pipefail
+          name="fintrack-$(TZ=Asia/Kolkata date +%Y-%m-%d-%H%M).sql.gz"
+          /usr/lib/postgresql/17/bin/pg_dump --no-owner --no-privileges "$DATABASE_URL" | gzip -9 > "$name"
+          size=$(stat -c%s "$name")
+          if [ "$size" -lt 1000 ]; then
+            echo "::error::The backup file is only $size bytes, so something went wrong."
+            exit 1
+          fi
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+          echo "Dump: $name, $size bytes"
+
+      - name: Save to Google Drive
+        run: |
+          set -euo pipefail
+          base64 -w0 "$BACKUP_FILE" > data.b64
+          jq -n --arg s "$BACKUP_SECRET" --arg n "$BACKUP_FILE" --rawfile d data.b64 \
+            '{secret: $s, name: $n, data: $d}' > payload.json
+          # Apps Script answers a POST with a redirect to its result; -L follows it.
+          resp=$(curl -sS -L --max-time 300 -H 'Content-Type: application/json' \
+            --data-binary @payload.json "$DRIVE_URL" || true)
+          rm -f payload.json data.b64
+          if ! echo "$resp" | jq -e '.ok == true' > /dev/null 2>&1; then
+            err=$(echo "$resp" | jq -r '.error // empty' 2>/dev/null || true)
+            echo "::error::Google Drive did not accept the backup: ${err:-unexpected reply from the Apps Script URL}"
+            exit 1
+          fi
+          echo "Saved to Drive: $(echo "$resp" | jq -r .name) ($(echo "$resp" | jq -r .size) bytes); old backups removed: $(echo "$resp" | jq -r .removed)"
