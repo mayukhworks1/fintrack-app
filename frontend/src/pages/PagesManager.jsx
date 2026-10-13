@@ -17,6 +17,7 @@ import {
   Download, RefreshCw, X, MapPin, Wifi, Monitor, Smartphone,
   Clock, Link2, ExternalLink, ChevronDown, ChevronRight,
   LayoutGrid, List, Layers, Folder, FolderInput, ShieldCheck, Timer,
+  MoreHorizontal, EyeOff, Check, ArrowUpDown,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 
@@ -140,8 +141,8 @@ function CSVPreview({ text }) {
   return (
     <div style={{ overflowX:'auto', padding:12 }}>
       <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
-        <thead><tr>{headers.map((h,i)=><th key={i} style={{ border:'1px solid var(--border)', padding:'6px 10px', background:'var(--bg-card)', textAlign:'left', fontWeight:600 }}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((row,ri)=><tr key={ri} style={{ background:ri%2?'var(--bg-card)':'var(--bg-base)' }}>{row.map((cell,ci)=><td key={ci} style={{ border:'1px solid var(--border)', padding:'5px 10px' }}>{show(cell,ri+1,ci)}</td>)}</tr>)}</tbody>
+        <thead><tr>{headers.map((h,i)=><th key={i} style={{ border:'1px solid var(--border)', padding:'6px 10px', background:'var(--card-bg)', textAlign:'left', fontWeight:600 }}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((row,ri)=><tr key={ri} style={{ background:ri%2?'var(--card-bg)':'var(--bg-base)' }}>{row.map((cell,ci)=><td key={ci} style={{ border:'1px solid var(--border)', padding:'5px 10px' }}>{show(cell,ri+1,ci)}</td>)}</tr>)}</tbody>
       </table>
       {lines.length > 11 && <div style={{ fontSize:11, color:'var(--text-2)', marginTop:6 }}>Showing 10 of {lines.length-1} rows</div>}
     </div>
@@ -229,7 +230,7 @@ function Badge({ label, color }) {
     spreadsheet:  { bg:'#d1fae5', text:'#065f46', border:'#a7f3d0', dot:null },
     text:         { bg:'#e0f2fe', text:'#0369a1', border:'#bae6fd', dot:null },
   }
-  const c = map[color] || { bg:'var(--bg-card)', text:'var(--text-2)', border:'var(--border)', dot:null }
+  const c = map[color] || { bg:'var(--card-bg)', text:'var(--text-2)', border:'var(--border)', dot:null }
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:6, fontSize:11, fontWeight:600, background:c.bg, color:c.text, border:`1px solid ${c.border}`, textTransform:'capitalize', letterSpacing:'0.01em' }}>
       {c.dot && <span style={{ width:5, height:5, borderRadius:'50%', background:c.dot, display:'inline-block', flexShrink:0 }} />}
@@ -445,7 +446,7 @@ function AnalyticsDrawer({ page, onClose }) {
   if (!page) return null
   const cols=['','Time','IP Address','Location','ISP / Network','Device','Browser','Screen','Timezone','Language','Referer','']
 
-  const inputStyle = { background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', fontSize:12, color:'var(--text-1)', outline:'none' }
+  const inputStyle = { background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', fontSize:12, color:'var(--text-1)', outline:'none' }
 
   return (
     <Overlay>
@@ -476,7 +477,7 @@ function AnalyticsDrawer({ page, onClose }) {
 
         {/* Stats bar */}
         {data && (
-          <div style={{ padding:isMobile?'12px 16px':'14px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?16:28, flexWrap:'wrap', flexShrink:0, background:'var(--bg-card)', overflowX:'auto' }}>
+          <div style={{ padding:isMobile?'12px 16px':'14px 24px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?16:28, flexWrap:'wrap', flexShrink:0, background:'var(--card-bg)', overflowX:'auto' }}>
             <Stat label="Total Views" value={data.total} />
             <Stat label="Filtered" value={filtered.length} />
             <Stat label="Unique IPs" value={new Set(filtered.map(v=>v.viewer_ip).filter(Boolean)).size} />
@@ -536,7 +537,7 @@ function AnalyticsDrawer({ page, onClose }) {
                   {filtered.map(v=>{
                     const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id; const sel=selected.has(v.id)
                     return (
-                      <div key={v.id} style={{ background:'var(--bg-card)', border:`1px solid ${exp?'var(--accent)':sel?'var(--accent-soft)':'var(--border)'}`, borderRadius:10, overflow:'hidden' }}>
+                      <div key={v.id} style={{ background:'var(--card-bg)', border:`1px solid ${exp?'var(--accent)':sel?'var(--accent-soft)':'var(--border)'}`, borderRadius:10, overflow:'hidden' }}>
                         <div onClick={()=>setExpandedRow(exp?null:v.id)} style={{ padding:'12px 14px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                           <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
                             <input type="checkbox" checked={sel} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} style={{ marginTop:2 }} />
@@ -560,7 +561,7 @@ function AnalyticsDrawer({ page, onClose }) {
                 <div style={{ overflowX:'auto' }}>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                     <thead>
-                      <tr style={{ borderBottom:'2px solid var(--border)', background:'var(--bg-card)', position:'sticky', top:0, zIndex:2 }}>
+                      <tr style={{ borderBottom:'2px solid var(--border)', background:'var(--card-bg)', position:'sticky', top:0, zIndex:2 }}>
                         <th style={{ padding:'9px 12px' }}>
                           <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all visible" />
                         </th>
@@ -571,7 +572,7 @@ function AnalyticsDrawer({ page, onClose }) {
                       {filtered.map((v,i)=>{
                         const geo=v.metadata?.geo||{}; const cli=v.metadata?.client||{}; const exp=expandedRow===v.id; const sel=selected.has(v.id)
                         return [
-                          <tr key={v.id} onClick={()=>setExpandedRow(exp?null:v.id)} style={{ borderBottom:exp?'none':'1px solid var(--border)', background:sel?'var(--accent-dim)':exp?'var(--bg-card)':i%2?'var(--bg-card)':'var(--bg-base)', cursor:'pointer' }}>
+                          <tr key={v.id} onClick={()=>setExpandedRow(exp?null:v.id)} style={{ borderBottom:exp?'none':'1px solid var(--border)', background:sel?'var(--accent-dim)':exp?'var(--card-bg)':i%2?'var(--card-bg)':'var(--bg-base)', cursor:'pointer' }}>
                             <td style={{ padding:'9px 12px' }} onClick={e=>e.stopPropagation()}>
                               <input type="checkbox" checked={sel} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} />
                             </td>
@@ -589,7 +590,7 @@ function AnalyticsDrawer({ page, onClose }) {
                               <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Delete'}</button>
                             </td>
                           </tr>,
-                          exp&&<tr key={`${v.id}-exp`} style={{ background:'var(--bg-card)', borderBottom:'2px solid var(--accent)' }}>
+                          exp&&<tr key={`${v.id}-exp`} style={{ background:'var(--card-bg)', borderBottom:'2px solid var(--accent)' }}>
                             <td colSpan={12} style={{ padding:'20px 24px' }}><DetailGrid geo={geo} cli={cli} v={v} isMobile={false} /></td>
                           </tr>
                         ]
@@ -637,7 +638,7 @@ function ShareModal({ page, onClose, onCopy }) {
           <img src={qr} alt="QR code" width={180} height={180} style={{ borderRadius:12, border:'1px solid var(--border)' }} />
           <div style={{ fontSize:12, color:'var(--text-2)', marginTop:8 }}>Scan to open on mobile</div>
         </div>
-        <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 12px', marginBottom:12, display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 12px', marginBottom:12, display:'flex', gap:8, alignItems:'center' }}>
           <span style={{ flex:1, fontSize:12, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{url}</span>
           <button onClick={copy} style={{ ...btnPrimary, padding:'5px 12px', fontSize:12, whiteSpace:'nowrap' }}>{copied?'✓ Copied!':'Copy'}</button>
         </div>
@@ -814,7 +815,7 @@ function AttachmentsBar({ content, onChange }) {
     setDeleting(null)
   }
   return (
-    <div style={{ display:'flex', gap:8, flexWrap:'wrap', padding:'8px 12px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+    <div style={{ display:'flex', gap:8, flexWrap:'wrap', padding:'8px 12px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
       <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', marginRight:4 }}>📎 {assets.length} attachment{assets.length!==1?'s':''}</span>
       {assets.map(a=>(
         <div key={a.path} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 6px 3px 4px', border:'1px solid var(--border)', borderRadius:6, background:'var(--bg-base)' }}>
@@ -938,7 +939,7 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
     // On a phone the wrapped version became three stacked rows — 125px of
     // toolbar above a 286px editor. One row that scrolls sideways keeps every
     // tool reachable and costs a third of the height.
-    <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)',
+    <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)',
                   flexWrap:isMobile?'nowrap':'wrap', overflowX:isMobile?'auto':'visible', scrollbarWidth:'none',
                   alignItems:'center', flexShrink:0 }}>
       {tools.map((group, gi) => (
@@ -1036,7 +1037,7 @@ function SpreadsheetEditor({ value, onChange }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'var(--bg-base)' }}>
       {/* Formula bar */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderBottom:'2px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderBottom:'2px solid var(--border)', background:'var(--card-bg)', flexShrink:0 }}>
         <div style={{ background:'#e2e8f0', borderRadius:4, padding:'4px 10px', fontSize:12, fontFamily:'monospace', fontWeight:700, color:'var(--text-2)', minWidth:50, textAlign:'center' }}>
           {selectedCell?`${colLetter(selectedCell[1])}${selectedCell[0]+1}`:'—'}
         </div>
@@ -1048,7 +1049,7 @@ function SpreadsheetEditor({ value, onChange }) {
           }} onBlur={()=>setTimeout(()=>setSuggest([]),150)}
             placeholder="Value or =SUM(A1:A5) …" style={{ width:'100%', boxSizing:'border-box', border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontSize:13, fontFamily:'monospace', background:'var(--bg-base)', color:'var(--text-1)', outline:'none' }} />
           {suggest.length>0 && (
-            <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', minWidth:180, overflow:'hidden' }}>
+            <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:2, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', minWidth:180, overflow:'hidden' }}>
               {suggest.map(fn=>(
                 <div key={fn} onMouseDown={e=>{e.preventDefault();applySuggest(fn)}}
                   style={{ padding:'6px 10px', fontSize:12, fontFamily:'monospace', cursor:'pointer', color:'var(--text-1)', borderBottom:'1px solid var(--border)' }}
@@ -1115,7 +1116,7 @@ function SpreadsheetEditor({ value, onChange }) {
           </tbody>
         </table>
       </div>
-      <div style={{ padding:'4px 12px', background:'var(--bg-card)', borderTop:'1px solid var(--border)', fontSize:11, color:'var(--text-2)', flexShrink:0 }}>
+      <div style={{ padding:'4px 12px', background:'var(--card-bg)', borderTop:'1px solid var(--border)', fontSize:11, color:'var(--text-2)', flexShrink:0 }}>
         {rows.length} rows × {cols} columns · Tab/Enter to move · Type <code style={{ fontFamily:'monospace' }}>=SUM(A1:A5)</code>, <code style={{ fontFamily:'monospace' }}>=A1*B1</code> for formulas
       </div>
     </div>
@@ -1144,7 +1145,7 @@ function docStats(content, contentType) {
 function TemplatePicker({ contentType, onSelect }) {
   const list = TEMPLATES[contentType] || TEMPLATES.markdown
   return (
-    <div style={{ display:'flex', gap:8, padding:'8px 12px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', overflowX:'auto', flexShrink:0 }}>
+    <div style={{ display:'flex', gap:8, padding:'8px 12px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', overflowX:'auto', flexShrink:0 }}>
       <span style={{ fontSize:11, color:'var(--text-2)', fontWeight:600, whiteSpace:'nowrap', alignSelf:'center' }}>Templates:</span>
       {list.map(t=>(
         <button key={t.name} onClick={()=>onSelect(t.content)} style={{ ...btnTiny, whiteSpace:'nowrap', fontSize:11, padding:'4px 10px', flexShrink:0 }}>
@@ -1257,10 +1258,10 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
               const isSelected = previewVer?.id === ver.id
               const isRestoring = restoring === ver.id
               return (
-                <div key={ver.id} style={{ borderBottom:'1px solid var(--border)', padding:'10px 14px', background:isSelected?'var(--bg-card)':'transparent', cursor:'pointer' }}
+                <div key={ver.id} style={{ borderBottom:'1px solid var(--border)', padding:'10px 14px', background:isSelected?'var(--card-bg)':'transparent', cursor:'pointer' }}
                   onClick={() => loadPreview(ver)}>
                   <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'var(--accent)', background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, padding:'1px 6px', flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--accent)', background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:10, padding:'1px 6px', flexShrink:0 }}>
                       v{ver.version_num}
                     </div>
                     <div style={{ fontSize:12, color:'var(--text-1)', fontWeight:isSelected?700:400, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -1294,7 +1295,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
       {/* Preview pane (right) */}
       {previewVer && (
         <div style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column' }}>
-          <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10, background:'var(--bg-card)', flexShrink:0 }}>
+          <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10, background:'var(--card-bg)', flexShrink:0 }}>
             <span style={{ fontSize:12, fontWeight:700 }}>Preview: v{previewVer.version_num}</span>
             <span style={{ fontSize:11, color:'var(--text-2)' }}>{previewVer.title}</span>
             <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{new Date(previewVer.saved_at).toLocaleString()}</span>
@@ -1599,7 +1600,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
   if (!open) {
     return (
-      <div style={{ padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+      <div style={{ padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
         <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
           ✨ Agent Studio
         </button>
@@ -1626,7 +1627,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   }
 
   return (
-    <div style={{ padding:isMobile?'10px 12px':'10px 14px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
+    <div style={{ padding:isMobile?'10px 12px':'10px 14px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
         <span style={{ fontSize:12, fontWeight:700 }}>✨ Agent Studio</span>
         {mode === 'streaming' && (
@@ -2178,7 +2179,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             <button
               onClick={()=>setShowSettings(s=>!s)}
               aria-expanded={showSettings}
-              style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'6px 12px', border:'none', borderBottom:'1px solid var(--border)', background:'var(--bg-card)', color:'var(--text-2)', fontSize:11, cursor:'pointer', textAlign:'left', flexShrink:0 }}>
+              style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'6px 12px', border:'none', borderBottom:'1px solid var(--border)', background:'var(--card-bg)', color:'var(--text-2)', fontSize:11, cursor:'pointer', textAlign:'left', flexShrink:0 }}>
               <span style={{ flex:1, minWidth:0, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 /p/{form.slug || '…'}
               </span>
@@ -2226,7 +2227,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {/* Meta fields. On a phone the whole block is behind Settings and gets
             its own scroll, so opening it can never push the editor off screen. */}
         {(!isMobile || showSettings) && (
-        <div style={{ padding:isMobile?'12px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?14:10, flexWrap:'wrap', alignContent:'flex-start', flexShrink:0, flex:mobileSettingsMode?'1 1 auto':'0 0 auto', minHeight:0, overflowY:isMobile?'auto':undefined, background:isMobile?'var(--bg-card)':undefined }}>
+        <div style={{ padding:isMobile?'12px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?14:10, flexWrap:'wrap', alignContent:'flex-start', flexShrink:0, flex:mobileSettingsMode?'1 1 auto':'0 0 auto', minHeight:0, overflowY:isMobile?'auto':undefined, background:isMobile?'var(--card-bg)':undefined }}>
           {isMobile ? (
             <div style={{ flex:'1 1 100%' }}>
               <label style={labelStyle} htmlFor="ft-doctype">Document type</label>
@@ -2343,7 +2344,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
           <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} isMobile={isMobile} />
         )}
         {isHtml && tab === 'edit' && (
-          <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+          <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
             <ImportHtmlButton value={form.content} onChange={c=>{ setContent(c); setShowTemplates(false) }}
               onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? '📄 Upload HTML' : '📄 Upload HTML file'} />
             <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
@@ -2437,7 +2438,7 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
     <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onCancel}>
-      <div style={{ background:'var(--bg-base)', borderRadius:'var(--radius)', padding:28, maxWidth:380, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>Confirm</div>
         <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:22 }}>{message}</div>
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
@@ -2474,7 +2475,7 @@ function PageTags({ page, onFolder }) {
           <Folder size={10} /> {folder}
         </button>
       )}
-      {exp && (
+      {exp && !expired && (
         <span style={{ ...tag, ...(expired?{ color:'#b91c1c', borderColor:'#fecaca', background:'#fef2f2' }:{}) }} title={`Link expires ${formatIst(exp)}`}>
           <Timer size={10} /> {expired ? 'Expired' : countdown(exp)}
         </span>
@@ -2519,76 +2520,161 @@ function FolderModal({ page, folders, onClose, onSave }) {
   )
 }
 
-function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, openingId, cloning }) {
+// "just now", "12m ago", "3h ago", "yesterday", "5d ago", then a date.
+function relTime(iso) {
+  if (!iso) return '—'
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '—'
+  const m = Math.round((Date.now() - t) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.round(h / 24)
+  if (d === 1) return 'yesterday'
+  if (d < 7) return `${d}d ago`
+  return new Date(iso).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })
+}
+
+// The less frequent actions for a page, behind one "⋯" button so each row
+// carries three clear actions instead of seven. Rendered into <body> so a row
+// near the bottom of a scrolling table never clips it.
+function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, cloning }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState(null)
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    const w = 210, h = 290
+    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))
+    const top = r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4
+    setPos({ left, top })
+  }
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus() } }
+    const onScroll = () => setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onScroll)
+    window.addEventListener('scroll', onScroll, true)
+    setTimeout(() => menuRef.current?.querySelector('button')?.focus(), 0)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onScroll)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open])
+  const run = (fn) => () => { setOpen(false); fn(page) }
+  const item = (Icon, label, onClick, opts = {}) => (
+    <button type="button" role="menuitem" onClick={onClick} disabled={opts.disabled}
+      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:36, padding:'8px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:'pointer', borderRadius:7, color:opts.danger?'#dc2626':'var(--text-1)' }}
+      onMouseEnter={e=>e.currentTarget.style.background=opts.danger?'#fef2f2':'var(--bg-base)'}
+      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+      <Icon size={14} strokeWidth={1.9} style={{ flexShrink:0, opacity:0.8 }} /> {label}
+    </button>
+  )
+  return (
+    <>
+      <button ref={btnRef} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`More actions for ${page.title || 'page'}`} title="More actions"
+        onClick={()=>{ if (!open) place(); setOpen(o=>!o) }}
+        style={{ ...btnTiny, padding:'6px 8px', borderRadius:8, color:'var(--text-2)', display:'inline-flex', alignItems:'center', background:open?'var(--bg-base)':'var(--card-bg)' }}>
+        <MoreHorizontal size={15} />
+      </button>
+      {open && pos && createPortal(
+        <div ref={menuRef} role="menu" aria-label="Page actions"
+          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, background:'var(--card-bg, #fff)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
+          {item(page.is_published ? EyeOff : Globe, page.is_published ? 'Unpublish' : 'Publish', run(onPublish))}
+          {page.is_published && item(Share2, 'Share…', run(onShare))}
+          {item(BarChart2, 'Views & analytics', run(onAnalytics))}
+          {item(Copy, cloning===page.id ? 'Duplicating…' : 'Duplicate as draft', run(onClone), { disabled: cloning===page.id })}
+          {item(FolderInput, 'Move to folder…', run(onMove))}
+          <div style={{ height:1, background:'var(--border)', margin:'4px 6px' }} />
+          {item(Trash2, 'Delete', run(onDelete), { danger:true })}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+function CopyLinkButton({ page, onCopied, compact }) {
+  const [done, setDone] = useState(false)
+  const copy = () => {
+    const url = `${window.location.origin}/p/${page.slug}`
+    const ok = () => { setDone(true); onCopied?.(); setTimeout(()=>setDone(false), 1500) }
+    navigator.clipboard?.writeText(url).then(ok).catch(()=>{})
+  }
+  return (
+    <button type="button" onClick={copy} disabled={!page.is_published}
+      title={page.is_published ? 'Copy public link' : 'Publish the page to get a link'}
+      style={{ ...btnTiny, padding:compact?'7px 9px':'6px 10px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:done?'#15803d':'var(--text-1)', opacity:page.is_published?1:0.45, cursor:page.is_published?'pointer':'not-allowed' }}>
+      {done ? <Check size={13} /> : <Link2 size={13} />}{!compact && (done ? 'Copied' : 'Copy link')}
+    </button>
+  )
+}
+
+function StatusPill({ page }) {
+  const expired = page.expires_at && msUntil(page.expires_at) <= 0
+  const s = expired ? { label:'Expired', bg:'#fef2f2', fg:'#b91c1c', dot:'#ef4444' }
+    : page.is_published ? { label:'Live', bg:'#ecfdf5', fg:'#047857', dot:'#10b981' }
+    : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'#94a3b8' }
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'3px 10px', borderRadius:999, fontSize:12, fontWeight:600, background:s.bg, color:s.fg, whiteSpace:'nowrap' }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }} />{s.label}
+    </span>
+  )
+}
+
+function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, openingId, cloning }) {
   const [hover, setHover] = useState(false)
+  const cell = { padding:'14px 16px', verticalAlign:'middle' }
   return (
     <tr
       onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
-      style={{ borderBottom:idx<total-1?'1px solid var(--border)':'none', background:hover?'var(--bg-card)':'transparent', transition:'background 0.12s' }}
+      style={{ borderBottom:idx<total-1?'1px solid var(--border)':'none', background:hover?'var(--bg-base)':'transparent', transition:'background 0.12s' }}
     >
-      {/* Title / URL */}
-      <td style={{ padding:'13px 16px', maxWidth:280 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
-          <div style={{ width:32, height:32, borderRadius:8, background:'var(--bg-base)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'var(--text-2)' }}>
-            <TypeIcon type={page.content_type} size={14} />
+      <td style={{ ...cell, maxWidth:0, width:'46%' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, minWidth:0 }}>
+          <div title={page.content_type} style={{ width:36, height:36, borderRadius:9, background:'var(--bg-base)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'var(--text-2)' }}>
+            <TypeIcon type={page.content_type} size={15} />
           </div>
           <div style={{ minWidth:0 }}>
-            <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-1)', fontSize:13, display:'flex', alignItems:'center', gap:5 }}>
-              {page.title||<span style={{ color:'var(--text-2)', fontStyle:'italic' }}>Untitled</span>}
-              {page.is_password_protected && <Lock size={11} style={{ color:'var(--text-3)', flexShrink:0 }} />}
-            </div>
-            {page.is_published
-              ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug}</a>
-              : <span style={{ fontSize:11, color:'var(--text-3)', fontFamily:'monospace' }}>/p/{page.slug}</span>
-            }
+            <button type="button" onClick={()=>onEdit(page)} title="Edit page"
+              style={{ all:'unset', cursor:'pointer', fontWeight:650, color:'var(--text-1)', fontSize:14, display:'flex', alignItems:'center', gap:6, maxWidth:'100%' }}>
+              <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{page.title||<span style={{ color:'var(--text-2)', fontStyle:'italic' }}>Untitled</span>}</span>
+              {page.is_password_protected && <Lock size={12} style={{ color:'var(--text-3)', flexShrink:0 }} aria-label="Password protected" />}
+            </button>
+            <div style={{ fontSize:12, color:'var(--text-3)', fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:2 }}>/p/{page.slug}</div>
             <PageTags page={page} onFolder={onFolder} />
           </div>
         </div>
       </td>
-      {/* Type */}
-      <td style={{ padding:'13px 16px', whiteSpace:'nowrap' }}>
-        <Badge label={page.content_type} color={page.content_type} />
-      </td>
-      {/* Status */}
-      <td style={{ padding:'13px 16px', whiteSpace:'nowrap' }}>
-        <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
-      </td>
-      {/* Views */}
-      <td style={{ padding:'13px 16px', whiteSpace:'nowrap' }}>
-        <button onClick={()=>onAnalytics(page)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'transparent', border:'1px solid transparent', borderRadius:7, padding:'4px 8px', cursor:'pointer', fontSize:12, fontWeight:600, color:'var(--text-2)', transition:'all 0.12s', ...(hover?{background:'var(--bg-base)',border:'1px solid var(--border)',color:'var(--text-1)'}:{}) }}>
-          <Eye size={13} strokeWidth={2} /> {page.view_count??0}
+      <td style={cell}><StatusPill page={page} /></td>
+      <td style={cell}>
+        <button type="button" onClick={()=>onAnalytics(page)} title="Views & analytics"
+          style={{ display:'inline-flex', alignItems:'center', gap:5, background:'transparent', border:'1px solid transparent', borderRadius:7, padding:'4px 8px', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--text-1)', ...(hover?{border:'1px solid var(--border)', background:'var(--card-bg)'}:{}) }}>
+          <Eye size={13} strokeWidth={2} style={{ color:'var(--text-3)' }} /> {(page.view_count??0).toLocaleString('en-IN')}
         </button>
       </td>
-      {/* Created */}
-      <td style={{ padding:'13px 16px', whiteSpace:'nowrap', color:'var(--text-3)', fontSize:12 }}>
-        {page.created_at ? new Date(page.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'}
+      <td style={{ ...cell, whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12.5 }} title={page.updated_at ? new Date(page.updated_at).toLocaleString('en-IN') : ''}>
+        {relTime(page.updated_at || page.created_at)}
       </td>
-      {/* Actions */}
-      <td style={{ padding:'13px 16px', whiteSpace:'nowrap' }}>
-        <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-          <button style={{ ...btnTiny, background:'var(--accent)', color:'#fff', border:'none', padding:'6px 14px', borderRadius:7, fontWeight:600, fontSize:12 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
-            {openingId===page.id ? '…' : 'Edit'}
+      <td style={{ ...cell, whiteSpace:'nowrap', textAlign:'right' }}>
+        <div style={{ display:'inline-flex', gap:6, alignItems:'center' }}>
+          <button style={{ ...btnTiny, background:'var(--accent)', color:'#fff', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:600, fontSize:12, display:'inline-flex', alignItems:'center', gap:5 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
+            <PenLine size={12} /> {openingId===page.id ? 'Opening…' : 'Edit'}
           </button>
-          <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#dcfce7', color:page.is_published?'#92400e':'#15803d', border:'none', padding:'6px 12px', borderRadius:7, fontSize:12 }} onClick={()=>onPublish(page)}>
-            {page.is_published ? 'Unpublish' : 'Publish'}
-          </button>
-          <button style={{ ...btnTiny, padding:'6px 8px', borderRadius:7, color:'var(--text-2)' }} onClick={()=>onClone(page)} disabled={cloning===page.id} title="Duplicate as a new draft and edit it">
-            {cloning===page.id ? '…' : <Copy size={13} strokeWidth={1.75} />}
-          </button>
-          <button style={{ ...btnTiny, padding:'6px 8px', borderRadius:7, color:'var(--text-2)' }} onClick={()=>onMove(page)} title="Move to folder">
-            <FolderInput size={13} strokeWidth={1.75} />
-          </button>
-          {page.is_published && (
-            <button style={{ ...btnTiny, background:'#eff6ff', color:'#1d4ed8', border:'none', padding:'6px 10px', borderRadius:7, display:'inline-flex', alignItems:'center', gap:4, fontSize:12 }} onClick={()=>onShare(page)}>
-              <Share2 size={12} strokeWidth={2} /> Share
-            </button>
-          )}
-          <button style={{ ...btnTiny, background:'transparent', color:'var(--text-3)', border:'1px solid transparent', padding:'6px 8px', borderRadius:7, transition:'all 0.12s' }}
-            onMouseEnter={e=>{e.currentTarget.style.background='#fef2f2';e.currentTarget.style.color='#991b1b';e.currentTarget.style.borderColor='#fecaca'}}
-            onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--text-3)';e.currentTarget.style.borderColor='transparent'}}
-            onClick={()=>onDelete(page)} title="Delete">
-            <Trash2 size={13} strokeWidth={1.75} />
-          </button>
+          <CopyLinkButton page={page} onCopied={onCopied} />
+          <a href={page.is_published ? `/p/${page.slug}` : undefined} target="_blank" rel="noopener noreferrer" aria-label="Open live page" title={page.is_published ? 'Open live page' : 'Not published yet'}
+            style={{ ...btnTiny, padding:'6px 8px', borderRadius:8, display:'inline-flex', alignItems:'center', color:'var(--text-2)', opacity:page.is_published?1:0.45, pointerEvents:page.is_published?'auto':'none' }}>
+            <ExternalLink size={14} />
+          </a>
+          <RowMenu page={page} onPublish={onPublish} onShare={onShare} onAnalytics={onAnalytics} onDelete={onDelete} onClone={onClone} onMove={onMove} cloning={cloning} />
         </div>
       </td>
     </tr>
@@ -2598,63 +2684,36 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
 // ---------------------------------------------------------------------------
 // Mobile card
 // ---------------------------------------------------------------------------
-function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, cloning }) {
+function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, cloning }) {
   return (
-    <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:14, padding:14, display:'flex', flexDirection:'column', gap:11 }}>
-      {/* Top row: icon + title + badges */}
+    <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:14, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
       <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
         <div style={{ width:36, height:36, borderRadius:9, background:'var(--bg-base)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'var(--text-2)' }}>
           <TypeIcon type={page.content_type} size={15} />
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:600, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:4, color:'var(--text-1)', display:'flex', alignItems:'center', gap:5 }}>
-            {page.title||'Untitled'}
-            {page.is_password_protected && <Lock size={11} style={{ color:'var(--text-3)', flexShrink:0 }} />}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'wrap' }}>
-            <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
-            <Badge label={page.content_type} color={page.content_type} />
-          </div>
+          <button type="button" onClick={()=>onEdit(page)} style={{ all:'unset', cursor:'pointer', fontWeight:650, fontSize:15, color:'var(--text-1)', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>
+            {page.title||'Untitled'}{page.is_password_protected && <Lock size={11} style={{ marginLeft:5, color:'var(--text-3)' }} />}
+          </button>
+          <div style={{ fontSize:11.5, color:'var(--text-3)', fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:2 }}>/p/{page.slug}</div>
           <PageTags page={page} onFolder={onFolder} />
         </div>
+        <RowMenu page={page} onPublish={onPublish} onShare={onShare} onAnalytics={onAnalytics} onDelete={onDelete} onClone={onClone} onMove={onMove} cloning={cloning} />
       </div>
-
-      {/* Slug */}
-      {page.is_published
-        ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none', background:'var(--bg-base)', padding:'5px 10px', borderRadius:6, border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:5, overflow:'hidden' }}>
-            <ExternalLink size={10} strokeWidth={2} style={{ flexShrink:0 }} /><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>/p/{page.slug}</span>
-          </a>
-        : <span style={{ fontSize:11, color:'var(--text-3)', fontFamily:'monospace', background:'var(--bg-base)', padding:'5px 10px', borderRadius:6, border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:5, overflow:'hidden' }}>
-            <Link2 size={10} strokeWidth={2} style={{ flexShrink:0, opacity:0.5 }} /><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>/p/{page.slug}</span>
-          </span>
-      }
-
-      {/* Analytics button */}
-      <button onClick={()=>onAnalytics(page)} style={{ display:'flex', alignItems:'center', gap:8, background:'var(--bg-base)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 12px', cursor:'pointer', fontSize:12, fontWeight:500, color:'var(--text-2)', textAlign:'left', width:'100%' }}>
-        <Eye size={13} strokeWidth={2} style={{ flexShrink:0 }} />
-        <span style={{ color:'var(--text-1)', fontWeight:600 }}>{page.view_count??0}</span>
-        <span>view{(page.view_count??0)!==1?'s':''}</span>
-        <span style={{ color:'var(--accent)', fontSize:11, marginLeft:'auto', display:'flex', alignItems:'center', gap:3 }}>Analytics <ChevronRight size={11} /></span>
-      </button>
-
-      {/* Actions */}
-      <div style={{ display:'flex', gap:5, paddingTop:1 }}>
-        <button style={{ ...btnPrimary, flex:1, padding:'7px 10px', fontSize:12, borderRadius:8 }} onClick={()=>onEdit(page)}>Edit</button>
-        <button style={{ ...btnTiny, flex:1, background:page.is_published?'#fef3c7':'#dcfce7', color:page.is_published?'#92400e':'#15803d', border:'none', padding:'7px 8px', fontSize:12, borderRadius:8 }} onClick={()=>onPublish(page)}>{page.is_published?'Unpublish':'Publish'}</button>
-        {page.is_published && (
-          <button style={{ ...btnTiny, padding:'7px 8px', fontSize:12, background:'#eff6ff', color:'#1d4ed8', border:'none', borderRadius:8, display:'flex', alignItems:'center', gap:4 }} onClick={()=>onShare(page)}>
-            <Share2 size={12} strokeWidth={2} />
-          </button>
-        )}
-        <button aria-label="Duplicate" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, borderRadius:8, display:'flex', alignItems:'center', color:'var(--text-2)' }} onClick={()=>onClone(page)} disabled={cloning===page.id}>
-          {cloning===page.id ? '…' : <Copy size={13} strokeWidth={1.75} />}
+      <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:12, color:'var(--text-2)' }}>
+        <StatusPill page={page} />
+        <button type="button" onClick={()=>onAnalytics(page)} style={{ all:'unset', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4 }}>
+          <Eye size={12} /> {(page.view_count??0).toLocaleString('en-IN')}
         </button>
-        <button aria-label="Move to folder" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, borderRadius:8, display:'flex', alignItems:'center', color:'var(--text-2)' }} onClick={()=>onMove(page)}>
-          <FolderInput size={13} strokeWidth={1.75} />
-        </button>
-        <button aria-label="Delete" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, background:'transparent', color:'var(--text-3)', borderRadius:8, display:'flex', alignItems:'center' }} onClick={()=>onDelete(page)}>
-          <Trash2 size={13} strokeWidth={1.75} />
-        </button>
+        <span style={{ marginLeft:'auto' }}>Edited {relTime(page.updated_at || page.created_at)}</span>
+      </div>
+      <div style={{ display:'flex', gap:6 }}>
+        <button style={{ ...btnPrimary, flex:1, padding:'9px 10px', fontSize:13, borderRadius:9 }} onClick={()=>onEdit(page)}>Edit</button>
+        <CopyLinkButton page={page} onCopied={onCopied} />
+        <a href={page.is_published ? `/p/${page.slug}` : undefined} target="_blank" rel="noopener noreferrer" aria-label="Open live page"
+          style={{ ...btnTiny, padding:'9px 11px', borderRadius:9, display:'inline-flex', alignItems:'center', color:'var(--text-2)', opacity:page.is_published?1:0.45, pointerEvents:page.is_published?'auto':'none' }}>
+          <ExternalLink size={14} />
+        </a>
       </div>
     </div>
   )
@@ -2678,6 +2737,20 @@ export default function PagesManager() {
   // '' = every folder, UNFILED = pages with no folder, otherwise a folder name.
   const [folderFilter, setFolderFilter] = useState('')
   const [movePage, setMovePage] = useState(null)
+  const [sortBy, setSortBy] = useState(() => { try { return localStorage.getItem('pages_sort') || 'updated' } catch { return 'updated' } })
+  useEffect(() => { try { localStorage.setItem('pages_sort', sortBy) } catch {} }, [sortBy])
+  const searchRef = useRef(null)
+  // "/" jumps to search, as on most list screens.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      e.preventDefault(); searchRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
   const [cloning, setCloning] = useState(null)
 
   const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast({msg:'',ok:true}),3500) }
@@ -2805,13 +2878,21 @@ export default function PagesManager() {
     const hay = [p.title, p.slug, p.metadata?.description, f].filter(Boolean).join(' ').toLowerCase()
     return matchTab&&matchFolder&&(!q||q.split(/\s+/).every(w=>hay.includes(w)))
   })
+  const ts = (v) => (v ? new Date(v).getTime() : 0) || 0
+  const SORTS = {
+    updated: (a,b) => ts(b.updated_at||b.created_at) - ts(a.updated_at||a.created_at),
+    created: (a,b) => ts(b.created_at) - ts(a.created_at),
+    views:   (a,b) => (b.view_count||0) - (a.view_count||0),
+    title:   (a,b) => (a.title||'').localeCompare(b.title||'', 'en', { sensitivity:'base', numeric:true }),
+  }
+  filtered.sort(SORTS[sortBy] || SORTS.updated)
   const anyFilter = search || filterTab!=='all' || folderFilter
   const clearFilters = () => { setSearch(''); setFilterTab('all'); setFolderFilter('') }
 
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
   return (
-    <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1240, margin:'0 auto' }}>
+    <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1480, margin:'0 auto' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
         <div>
@@ -2832,7 +2913,7 @@ export default function PagesManager() {
             { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'#f59e0b' },
             { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'#3b82f6' },
           ].map(({ label, value, Icon, accent })=>(
-            <div key={label} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
+            <div key={label} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:`${accent}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
                 <Icon size={16} strokeWidth={2} />
               </div>
@@ -2850,13 +2931,25 @@ export default function PagesManager() {
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ position:'relative', flex:isMobile?'1 1 100%':'0 0 auto' }}>
             <Search size={13} strokeWidth={2} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'var(--text-3)' }} />
-            <input style={{ ...inputStyle, maxWidth:isMobile?'100%':260, padding:'8px 12px 8px 32px', borderRadius:10, fontSize:13 }} placeholder="Search title, link, folder…" value={search} onChange={e=>setSearch(e.target.value)} />
+            <input ref={searchRef} aria-label="Search pages" style={{ ...inputStyle, width:isMobile?'100%':300, padding:'8px 30px 8px 32px', borderRadius:10, fontSize:13 }} placeholder="Search title, link, folder…" value={search} onChange={e=>setSearch(e.target.value)} />
+            {!isMobile && !search && <kbd style={{ position:'absolute', right:9, top:'50%', transform:'translateY(-50%)', fontSize:10, color:'var(--text-3)', border:'1px solid var(--border)', borderRadius:4, padding:'0 5px', fontFamily:'inherit', pointerEvents:'none' }}>/</kbd>}
           </div>
-          <div style={{ display:'flex', gap:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
+          <div style={{ display:'flex', gap:2, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
             {[['all','All'],['published','Live'],['drafts','Drafts'],['expired','Expired']].map(([val,label])=>(
               <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
             ))}
           </div>
+          <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginLeft:isMobile?0:'auto', fontSize:12, color:'var(--text-2)' }}>
+            <ArrowUpDown size={13} />
+            <span className="sr-only">Sort by</span>
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} aria-label="Sort pages"
+              style={{ ...inputStyle, width:'auto', padding:'7px 10px', borderRadius:10, fontSize:12.5 }}>
+              <option value="updated">Recently edited</option>
+              <option value="created">Newest first</option>
+              <option value="views">Most viewed</option>
+              <option value="title">Name A–Z</option>
+            </select>
+          </label>
           {anyFilter&&<button onClick={clearFilters} style={{ ...btnGhost, fontSize:12, padding:'6px 12px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:4 }}><X size={12} /> Clear</button>}
         </div>
       )}
@@ -2868,7 +2961,7 @@ export default function PagesManager() {
             const on = folderFilter===val
             return (
               <button key={val||'__all'} onClick={()=>setFolderFilter(val)} aria-pressed={on}
-                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--bg-card)', color:on?'#fff':'var(--text-2)' }}>
+                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card-bg)', color:on?'#fff':'var(--text-2)' }}>
                 {val!=='' && val!==UNFILED && <Folder size={12} />}{label} <span style={{ opacity:0.7 }}>{n}</span>
               </button>
             )
@@ -2881,7 +2974,7 @@ export default function PagesManager() {
       {loading ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {Array.from({length:3}).map((_,i)=>(
-            <div key={i} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:12, padding:'16px 18px', display:'flex', gap:12, alignItems:'center' }}>
+            <div key={i} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:'16px 18px', display:'flex', gap:12, alignItems:'center' }}>
               <div style={{ width:34, height:34, borderRadius:8, background:'var(--border)', flexShrink:0, opacity:0.5 }} />
               <div style={{ flex:1 }}>
                 <div style={{ height:12, background:'var(--border)', borderRadius:5, width:`${38+i*10}%`, marginBottom:8, opacity:0.5 }} />
@@ -2893,7 +2986,7 @@ export default function PagesManager() {
         </div>
       ) : !pages.length ? (
         <div style={{ textAlign:'center', padding:'60px 24px', border:'1px dashed var(--border)', borderRadius:16, color:'var(--text-2)' }}>
-          <div style={{ width:48, height:48, borderRadius:12, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', color:'var(--text-3)' }}>
+          <div style={{ width:48, height:48, borderRadius:12, background:'var(--card-bg)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', color:'var(--text-3)' }}>
             <FileText size={22} strokeWidth={1.5} />
           </div>
           <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
@@ -2908,7 +3001,7 @@ export default function PagesManager() {
         </div>
       ) : !filtered.length ? (
         <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--text-2)' }}>
-          <div style={{ width:40, height:40, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px', color:'var(--text-3)' }}>
+          <div style={{ width:40, height:40, borderRadius:10, background:'var(--card-bg)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px', color:'var(--text-3)' }}>
             <Search size={18} strokeWidth={1.5} />
           </div>
           <div style={{ fontSize:14, fontWeight:600, marginBottom:4, color:'var(--text-1)' }}>No pages match your search</div>
@@ -2917,15 +3010,17 @@ export default function PagesManager() {
         </div>
       ) : isMobile ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} cloning={cloning} />)}
+          {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={()=>showToast('Link copied')} cloning={cloning} />)}
         </div>
       ) : (
         <div style={{ border:'1px solid var(--border)', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
-              <tr style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)' }}>
-                {['Title / URL','Type','Status','Views','Created','Actions'].map(h=>(
-                  <th key={h} style={{ padding:'12px 16px', textAlign:'left', fontWeight:700, color:'var(--text-2)', whiteSpace:'nowrap', fontSize:10, textTransform:'uppercase', letterSpacing:'0.08em' }}>{h}</th>
+              <tr style={{ background:'var(--card-bg)', borderBottom:'1px solid var(--border)' }}>
+                {[['Page'],['Status'],['Views'],['Last edited'],['Actions','right']].map(([h,align])=>(
+                  <th key={h} style={{ padding:'11px 16px', textAlign:align||'left', fontWeight:700, color:'var(--text-2)', whiteSpace:'nowrap', fontSize:10.5, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+                    {h==='Actions' ? <span className="sr-only">Actions</span> : h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -2934,7 +3029,7 @@ export default function PagesManager() {
                 <PageRow key={page.id} page={page} idx={idx} total={filtered.length}
                   onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage}
                   onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete}
-                  onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} openingId={openingId} cloning={cloning} />
+                  onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={()=>showToast('Link copied')} openingId={openingId} cloning={cloning} />
               ))}
             </tbody>
           </table>
@@ -2948,7 +3043,7 @@ export default function PagesManager() {
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
 
       {toast.msg&&(
-        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'#1e293b':'#dc2626', color:'#f8fafc', padding:'11px 20px', borderRadius:'var(--radius)', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
+        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'#1e293b':'#dc2626', color:'#f8fafc', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
           {toast.msg}
         </div>
       )}
@@ -2959,10 +3054,10 @@ export default function PagesManager() {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-const inputStyle = { display:'block', width:'100%', padding:'7px 10px', border:'1px solid var(--border)', borderRadius:'var(--radius)', background:'var(--bg-card)', color:'var(--text-1)', fontSize:13, outline:'none', boxSizing:'border-box' }
+const inputStyle = { display:'block', width:'100%', padding:'7px 10px', border:'1px solid var(--border)', borderRadius:'10px', background:'var(--card-bg)', color:'var(--text-1)', fontSize:13, outline:'none', boxSizing:'border-box' }
 const labelStyle = { display:'block', fontSize:10, fontWeight:600, color:'var(--text-2)', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.05em' }
-const btnBase = { border:'none', borderRadius:'var(--radius)', padding:'8px 16px', fontSize:13, fontWeight:600, cursor:'pointer' }
+const btnBase = { border:'none', borderRadius:'10px', padding:'8px 16px', fontSize:13, fontWeight:600, cursor:'pointer' }
 const btnPrimary = { ...btnBase, background:'var(--accent)', color:'#fff' }
-const btnSecondary = { ...btnBase, background:'var(--bg-card)', color:'var(--text-1)', border:'1px solid var(--border)' }
+const btnSecondary = { ...btnBase, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }
 const btnGhost = { ...btnBase, background:'transparent', color:'var(--text-2)', padding:'7px 12px' }
-const btnTiny = { ...btnBase, padding:'4px 10px', fontSize:12, background:'var(--bg-card)', color:'var(--text-1)', border:'1px solid var(--border)' }
+const btnTiny = { ...btnBase, padding:'4px 10px', fontSize:12, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }

@@ -85,7 +85,8 @@ describe('Pages folders and search', () => {
 
   it('moves a page to a folder from the list', async () => {
     await mount()
-    fireEvent.click(screen.getAllByTitle('Move to folder')[2])
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Team notes' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move to folder/ }))
     fireEvent.change(await screen.findByLabelText('Folder name'), { target: { value: 'Internal' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(calls.update).toHaveLength(1))
@@ -96,7 +97,8 @@ describe('Pages folders and search', () => {
 describe('Duplicate', () => {
   it('creates an unpublished copy and opens it in the editor', async () => {
     await mount()
-    fireEvent.click(screen.getAllByTitle(/Duplicate/)[0])
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Acme proposal' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Duplicate as draft/ }))
     await waitFor(() => expect(calls.create).toHaveLength(1))
     const body = calls.create[0]
     expect(body.title).toBe('Acme proposal (Copy)')
@@ -110,7 +112,7 @@ describe('Duplicate', () => {
 describe('Editor settings', () => {
   it('saves folder, expiry in IST and protection, keeping other settings', async () => {
     await mount()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])     // Beta deck
+    fireEvent.click(screen.getByRole('button', { name: 'Beta deck' }))
     await screen.findByDisplayValue('Beta deck')
     fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'Prospects' } })
     fireEvent.change(screen.getByLabelText('Link expires (IST)'), { target: { value: '2030-01-15T18:00' } })
@@ -122,5 +124,32 @@ describe('Editor settings', () => {
     expect(id).toBe('b')
     expect(body.expires_at).toBe('2030-01-15T18:00:00+05:30')
     expect(body.metadata).toMatchObject({ folder: 'Prospects', protect_source: true, description: 'pitch for globex' })
+  })
+})
+
+describe('List layout', () => {
+  it('sorts by name and by views', async () => {
+    await mount()
+    fireEvent.change(screen.getByLabelText('Sort pages'), { target: { value: 'title' } })
+    expect(rows().map(r => r.match(/^(Acme proposal|Beta deck|Team notes)/)?.[1])).toEqual(['Acme proposal', 'Beta deck', 'Team notes'])
+    fireEvent.change(screen.getByLabelText('Sort pages'), { target: { value: 'views' } })
+    expect(rows()[0]).toMatch(/^Acme proposal/)
+    expect(rows()[2]).toMatch(/^Beta deck/)
+  })
+
+  it('keeps rare actions in a menu that closes on Escape', async () => {
+    await mount()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Beta deck' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Publish' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('"/" focuses search', async () => {
+    await mount()
+    fireEvent.keyDown(document.body, { key: '/' })
+    expect(document.activeElement).toBe(screen.getByLabelText('Search pages'))
   })
 })
