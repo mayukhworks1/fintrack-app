@@ -4,6 +4,7 @@ import { useConfirm } from '../context/ConfirmContext'
 import { useAuth } from '../context/AuthContext'
 import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import StreamingDraft from '../components/StreamingDraft'
+import { toIstInput, fromIstInput, formatIst, countdown, msUntil, expiryPreset } from '../utils/ist'
 import { api, API_BASE_URL } from '../services/api'
 import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -15,8 +16,9 @@ import {
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
   Download, RefreshCw, X, MapPin, Wifi, Monitor, Smartphone,
   Clock, Link2, ExternalLink, ChevronDown, ChevronRight,
-  LayoutGrid, List, Layers,
+  LayoutGrid, List, Layers, Folder, FolderInput, ShieldCheck, Timer,
 } from 'lucide-react'
+import Modal from '../components/Modal'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -1812,7 +1814,55 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   )
 }
 
-function PageDrawer({ page, onClose, onSaved, initialType }) {
+// Expiry is entered and shown in IST. A live countdown makes it obvious how
+// long the link has left without doing date arithmetic in your head.
+function ExpiryField({ value, onChange, isMobile }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!value) return
+    setNow(Date.now())
+    const iv = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(iv)
+  }, [value])
+  const expired = !!value && msUntil(value, now) <= 0
+  return (
+    <div>
+      <label style={labelStyle} htmlFor="ft-expiry">Link expires (IST)</label>
+      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+        <input id="ft-expiry" type="datetime-local" value={toIstInput(value)}
+          onChange={e=>onChange(fromIstInput(e.target.value))}
+          style={{ ...inputStyle, width:isMobile?'100%':190, fontSize:12 }} />
+        <select value="" aria-label="Quick expiry"
+          onChange={e=>{ const v=e.target.value; if (v==='never') onChange(''); else if (v) onChange(expiryPreset(v)) }}
+          style={{ ...inputStyle, width:'auto', fontSize:12 }}>
+          <option value="">Quick…</option>
+          <option value="1h">In 1 hour</option>
+          <option value="eod">Tonight, 11:59 pm</option>
+          <option value="24h">In 24 hours</option>
+          <option value="7d">In 7 days</option>
+          <option value="30d">In 30 days</option>
+          <option value="never">Never expires</option>
+        </select>
+      </div>
+      {value && (
+        <div style={{ fontSize:11, marginTop:3, color:expired?'#dc2626':'var(--text-2)' }}>
+          {expired ? '⛔ Expired: the link no longer opens' : `⏳ ${formatIst(value)} · ${countdown(value, now)}`}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Everything an auto-save compares: a change to any of these is saved.
+function snapOf(f) {
+  return JSON.stringify({
+    title:f.title||'', content_type:f.content_type||'markdown', content:f.content||'', slug:f.slug||'',
+    description:f.description||'', folder:(f.folder||'').trim(), protect_source:!!f.protect_source,
+    expires_at:f.expires_at||'',
+  })
+}
+
+function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
   const confirm = useConfirm()
   const { hasPerm } = useAuth()
   const isMobile = useIsMobile()
@@ -1830,6 +1880,18 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     is_password_protected:page?.is_password_protected || false,
     password:             '',
     description:          page?.metadata?.description || '',
+    folder:               page?.metadata?.folder || '',
+    protect_source:       !!page?.metadata?.protect_source,
+    expires_at:           page?.expires_at || '',
+  })
+  // Metadata keys this editor does not manage (set by other features) ride
+  // along unchanged on every save instead of being dropped.
+  const baseMetaRef = useRef(page?.metadata || {})
+  const metadataOf = (f) => ({
+    ...baseMetaRef.current,
+    description: f.description,
+    folder: (f.folder || '').trim() || undefined,
+    protect_source: f.protect_source || undefined,
   })
   const [slugManual, setSlugManual] = useState(!!page?.slug)
   const [tab, setTab] = useState('edit')
@@ -1851,7 +1913,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
   const createdRef = useRef(false)   // guards against double-create races
   const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
-  const savedSnapRef = useRef(JSON.stringify({ title:page?.title||'', content_type:page?.content_type||'markdown', content:page?.content||'', slug:page?.slug||'', description:page?.metadata?.description||'' }))
+  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source }))
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
   const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
@@ -1878,10 +1940,14 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
       is_password_protected:page.is_password_protected || false,
       password:             '',
       description:          page?.metadata?.description || '',
+      folder:               page?.metadata?.folder || '',
+      protect_source:       !!page?.metadata?.protect_source,
+      expires_at:           page.expires_at || '',
     }
+    baseMetaRef.current = page.metadata || {}
     setForm(next)
     setShowTemplates(false)
-    savedSnapRef.current = JSON.stringify({ title:next.title, content_type:next.content_type, content:next.content, slug:next.slug||'', description:next.description||'' })
+    savedSnapRef.current = snapOf(next)
   }, [page?.id, page?.content])
 
   // Auto-slug
@@ -1908,11 +1974,10 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
     content_type: form.content_type,
     content:      form.content,
     slug:         form.slug || undefined,
-    metadata:     { description: form.description },
-  }), [form.title, form.content_type, form.content, form.slug, form.description])
-  const snapshot = useMemo(() => JSON.stringify({
-    title:form.title, content_type:form.content_type, content:form.content, slug:form.slug||'', description:form.description||'',
-  }), [form.title, form.content_type, form.content, form.slug, form.description])
+    metadata:     metadataOf(form),
+    expires_at:   form.expires_at || '',
+  }), [form]) // eslint-disable-line react-hooks/exhaustive-deps
+  const snapshot = useMemo(() => snapOf(form), [form])
   const debouncedSnap = useDebounce(snapshot, 1200)
 
   useEffect(() => {
@@ -1987,7 +2052,8 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         slug:                 form.slug || undefined,
         is_password_protected:form.is_password_protected,
         password:             form.is_password_protected && form.password ? form.password : undefined,
-        metadata:             { description: form.description },
+        metadata:             metadataOf(form),
+        expires_at:           form.expires_at || '',
       }
       // If auto-save is mid-create, await that promise and use its ID instead of creating a duplicate
       let resolvedId = currentId
@@ -2010,7 +2076,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
   // fire a save (fire-and-forget, also backed by localStorage) before closing.
   const flushAndClose = () => {
     if (snapshot !== savedSnapRef.current && form.title.trim()) {
-      const payload = { title:form.title, content_type:form.content_type, content:form.content, slug:form.slug || undefined, metadata:{ description:form.description } }
+      const payload = savePayload
       try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...payload, ts:Date.now() })) } catch {}
       // Guard against creating a duplicate when an auto-save create is already
       // in flight (createdRef) but currentId hasn't been set yet.
@@ -2221,6 +2287,22 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
               <input style={{ ...inputStyle, width:isMobile?'100%':110, fontSize:12 }} type="password" placeholder="Set password" value={form.password} onChange={e=>set('password',e.target.value)} />
             )}
           </div>
+          <div style={{ flex:isMobile?'1 1 100%':'1 1 160px' }}>
+            <label style={labelStyle} htmlFor="ft-folder">Folder</label>
+            <input id="ft-folder" list="ft-folders" style={inputStyle} placeholder="e.g. Clients" value={form.folder}
+              onChange={e=>set('folder',e.target.value.slice(0,80))} />
+            <datalist id="ft-folders">{folders.map(f=><option key={f} value={f} />)}</datalist>
+          </div>
+          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto' }}>
+            <ExpiryField value={form.expires_at} onChange={v=>set('expires_at',v)} isMobile={isMobile} />
+          </div>
+          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto', display:'flex', alignItems:isMobile?'center':'flex-end' }}>
+            <label title="Visitors cannot right-click, save the page, or open its source with keyboard shortcuts, and the code is not sent outside the page itself."
+              style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap', paddingBottom:isMobile?0:6 }}>
+              <input type="checkbox" checked={form.protect_source} onChange={e=>set('protect_source',e.target.checked)} />
+              🛡 Protect code
+            </label>
+          </div>
           {isMobile && (stats.label || stats.readTime !== '—') && (
             <div style={{ flex:'1 1 100%', fontSize:11, color:'var(--text-2)' }}>
               {stats.label}{stats.readTime !== '—' ? ` · ${stats.readTime}` : ''}
@@ -2319,7 +2401,7 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
                   content:      restoredPage.content ?? f.content,
                   content_type: restoredPage.content_type || f.content_type,
                 }))
-                savedSnapRef.current = JSON.stringify({ title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', description:form.description||'' })
+                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'' })
                 setTab('edit')
                 onSaved(restoredPage)
               }}
@@ -2374,7 +2456,70 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
 // ---------------------------------------------------------------------------
 // Desktop table row
 // ---------------------------------------------------------------------------
-function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, openingId, cloning }) {
+const UNFILED = '\u0000unfiled'
+
+// Small labels under a page's title: its folder, when its link expires, and
+// whether its code is protected.
+function PageTags({ page, onFolder }) {
+  const folder = page.metadata?.folder
+  const protect = page.metadata?.protect_source
+  const exp = page.expires_at
+  if (!folder && !protect && !exp) return null
+  const expired = exp && msUntil(exp) <= 0
+  const tag = { display:'inline-flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:5, border:'1px solid var(--border)', background:'var(--bg-base)', color:'var(--text-2)', whiteSpace:'nowrap' }
+  return (
+    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center', marginTop:3 }}>
+      {folder && (
+        <button type="button" onClick={()=>onFolder?.(folder)} title="Show this folder" style={{ ...tag, cursor:'pointer' }}>
+          <Folder size={10} /> {folder}
+        </button>
+      )}
+      {exp && (
+        <span style={{ ...tag, ...(expired?{ color:'#b91c1c', borderColor:'#fecaca', background:'#fef2f2' }:{}) }} title={`Link expires ${formatIst(exp)}`}>
+          <Timer size={10} /> {expired ? 'Expired' : countdown(exp)}
+        </span>
+      )}
+      {protect && <span style={tag} title="Code protection is on"><ShieldCheck size={10} /> Protected</span>}
+    </div>
+  )
+}
+
+// Move a page into a folder (or out of one) without opening the editor.
+function FolderModal({ page, folders, onClose, onSave }) {
+  const [value, setValue] = useState(page?.metadata?.folder || '')
+  const [saving, setSaving] = useState(false)
+  const submit = async (e) => {
+    e?.preventDefault()
+    setSaving(true)
+    try { await onSave(page, value.trim().slice(0, 80)) } finally { setSaving(false) }
+  }
+  return (
+    <Modal open={!!page} onClose={onClose} title="Move to folder" subtitle={page?.title} width={400}
+      footer={<>
+        <button className="btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+      </>}>
+      <form onSubmit={submit}>
+        <label style={labelStyle} htmlFor="ft-move-folder">Folder name</label>
+        <input id="ft-move-folder" autoFocus list="ft-move-folders" style={inputStyle} value={value}
+          placeholder="Leave empty for no folder" onChange={e=>setValue(e.target.value)} />
+        <datalist id="ft-move-folders">{folders.map(f=><option key={f} value={f} />)}</datalist>
+        {folders.length > 0 && (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10 }}>
+            {folders.map(f=>(
+              <button key={f} type="button" onClick={()=>setValue(f)}
+                style={{ ...btnTiny, display:'inline-flex', alignItems:'center', gap:4, borderColor:value===f?'var(--accent)':'var(--border)' }}>
+                <Folder size={11} /> {f}
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
+    </Modal>
+  )
+}
+
+function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, openingId, cloning }) {
   const [hover, setHover] = useState(false)
   return (
     <tr
@@ -2396,6 +2541,7 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
               ? <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace', textDecoration:'none' }}>/p/{page.slug}</a>
               : <span style={{ fontSize:11, color:'var(--text-3)', fontFamily:'monospace' }}>/p/{page.slug}</span>
             }
+            <PageTags page={page} onFolder={onFolder} />
           </div>
         </div>
       </td>
@@ -2426,8 +2572,11 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
           <button style={{ ...btnTiny, background:page.is_published?'#fef3c7':'#dcfce7', color:page.is_published?'#92400e':'#15803d', border:'none', padding:'6px 12px', borderRadius:7, fontSize:12 }} onClick={()=>onPublish(page)}>
             {page.is_published ? 'Unpublish' : 'Publish'}
           </button>
-          <button style={{ ...btnTiny, padding:'6px 8px', borderRadius:7, color:'var(--text-2)' }} onClick={()=>onClone(page)} disabled={cloning===page.id} title="Clone">
+          <button style={{ ...btnTiny, padding:'6px 8px', borderRadius:7, color:'var(--text-2)' }} onClick={()=>onClone(page)} disabled={cloning===page.id} title="Duplicate as a new draft and edit it">
             {cloning===page.id ? '…' : <Copy size={13} strokeWidth={1.75} />}
+          </button>
+          <button style={{ ...btnTiny, padding:'6px 8px', borderRadius:7, color:'var(--text-2)' }} onClick={()=>onMove(page)} title="Move to folder">
+            <FolderInput size={13} strokeWidth={1.75} />
           </button>
           {page.is_published && (
             <button style={{ ...btnTiny, background:'#eff6ff', color:'#1d4ed8', border:'none', padding:'6px 10px', borderRadius:7, display:'inline-flex', alignItems:'center', gap:4, fontSize:12 }} onClick={()=>onShare(page)}>
@@ -2449,7 +2598,7 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
 // ---------------------------------------------------------------------------
 // Mobile card
 // ---------------------------------------------------------------------------
-function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete }) {
+function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, cloning }) {
   return (
     <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:14, padding:14, display:'flex', flexDirection:'column', gap:11 }}>
       {/* Top row: icon + title + badges */}
@@ -2466,6 +2615,7 @@ function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete }) {
             <Badge label={page.is_published?'Live':'Draft'} color={page.is_published?'published':'draft'} />
             <Badge label={page.content_type} color={page.content_type} />
           </div>
+          <PageTags page={page} onFolder={onFolder} />
         </div>
       </div>
 
@@ -2496,7 +2646,13 @@ function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete }) {
             <Share2 size={12} strokeWidth={2} />
           </button>
         )}
-        <button style={{ ...btnTiny, padding:'7px 9px', fontSize:12, background:'transparent', color:'var(--text-3)', borderRadius:8, display:'flex', alignItems:'center' }} onClick={()=>onDelete(page)}>
+        <button aria-label="Duplicate" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, borderRadius:8, display:'flex', alignItems:'center', color:'var(--text-2)' }} onClick={()=>onClone(page)} disabled={cloning===page.id}>
+          {cloning===page.id ? '…' : <Copy size={13} strokeWidth={1.75} />}
+        </button>
+        <button aria-label="Move to folder" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, borderRadius:8, display:'flex', alignItems:'center', color:'var(--text-2)' }} onClick={()=>onMove(page)}>
+          <FolderInput size={13} strokeWidth={1.75} />
+        </button>
+        <button aria-label="Delete" style={{ ...btnTiny, padding:'7px 9px', fontSize:12, background:'transparent', color:'var(--text-3)', borderRadius:8, display:'flex', alignItems:'center' }} onClick={()=>onDelete(page)}>
           <Trash2 size={13} strokeWidth={1.75} />
         </button>
       </div>
@@ -2519,6 +2675,9 @@ export default function PagesManager() {
   const [toast, setToast] = useState({ msg:'', ok:true })
   const [search, setSearch] = useState('')
   const [filterTab, setFilterTab] = useState('all')
+  // '' = every folder, UNFILED = pages with no folder, otherwise a folder name.
+  const [folderFilter, setFolderFilter] = useState('')
+  const [movePage, setMovePage] = useState(null)
   const [cloning, setCloning] = useState(null)
 
   const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast({msg:'',ok:true}),3500) }
@@ -2588,14 +2747,29 @@ export default function PagesManager() {
     setCloning(page.id)
     try {
       const full = await api.pages.get(page.id)
+      // A new, unpublished page: the live one is not touched. It keeps the
+      // folder, description and protection setting, but not the expiry, since
+      // a copy is usually made to send to someone new.
       const created = await api.pages.create({
         title:`${full.title} (Copy)`, content_type:full.content_type, content:full.content,
         slug:slugify(`${full.title}-copy-${Date.now().toString(36)}`), metadata:full.metadata||{},
       })
       if (created?.detail||created?.error) throw new Error(created.detail||created.error)
-      setPages(prev=>[created,...prev]); showToast('Cloned — edit and publish when ready')
+      setPages(prev=>[created,...prev])
+      setDrawerPage(created)
+      showToast('Duplicated as a draft. The original is unchanged.')
     } catch (e) { showToast(e?.message||'Clone failed',false) }
     finally { setCloning(null) }
+  }
+
+  const handleMove = async (page, folder) => {
+    try {
+      const updated = await api.pages.update(page.id, { metadata:{ ...(page.metadata||{}), folder: folder || undefined } })
+      if (updated?.detail||updated?.error) throw new Error(updated.detail||updated.error)
+      setPages(prev=>prev.map(p=>p.id===updated.id?{ ...p, ...updated }:p))
+      setMovePage(null)
+      showToast(folder ? `Moved to ${folder}` : 'Removed from folder')
+    } catch (e) { showToast(e?.message||'Move failed', false) }
   }
 
   const [openingId, setOpeningId] = useState(null)
@@ -2614,11 +2788,25 @@ export default function PagesManager() {
     }
   }
 
+  const folderCounts = useMemo(() => {
+    const m = new Map()
+    for (const p of pages) { const f = p.metadata?.folder; if (f) m.set(f, (m.get(f)||0)+1) }
+    return [...m.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
+  }, [pages])
+  const folders = useMemo(() => folderCounts.map(([f])=>f), [folderCounts])
+  const unfiledCount = pages.filter(p=>!p.metadata?.folder).length
+
   const filtered = pages.filter(p=>{
-    const matchTab=filterTab==='all'||(filterTab==='published'&&p.is_published)||(filterTab==='drafts'&&!p.is_published)
-    const q=search.toLowerCase()
-    return matchTab&&(!q||p.title?.toLowerCase().includes(q)||p.slug?.toLowerCase().includes(q))
+    const expired = p.expires_at && msUntil(p.expires_at) <= 0
+    const matchTab=filterTab==='all'||(filterTab==='published'&&p.is_published)||(filterTab==='drafts'&&!p.is_published)||(filterTab==='expired'&&expired)
+    const f = p.metadata?.folder || ''
+    const matchFolder = !folderFilter || (folderFilter===UNFILED ? !f : f===folderFilter)
+    const q=search.trim().toLowerCase()
+    const hay = [p.title, p.slug, p.metadata?.description, f].filter(Boolean).join(' ').toLowerCase()
+    return matchTab&&matchFolder&&(!q||q.split(/\s+/).every(w=>hay.includes(w)))
   })
+  const anyFilter = search || filterTab!=='all' || folderFilter
+  const clearFilters = () => { setSearch(''); setFilterTab('all'); setFolderFilter('') }
 
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
@@ -2660,16 +2848,31 @@ export default function PagesManager() {
       {/* Search + filter */}
       {pages.length>0&&(
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-          <div style={{ position:'relative', flex:isMobile?1:'0 0 auto' }}>
+          <div style={{ position:'relative', flex:isMobile?'1 1 100%':'0 0 auto' }}>
             <Search size={13} strokeWidth={2} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'var(--text-3)' }} />
-            <input style={{ ...inputStyle, maxWidth:isMobile?'100%':260, padding:'8px 12px 8px 32px', borderRadius:10, fontSize:13 }} placeholder="Search pages…" value={search} onChange={e=>setSearch(e.target.value)} />
+            <input style={{ ...inputStyle, maxWidth:isMobile?'100%':260, padding:'8px 12px 8px 32px', borderRadius:10, fontSize:13 }} placeholder="Search title, link, folder…" value={search} onChange={e=>setSearch(e.target.value)} />
           </div>
           <div style={{ display:'flex', gap:2, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
-            {[['all','All'],['published','Live'],['drafts','Drafts']].map(([val,label])=>(
+            {[['all','All'],['published','Live'],['drafts','Drafts'],['expired','Expired']].map(([val,label])=>(
               <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
             ))}
           </div>
-          {(search||filterTab!=='all')&&<button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnGhost, fontSize:12, padding:'6px 12px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:4 }}><X size={12} /> Clear</button>}
+          {anyFilter&&<button onClick={clearFilters} style={{ ...btnGhost, fontSize:12, padding:'6px 12px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:4 }}><X size={12} /> Clear</button>}
+        </div>
+      )}
+
+      {/* Folders */}
+      {folders.length>0&&(
+        <div role="group" aria-label="Folders" style={{ display:'flex', gap:6, marginBottom:16, overflowX:'auto', paddingBottom:2 }}>
+          {[['', 'All folders', pages.length], ...folderCounts.map(([f,n])=>[f,f,n]), [UNFILED, 'No folder', unfiledCount]].map(([val,label,n])=>{
+            const on = folderFilter===val
+            return (
+              <button key={val||'__all'} onClick={()=>setFolderFilter(val)} aria-pressed={on}
+                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--bg-card)', color:on?'#fff':'var(--text-2)' }}>
+                {val!=='' && val!==UNFILED && <Folder size={12} />}{label} <span style={{ opacity:0.7 }}>{n}</span>
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -2710,11 +2913,11 @@ export default function PagesManager() {
           </div>
           <div style={{ fontSize:14, fontWeight:600, marginBottom:4, color:'var(--text-1)' }}>No pages match your search</div>
           <div style={{ fontSize:13, marginBottom:16 }}>Try different keywords or clear the filters.</div>
-          <button onClick={()=>{setSearch('');setFilterTab('all')}} style={{ ...btnSecondary, fontSize:12, borderRadius:8, display:'inline-flex', alignItems:'center', gap:5 }}><X size={12} /> Clear filters</button>
+          <button onClick={clearFilters} style={{ ...btnSecondary, fontSize:12, borderRadius:8, display:'inline-flex', alignItems:'center', gap:5 }}><X size={12} /> Clear filters</button>
         </div>
       ) : isMobile ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} />)}
+          {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} cloning={cloning} />)}
         </div>
       ) : (
         <div style={{ border:'1px solid var(--border)', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
@@ -2731,14 +2934,15 @@ export default function PagesManager() {
                 <PageRow key={page.id} page={page} idx={idx} total={filtered.length}
                   onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage}
                   onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete}
-                  onClone={handleClone} openingId={openingId} cloning={cloning} />
+                  onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} openingId={openingId} cloning={cloning} />
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} />}
+      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} />}
+      {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}

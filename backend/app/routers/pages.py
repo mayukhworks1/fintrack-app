@@ -18,7 +18,7 @@ import re
 import secrets
 import string
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -35,6 +35,8 @@ from ..utils.uploads import read_upload, upload_limit
 from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
+
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
 from .ai import _ai_quota
 from .deps import require_auth, require_permission
 
@@ -524,6 +526,31 @@ async def _delete_page_assets(content: str | None) -> None:
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+def _parse_expiry(value: str | None) -> tuple[bool, datetime | None]:
+    """(given, when) for an expires_at field. "" clears the expiry; a value
+    without an offset is read as IST, the timezone the editor works in."""
+    if value is None:
+        return False, None
+    value = value.strip()
+    if not value:
+        return True, None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(422, "Invalid expiry date")
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=IST)
+    return True, when
+
+
+def _is_expired(row) -> bool:
+    return bool(row["expires_at"] and row["expires_at"] <= datetime.now(timezone.utc))
+
+
+def _source_protected(row) -> bool:
+    return bool(_meta(row["metadata"]).get("protect_source"))
+
+
 class CreatePageBody(BaseModel):
     title: str
     content_type: str = "markdown"
@@ -657,12 +684,7 @@ async def create_page(
 
         pw_hash = _hash_password(body.password) if body.is_password_protected and body.password else None
 
-        expires_at = None
-        if body.expires_at:
-            try:
-                expires_at = datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
-            except ValueError:
-                pass
+        _, expires_at = _parse_expiry(body.expires_at)
 
         row = await conn.fetchrow(
             """
@@ -1124,11 +1146,9 @@ async def update_page(
             updates["is_password_protected"] = body.is_password_protected
         if body.password is not None:
             updates["password_hash"] = _hash_password(body.password)
-        if body.expires_at is not None:
-            try:
-                updates["expires_at"] = datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
-            except ValueError:
-                pass
+        given, expires_at = _parse_expiry(body.expires_at)
+        if given:
+            updates["expires_at"] = expires_at
 
         # Slug update with uniqueness check
         if body.slug is not None:
@@ -1497,7 +1517,7 @@ async def public_get_page(slug: str, request: Request):
         raise HTTPException(404, "Page not found")
     if not row["is_published"]:
         raise HTTPException(404, "Page not found")
-    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+    if _is_expired(row):
         raise HTTPException(410, "Page has expired")
 
     import json as _json
@@ -1511,7 +1531,7 @@ async def public_get_page(slug: str, request: Request):
         )
 
     return Response(
-        content=_json.dumps(_public_page_dict(row)),
+        content=_json.dumps(_public_page_dict(row, with_render_token=_source_protected(row))),
         media_type="application/json",
         headers=_no_cache,
     )
@@ -1550,14 +1570,18 @@ async def public_render_page(slug: str, t: str | None = None):
 
     if not row or not row["is_published"]:
         raise HTTPException(404, "Page not found")
-    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+    if _is_expired(row):
         raise HTTPException(410, "Page has expired")
-    if row["is_password_protected"] and not _render_token_valid(slug, t):
+    protected = _source_protected(row)
+    if (row["is_password_protected"] or protected) and not _render_token_valid(slug, t):
         raise HTTPException(401, "This page is protected.")
 
+    # A page with an expiry is never cached, so it stops on the minute it is
+    # set to rather than living on in a cache for up to a minute more.
+    cacheable = not (row["is_password_protected"] or protected or row["expires_at"])
     return HTMLResponse(
-        content=page_render.build_document(row["content"] or ""),
-        headers=page_render.render_headers(cacheable=not row["is_password_protected"]),
+        content=page_render.build_document(row["content"] or "", protect=protected),
+        headers=page_render.render_headers(cacheable=cacheable),
     )
 
 
@@ -1574,18 +1598,18 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
 
     if not row or not row["is_published"]:
         raise HTTPException(404, "Page not found")
-    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+    if _is_expired(row):
         raise HTTPException(410, "Page has expired")
 
     if not row["is_password_protected"]:
-        return _public_page_dict(row)
+        return _public_page_dict(row, with_render_token=_source_protected(row))
 
     if _hash_password(body.password) != (row["password_hash"] or ""):
         raise HTTPException(401, "Incorrect password")
 
     # The renderer serves the document straight into an iframe and has no way
     # to be told a password, so proof of the password travels as a token.
-    return {**_public_page_dict(row), "render_token": _render_token(slug)}
+    return _public_page_dict(row, with_render_token=True)
 
 
 @router.post("/api/public/pages/{slug}/view")
@@ -1717,13 +1741,30 @@ def _page_list_dict(row) -> dict:
     return d
 
 
-def _public_page_dict(row) -> dict:
-    return {
+# Settings that only matter to the author and say nothing a visitor needs.
+_PRIVATE_META_KEYS = ("folder",)
+
+# A protected page's render token is short-lived: long enough to load the page,
+# too short to be worth passing around as a way to fetch its source.
+PROTECTED_RENDER_TOKEN_TTL_SECONDS = 10 * 60
+
+
+def _public_page_dict(row, with_render_token: bool = False) -> dict:
+    meta = {k: v for k, v in _meta(row["metadata"]).items() if k not in _PRIVATE_META_KEYS}
+    protected = bool(meta.get("protect_source"))
+    d = {
         "id": str(row["id"]),
         "slug": row["slug"],
         "title": row["title"],
         "content_type": row["content_type"],
-        "content": row["content"],
+        # A protected web page is shown only through its render URL, so its
+        # source is not handed out here as well.
+        "content": "" if protected and row["content_type"] == "html" else row["content"],
         "published_at": _dt(row["published_at"]),
-        "metadata": _meta(row.get("metadata")),
+        "expires_at": _dt(row["expires_at"]),
+        "metadata": meta,
     }
+    if with_render_token:
+        ttl = PROTECTED_RENDER_TOKEN_TTL_SECONDS if protected and not row["is_password_protected"] else RENDER_TOKEN_TTL_SECONDS
+        d["render_token"] = _render_token(row["slug"], ttl)
+    return d

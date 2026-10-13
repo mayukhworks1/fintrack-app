@@ -351,7 +351,24 @@ _BODY_CLOSE = re.compile(r"</body\s*>", re.IGNORECASE)
 _HTML_CLOSE = re.compile(r"</html\s*>", re.IGNORECASE)
 
 
-def build_document(content: str | None, padded: bool = False, preview: bool = False) -> str:
+# Opt-in deterrent for authors who would rather visitors did not lift a page's
+# code. A browser has to receive a page to show it, so this cannot make the
+# source secret; it removes the easy routes: the context menu ("View source",
+# "Save as"), the view-source / save / dev-tools shortcuts, and dragging
+# images out. Text can still be selected so the page stays readable.
+PROTECT_SCRIPT = (
+    "(function(){var d=document;"
+    "d.addEventListener('contextmenu',function(e){e.preventDefault()},true);"
+    "d.addEventListener('dragstart',function(e){if(e.target&&e.target.tagName==='IMG')e.preventDefault()},true);"
+    "d.addEventListener('keydown',function(e){var k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;"
+    "if(k==='f12'||(m&&(k==='u'||k==='s'))||(m&&e.shiftKey&&(k==='i'||k==='j'||k==='c'))||(e.metaKey&&e.altKey&&(k==='i'||k==='j'||k==='u'))){e.preventDefault();e.stopPropagation()}},true);"
+    "})();"
+)
+
+
+def build_document(
+    content: str | None, padded: bool = False, preview: bool = False, protect: bool = False,
+) -> str:
     """
     Wrap author content into a complete document.
 
@@ -361,7 +378,7 @@ def build_document(content: str | None, padded: bool = False, preview: bool = Fa
     author <script> executes.
 
     `padded` only affects a bare fragment. A full document keeps whatever
-    spacing its author wrote.
+    spacing its author wrote. `protect` adds PROTECT_SCRIPT.
     """
     body = content or ""
     is_document = bool(_HAS_DOCUMENT.match(body))
@@ -372,6 +389,7 @@ def build_document(content: str | None, padded: bool = False, preview: bool = Fa
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f"<style>{reset}{pad}</style>"
         f"<script>{VIEWER_PRELUDE}</script>"
+        + (f"<script>{PROTECT_SCRIPT}</script>" if protect else "")
     )
     bridge = f"<script>{AGENT_BRIDGE}</script>" if preview else ""
     runtime = f"<script>{VIEWER_RUNTIME}</script>{bridge}"

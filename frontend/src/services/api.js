@@ -840,7 +840,12 @@ export const api = {
     analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
     deleteView:    (pageId, viewId) => request(`/api/pages/${pageId}/views/${viewId}`, { method: 'DELETE' }),
     allViews:      (params)    => request(`/api/pages/admin/all-views?${new URLSearchParams(params || {})}`),
-    publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(r => r.json()),
+    // A 410 means the page's link has expired; flagged so the viewer can say
+    // so instead of showing "not found".
+    publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(async r => {
+      const data = await r.json().catch(() => ({}))
+      return r.status === 410 ? { ...(data || {}), expired: true } : data
+    }),
     publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
     publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
     // Parks unsaved editor content so the public renderer can serve it. The

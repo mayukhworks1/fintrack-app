@@ -472,6 +472,7 @@ export default function PageViewer() {
     setState('loading'); setPage(null)
     api.pages.publicGet(slug)
       .then(data => {
+        if (data?.expired) { setState('expired'); return }
         if (!data || data.detail || data.error) { setState('notfound'); return }
         if (data.requires_password) {
           // If this tab already unlocked the page this session, re-verify
@@ -492,6 +493,32 @@ export default function PageViewer() {
       })
       .catch(() => setState('notfound'))
   }, [slug])
+
+  // A page open on someone's screen closes at its expiry time too, not only
+  // on the next load.
+  useEffect(() => {
+    if (state !== 'loaded' || !page?.expires_at) return
+    const ms = new Date(page.expires_at).getTime() - Date.now()
+    if (!(ms > 0)) { setState('expired'); return }
+    // setTimeout caps at ~24.8 days; a later expiry is caught on reload.
+    if (ms > 2_000_000_000) return
+    const t = setTimeout(() => setState('expired'), ms)
+    return () => clearTimeout(t)
+  }, [state, page?.expires_at])
+
+  // Code protection for documents and sheets, which render here rather than in
+  // the framed document (that one carries its own guard).
+  useEffect(() => {
+    if (state !== 'loaded' || !page?.metadata?.protect_source || page.content_type === 'html') return
+    const menu = (e) => e.preventDefault()
+    const keys = (e) => {
+      const k = (e.key || '').toLowerCase(), m = e.ctrlKey || e.metaKey
+      if (k === 'f12' || (m && (k === 'u' || k === 's')) || (m && e.shiftKey && 'ijc'.includes(k))) e.preventDefault()
+    }
+    document.addEventListener('contextmenu', menu, true)
+    document.addEventListener('keydown', keys, true)
+    return () => { document.removeEventListener('contextmenu', menu, true); document.removeEventListener('keydown', keys, true) }
+  }, [state, page?.metadata?.protect_source, page?.content_type])
 
   useEffect(() => {
     if (state !== 'loaded' || viewLogged.current) return
@@ -583,6 +610,16 @@ export default function PageViewer() {
         <div style={{ fontSize: 80, fontWeight: 800, color: '#e2e8f0', lineHeight: 1 }}>404</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: '#374151', margin: '16px 0 8px' }}>Page not found</h2>
         <p style={{ color: '#9ca3af', fontSize: 15, margin: 0 }}>This page doesn't exist or has been unpublished.</p>
+      </div>
+    </ViewerShell>
+  )
+
+  if (state === 'expired') return (
+    <ViewerShell isHtml={false}>
+      <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+        <div style={{ fontSize: 56, lineHeight: 1 }}>⏳</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: '#374151', margin: '16px 0 8px' }}>This link has expired</h2>
+        <p style={{ color: '#9ca3af', fontSize: 15, margin: 0 }}>Ask the person who shared it for a new link.</p>
       </div>
     </ViewerShell>
   )
