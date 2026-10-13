@@ -223,7 +223,8 @@ export const fmtDateFull = (d) => {
 export function parseAttachments(cell) {
   if (!cell) return []
   if (Array.isArray(cell)) {
-    return cell.map(a => ({ name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || a.mimetype || '' }))
+    // thumb: Teable's small preview, so a row thumbnail doesn't pull the full original
+    return cell.map(a => ({ name: a.name || a.filename || 'Attachment', url: a.url || a.presignedUrl || '', mime: a.mimeType || a.mimetype || '', thumb: a.smThumbnailUrl || a.lgThumbnailUrl || '' }))
   }
   const parts = String(cell).split(/\s+/)
   const out = []

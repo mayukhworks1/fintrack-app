@@ -320,6 +320,8 @@ export function parseAttachments(cell) {
       name: a.name || a.filename || 'Attachment',
       url:  a.url  || a.presignedUrl || '',
       mime: a.mimeType || a.mimetype || '',
+      // Teable's small preview, so a 28px row thumbnail doesn't pull the full original
+      thumb: a.smThumbnailUrl || a.lgThumbnailUrl || '',
     }))
   }
   const parts = String(cell).split(/\s+/)

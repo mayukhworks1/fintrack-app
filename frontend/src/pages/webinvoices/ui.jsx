@@ -83,7 +83,7 @@ export function AgingBadge({ days, status }) {
 export function AttachThumb({ a, size = 28, onPreview }) {
   const [err, setErr] = useState(false)
   const inner = isImage(a) && !err
-    ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
+    ? <img src={a.thumb || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { const img = e.currentTarget; if (a.thumb && !img.dataset.full) { img.dataset.full = "1"; img.src = a.url } else setErr(true) }} />
     : isPdf(a)
       ? <FileText size={Math.round(size * 0.45)} style={{ color: '#f87171' }} />
       : <ImageIcon size={Math.round(size * 0.45)} style={{ color: 'var(--text-3)' }} />
@@ -112,7 +112,7 @@ export function AttachCard({ a, onPreview }) {
     <div className="rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
       style={{ width: 44, height: 44, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.10)' : 'var(--bg-input)' }}>
       {isImage(a) && !err
-        ? <img src={a.url} alt={a.name} className="w-full h-full object-cover" onError={() => setErr(true)} />
+        ? <img src={a.thumb || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { const img = e.currentTarget; if (a.thumb && !img.dataset.full) { img.dataset.full = "1"; img.src = a.url } else setErr(true) }} />
         : isPdf(a)
           ? <FileText size={20} style={{ color: '#f87171' }} />
           : <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />}
