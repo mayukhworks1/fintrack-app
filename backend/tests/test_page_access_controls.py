@@ -40,7 +40,7 @@ def _row(**over):
         "id": uuid.uuid4(), "slug": "proposal", "title": "Proposal", "content_type": "html",
         "content": HTML, "is_published": True, "is_password_protected": False,
         "password_hash": None, "published_at": datetime.now(timezone.utc),
-        "expires_at": None, "metadata": json.dumps({}),
+        "expires_at": None, "metadata": json.dumps({}), "updated_at": None,
     }
     row.update(over)
     return row
@@ -134,3 +134,42 @@ def test_folder_is_not_shown_to_visitors(page):
     page(metadata=json.dumps({"folder": "Clients/Acme", "description": "d"}))
     meta = _get()["metadata"]
     assert "folder" not in meta and meta["description"] == "d"
+
+
+class _Req:
+    headers = {"host": "api.example"}
+
+
+class TestLinkPreview:
+    @pytest.fixture(autouse=True)
+    def _origin(self, monkeypatch):
+        monkeypatch.setattr(P.settings, "frontend_url", "https://app.example")
+
+    def _card(self, slug="proposal"):
+        return asyncio.run(P.public_share_card(slug, _Req())).body.decode()
+
+    def test_card_carries_the_page_title_description_and_image(self, page):
+        page(updated_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+             metadata=json.dumps({"description": "Q4 plan for <Acme>"}))
+        html = self._card()
+        assert '<meta property="og:title" content="Proposal">' in html
+        assert 'content="Q4 plan for &lt;Acme&gt;"' in html
+        assert 'og:url" content="https://app.example/p/proposal"' in html
+        assert 'og:image" content="https://app.example/p/proposal/preview.png?v=' in html
+        assert "secret layout" not in html
+
+    def test_protected_page_shows_no_description(self, page):
+        page(is_password_protected=True, updated_at=None, metadata=json.dumps({"description": "confidential terms"}))
+        html = self._card()
+        assert "confidential terms" not in html
+        assert "Enter the password" in html
+
+    def test_expired_and_missing_pages_say_so(self, page):
+        page(expires_at=datetime.now(timezone.utc) - timedelta(days=1), updated_at=None)
+        assert "This link has expired" in self._card()
+        assert "Page not found" in self._card("nope")
+
+    def test_image_is_a_png(self, page):
+        page(updated_at=None)
+        resp = asyncio.run(P.public_share_image("proposal", _Req()))
+        assert resp.media_type == "image/png" and resp.body[:8] == b"\x89PNG\r\n\x1a\n"

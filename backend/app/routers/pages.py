@@ -35,6 +35,7 @@ from ..utils.uploads import read_upload, upload_limit
 from ..services import page_design
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
+from ..services import page_share
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 from .ai import _ai_quota
@@ -1535,6 +1536,67 @@ async def public_get_page(slug: str, request: Request):
         media_type="application/json",
         headers=_no_cache,
     )
+
+
+def _public_origin(request: Request) -> str:
+    """The site visitors use, for the links inside a preview card."""
+    for o in (settings.frontend_url or "").split(","):
+        o = o.strip().rstrip("/")
+        if o.startswith("http"):
+            return o
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    return f"https://{host}" if host else ""
+
+
+def _share_fields(row) -> dict:
+    """What a link preview may say about a page. A protected or expired page
+    gives away no more than its own password or expiry screen already does."""
+    if not row or not row["is_published"]:
+        return {"title": "Page not found", "description": "", "badge": ""}
+    if _is_expired(row):
+        return {"title": "This link has expired", "description": "Ask the person who shared it for a new link.", "badge": ""}
+    meta = _meta(row["metadata"])
+    if row["is_password_protected"]:
+        return {"title": row["title"] or "Protected page", "description": "Enter the password to view this page.", "badge": "Password protected"}
+    return {"title": row["title"] or "Untitled page", "description": (meta.get("description") or "").strip(), "badge": ""}
+
+
+@router.get("/api/public/pages/{slug}/share", response_class=HTMLResponse)
+async def public_share_card(slug: str, request: Request):
+    """Link-preview document for crawlers (WhatsApp, LinkedIn, Slack...)."""
+    pool = get_pool()
+    row = None
+    if pool:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
+    f = _share_fields(row)
+    origin = _public_origin(request)
+    version = int(row["updated_at"].timestamp()) if row and row["updated_at"] else 0
+    body = page_share.share_html(
+        title=f["title"], description=f["description"],
+        url=f"{origin}/p/{quote(slug)}",
+        image=f"{origin}/p/{quote(slug)}/preview.png?v={version}",
+        site_name="FinTrack Pages",
+    )
+    return HTMLResponse(body, headers={"Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex"})
+
+
+@router.get("/api/public/pages/{slug}/og.png")
+async def public_share_image(slug: str, request: Request):
+    pool = get_pool()
+    row = None
+    if pool:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
+    f = _share_fields(row)
+    host = _public_origin(request).split("://", 1)[-1]
+    version = row["updated_at"].timestamp() if row and row["updated_at"] else 0
+    key = (slug, version, f["title"], f["description"], f["badge"])
+    png = await asyncio.to_thread(
+        page_share.card_png_cached, key,
+        title=f["title"], description=f["description"], footer=host, badge=f["badge"],
+    )
+    return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/api/public/pages/preview/{token}", response_class=HTMLResponse)
