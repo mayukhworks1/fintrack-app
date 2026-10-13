@@ -64,12 +64,14 @@ function ToastItem({ toast, dismiss }) {
   )
 }
 
+// Above every overlay, confirm dialog included (10000), so a message raised
+// from inside a full-screen dialog such as the payment-reminder one is seen.
 function ToastContainer({ toasts, dismiss }) {
   if (!toasts.length) return null
   return (
     <div
       aria-label="Notifications"
-      className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-[100] flex flex-col gap-2 items-end pointer-events-none"
+      className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-[10050] flex flex-col gap-2 items-end pointer-events-none"
     >
       {toasts.map(t => (
         <div key={t.id} className="pointer-events-auto">
