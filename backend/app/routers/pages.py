@@ -1326,6 +1326,58 @@ async def page_analytics(
     return {"total": total, "items": [_av(r) for r in rows]}
 
 
+_INSIGHTS_SQL = """
+WITH v AS (
+    SELECT viewed_at, viewer_ip,
+           CASE
+               WHEN coalesce(user_agent, '') = '' THEN 'Unknown'
+               WHEN user_agent ~* '(ipad|tablet)' THEN 'Tablet'
+               WHEN user_agent ~* '(mobi|iphone|android)' THEN 'Mobile'
+               ELSE 'Desktop'
+           END AS device,
+           coalesce(nullif(metadata->'geo'->>'country', ''), nullif(country, ''), 'Unknown') AS place
+    FROM page_views WHERE page_id = $1
+)
+SELECT json_build_object(
+    'total',    (SELECT count(*) FROM v),
+    'unique',   (SELECT count(DISTINCT viewer_ip) FROM v),
+    'last7',    (SELECT count(*) FROM v WHERE viewed_at >= now() - interval '7 days'),
+    'prev7',    (SELECT count(*) FROM v WHERE viewed_at >= now() - interval '14 days'
+                                          AND viewed_at <  now() - interval '7 days'),
+    'daily',    (SELECT coalesce(json_agg(json_build_object('day', d, 'views', n) ORDER BY d), '[]')
+                 FROM (SELECT (viewed_at AT TIME ZONE 'Asia/Kolkata')::date AS d, count(*) AS n
+                       FROM v WHERE viewed_at >= now() - interval '30 days' GROUP BY 1) t),
+    'devices',  (SELECT coalesce(json_agg(json_build_object('name', device, 'views', n) ORDER BY n DESC), '[]')
+                 FROM (SELECT device, count(*) AS n FROM v GROUP BY 1) t),
+    'countries',(SELECT coalesce(json_agg(json_build_object('name', place, 'views', n) ORDER BY n DESC), '[]')
+                 FROM (SELECT place, count(*) AS n FROM v GROUP BY 1 ORDER BY 2 DESC LIMIT 6) t)
+)
+"""
+
+
+@router.get("/api/pages/{page_id}/insights")
+async def page_insights(page_id: str, request: Request, role: str = Depends(require_auth)):
+    """Totals and breakdowns over every view of a page, for the insights
+    charts. The analytics list only carries the latest rows, so charts drawn
+    from it undercounted any page past its first hundred views."""
+    pool = get_pool()
+    if not pool:
+        raise HTTPException(503, "Database unavailable")
+    user_id = getattr(request.state, "auth_user_id", None)
+    auth_role = getattr(request.state, "auth_role", role) or role
+    async with pool.acquire() as conn:
+        page = await conn.fetchrow("SELECT id, created_by FROM published_pages WHERE id = $1", page_id)
+        if not page:
+            raise HTTPException(404, "Page not found")
+        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+            raise HTTPException(403, "Access denied")
+        raw = await conn.fetchval(_INSIGHTS_SQL, page_id)
+    data = json.loads(raw) if isinstance(raw, str) else raw
+    for row in data.get("daily") or []:
+        row["day"] = str(row["day"])
+    return data
+
+
 # ---------------------------------------------------------------------------
 # Version history endpoints
 # ---------------------------------------------------------------------------

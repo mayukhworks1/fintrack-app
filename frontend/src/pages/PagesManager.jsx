@@ -275,24 +275,110 @@ function exportAnalyticsCSV(items, pageTitle) {
 // ---------------------------------------------------------------------------
 // Sparkline
 // ---------------------------------------------------------------------------
-function ViewSparkline({ items }) {
-  if (!items?.length) return null
-  const now = new Date()
-  const days = Array.from({length:14},(_,i)=>{ const d=new Date(now); d.setDate(d.getDate()-(13-i)); return d.toISOString().slice(0,10) })
-  const counts = {}; items.forEach(v=>{ const d=v.viewed_at?.slice(0,10); if(d) counts[d]=(counts[d]||0)+1 })
-  const vals = days.map(d=>counts[d]||0); const max=Math.max(...vals,1)
+// Insights over every view of a page: a few headline numbers, views per day
+// for the last 30 days, and where and on what people opened it. One hue
+// throughout: every chart here is a magnitude, none is an identity.
+function PageInsights({ pageId, reloadKey, isMobile }) {
+  const [d, setD] = useState(null)
+  const [err, setErr] = useState(false)
+  const [hover, setHover] = useState(null)
+  useEffect(() => {
+    let alive = true
+    setErr(false)
+    api.pages.insights(pageId).then(r => { if (alive) setD(r) }).catch(() => { if (alive) setErr(true) })
+    return () => { alive = false }
+  }, [pageId, reloadKey])
+
+  if (err) return null
+  if (!d) return <div style={{ marginBottom:18 }}><SkeletonList rows={2} compact label="Loading insights" /></div>
+  if (!d.total) return null
+
+  // 30 IST calendar days, oldest first, zero-filled.
+  const IST = 5.5 * 3600e3
+  const today = new Date(Date.now() + IST)
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const x = new Date(today); x.setUTCDate(x.getUTCDate() - (29 - i))
+    return x.toISOString().slice(0, 10)
+  })
+  const byDay = Object.fromEntries((d.daily || []).map(r => [r.day, r.views]))
+  const vals = days.map(k => byDay[k] || 0)
+  const max = Math.max(...vals, 1)
+  const label = (k) => new Date(k + 'T00:00:00Z').toLocaleDateString('en-IN', { day:'numeric', month:'short', timeZone:'UTC' })
+  const delta = d.last7 - d.prev7
+  const top = d.countries?.find(c => c.name !== 'Unknown')
+
+  const card = { background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 16px' }
+  const h = { fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10 }
+  const tiles = [
+    { k:'Total views', v:d.total.toLocaleString('en-IN') },
+    { k:'Unique visitors', v:d.unique.toLocaleString('en-IN'), sub:'by network address' },
+    { k:'Last 7 days', v:d.last7.toLocaleString('en-IN'), sub: d.prev7 || d.last7 ? `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)} vs previous 7 days` : 'no views yet' },
+    { k:'Top country', v: top ? top.name : '—', sub: top ? `${top.views.toLocaleString('en-IN')} views` : '' },
+  ]
+
+  const BarList = ({ title, rows }) => {
+    const m = Math.max(...rows.map(r => r.views), 1)
+    return (
+      <div style={card}>
+        <div style={h}>{title}</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+          {rows.map(r => (
+            <div key={r.name} style={{ display:'grid', gridTemplateColumns:'minmax(70px,120px) 1fr auto', alignItems:'center', gap:10, fontSize:12.5 }}>
+              <span style={{ color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
+              <span style={{ height:8, background:'var(--bg-base)', borderRadius:4, overflow:'hidden' }}>
+                <span style={{ display:'block', height:'100%', width:`${Math.max(2, r.views / m * 100)}%`, background:'var(--accent)', borderRadius:4 }} />
+              </span>
+              <span style={{ color:'var(--text-2)', fontVariantNumeric:'tabular-nums', minWidth:28, textAlign:'right' }}>{r.views.toLocaleString('en-IN')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ marginBottom:16 }}>
-      <div style={{ fontSize:11, color:'var(--text-2)', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Views — last 14 days</div>
-      <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:40 }}>
-        {vals.map((v,i)=>(
-          <div key={i} title={`${days[i]}: ${v} view${v!==1?'s':''}`} style={{ flex:1, minWidth:8, borderRadius:3, background:v>0?'var(--accent)':'var(--border)', height:`${Math.max(4,(v/max)*40)}px`, opacity:v>0?0.85:0.3 }} />
+    <section aria-label="Page insights" style={{ marginBottom:20, display:'flex', flexDirection:'column', gap:12 }}>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10 }}>
+        {tiles.map(t => (
+          <div key={t.k} style={card}>
+            <div style={{ fontSize:11, color:'var(--text-2)', fontWeight:600 }}>{t.k}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:'var(--text-1)', marginTop:4, fontVariantNumeric:'tabular-nums', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.v}</div>
+            {t.sub && <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>{t.sub}</div>}
+          </div>
         ))}
       </div>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'var(--text-2)', marginTop:3 }}>
-        <span>{days[0].slice(5)}</span><span>{days[6].slice(5)}</span><span>{days[13].slice(5)}</span>
+
+      <div style={card}>
+        <div style={{ ...h, display:'flex', justifyContent:'space-between' }}>
+          <span>Views per day · last 30 days (IST)</span>
+          <span aria-live="polite" style={{ textTransform:'none', letterSpacing:0, color:'var(--text-1)', fontWeight:600 }}>
+            {hover != null ? `${label(days[hover])}: ${vals[hover]} view${vals[hover] === 1 ? '' : 's'}` : ''}
+          </span>
+        </div>
+        <div style={{ position:'relative', height:120, display:'flex', alignItems:'flex-end', gap:2, borderBottom:'1px solid var(--border)' }}
+          onMouseLeave={() => setHover(null)}>
+          {[0.5, 1].map(f => (
+            <div key={f} aria-hidden="true" style={{ position:'absolute', left:0, right:0, bottom:`${f * 100}%`, borderTop:'1px dashed var(--border)', opacity:0.6 }} />
+          ))}
+          <span aria-hidden="true" style={{ position:'absolute', right:0, top:-2, fontSize:10, color:'var(--text-3)', background:'var(--card-bg)', paddingLeft:4 }}>{max}</span>
+          {vals.map((v, i) => (
+            <button key={days[i]} type="button" aria-label={`${label(days[i])}: ${v} view${v === 1 ? '' : 's'}`}
+              onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
+              style={{ all:'unset', flex:1, height:'100%', display:'flex', alignItems:'flex-end', cursor:'default', position:'relative' }}>
+              <span style={{ display:'block', width:'100%', height: v ? `${Math.max(3, v / max * 100)}%` : 2, background: v ? 'var(--accent)' : 'var(--border)', borderRadius:'4px 4px 0 0', opacity: hover == null || hover === i ? 1 : 0.45, transition:'opacity .12s' }} />
+            </button>
+          ))}
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:10.5, color:'var(--text-3)', marginTop:5 }}>
+          <span>{label(days[0])}</span><span>{label(days[15])}</span><span>Today</span>
+        </div>
       </div>
-    </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
+        <BarList title="Devices" rows={d.devices || []} />
+        <BarList title="Countries" rows={d.countries || []} />
+      </div>
+    </section>
   )
 }
 
@@ -378,8 +464,10 @@ function AnalyticsDrawer({ page, onClose }) {
   }
   const fmtRef = (ref) => { if (!ref) return '—'; try { return new URL(ref).hostname } catch { return ref.slice(0,30) } }
 
+  const [insightsKey, setInsightsKey] = useState(0)
   const reload = () => {
     if (!page) return
+    setInsightsKey(k => k + 1)
     setLoading(true)
     api.pages.analytics(page.id, {limit, offset:0})
       .then(d=>{ setData(d); setSelected(new Set()) }).catch(()=>setData({items:[],total:0})).finally(()=>setLoading(false))
@@ -517,6 +605,7 @@ function AnalyticsDrawer({ page, onClose }) {
         )}
 
         <div style={{ flex:1, padding:isMobile?'12px 16px':'16px 24px', overflow:'auto' }}>
+          <PageInsights pageId={page.id} reloadKey={insightsKey} isMobile={isMobile} />
           {loading ? (
             <SkeletonList rows={6} label="Loading views" />
           ) : !data?.items?.length ? (
@@ -525,7 +614,6 @@ function AnalyticsDrawer({ page, onClose }) {
             </div>
           ) : (
             <>
-              <ViewSparkline items={filtered} />
               <div style={{ fontSize:12, color:'var(--text-2)', marginBottom:12 }}>
                 Showing <strong>{filtered.length}</strong> of <strong>{data.total}</strong> views
                 {hasFilters&&<span style={{ color:'var(--accent)' }}> (filtered)</span>}

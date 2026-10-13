@@ -173,3 +173,35 @@ class TestLinkPreview:
         page(updated_at=None)
         resp = asyncio.run(P.public_share_image("proposal", _Req()))
         assert resp.media_type == "image/png" and resp.body[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+class _InsightsPool(OnePagePool):
+    def __init__(self, owner):
+        self.owner = owner
+
+    async def fetchrow(self, sql, *args):
+        return {"id": args[0], "created_by": self.owner}
+
+    async def fetchval(self, sql, *args):
+        assert "page_views" in sql
+        return json.dumps({"total": 3, "unique": 2, "last7": 3, "prev7": 0,
+                           "daily": [{"day": "2026-10-13", "views": 3}],
+                           "devices": [{"name": "Mobile", "views": 3}], "countries": []})
+
+
+class TestInsights:
+    def _req(self, user, role="user"):
+        from types import SimpleNamespace
+        return SimpleNamespace(state=SimpleNamespace(auth_user_id=user, auth_role=role))
+
+    def test_owner_gets_totals_and_daily_counts(self, monkeypatch):
+        owner = str(uuid.uuid4())
+        monkeypatch.setattr(P, "get_pool", lambda: _InsightsPool(owner))
+        d = asyncio.run(P.page_insights("p1", self._req(owner), role="editor"))
+        assert d["total"] == 3 and d["daily"][0] == {"day": "2026-10-13", "views": 3}
+
+    def test_someone_else_is_refused(self, monkeypatch):
+        monkeypatch.setattr(P, "get_pool", lambda: _InsightsPool(str(uuid.uuid4())))
+        with pytest.raises(HTTPException) as e:
+            asyncio.run(P.page_insights("p1", self._req(str(uuid.uuid4())), role="editor"))
+        assert e.value.status_code == 403

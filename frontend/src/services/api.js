@@ -838,6 +838,7 @@ export const api = {
     delete:        (id)        => request(`/api/pages/${id}`, { method: 'DELETE' }),
     publish:       (id, published) => request(`/api/pages/${id}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
     analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
+    insights:      (id)         => request(`/api/pages/${id}/insights`),
     deleteView:    (pageId, viewId) => request(`/api/pages/${pageId}/views/${viewId}`, { method: 'DELETE' }),
     allViews:      (params)    => request(`/api/pages/admin/all-views?${new URLSearchParams(params || {})}`),
     // A 410 means the page's link has expired; flagged so the viewer can say
