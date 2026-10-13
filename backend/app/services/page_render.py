@@ -120,6 +120,19 @@ def csp_header() -> str:
 # margin, which no author asked for. The media rules stop an oversized image or
 # a wide table from forcing sideways scroll on a phone, which author markup
 # cannot be relied on to handle.
+# A full HTML document gets only MINIMAL_RESET: its author already decided
+# box-sizing, wrapping and media sizing, and the rest of VIEWER_RESET changed
+# layouts that render correctly everywhere else (overflow-wrap:break-word split
+# "works" into "work / s" in a tight tile; height:auto resized sized SVGs).
+# VIEWER_RESET is for bare fragments, which have no styles of their own.
+_IMG_FAILED = """
+.__ft-img-failed{display:flex;align-items:center;justify-content:center;min-height:80px;
+  padding:14px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;
+  color:#64748b;font:500 13px/1.4 system-ui,sans-serif;text-align:center}
+""".strip()
+
+MINIMAL_RESET = ":where(html,body){margin:0;padding:0}\n" + _IMG_FAILED
+
 VIEWER_RESET = """
 :where(html,body){margin:0;padding:0}
 :where(*,*::before,*::after){box-sizing:border-box}
@@ -129,10 +142,7 @@ VIEWER_RESET = """
 :where(pre){overflow-x:auto}
 :where(table){display:block;overflow-x:auto}
 :where(img){background:#f1f5f9}
-.__ft-img-failed{display:flex;align-items:center;justify-content:center;min-height:80px;
-  padding:14px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;
-  color:#64748b;font:500 13px/1.4 system-ui,sans-serif;text-align:center}
-""".strip()
+""".strip() + "\n" + _IMG_FAILED
 
 # ---------------------------------------------------------------------------
 # Runtime — a prelude before the author's markup, a pass after it
@@ -354,11 +364,13 @@ def build_document(content: str | None, padded: bool = False, preview: bool = Fa
     spacing its author wrote.
     """
     body = content or ""
-    pad = "\n:where(body){padding:14px}" if padded else ""
+    is_document = bool(_HAS_DOCUMENT.match(body))
+    pad = "\n:where(body){padding:14px}" if padded and not is_document else ""
+    reset = MINIMAL_RESET if is_document else VIEWER_RESET
     head = (
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-        f"<style>{VIEWER_RESET}{pad}</style>"
+        f"<style>{reset}{pad}</style>"
         f"<script>{VIEWER_PRELUDE}</script>"
     )
     bridge = f"<script>{AGENT_BRIDGE}</script>" if preview else ""

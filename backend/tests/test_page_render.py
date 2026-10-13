@@ -56,6 +56,21 @@ class TestDocumentAssembly:
         for sel in element_rules:
             assert ":where(" in sel, f'"{sel}" must be wrapped in :where()'
 
+    def test_a_full_document_keeps_its_own_layout(self):
+        """An uploaded page that renders correctly in any browser must render
+        the same here: overflow-wrap:break-word split "works" into "work / s"
+        in a tight tile, and height:auto resized SVGs sized by attribute."""
+        src = "<!DOCTYPE html><html><head><title>T</title></head><body><svg width='40' height='40'></svg></body></html>"
+        out = page_render.build_document(src)
+        assert ":where(html,body){margin:0;padding:0}" in out
+        assert ".__ft-img-failed{" in out
+        for rule in ("overflow-wrap", "box-sizing", "height:auto", "display:block", "overflow-x:hidden"):
+            assert rule not in out.split("<title>")[0], rule
+
+    def test_a_fragment_still_gets_the_full_reset(self):
+        out = page_render.build_document("<p>x</p>")
+        assert "overflow-wrap:break-word" in out and "box-sizing:border-box" in out
+
     def test_only_pads_when_asked(self):
         assert ":where(body){padding:14px}" in page_render.build_document("<p>x</p>", padded=True)
         assert ":where(body){padding:14px}" not in page_render.build_document("<p>x</p>")
