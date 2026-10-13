@@ -758,6 +758,42 @@ function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attac
   )
 }
 
+// Load a whole .html file from disk into the editor, replacing the content.
+// Read in the browser — nothing is uploaded until the page is saved.
+function ImportHtmlButton({ value, onChange, onTitle, label = '📄 Upload HTML file' }) {
+  const confirm = useConfirm()
+  const inputRef = useRef(null)
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const text = await file.text()
+      if ((value || '').trim() && !(await confirm({
+        title: 'Replace page content',
+        message: `Replace the current content with "${file.name}"?`,
+        confirmLabel: 'Replace',
+      }))) return
+      onChange(text)
+      const t = text.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim()
+      onTitle?.(t || file.name.replace(/\.html?$/i, ''))
+    } catch (err) {
+      alert('Could not read file: ' + (err?.message || err))
+    }
+  }
+  return (
+    <>
+      <input ref={inputRef} type="file" onChange={onFile} style={{ display:'none' }} accept=".html,.htm,text/html" />
+      <button type="button" title="Load a .html file from your computer"
+        onMouseDown={e=>{ e.preventDefault(); inputRef.current?.click() }}
+        style={{ background:'transparent', border:'none', borderRadius:5, padding:'4px 7px', fontSize:12, cursor:'pointer', color:'var(--text-1)', userSelect:'none', whiteSpace:'nowrap' }}
+        onMouseEnter={e=>e.target.style.background='var(--border)'}
+        onMouseLeave={e=>e.target.style.background='transparent'}>
+        {label}
+      </button>
+    </>
+  )
+}
+
 // Lists uploaded attachments referenced in the content with a delete action.
 function AttachmentsBar({ content, onChange }) {
   const confirm = useConfirm()
@@ -2226,6 +2262,8 @@ function PageDrawer({ page, onClose, onSaved, initialType }) {
         )}
         {isHtml && tab === 'edit' && (
           <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--bg-card)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+            <ImportHtmlButton value={form.content} onChange={c=>{ setContent(c); setShowTemplates(false) }}
+              onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? '📄 Upload HTML' : '📄 Upload HTML file'} />
             <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
             {/* The explanation is worth a line on a desktop toolbar and worth a
                 row of a phone screen — which it is not. */}
