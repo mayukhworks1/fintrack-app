@@ -13,7 +13,7 @@ import PublicLayout from '../../components/PublicLayout'
 import PermissionPlayground from '../../components/PermissionPlayground'
 import BrandCustomizerSandbox from '../../components/BrandCustomizerSandbox'
 import { Grain } from '../../components/LandingVisuals'
-import { PageHead, Card, Grid, Closing, Head } from '../../components/PublicBits'
+import { PageHead, Card, Grid, Closing, Head, Reveal } from '../../components/PublicBits'
 import { PermissionRows, OneBuildTwoHomes, ModuleSlotsIn } from '../../components/SceneDiagrams'
 import { SHAPE, APP_LD, crumbs, graph } from '../../content/publicContent'
 
@@ -66,7 +66,7 @@ export default function Customise() {
           says what they would actually sign in to.
         </Head>
 
-        <PermissionPlayground />
+        <Reveal><PermissionPlayground /></Reveal>
 
         <p className="mt-6 mb-14 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
           One thing is deliberately not adjustable: the set of measures the
@@ -83,7 +83,7 @@ export default function Customise() {
           and customize your invoice taxonomy.
         </Head>
 
-        <BrandCustomizerSandbox />
+        <Reveal><BrandCustomizerSandbox /></Reveal>
       </section>
 
       <Closing title="Tell us how you work"

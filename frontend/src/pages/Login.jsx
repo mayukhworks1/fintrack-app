@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock } from 'lucide-react'
 import BrandMark from '../components/BrandMark'
+import LoginShowcase from '../components/LoginShowcase'
 import { useAuth } from '../context/AuthContext'
 import { useTilt } from '../hooks/useTilt'
 import { api } from '../services/api'
@@ -324,6 +325,8 @@ export default function Login() {
 
   return (
     <div ref={pageLight} className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="w-full flex items-center justify-center gap-12 xl:gap-20" style={{ maxWidth: 1180 }}>
+      {!resetToken && <LoginShowcase />}
 
       {/* The column arrives in order: way back, mark, card, footnote. */}
       <div className="w-full max-w-sm ft-login-enter">
@@ -333,8 +336,9 @@ export default function Login() {
           <ArrowLeft size={13} aria-hidden="true" /> Back to overview
         </Link>
 
-        {/* Brand wordmark above card */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
+        {/* Brand wordmark above card. On wide screens the showcase beside
+            the form already carries it, so it is not said twice. */}
+        <div className={`flex items-center justify-center gap-2.5 mb-8${resetToken ? '' : ' lg:hidden'}`}>
           <BrandMark size={36} className="ft-login-mark" />
           <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.6rem' }}>
             FinTrack
@@ -739,6 +743,7 @@ export default function Login() {
               ? 'New accounts stay pending until a superadmin approves access'
               : legacyMode ? 'Legacy password is temporary during RBAC migration' : 'Email login requires superadmin approval'}
         </p>
+      </div>
       </div>
     </div>
   )

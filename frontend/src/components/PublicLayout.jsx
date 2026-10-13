@@ -39,6 +39,26 @@ export default function PublicLayout({ children }) {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // Spotlight: tell the card under a mouse pointer where the pointer is, so
+  // its glow (index.css, SPOTLIGHT) can follow it. One listener for the page.
+  useEffect(() => {
+    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let frame = 0
+    const onMove = (e) => {
+      const el = e.target?.closest?.('.ft-chip, .ft-lift, .ft-spot')
+      if (!el || frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const r = el.getBoundingClientRect()
+        el.style.setProperty('--mx', `${e.clientX - r.left}px`)
+        el.style.setProperty('--my', `${e.clientY - r.top}px`)
+      })
+    }
+    document.addEventListener('pointermove', onMove, { passive: true })
+    return () => { document.removeEventListener('pointermove', onMove); cancelAnimationFrame(frame) }
+  }, [])
+
   // A fixed overlay that scrolls the page behind it reads as broken.
   useEffect(() => {
     if (!open && !legalModal) return

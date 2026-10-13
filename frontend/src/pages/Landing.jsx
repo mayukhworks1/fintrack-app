@@ -34,6 +34,7 @@ import { Reveal, Rising, Stagger, Rule, Head, Card, Grid, Closing } from '../com
 import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
 } from '../content/publicContent'
+import ScreenGallery from '../components/ScreenGallery'
 
 const LD = graph(APP_LD, FAQ_LD)
 
@@ -183,6 +184,17 @@ export default function Landing() {
             </div>
           ))}
         </Stagger>
+      </section>
+
+      {/* ── Every screen ────────────────────────────────────────────────
+          Real captures of the product, from the same sample workspace the
+          sandbox runs on: what it looks like before anyone signs in. */}
+      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+        <Head eyebrow="Every screen" title="See it before you sign in">
+          Nine of the screens your team works in, on sample data. Swipe through,
+          or open one to look closer.
+        </Head>
+        <Reveal><ScreenGallery /></Reveal>
       </section>
 
       {/* ── The problem ─────────────────────────────────────────────────── */}

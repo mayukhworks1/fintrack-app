@@ -4475,3 +4475,118 @@ html.dark .main-app-theme {
   select.input-field { padding-right: 2rem; }
   textarea.input-field { min-height: 88px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   SPOTLIGHT — a soft glow that follows the pointer across a card.
+   PublicLayout writes --mx/--my on the card under the pointer. The glow
+   sits under the card's content (isolation + z-index -1) and over its
+   background, so text never washes out. Mouse only; off for reduced motion.
+   ══════════════════════════════════════════════════════════════════ */
+.ft-chip, .ft-lift, .ft-spot { position: relative; isolation: isolate; }
+.ft-chip::before, .ft-lift::before, .ft-spot::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  pointer-events: none; opacity: 0; transition: opacity 260ms ease;
+  background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%),
+              color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ft-chip:hover::before, .ft-lift:hover::before, .ft-spot:hover::before { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ft-chip::before, .ft-lift::before, .ft-spot::before { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SCREEN GALLERY
+   ══════════════════════════════════════════════════════════════════ */
+.ft-gallery {
+  display: flex; gap: 16px; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory; scroll-padding-inline: 2px;
+  padding: 6px 2px 18px; scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+          mask-image: linear-gradient(90deg, #000 92%, transparent);
+}
+.ft-gallery-card { flex: 0 0 min(520px, 84vw); scroll-snap-align: start; }
+.ft-gallery-shot {
+  display: block; width: 100%; padding: 0; cursor: zoom-in; overflow: hidden;
+  border-radius: 14px; border: 1px solid var(--card-border); background: var(--card-bg);
+  box-shadow: 0 12px 30px -18px rgba(15,23,42,0.35);
+  transition: transform 320ms cubic-bezier(0.22,1,0.36,1), box-shadow 320ms ease, border-color 220ms ease;
+}
+.ft-gallery-shot img {
+  display: block; width: 100%; height: auto; aspect-ratio: 1072 / 691;
+  transition: transform 600ms cubic-bezier(0.22,1,0.36,1);
+}
+.ft-gallery-zoom {
+  position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(15,23,42,0.72); color: #fff; opacity: 0; transform: scale(.85);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.ft-gallery-shot:hover, .ft-gallery-shot:focus-visible {
+  transform: translateY(-4px); border-color: var(--accent-soft);
+  box-shadow: 0 22px 44px -22px var(--accent-glow, rgba(37,99,235,.45)); outline: none;
+}
+.ft-gallery-shot:hover img { transform: scale(1.025); }
+.ft-gallery-shot:hover .ft-gallery-zoom, .ft-gallery-shot:focus-visible .ft-gallery-zoom { opacity: 1; transform: none; }
+.ft-gallery-shot:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
+.ft-lightbox { animation: ft-fade-in 200ms ease both; }
+.ft-lightbox-img { animation: ft-zoom-in 260ms cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes ft-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes ft-zoom-in { from { opacity: 0; transform: scale(.97) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) {
+  .ft-gallery-shot, .ft-gallery-shot img, .ft-gallery-zoom { transition: none; }
+  .ft-gallery-shot:hover, .ft-gallery-shot:hover img { transform: none; }
+  .ft-lightbox, .ft-lightbox-img { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LOGIN SHOWCASE — the panel beside the sign-in form on wide screens.
+   ══════════════════════════════════════════════════════════════════ */
+.ft-showcase {
+  position: relative; overflow: hidden; flex: 1 1 0; max-width: 620px; min-height: 640px;
+  flex-direction: column; justify-content: space-between;
+  padding: 44px 44px 36px; border-radius: 28px;
+  background: linear-gradient(155deg, #0b1224 0%, #121c3d 55%, #1b2a63 100%);
+  box-shadow: 0 40px 90px -40px rgba(11,18,36,0.6);
+  animation: ft-showcase-in 700ms cubic-bezier(0.22,1,0.36,1) both;
+}
+.ft-showcase::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 75%);
+          mask-image: linear-gradient(180deg, #000, transparent 75%);
+}
+.ft-showcase-glow {
+  position: absolute; width: 520px; height: 520px; right: -160px; bottom: -200px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(79,112,255,0.55), transparent 65%);
+  filter: blur(10px); animation: ft-showcase-drift 14s ease-in-out infinite alternate;
+}
+.ft-showcase-point { opacity: 0; animation: ft-showcase-rise 600ms cubic-bezier(0.22,1,0.36,1) forwards; }
+.ft-showcase-frame {
+  position: relative; aspect-ratio: 1072 / 691; border-radius: 14px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.14); background: #f6f7fb;
+  box-shadow: 0 30px 60px -28px rgba(0,0,0,0.65);
+  transform: perspective(1400px) rotateX(5deg) rotateY(-7deg); transform-origin: 60% 40%;
+  transition: transform 600ms cubic-bezier(0.22,1,0.36,1);
+}
+.ft-showcase:hover .ft-showcase-frame { transform: perspective(1400px) rotateX(0) rotateY(0); }
+.ft-showcase-slide {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left;
+  opacity: 0; transform: scale(1.03); transition: opacity 700ms ease, transform 1200ms ease;
+}
+.ft-showcase-slide[data-on] { opacity: 1; transform: none; }
+.ft-showcase-dot {
+  width: 8px; height: 8px; border-radius: 999px; padding: 0; border: 0; cursor: pointer;
+  background: rgba(255,255,255,0.3); transition: width 260ms ease, background 260ms ease;
+}
+.ft-showcase-dot[data-on] { width: 22px; background: #9db8ff; }
+.ft-showcase-dot:focus-visible { outline: 2px solid #9db8ff; outline-offset: 2px; }
+@keyframes ft-showcase-in { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+@keyframes ft-showcase-rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes ft-showcase-drift { from { transform: translate(0,0) } to { transform: translate(-60px,-40px) } }
+@media (prefers-reduced-motion: reduce) {
+  .ft-showcase, .ft-showcase-point, .ft-showcase-glow { animation: none; opacity: 1; }
+  .ft-showcase-frame, .ft-showcase-slide { transition: none; transform: none; }
+}

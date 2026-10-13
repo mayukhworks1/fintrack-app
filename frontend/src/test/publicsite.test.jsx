@@ -187,7 +187,9 @@ describe('the overview stays short', () => {
 
   it('labels the sandbox as invented before anyone reads a figure from it', () => {
     at('/')
-    expect(screen.getByText(/Sample data/i)).toBeInTheDocument()
+    // The sandbox carries its own label; the screen gallery says so too.
+    expect(screen.getAllByText(/Sample data/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/Every figure is sample data/i)).toBeInTheDocument()
   })
 
   it('no longer carries the sections that moved', () => {
