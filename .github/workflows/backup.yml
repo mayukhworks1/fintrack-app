@@ -35,11 +35,19 @@ jobs:
           [ -n "$DRIVE_URL" ]     || missing="$missing BACKUP_DRIVE_URL"
           [ -n "$BACKUP_SECRET" ] || missing="$missing BACKUP_SECRET"
           if [ -n "$missing" ]; then
+            # Until it is set up, the nightly run skips quietly instead of
+            # emailing a failure every day. A manual run still fails loudly.
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              echo "::notice::Backup is not set up yet (missing:$missing). Skipping. See docs/BACKUPS.md."
+              echo "SKIP_BACKUP=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
             echo "::error::Backup is not set up yet. Missing repository secrets:$missing. See docs/BACKUPS.md."
             exit 1
           fi
 
       - name: Install PostgreSQL 17 client
+        if: env.SKIP_BACKUP != '1'
         # The server runs PostgreSQL 17; an older pg_dump refuses to dump it.
         run: |
           sudo apt-get update -qq
@@ -49,6 +57,7 @@ jobs:
           /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Dump database
+        if: env.SKIP_BACKUP != '1'
         run: |
           set -euo pipefail
           name="fintrack-$(TZ=Asia/Kolkata date +%Y-%m-%d-%H%M).sql.gz"
@@ -62,6 +71,7 @@ jobs:
           echo "Dump: $name, $size bytes"
 
       - name: Save to Google Drive
+        if: env.SKIP_BACKUP != '1'
         run: |
           set -euo pipefail
           base64 -w0 "$BACKUP_FILE" > data.b64
