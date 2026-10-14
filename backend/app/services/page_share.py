@@ -16,6 +16,7 @@ import html
 import io
 import os
 import textwrap
+import threading
 from collections import OrderedDict
 from functools import lru_cache
 
@@ -39,8 +40,16 @@ def _font(size: int, bold: bool = True):
         return ImageFont.load_default(size=size)
 
 
+def _clip(draw, line: str, font, width_px: int) -> str:
+    """Cut a line to fit the width, ending it with an ellipsis."""
+    while line and draw.textlength(line + "…", font=font) > width_px:
+        line = line[:-1]
+    return line.rstrip() + "…"
+
+
 def _wrap(draw, text: str, font, width_px: int, max_lines: int) -> list[str]:
-    """Greedy word wrap by measured width; the last line gets an ellipsis."""
+    """Greedy word wrap by measured width; the last line gets an ellipsis, and
+    a single word wider than the card (a long URL, a run-on name) is cut."""
     words = (text or "").split()
     lines: list[str] = []
     cur = ""
@@ -58,11 +67,8 @@ def _wrap(draw, text: str, font, width_px: int, max_lines: int) -> list[str]:
         lines.append(cur)
     consumed = " ".join(lines)
     if len(consumed) < len(" ".join(words)) and lines:
-        last = lines[-1]
-        while last and draw.textlength(last + "…", font=font) > width_px:
-            last = last[:-1]
-        lines[-1] = last.rstrip() + "…"
-    return lines
+        lines[-1] = _clip(draw, lines[-1], font, width_px)
+    return [_clip(draw, ln, font, width_px) if draw.textlength(ln, font=font) > width_px else ln for ln in lines]
 
 
 def render_card_png(title: str, description: str = "", footer: str = "", badge: str = "") -> bytes:
@@ -113,16 +119,23 @@ def render_card_png(title: str, description: str = "", footer: str = "", badge: 
 # member's client, and drawing the card is the only non-trivial work here.
 _CARD_CACHE: "OrderedDict[tuple, bytes]" = OrderedDict()
 _CARD_CACHE_MAX = 64
+# Called through asyncio.to_thread, so several worker threads can touch the
+# cache at once; an unguarded eviction could drop a key between the membership
+# check and move_to_end. Drawing happens outside the lock.
+_CARD_CACHE_LOCK = threading.Lock()
 
 
 def card_png_cached(key: tuple, **kw) -> bytes:
-    if key in _CARD_CACHE:
-        _CARD_CACHE.move_to_end(key)
-        return _CARD_CACHE[key]
+    with _CARD_CACHE_LOCK:
+        png = _CARD_CACHE.get(key)
+        if png is not None:
+            _CARD_CACHE.move_to_end(key)
+            return png
     png = render_card_png(**kw)
-    _CARD_CACHE[key] = png
-    while len(_CARD_CACHE) > _CARD_CACHE_MAX:
-        _CARD_CACHE.popitem(last=False)
+    with _CARD_CACHE_LOCK:
+        _CARD_CACHE[key] = png
+        while len(_CARD_CACHE) > _CARD_CACHE_MAX:
+            _CARD_CACHE.popitem(last=False)
     return png
 
 

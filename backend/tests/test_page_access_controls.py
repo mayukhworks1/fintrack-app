@@ -205,3 +205,14 @@ class TestInsights:
         with pytest.raises(HTTPException) as e:
             asyncio.run(P.page_insights("p1", self._req(str(uuid.uuid4())), role="editor"))
         assert e.value.status_code == 403
+
+
+def test_card_lines_never_run_past_the_image_edge():
+    from PIL import Image, ImageDraw
+    from app.services import page_share as S
+    d = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+    font = S._font(64)
+    width = S.CARD_W - 160
+    lines = S._wrap(d, "Q3-Client-Proposal-Final-Revised-Version-2026-Draft-Copy " * 2, font, width, 2)
+    assert lines and all(d.textlength(l, font=font) <= width for l in lines)
+    assert lines[-1].endswith("…")

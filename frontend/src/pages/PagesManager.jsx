@@ -273,8 +273,30 @@ function exportAnalyticsCSV(items, pageTitle) {
 }
 
 // ---------------------------------------------------------------------------
-// Sparkline
+// Insights
 // ---------------------------------------------------------------------------
+// One breakdown (devices, countries) as horizontal bars. Module level so a
+// hover on the daily chart does not remount it.
+function InsightBarList({ title, rows, card, head }) {
+  const m = Math.max(...rows.map(r => r.views), 1)
+  return (
+    <div style={card}>
+      <div style={head}>{title}</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+        {rows.map(r => (
+          <div key={r.name} style={{ display:'grid', gridTemplateColumns:'minmax(70px,120px) 1fr auto', alignItems:'center', gap:10, fontSize:12.5 }}>
+            <span style={{ color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
+            <span style={{ height:8, background:'var(--bg-base)', borderRadius:4, overflow:'hidden' }}>
+              <span style={{ display:'block', height:'100%', width:`${Math.max(2, r.views / m * 100)}%`, background:'var(--accent)', borderRadius:4 }} />
+            </span>
+            <span style={{ color:'var(--text-2)', fontVariantNumeric:'tabular-nums', minWidth:28, textAlign:'right' }}>{r.views.toLocaleString('en-IN')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Insights over every view of a page: a few headline numbers, views per day
 // for the last 30 days, and where and on what people opened it. One hue
 // throughout: every chart here is a magnitude, none is an identity.
@@ -316,26 +338,6 @@ function PageInsights({ pageId, reloadKey, isMobile }) {
     { k:'Top country', v: top ? top.name : '—', sub: top ? `${top.views.toLocaleString('en-IN')} views` : '' },
   ]
 
-  const BarList = ({ title, rows }) => {
-    const m = Math.max(...rows.map(r => r.views), 1)
-    return (
-      <div style={card}>
-        <div style={h}>{title}</div>
-        <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-          {rows.map(r => (
-            <div key={r.name} style={{ display:'grid', gridTemplateColumns:'minmax(70px,120px) 1fr auto', alignItems:'center', gap:10, fontSize:12.5 }}>
-              <span style={{ color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
-              <span style={{ height:8, background:'var(--bg-base)', borderRadius:4, overflow:'hidden' }}>
-                <span style={{ display:'block', height:'100%', width:`${Math.max(2, r.views / m * 100)}%`, background:'var(--accent)', borderRadius:4 }} />
-              </span>
-              <span style={{ color:'var(--text-2)', fontVariantNumeric:'tabular-nums', minWidth:28, textAlign:'right' }}>{r.views.toLocaleString('en-IN')}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <section aria-label="Page insights" style={{ marginBottom:20, display:'flex', flexDirection:'column', gap:12 }}>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10 }}>
@@ -375,8 +377,8 @@ function PageInsights({ pageId, reloadKey, isMobile }) {
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
-        <BarList title="Devices" rows={d.devices || []} />
-        <BarList title="Countries" rows={d.countries || []} />
+        <InsightBarList title="Devices" rows={d.devices || []} card={card} head={h} />
+        <InsightBarList title="Countries" rows={d.countries || []} card={card} head={h} />
       </div>
     </section>
   )
@@ -2564,9 +2566,10 @@ function PageTags({ page, onFolder }) {
           <Folder size={10} /> {folder}
         </button>
       )}
+      {/* An expired link is already flagged by the status pill. */}
       {exp && !expired && (
-        <span style={{ ...tag, ...(expired?{ color:'#b91c1c', borderColor:'#fecaca', background:'#fef2f2' }:{}) }} title={`Link expires ${formatIst(exp)}`}>
-          <Timer size={10} /> {expired ? 'Expired' : countdown(exp)}
+        <span style={tag} title={`Link expires ${formatIst(exp)}`}>
+          <Timer size={10} /> {countdown(exp)}
         </span>
       )}
       {protect && <span style={tag} title="Code protection is on"><ShieldCheck size={10} /> Protected</span>}

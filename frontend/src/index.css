@@ -2646,14 +2646,6 @@ html.dark .web-invoices-shell {
    nothing here needs its own override.
 ══════════════════════════════════════════════════════════════════ */
 
-/* Clean, subtle structural background — no blurry neon blobs */
-.ft-aurora {
-  display: none;
-}
-.ft-aurora span {
-  display: none;
-}
-
 /* Scroll reveal. The element starts offset and is released by an
    IntersectionObserver adding [data-shown] — so content below the fold
    animates when it is reached rather than all at once on load. */

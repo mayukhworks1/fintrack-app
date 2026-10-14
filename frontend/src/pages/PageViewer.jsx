@@ -381,8 +381,10 @@ function PasswordPrompt({ title, onSubmit, error, loading }) {
 // ---------------------------------------------------------------------------
 function PageContent({ page, slug }) {
   const { content_type, content } = page
-  if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
+  // Checked before the empty-content guard: a protected web page arrives with
+  // its source blanked and is shown only through its render URL.
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
+  if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
   if (content_type === 'csv') return <CSVTable text={content} />
   if (content_type === 'text') {
     return (
@@ -535,6 +537,7 @@ export default function PageViewer() {
           if (saved) {
             api.pages.publicVerify(slug, saved)
               .then(v => {
+                if (v?.expired) { setState('expired'); return }
                 if (v && v.id && !v.error && !v.detail) { setPage(v); setState('loaded') }
                 else { try { sessionStorage.removeItem(pwKey) } catch {} ; setPage(data); setState('requires_password') }
               })
@@ -632,6 +635,8 @@ export default function PageViewer() {
     setPwError(''); setPwLoading(true)
     api.pages.publicVerify(slug, password)
       .then(data => {
+        // The link ran out while the password screen was open.
+        if (data?.expired) { setState('expired'); return }
         if (!data || data.detail || data.error || !data.id) {
           // data.error may be an object {code,type,message,...} — never render it raw
           const msg = data?.detail

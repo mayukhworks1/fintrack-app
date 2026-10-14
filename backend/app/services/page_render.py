@@ -394,7 +394,7 @@ def build_document(
     bridge = f"<script>{AGENT_BRIDGE}</script>" if preview else ""
     runtime = f"<script>{VIEWER_RUNTIME}</script>{bridge}"
 
-    if not _HAS_DOCUMENT.match(body):
+    if not is_document:
         return f"<!DOCTYPE html><html><head>{head}</head><body>{body}{runtime}</body></html>"
 
     # A full document. Insert into its <head> when there is one; when the author

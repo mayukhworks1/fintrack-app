@@ -847,7 +847,10 @@ export const api = {
       const data = await r.json().catch(() => ({}))
       return r.status === 410 ? { ...(data || {}), expired: true } : data
     }),
-    publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(r => r.json()),
+    publicVerify:  (slug, password) => fetch(`${BASE_URL}/api/public/pages/${slug}/verify`, { method: 'POST', body: JSON.stringify({ password }), headers: { 'Content-Type': 'application/json' } }).then(async r => {
+      const data = await r.json().catch(() => ({}))
+      return r.status === 410 ? { ...(data || {}), expired: true } : data
+    }),
     publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
     // Parks unsaved editor content so the public renderer can serve it. The
     // preview and the published page then come out of the same pipeline.
