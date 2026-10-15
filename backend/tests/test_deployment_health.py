@@ -225,3 +225,64 @@ class TestResponseContract:
         import app.main as M
         r = TestClient(M.app).get("/api/admin/deployment-health")
         assert r.status_code == 401
+
+
+# ── AI providers ─────────────────────────────────────────────────────────────
+
+class _GatewayPool:
+    """The gateway tables, holding one stored OpenRouter key."""
+    def __init__(self, enc): self.enc = enc
+    async def fetch(self, sql, *a):
+        if "FROM ai_gateway_providers" in sql:
+            return [{"key": "openrouter", "api_key_enc": self.enc, "key_hint": "9xYz"}]
+        return []
+
+
+class TestAiProviders:
+    """
+    The openrouter and groq_fallback items report what the AI gateway resolves
+    — switched on, with a key saved in Admin → AI gateway or the env fallback —
+    not just whether an env var is set: a key saved in the panel works without
+    one, and an env key no longer means the provider is in use.
+    """
+
+    @pytest.fixture(autouse=True)
+    def gateway(self, monkeypatch):
+        G = admin.ai_gateway
+        for name, value in (("_config", None), ("_config_expires", 0.0), ("_inflight", {})):
+            monkeypatch.setattr(G, name, value)
+        monkeypatch.setattr(G, "get_pool", lambda: None)
+        monkeypatch.setattr(G.settings, "openrouter_api_key", None)
+        monkeypatch.setattr(G.settings, "groq_api_key", None)
+        return G
+
+    def _health(self):
+        return _run({"tokA": (0.01, 200), "tokB": (0.01, 200), "tokC": (0.01, 200)})[0]
+
+    def test_env_keys_make_both_providers_ready(self, gateway, monkeypatch):
+        monkeypatch.setattr(gateway.settings, "openrouter_api_key", "sk-or-env")
+        monkeypatch.setattr(gateway.settings, "groq_api_key", "gsk-env")
+        out = self._health()
+        assert out["openrouter"]["ok"] is True
+        assert out["openrouter"]["detail"] == "Ready — key from OPENROUTER_API_KEY"
+        assert out["openrouter"]["key_source"] == "env"
+        assert out["groq_fallback"]["ok"] is True
+        assert "openai/gpt-oss-120b" in out["groq_fallback"]["models"]
+        assert out["env"]["checks"]["OPENROUTER_API_KEY"] is True
+
+    def test_no_key_anywhere_points_at_the_gateway(self):
+        out = self._health()
+        for item in ("openrouter", "groq_fallback"):
+            assert out[item]["ok"] is False
+            assert "Admin → AI gateway" in out[item]["detail"]
+        assert out["env"]["checks"]["GROQ_API_KEY"] is False
+
+    def test_a_key_saved_in_the_gateway_counts_without_the_env_var(self, gateway, monkeypatch):
+        monkeypatch.setattr(gateway, "get_pool", lambda: _GatewayPool(gateway.encrypt_key("sk-or-stored-9xYz")))
+        out = self._health()
+        assert out["openrouter"]["ok"] is True
+        assert out["openrouter"]["key_source"] == "stored"
+        assert "Admin → AI gateway" in out["openrouter"]["detail"]
+        assert "sk-or-stored" not in str(out)
+        assert out["env"]["checks"]["OPENROUTER_API_KEY"] is True
+        assert out["groq_fallback"]["ok"] is False

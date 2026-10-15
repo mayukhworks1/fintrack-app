@@ -17,6 +17,7 @@ from starlette.types import Message, Receive, Scope, Send
 from .config import settings, is_dev_env
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers import admin
+from .routers import ai_gateway as ai_gateway_router
 from .routers import insights as insights_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
@@ -169,21 +170,26 @@ async def lifespan(app: FastAPI):
         logger.info("Background project duration refresh task started")
 
     # ── Background embedding task (pgvector RAG) ─────────────────────────────
-    if postgres.get_pool() and settings.openrouter_api_key:
-        async def _embed_loop():
-            from .services.embeddings import embed_all_records_bg, is_pgvector_available
-            if not await is_pgvector_available():
-                logger.info("pgvector not available — embedding loop skipped")
-                return
-            logger.info("Starting background embedding task")
-            while True:
-                try:
-                    await embed_all_records_bg()
-                except Exception as exc:
-                    logger.warning("embed_all_records_bg error: %s", exc)
-                await asyncio.sleep(600)   # re-embed new/changed records every 10 min
-        _embed_task = asyncio.create_task(_embed_loop(), name="embedding-bg")
-        logger.info("Background embedding task started")
+    # Started whatever the key situation: each pass checks that OpenRouter is
+    # ready (Admin → AI gateway, or OPENROUTER_API_KEY), so a key saved after
+    # startup is picked up within one interval. Not started at all without
+    # pgvector: a loop that ended at once would read as a dead task to the
+    # alert monitor.
+    if postgres.get_pool():
+        from .services.embeddings import embed_all_records_bg, is_pgvector_available
+        if not await is_pgvector_available():
+            logger.info("pgvector not available — embedding loop skipped")
+        else:
+            async def _embed_loop():
+                logger.info("Starting background embedding task")
+                while True:
+                    try:
+                        await embed_all_records_bg()
+                    except Exception as exc:
+                        logger.warning("embed_all_records_bg error: %s", exc)
+                    await asyncio.sleep(600)   # re-embed new/changed records every 10 min
+            _embed_task = asyncio.create_task(_embed_loop(), name="embedding-bg")
+            logger.info("Background embedding task started")
 
     # ── Pages: move inline base64 images saved before this build into assets
     if postgres.get_pool() and settings.hf_token and settings.hf_dataset_repo:
@@ -354,6 +360,7 @@ app.include_router(web_projects_router)
 app.include_router(web_resources_router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
+app.include_router(ai_gateway_router.router)
 app.include_router(insights_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
@@ -607,10 +614,11 @@ async def health(detail: bool = Depends(_health_detail)):
     if isinstance(sync_meta, BaseException):
         sync_meta = None
     from .services.embeddings import _pgvector_ok as _pgv
+    from .services.ai_gateway import any_provider_ready
     return {
         **summary,
         "teable_configured": bool(settings.teable_api_token),
-        "ai_configured":     bool(settings.openrouter_api_key),
+        "ai_configured":     await any_provider_ready(),
         "storage_configured": bool(settings.hf_token and settings.hf_dataset_repo),
         "postgres_error":    pg_err,
         "pool":              postgres.pool_stats(),

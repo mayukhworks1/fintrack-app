@@ -192,3 +192,65 @@ describe('admin timeline export', () => {
     expect(call.error.message).toBe('Admin access required')
   })
 })
+
+describe('AI gateway client', () => {
+  const GW = `${API_BASE_URL}/api/admin/ai-gateway`
+
+  it('sends a provider key only in the JSON body of a PUT', async () => {
+    fetchMock.mockResolvedValue(reply(200, { key: 'openrouter', key_hint: 'cd12' }))
+    const call = track(api.admin.aiGateway.setKey('openrouter', 'sk-or-v1-abcdef12'))
+    await vi.advanceTimersByTimeAsync(100)
+    expect(call.value.key_hint).toBe('cd12')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(`${GW}/providers/openrouter/key`)
+    expect(url).not.toContain('sk-or-v1')
+    expect(init.method).toBe('PUT')
+    expect(JSON.parse(init.body)).toEqual({ api_key: 'sk-or-v1-abcdef12' })
+  })
+
+  it('maps each write to its method, path and body', async () => {
+    fetchMock.mockResolvedValue(reply(200, {}))
+    const cases = [
+      [() => api.admin.aiGateway.saveProvider('groq', { enabled: false }), 'PATCH', '/providers/groq', { enabled: false }],
+      [() => api.admin.aiGateway.removeKey('groq'), 'DELETE', '/providers/groq/key', undefined],
+      [() => api.admin.aiGateway.testAll(), 'POST', '/providers/test-all', undefined],
+      [() => api.admin.aiGateway.saveTask('chat', { daily_cap: null }), 'PATCH', '/tasks/chat', { daily_cap: null }],
+      [() => api.admin.aiGateway.savePrompt('chat', null), 'PUT', '/tasks/chat/prompt', { prompt: null }],
+      [() => api.admin.aiGateway.testTask('judge', null), 'POST', '/tasks/judge/test', { input: null }],
+      [() => api.admin.aiGateway.saveGlobal({ daily_call_cap: 10 }), 'PATCH', '/global', { daily_call_cap: 10 }],
+      [() => api.admin.aiGateway.promptVersion('chat', 3), 'GET', '/tasks/chat/prompt/versions/3', undefined],
+    ]
+    for (const [run, method, path, body] of cases) {
+      fetchMock.mockClear()
+      const call = track(run())
+      await vi.advanceTimersByTimeAsync(100)
+      expect(call.done).toBe(true)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe(`${GW}${path}`)
+      expect((init.method || 'GET').toUpperCase()).toBe(method)
+      expect(init.body === undefined ? undefined : JSON.parse(init.body)).toEqual(body)
+    }
+  })
+
+  it('leaves empty call-log filters out of the query', async () => {
+    fetchMock.mockResolvedValue(reply(200, { total: 0, rows: [] }))
+    const call = track(api.admin.aiGateway.calls({ from: '2026-10-01', to: '2026-10-15', task: 'chat', provider: '', status: null, limit: 50, offset: 0 }))
+    await vi.advanceTimersByTimeAsync(100)
+    expect(call.done).toBe(true)
+    expect(fetchMock.mock.calls[0][0]).toBe(`${GW}/calls?from=2026-10-01&to=2026-10-15&task=chat&limit=50&offset=0`)
+  })
+
+  it('gives connection tests the long AI timeout and ordinary reads the default one', async () => {
+    fetchMock.mockImplementation((url, init) => new Promise((resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+      setTimeout(() => resolve(reply(200, { ok: true })), 30_000)
+    }))
+    const test = track(api.admin.aiGateway.testProvider('groq'))
+    await vi.advanceTimersByTimeAsync(31_000)
+    expect(test.value).toEqual({ ok: true })
+
+    const read = track(api.admin.aiGateway.get())
+    await vi.advanceTimersByTimeAsync(100_000)
+    expect(read.error.message).toMatch(/timed out/)
+  })
+})

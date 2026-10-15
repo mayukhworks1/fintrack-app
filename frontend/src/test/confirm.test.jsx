@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ConfirmProvider, useConfirm } from '../context/ConfirmContext'
+import Modal from '../components/Modal'
 
 /**
  * The confirm dialog replaced window.confirm on destructive admin actions —
@@ -113,5 +114,42 @@ describe('confirm dialog stacking', () => {
     const z = Number(screen.getByRole('dialog').style.zIndex)
     // PagesManager drawers use 1000/2000, InvoiceDetail uses 9999.
     expect(z).toBeGreaterThan(9999)
+  })
+})
+
+describe('a confirmation opened from another dialog', () => {
+  function Stacked({ onOuterClose, onResult }) {
+    const confirm = useConfirm()
+    return (
+      <Modal open onClose={onOuterClose} title="Prompt">
+        <button onClick={async () => onResult(await confirm({ message: 'Use the built-in prompt?', confirmLabel: 'Use built-in' }))}>
+          ask
+        </button>
+      </Modal>
+    )
+  }
+
+  async function openStacked() {
+    const onOuterClose = vi.fn()
+    const results = []
+    render(<ConfirmProvider><Stacked onOuterClose={onOuterClose} onResult={(r) => results.push(r)} /></ConfirmProvider>)
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'ask' })) })
+    await screen.findByText('Use the built-in prompt?')
+    return { onOuterClose, results }
+  }
+
+  it('Escape dismisses only the confirmation, not the dialog underneath', async () => {
+    const { onOuterClose, results } = await openStacked()
+    await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }) })
+    await waitFor(() => expect(results).toEqual([false]))
+    expect(onOuterClose).not.toHaveBeenCalled()
+  })
+
+  it('Tab is handled by the confirmation alone, so its buttons stay reachable', async () => {
+    await openStacked()
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    cancel.focus()
+    await act(async () => { fireEvent.keyDown(cancel, { key: 'Tab' }) })
+    expect(document.activeElement).toBe(cancel)
   })
 })

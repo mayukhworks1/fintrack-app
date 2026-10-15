@@ -25,7 +25,7 @@ import time
 
 from ..db.postgres import get_pool
 from . import embeddings
-from .openrouter import _try_chat, judge_answer
+from .openrouter import _prompt_for, _try_chat, judge_answer
 
 logger = logging.getLogger("fintrack.studio.ask")
 
@@ -408,7 +408,7 @@ async def ask(
     # the last two, and answers are truncated: the sources are the ground truth
     # and a long transcript would crowd them out of a free model's context.
     messages: list[dict] = [
-        {"role": "system", "content": _SYSTEM},
+        {"role": "system", "content": await _prompt_for("studio_ask", _SYSTEM)},
         {"role": "system", "content": f"SOURCES:\n\n{context}"},
     ]
     for turn in (history or [])[-2:]:
@@ -425,6 +425,7 @@ async def ask(
         max_tokens=1200,
         temperature=0.2,
         extract=False,
+        task="studio_ask",
     )
     answer = (result.get("content") or "").strip()
 
@@ -514,7 +515,7 @@ async def capabilities() -> dict:
     elif not vec_column or not cosine:
         reason = "the embedding column is not available on this database"
     elif not embedded:
-        reason = "no passages have been embedded yet — check the OpenRouter key"
+        reason = "no passages have been embedded yet — check the OpenRouter key in Admin → AI gateway"
     else:
         reason = ""
 

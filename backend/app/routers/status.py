@@ -204,6 +204,9 @@ async def generate_ai_status_update(
             "model": result.get("model", ""),
             "record_count": len(selected),
         }
+    except ValueError as e:
+        # A refusal (task switched off, a daily cap) or every model failing.
+        raise HTTPException(status_code=400, detail=f"AI update failed: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI update failed: {e}")
 

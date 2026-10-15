@@ -21,7 +21,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useFocusTrap, isTopmostTrap } from '../hooks/useFocusTrap'
 
 const DURATION = 260 // ms — must match CSS transition duration
 
@@ -65,7 +65,7 @@ export default function Drawer({
   // ── Keyboard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    const handler = (e) => { if (e.key === 'Escape' && isTopmostTrap(panelRef)) onClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])

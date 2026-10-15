@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useFocusTrap, isTopmostTrap } from '../hooks/useFocusTrap'
 
 const DURATION = 220
 
@@ -50,7 +50,9 @@ export default function Modal({
 
   useEffect(() => {
     if (!open) return
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    // Only the innermost dialog: Escape on a confirmation must not also close
+    // the dialog it was opened from.
+    const handler = (e) => { if (e.key === 'Escape' && isTopmostTrap(panelRef)) onClose() }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])

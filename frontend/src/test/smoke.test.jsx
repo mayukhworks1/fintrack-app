@@ -196,6 +196,16 @@ describe('api service structure', () => {
     expect(typeof api.admin.resendInvite).toBe('function')
     expect(typeof api.admin.forcePasswordReset).toBe('function')
   })
+
+  it('exports the AI gateway admin methods from the real client', async () => {
+    const { api } = await vi.importActual('../services/api')
+    for (const name of [
+      'get', 'saveProvider', 'setKey', 'removeKey', 'testProvider', 'testAll', 'saveTask', 'prompt',
+      'promptVersion', 'savePrompt', 'testTask', 'saveGlobal', 'calls', 'call',
+    ]) {
+      expect(typeof api.admin.aiGateway[name], name).toBe('function')
+    }
+  })
 })
 
 // ── Admin request investigation filters ──────────────────────────────────────

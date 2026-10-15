@@ -176,7 +176,9 @@ class TestInvoiceParse:
         async def fake_chat(messages, **kw):
             return {"content": '{"invoice_number": "WM/26-27/049"}'}
 
-        monkeypatch.setattr(O.settings, "openrouter_api_key", "test-key")
+        # Not gated on OPENROUTER_API_KEY any more: the task's route decides
+        # which provider serves it.
+        monkeypatch.setattr(O.gateway.settings, "openrouter_api_key", None)
         monkeypatch.setattr(O, "_try_chat", fake_chat)
         out = asyncio.run(O.parse_invoice_document(_pdf(["Sub Total 1,000.00"]), "inv.pdf", "application/pdf"))
 

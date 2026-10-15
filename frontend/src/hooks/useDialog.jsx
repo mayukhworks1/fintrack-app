@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { useFocusTrap } from './useFocusTrap'
+import { useFocusTrap, isTopmostTrap } from './useFocusTrap'
 
 /**
  * Dialog behaviour and semantics for hand-rolled overlays.
@@ -28,7 +28,7 @@ export function useDialog({ label, onClose, active = true } = {}) {
 
   useEffect(() => {
     if (!active || !onClose) return
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e) => { if (e.key === 'Escape' && isTopmostTrap(panelRef)) onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [active, onClose])

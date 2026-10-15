@@ -11,19 +11,32 @@ that decide whether a page reads well on a phone.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 from typing import Any, AsyncIterator
 
+import httpx
+
+from . import ai_gateway as gateway
 from . import page_design, page_edit
 from .openrouter import (
-    _try_chat,
-    _stream_post_with_retries,
-    _ordered_models,
-    _build_payload,
+    _SSE_DONE,
+    _Cascade,
     _auth_or_quota_error,
-    _provider_label,
+    _build_payload,
+    _chunk_text,
+    _chunk_usage,
+    _error_message,
+    _error_text,
+    _failure_text,
+    _ordered_models,
+    _prompt_for,
     _short,
+    _sse_chunk,
+    _stream_post_with_retries,
+    _try_chat,
 )
 
 # A full landing page with its own stylesheet runs longer than first assumed —
@@ -39,6 +52,10 @@ TEMPERATURE = 0.6
 
 MAX_PROMPT_CHARS = 4000
 MAX_EXISTING_CHARS = 24000
+
+# The browser allows a page build, section edit or script fix 120 s
+# (services/api.js), so its route may run longer than the usual AI budget.
+ROUTE_BUDGET_S = 110.0
 
 
 _HTML_RULES = """You generate complete, self-contained HTML documents.
@@ -488,6 +505,8 @@ async def generate_page(
         # extract=False: the answer-extraction heuristics are tuned for chat
         # prose and would mangle a markup document.
         extract=False,
+        task="page_build",
+        budget_s=ROUTE_BUDGET_S,
     )
 
     content, warnings = clean_output(result.get("content", ""), content_type)
@@ -591,7 +610,7 @@ async def analyze_prompt_needs(
 
     # Build few-shot examples into the message list
     messages: list[dict[str, str]] = [
-        {"role": "system", "content": _INTERVIEW_SYSTEM},
+        {"role": "system", "content": await _prompt_for("page_interview", _INTERVIEW_SYSTEM)},
     ]
     for ex in _INTERVIEW_EXAMPLES:
         messages.append({"role": "user", "content": ex["prompt"]})
@@ -604,6 +623,7 @@ async def analyze_prompt_needs(
         max_tokens=800,
         temperature=0.3,
         extract=False,
+        task="page_interview",
     )
 
     raw = result.get("content", "").strip()
@@ -746,6 +766,10 @@ async def stream_generate_page(
             {"role": "user", "content": user_content},
         ]
 
+    # Before the first frame, so a switched-off task or a spent cap is the
+    # stream's only frame rather than following a "Designing…" thought.
+    await gateway.admit("page_build")
+
     # Emit a synthetic thought frame before streaming starts
     yield {
         "type": "thought",
@@ -754,58 +778,52 @@ async def stream_generate_page(
         "mode": "edit" if revising else "create",
     }
 
-    errors: list[str] = []
+    cascade = _Cascade("page_build")
 
-    # Providers whose key is dead or out of quota — see _auth_or_quota_error.
-    dead_providers: set[str] = set()
-
-    for spec in _ordered_models():
-        if spec.provider in dead_providers:
+    for spec in await _ordered_models("page_build"):
+        p = await cascade.provider_for(spec)
+        if p is None:
             continue
+        started = time.time()
         resp = None
+        status: int | None = None
+        usage: dict | None = None
+        settled = False
         try:
             payload = _build_payload(
                 spec, messages, max_tokens=MAX_TOKENS,
                 temperature=TEMPERATURE, stream=True,
+                stream_options={"include_usage": True},
             )
 
-            resp = await _stream_post_with_retries(payload, provider=spec.provider)
+            resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
+            status = resp.status_code
 
-            provider_dead = _auth_or_quota_error(resp.status_code, spec.provider)
+            provider_dead = _auth_or_quota_error(status)
             if provider_dead:
-                dead_providers.add(spec.provider)
-                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
-                await resp.aclose()
+                cascade.dead.add(spec.provider)
+                cascade.failed(spec, started, provider_dead, http_status=status)
                 continue
-            if resp.status_code >= 400:
+            if status >= 400:
                 body = await resp.aread()
-                text = body.decode("utf-8", errors="ignore")[:200]
-                errors.append(
-                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
-                    f"{text or ('HTTP ' + str(resp.status_code))}"
-                )
-                await resp.aclose()
+                cascade.failed(spec, started, _error_text(body.decode("utf-8", errors="ignore"), status),
+                               http_status=status)
                 continue
 
             full_raw = ""
             plan_emitted = False
 
             async for line in resp.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
+                chunk_data = _sse_chunk(line)
+                if chunk_data is _SSE_DONE:
                     break
-                try:
-                    chunk_data = json.loads(data)
-                except json.JSONDecodeError:
+                if chunk_data is None:
                     continue
+                usage = _chunk_usage(chunk_data) or usage
+                if "error" in chunk_data:
+                    raise RuntimeError(_error_message(chunk_data["error"])[:100])
 
-                delta = (
-                    chunk_data.get("choices", [{}])[0]
-                    .get("delta", {})
-                    .get("content", "")
-                ) or ""
+                delta = _chunk_text(chunk_data)
                 if not delta:
                     continue
 
@@ -827,15 +845,18 @@ async def stream_generate_page(
                 # byte for byte, which is the whole reason for the format.
                 blocks = page_edit.parse_edit_blocks(full_raw)
                 if not blocks:
-                    errors.append(f"{_short(spec.id)}: returned no usable edits")
+                    cascade.failed(spec, started, "returned no usable edits",
+                                   http_status=status, tokens=usage)
                     continue
                 try:
                     result = page_edit.apply_edit_blocks(base, blocks)
                 except page_edit.EditError as exc:
-                    errors.append(f"{_short(spec.id)}: {exc}")
+                    cascade.failed(spec, started, str(exc), http_status=status, tokens=usage)
                     continue
 
                 content, warnings = clean_output(result["content"], content_type)
+                cascade.succeeded(spec, started, http_status=status, tokens=usage)
+                settled = True
                 for detail in result["details"]:
                     yield {"type": "edit", **detail}
                 if result["failed"]:
@@ -856,8 +877,12 @@ async def stream_generate_page(
             # Clean the final output using existing infrastructure
             content, warnings = clean_output(full_raw, content_type)
             if not content.strip():
-                errors.append(f"{_short(spec.id)}: response had no usable content")
+                cascade.failed(spec, started, "response had no usable content",
+                               http_status=status, tokens=usage)
                 continue
+
+            cascade.succeeded(spec, started, http_status=status, tokens=usage)
+            settled = True
 
             if content_type == "html":
                 reason = find_truncation(content)
@@ -879,21 +904,24 @@ async def stream_generate_page(
             }
             return
 
-        except (Exception,) as exc:
+        except (httpx.TimeoutException, httpx.ConnectError):
+            cascade.failed(spec, started, "timeout/network", http_status=status, tokens=usage)
+        except (GeneratorExit, asyncio.CancelledError):
+            if not settled:
+                cascade.failed(spec, started, "stopped: the client disconnected",
+                               http_status=status, tokens=usage)
+            raise
+        except Exception as exc:
+            # A model that fails mid-stream condemns that model, not the run.
+            cascade.failed(spec, started, _failure_text(exc, p), http_status=status, tokens=usage)
+        finally:
             if resp is not None:
                 try:
                     await resp.aclose()
                 except Exception:
                     pass
-            if isinstance(exc, ValueError):
-                raise
-            errors.append(f"{_short(spec.id)}: {str(exc)[:100]}")
-            continue
 
-    raise ValueError(
-        ("All AI models are unavailable right now. Tried: " + "; ".join(errors))
-        if errors else "No models configured."
-    )
+    cascade.give_up()
 
 
 # --- surgical section editor ------------------------------------------------
@@ -968,6 +996,8 @@ async def edit_page_section(
         max_tokens=MAX_TOKENS,
         temperature=TEMPERATURE,
         extract=False,
+        task="page_build",
+        budget_s=ROUTE_BUDGET_S,
     )
 
     new_section = (result.get("content", "")).strip()
@@ -1049,6 +1079,8 @@ async def fix_page_script_error(
         max_tokens=MAX_TOKENS,
         temperature=0.2,  # Low temperature for precise fixes
         extract=False,
+        task="page_build",
+        budget_s=ROUTE_BUDGET_S,
     )
 
     content, warnings = clean_output(result.get("content", ""), "html")

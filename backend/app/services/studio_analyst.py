@@ -233,6 +233,7 @@ async def analyze(question: str, owner_email: str | None) -> dict:
         max_tokens=400,
         temperature=0.1,   # this is a mapping task, not a creative one
         extract=False,
+        task="studio_analyze",
     )
     spec = parse_spec(spec_result.get("content", ""))
 
@@ -258,6 +259,7 @@ async def analyze(question: str, owner_email: str | None) -> dict:
             max_tokens=500,
             temperature=0.3,
             extract=False,
+            task="studio_analyze",
         )
         answer = (explain.get("content") or "").strip()
         model = explain.get("model_short") or explain.get("model", "")

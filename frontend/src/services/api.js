@@ -693,6 +693,23 @@ export const api = {
       `/api/admin/permissions/users/${encodeURIComponent(userId)}/${encodeURIComponent(permKey)}`,
       { method: 'PUT', body: JSON.stringify({ granted }) }
     ),
+    // API keys travel only in a JSON body; responses carry just the last four characters.
+    aiGateway: {
+      get:           ()             => request('/api/admin/ai-gateway'),
+      saveProvider:  (key, data)    => request(`/api/admin/ai-gateway/providers/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      setKey:        (key, apiKey)  => request(`/api/admin/ai-gateway/providers/${encodeURIComponent(key)}/key`, { method: 'PUT', body: JSON.stringify({ api_key: apiKey }) }),
+      removeKey:     (key)          => request(`/api/admin/ai-gateway/providers/${encodeURIComponent(key)}/key`, { method: 'DELETE' }),
+      testProvider:  (key)          => request(`/api/admin/ai-gateway/providers/${encodeURIComponent(key)}/test`, { method: 'POST', timeout: AI_TIMEOUT_MS }),
+      testAll:       ()             => request('/api/admin/ai-gateway/providers/test-all', { method: 'POST', timeout: AI_TIMEOUT_MS }),
+      saveTask:      (key, data)    => request(`/api/admin/ai-gateway/tasks/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      prompt:        (key)          => request(`/api/admin/ai-gateway/tasks/${encodeURIComponent(key)}/prompt`),
+      promptVersion: (key, v)       => request(`/api/admin/ai-gateway/tasks/${encodeURIComponent(key)}/prompt/versions/${encodeURIComponent(v)}`),
+      savePrompt:    (key, prompt)  => request(`/api/admin/ai-gateway/tasks/${encodeURIComponent(key)}/prompt`, { method: 'PUT', body: JSON.stringify({ prompt }) }),
+      testTask:      (key, input)   => request(`/api/admin/ai-gateway/tasks/${encodeURIComponent(key)}/test`, { method: 'POST', body: JSON.stringify({ input }), timeout: AI_TIMEOUT_MS }),
+      saveGlobal:    (data)         => request('/api/admin/ai-gateway/global', { method: 'PATCH', body: JSON.stringify(data) }),
+      calls:         (p = {})       => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/admin/ai-gateway/calls?${q}`) },
+      call:          (id)           => request(`/api/admin/ai-gateway/calls/${encodeURIComponent(id)}`),
+    },
   },
   insights: {
     listConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/insights/configs?${q}`) },

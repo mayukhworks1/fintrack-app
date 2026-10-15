@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 
 from ..config import settings, using_insecure_app_secret
 from ..db.postgres import get_pool
+from ..services import ai_gateway
 from ..services.shared_views import SharedViewService
 from .deps import (invalidate_permission_cache, require_admin, require_auth,
                    require_permission, require_superadmin, session_metadata)
@@ -146,6 +147,20 @@ _INFRA_PING_TIMEOUT_S: float = 2.0
 
 def _health_item(ok: bool, detail: str, **extra) -> dict:
     return {"ok": bool(ok), "detail": detail, **extra}
+
+
+def _provider_health_detail(p: "ai_gateway.ProviderState") -> str:
+    if not p.enabled:
+        return f"{p.label} is switched off in Admin → AI gateway"
+    if p.key_source == "stored":
+        hint = f" (…{p.key_hint})" if p.key_hint else ""
+        return f"Ready — key saved in Admin → AI gateway{hint}"
+    if p.key_source == "env":
+        unreadable = " (the saved key can't be read, so the env key is used)" if p.key_unreadable else ""
+        return f"Ready — key from {p.env_var}{unreadable}"
+    if p.key_unreadable:
+        return "The key saved in Admin → AI gateway can't be read — set it again"
+    return f"No key — set one in Admin → AI gateway, or {p.env_var} on the server"
 
 
 async def _write_auth_admin_event(
@@ -1583,22 +1598,18 @@ async def deployment_health(_: str = Depends(require_admin)):
         "detail": "Brevo configured" if is_email_configured() else "BREVOAPIKEY not set",
     }
 
-    results["openrouter"] = _health_item(
-        bool(s.openrouter_api_key),
-        f"Configured model: {s.openrouter_model}" if s.openrouter_api_key else "OPENROUTER_API_KEY not set",
-        model=s.openrouter_model,
-    )
-
-    # Whether the AI has a second provider to fall through to. Every OpenRouter
-    # model is on a free tier rate-limited per account, so without this every AI
-    # feature fails together during a busy hour.
-    groq_models = [m.strip() for m in (s.groq_models or "").split(",") if m.strip()]
-    results["groq_fallback"] = _health_item(
-        bool(s.groq_api_key),
-        (f"Armed — falls back to {', '.join(groq_models)}" if s.groq_api_key
-         else "GROQ_API_KEY not set — AI has no fallback if OpenRouter is rate-limited"),
-        model=groq_models[0] if groq_models else None,
-    )
+    # AI providers, as the gateway resolves them: switched on, with a stored
+    # key or the env fallback. Item keys kept for the admin cards.
+    gateway_cfg = await ai_gateway.get_config()
+    for item, provider_key in (("openrouter", "openrouter"), ("groq_fallback", "groq")):
+        p = gateway_cfg.providers[provider_key]
+        results[item] = _health_item(
+            p.ready,
+            _provider_health_detail(p),
+            key_source=p.key_source,
+            models=sorted({step["model"] for task in gateway_cfg.tasks.values()
+                           for step in task.route if step["provider"] == provider_key}),
+        )
 
     google_sso_ok = bool(s.google_client_id and s.google_client_secret and s.frontend_url and s.frontend_url != "*")
     results["google_sso"] = _health_item(
@@ -1709,8 +1720,9 @@ async def deployment_health(_: str = Depends(require_admin)):
         "APP_SECRET":    bool(s.app_secret) and not using_insecure_app_secret(),
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
-        "OPENROUTER_API_KEY": bool(s.openrouter_api_key),
-        "GROQ_API_KEY":  bool(s.groq_api_key),
+        # A key saved in Admin → AI gateway stands in for the env one.
+        "OPENROUTER_API_KEY": bool(gateway_cfg.providers["openrouter"].api_key),
+        "GROQ_API_KEY":  bool(gateway_cfg.providers["groq"].api_key),
         "GOOGLE_CLIENT_ID": bool(s.google_client_id),
         "GOOGLE_CLIENT_SECRET": bool(s.google_client_secret),
     }
@@ -1720,7 +1732,8 @@ async def deployment_health(_: str = Depends(require_admin)):
         "APP_SECRET": "Required for secure login/session token signing. Set a long random value in production.",
         "BREVOAPIKEY": "Required for invite, reset-password, and email test delivery.",
         "FRONTEND_URL": "Required for correct reset/invite links and OAuth redirects.",
-        "OPENROUTER_API_KEY": "Required for AI assistant and report generation.",
+        "OPENROUTER_API_KEY": "OpenRouter key for the AI features and embeddings. Not needed when a key is saved in Admin → AI gateway.",
+        "GROQ_API_KEY": "Groq key for the AI features. Not needed when a key is saved in Admin → AI gateway.",
         "GOOGLE_CLIENT_ID": "Required for Google SSO. Use a Google OAuth Web Client.",
         "GOOGLE_CLIENT_SECRET": "Required for Google SSO token exchange. Keep it secret.",
     }

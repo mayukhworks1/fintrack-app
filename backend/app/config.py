@@ -14,21 +14,14 @@ class Settings(BaseSettings):
     # Only override if project duration lives in a separate Teable table.
     teable_projects_table_id: Optional[str] = None
     teable_invoice_table_id: str = "tblyWvNkprE1HnaVZIH"
-    openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "meta-llama/llama-4-scout:free"
 
-    # ── Groq: the fallback provider ────────────────────────────────────────
-    # Every OpenRouter model in the cascade is on a free tier that is rate
-    # limited per ACCOUNT, so a busy hour can exhaust all of them at once and
-    # every AI feature in the app fails together. Groq is a second, independent
-    # provider tried after OpenRouter has been exhausted — different key,
-    # different quota, so the two do not fail at the same time.
-    #
-    # Set GROQ_API_KEY to switch it on; leave it unset and nothing changes.
-    # Model IDs are a comma-separated env value rather than code so a
-    # deprecated Groq model is a settings change and a restart, not a redeploy.
+    # ── AI provider keys ───────────────────────────────────────────────────
+    # Providers, models, caps and prompts are managed in Admin → AI gateway,
+    # and a key saved there wins. These env keys are the fallback a provider
+    # uses when no key is stored, so a fresh deployment works before anyone
+    # has opened the admin panel.
+    openrouter_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
-    groq_models: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
     frontend_url: str = "*"
     # CORS fail-closed policy: when FRONTEND_URL is unset/"*" the API restricts
     # to localhost dev origins by default. Set CORS_ALLOW_ALL=true only if you
@@ -63,6 +56,11 @@ class Settings(BaseSettings):
     # included. It MUST be overridden by APP_SECRET in any real deployment —
     # startup refuses to boot on this default unless APP_ENV says development.
     app_secret: str = "fintrack-dev-secret-change-me"
+    # Derives the key that encrypts AI provider keys saved in Admin → AI gateway.
+    # Falls back to APP_SECRET; set AI_GATEWAY_SECRET so rotating APP_SECRET
+    # does not make the stored keys unreadable. Keys saved before it was set
+    # stay readable through APP_SECRET until they are saved again.
+    ai_gateway_secret: Optional[str] = None
     # Deployment stage. Defaults to production so a host that forgets to set it
     # gets the strict checks rather than the permissive ones — the failure mode
     # of guessing wrong here is a silently forgeable auth token.
@@ -197,7 +195,9 @@ class Settings(BaseSettings):
     trusted_proxy_hops:     int  = 1
     trust_cf_connecting_ip: bool = False
 
-    model_config = ConfigDict(env_file=".env")
+    # extra="ignore": an .env written for an older release (OPENROUTER_MODEL,
+    # GROQ_MODELS) must not stop the app from booting.
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
 
 DEV_APP_SECRET = "fintrack-dev-secret-change-me"

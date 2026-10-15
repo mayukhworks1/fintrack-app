@@ -266,3 +266,61 @@ class TestMiddlewareCounts5xx:
         c.get("/__alerts_t/ok");   assert A.server_errors_in_window(300) == 0
         c.get("/__alerts_t/500");  assert A.server_errors_in_window(300) == 1
         c.get("/__alerts_t/boom"); assert A.server_errors_in_window(300) == 2
+
+
+# ── the embedding loop at startup ────────────────────────────────────────────
+
+class TestEmbeddingLoopStart:
+    """
+    Without pgvector the embedding loop has nothing to do. Started anyway, it
+    returned at once, and a registered task that has finished reads as dead:
+    a permanent critical alert on a deployment where nothing is wrong.
+    """
+
+    @pytest.fixture
+    def boot(self, monkeypatch):
+        import app.main as M
+        import app.services.embeddings as EMB
+        import app.utils.http as H
+
+        async def noop(*_a, **_k):
+            return None
+
+        async def idle(*_a, **_k):
+            await asyncio.sleep(3600)
+
+        monkeypatch.setattr(H, "init_http", noop)
+        monkeypatch.setattr(H, "close_http", noop)
+        monkeypatch.setattr(M.postgres, "init_pool", noop)
+        monkeypatch.setattr(M.postgres, "get_pool", lambda: object())
+        monkeypatch.setattr(M.postgres, "start_keepalive", lambda: None)
+        monkeypatch.setattr(M.postgres, "stop_keepalive", noop)
+        monkeypatch.setattr(M.postgres, "close_pool", noop)
+        monkeypatch.setattr(M.vk, "close_client", noop)
+        monkeypatch.setattr(M, "init_audit_queue", lambda: None)
+        monkeypatch.setattr(M, "audit_worker", idle)
+        monkeypatch.setattr(M.alerts, "alert_monitor_loop", idle)
+        monkeypatch.setattr(EMB, "embed_all_records_bg", idle)
+        for name in ("teable_api_token", "teable_web_api_token", "valkey_url", "hf_token"):
+            monkeypatch.setattr(settings, name, None)
+
+        def run(pgvector: bool):
+            async def available():
+                return pgvector
+            monkeypatch.setattr(EMB, "is_pgvector_available", available)
+
+            async def go():
+                async with M.lifespan(M.app):
+                    task = A._tasks_provider()["embedding"]
+                    await asyncio.sleep(0)
+                    return task, task is not None and task.done()
+            return asyncio.run(go())
+        return run
+
+    def test_without_pgvector_no_loop_is_started(self, boot):
+        task, _ = boot(pgvector=False)
+        assert task is None
+
+    def test_with_pgvector_the_loop_keeps_running(self, boot):
+        task, finished = boot(pgvector=True)
+        assert task is not None and finished is False

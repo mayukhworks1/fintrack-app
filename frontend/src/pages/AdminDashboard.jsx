@@ -10,6 +10,7 @@
  *   Audit Log  — every API request: role/IP/geo/OS/browser/referer/size
  *   Sessions   — login sessions (active-only toggle)
  *   AI Chats   — conversation sessions + messages
+ *   AI gateway — providers, keys, task routes, prompts, caps, call log (superadmin only)
  *   Sync Log   — Teable ↔ PostgreSQL sync history
  *   Projects   — PostgreSQL projects mirror
  *   Invoices   — all invoices: main + web (source filter)
@@ -19,9 +20,10 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  LayoutDashboard, ScrollText, Users, MessageSquareText, RefreshCw, Database, FileText, LogOut, Activity, History, ShieldAlert, ShieldCheck, Zap, BarChart2, Link2, Terminal, ServerCrash
+  LayoutDashboard, ScrollText, Users, MessageSquareText, RefreshCw, Database, FileText, LogOut, Activity, History, ShieldAlert, ShieldCheck, Zap, BarChart2, Link2, Terminal, ServerCrash, Cpu
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { AiGatewayTab } from './admin/AiGatewayTab'
 import { AiRunsTab } from './admin/AiRunsTab'
 import { AuditLogTab } from './admin/AuditLogTab'
 import { AuthUsersTab } from './admin/AuthUsersTab'
@@ -45,6 +47,7 @@ const TABS = [
   { id: 'users',       label: 'Users & Sessions', icon: ShieldAlert   },
   { id: 'permissions', label: 'Permissions',      icon: ShieldCheck   },
   { id: 'ai',          label: 'AI',               icon: MessageSquareText},
+  { id: 'ai-gateway',  label: 'AI gateway',       icon: Cpu,          superadmin: true },
   { id: 'insights',    label: 'Insights',         icon: BarChart2     },
   { id: 'sync',        label: 'Sync',             icon: RefreshCw     },
   { id: 'projects',    label: 'Projects',         icon: Database      },
@@ -75,10 +78,12 @@ const TAB_ALIAS = {
 }
 
 export default function AdminDashboard({ embedded = false }) {
-  const { logout } = useAuth()
+  const { logout, authRole } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const validTabIds = TABS.map(t => t.id)
+  // Superadmin-only tabs are hidden from everyone else and their ids fall back to overview.
+  const tabs = TABS.filter(t => !t.superadmin || authRole === 'superadmin')
+  const validTabIds = tabs.map(t => t.id)
   const rawTab = searchParams.get('tab') || 'overview'
   // Resolve aliases (old URLs still work)
   const activeTab = validTabIds.includes(rawTab) ? rawTab : (TAB_ALIAS[rawTab] ? TAB_ALIAS[rawTab] : 'overview')
@@ -133,7 +138,7 @@ export default function AdminDashboard({ embedded = false }) {
       style={embedded
         ? { background: 'var(--card-bg)', borderColor: 'var(--border)' }
         : { background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
-      {TABS.map(({ id, label, icon: Icon }) => (
+      {tabs.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => setTab(id)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
           style={activeTab === id
@@ -166,6 +171,7 @@ export default function AdminDashboard({ embedded = false }) {
           {effectiveSub === 'ai-runs' && <AiRunsTab />}
         </>
       )}
+      {activeTab === 'ai-gateway' && <AiGatewayTab />}
       {activeTab === 'insights'  && <InsightsTab />}
       {activeTab === 'sync'      && <SyncLogTab />}
       {activeTab === 'projects'  && <ProjectsMirrorTab />}

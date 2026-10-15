@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Send, Bot, User, Sparkles, Trash2, Database,
-  AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck,
+  AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck, ShieldQuestion,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { csvRow } from '../utils/csv'
@@ -136,16 +136,22 @@ function detailTableToCsv(dashboard) {
 function VerificationBadge({ verification }) {
   if (!verification) return null
   const confidence = String(verification.confidence || 'medium')
-  const tone = confidence === 'high'
-    ? { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.22)', text: 'var(--fin-positive)' }
-    : confidence === 'low'
-      ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.2)', text: 'var(--fin-negative)' }
-      : { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.22)', text: 'var(--fin-warning)' }
+  // The check could not run: neither a pass nor a warning, so neutral.
+  const unverified = confidence === 'unverified' && !verification.corrected
+  const tone = unverified
+    ? { bg: 'var(--bg-input)', border: 'var(--border)', text: 'var(--text-3)' }
+    : confidence === 'high'
+      ? { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.22)', text: 'var(--fin-positive)' }
+      : confidence === 'low'
+        ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.2)', text: 'var(--fin-negative)' }
+        : { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.22)', text: 'var(--fin-warning)' }
+  const Icon = unverified ? ShieldQuestion : ShieldCheck
   return (
     <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+      title={unverified ? verification.issues?.[0] || 'The answer check could not run.' : undefined}
       style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text }}>
-      <ShieldCheck size={10} />
-      {verification.corrected ? 'Verified + corrected' : `Verified ${confidence}`}
+      <Icon size={10} aria-hidden="true" />
+      {verification.corrected ? 'Verified + corrected' : unverified ? 'Unverified' : `Verified ${confidence}`}
     </span>
   )
 }
@@ -705,7 +711,7 @@ export default function AIAssistant() {
 
         if (e.status === 403) {
           errMsg = 'Access Restricted — This feature requires full account access. Contact your admin to upgrade your account.'
-        } else if (/OPENROUTER_API_KEY|Invalid OPENROUTER_API_KEY|quota exceeded/i.test(raw)) {
+        } else if (/switched off by the administrator|AI limit .*has been reached|No AI provider is available|quota exceeded/i.test(raw)) {
           errMsg = raw
         } else {
           errMsg = raw

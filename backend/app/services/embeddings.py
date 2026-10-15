@@ -13,8 +13,9 @@ Graceful degradation
 ────────────────────
 If pgvector is not installed in the Aiven PG instance, or if the OpenRouter
 embedding API fails, the system falls back cleanly to lexical-only search.
-Without OPENROUTER_API_KEY no query embedding is requested, so vector search
-is skipped as well.
+Without a ready OpenRouter provider (Admin → AI gateway: switched on, with a
+stored key or OPENROUTER_API_KEY) no embedding is requested, so vector search
+is skipped as well. Groq has no embeddings endpoint.
 """
 from __future__ import annotations
 
@@ -24,13 +25,14 @@ from typing import Optional
 
 from ..utils.http import shared_client
 
-from ..config import settings
 from ..db.postgres import get_pool
+from . import ai_gateway as gateway
 
 logger = logging.getLogger("fintrack.embeddings")
 
+# The record_embeddings and studio chunk columns are vector(1536): a model
+# with another dimension needs a migration first.
 EMBED_MODEL   = "openai/text-embedding-3-small"
-EMBED_API_URL = "https://openrouter.ai/api/v1/embeddings"
 BATCH_DELAY   = 0.25   # seconds between embedding API calls (rate limit courtesy)
 
 # Module-level cache so we don't re-check the DB on every request
@@ -56,19 +58,20 @@ async def is_pgvector_available() -> bool:
 
 async def get_embedding(text: str) -> Optional[list[float]]:
     """Call OpenRouter embeddings API; returns float list or None on failure."""
-    if not settings.openrouter_api_key:
+    provider = (await gateway.get_config()).providers["openrouter"]
+    if not provider.ready:
         return None
     try:
         async with shared_client(timeout=20) as client:
             r = await client.post(
-                EMBED_API_URL,
-                headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
+                f"{provider.base_url}/embeddings",
+                headers=gateway.headers_for(provider),
                 json={"model": EMBED_MODEL, "input": text[:8000]},
             )
             r.raise_for_status()
             return r.json()["data"][0]["embedding"]
     except Exception as exc:
-        logger.debug("Embedding API failed: %s", exc)
+        logger.debug("Embedding API failed: %s", gateway.redact(str(exc), provider))
         return None
 
 
@@ -185,7 +188,7 @@ async def embed_all_records_bg() -> None:
     """
     if not await is_pgvector_available():
         return
-    if not settings.openrouter_api_key:
+    if not await gateway.provider_key("openrouter"):
         return
 
     pool = get_pool()

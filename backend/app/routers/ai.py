@@ -1276,18 +1276,34 @@ async def ai_chat_stream(
                         structured=False,
                     )
                     if _should_run_judge(user_message, response_mode):
-                        judged = await judge_answer(user_message, final_content, grounded_context)
-                        if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
-                            final_content = judged["corrected_answer"]
-                        verification = _build_verification_metadata(
-                            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
-                            task="chat",
-                            mode=response_mode,
-                            confidence=str(judged.get("confidence") or "medium"),
-                            issues=list(judged.get("issues") or []),
-                            judge_model=judged.get("model"),
-                            corrected=bool(judged.get("corrected_answer")) and judged.get("verdict") == "soft-fail",
-                        )
+                        judge_source = "hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live")
+                        try:
+                            judged = await judge_answer(user_message, final_content, grounded_context)
+                        except Exception as exc:
+                            # The answer has already streamed; a failed check
+                            # leaves it standing, marked unverified, as Studio does.
+                            logging.getLogger("fintrack.ai").debug("chat judge skipped: %s", exc)
+                            judged = None
+                        if judged is None:
+                            verification = _build_verification_metadata(
+                                source=judge_source,
+                                task="chat",
+                                mode=response_mode,
+                                confidence="unverified",
+                                issues=["The answer check could not run, so this answer is unverified."],
+                            )
+                        else:
+                            if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
+                                final_content = judged["corrected_answer"]
+                            verification = _build_verification_metadata(
+                                source=judge_source,
+                                task="chat",
+                                mode=response_mode,
+                                confidence=str(judged.get("confidence") or "medium"),
+                                issues=list(judged.get("issues") or []),
+                                judge_model=judged.get("model"),
+                                corrected=bool(judged.get("corrected_answer")) and judged.get("verdict") == "soft-fail",
+                            )
                         event["content"] = final_content
                     event["verification"] = verification
                     event["planner"] = planner
@@ -1351,6 +1367,10 @@ async def ai_autofill(
     try:
         fields = await autofill_project(body.description)
         return {"fields": fields}
+    except ValueError as e:
+        # A refusal (task switched off, a daily cap) or every model failing:
+        # a readable answer, and not one a client retry could change.
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1372,6 +1392,8 @@ async def ai_analyze(
             "model": result["model_short"],
             "record_id": body.record_id,
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2377,6 +2399,8 @@ async def ai_status_briefing(
             "history_id":   history_id,
         }
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import logging
         logging.getLogger("fintrack.ai").exception("Status briefing failed: %s", e)

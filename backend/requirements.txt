@@ -20,6 +20,8 @@ redis==5.0.8
 alembic==1.14.0
 SQLAlchemy==2.0.36
 greenlet==3.1.1
+# Encrypts the AI provider keys stored in the database (services/ai_gateway.py).
+cryptography==50.0.1
 huggingface_hub>=0.26.0
 
 # langchain, langchain-openai and langchain-community were removed here.

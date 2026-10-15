@@ -1,11 +1,13 @@
 """
-FinTrack AI service — OpenRouter wiring.
+FinTrack AI service — every chat-completion call in the app passes through here.
 
 Architecture
 ------------
-1. Model registry (`MODELS`) — explicit metadata per model: clean? supports
-   reasoning:exclude? reasoning leakage score. Selection prefers clean
-   instruction-tuned models; reasoning-heavy models are last-resort.
+1. Routes, not a hardcoded model list — which provider and model serve each AI
+   task is set in Admin → AI gateway (services/ai_gateway.py). A call names its
+   task, is admitted (switched on, under its daily caps), then tries the task's
+   route in order. Every attempt that reaches a provider is logged, failed
+   ones included, streaming ones with their token counts.
 
 2. Delimited-answer protocol — every prompt instructs the model to wrap
    its output in `===ANSWER===` ... `===END===` markers. We extract the
@@ -17,9 +19,10 @@ Architecture
    b. Structured-plan markers (Sentence 1:, Step 1:, Plan:, Output:, etc.)
    c. Heuristic meta-paragraph detection ("We need to…", "Let me…")
 
-4. Resilient HTTP — single shared httpx.AsyncClient with retry on
-   transient failures (timeout / connection / 5xx), exponential back-off,
-   and per-model error reporting.
+4. Resilient HTTP — the shared pooled client with retry, exponential
+   back-off, where a retry cannot run the model twice (a connection that
+   never opened, a 5xx), per-model error reporting, and a time budget for
+   the whole route of a non-streamed call.
 """
 from __future__ import annotations
 
@@ -31,17 +34,14 @@ import re
 import time
 from dataclasses import dataclass
 from typing import AsyncIterator
-from typing import Any, Optional
+from typing import Any, Callable, NoReturn, Optional
 
 import httpx
 from ..utils.http import shared_client
 
-from ..config import settings
+from . import ai_gateway as gateway
+from . import ai_usage
 
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Groq speaks the OpenAI chat-completions shape, so the same request builder,
-# SSE parser and response handling serve both providers unchanged.
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 ANSWER_OPEN  = "===ANSWER==="
 ANSWER_CLOSE = "===END==="
 
@@ -52,129 +52,58 @@ RESPONSE_MODE_INSTRUCTIONS = {
 }
 
 
-# ── Model registry ────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class ModelSpec:
     id: str
-    leakage: int           # 0 = clean, 5 = leaks heavily
+    leakage: int = 0       # 0 = clean, 5 = leaks heavily
     supports_reasoning_param: bool = False
-    notes: str = ""
     # Which API serves this model. Both speak the OpenAI chat-completions
     # shape, so only the URL, the key and a couple of vendor-only payload
     # fields differ.
     provider: str = "openrouter"
+    attempt: int = 0       # 1-based position in the route, as tried
 
 
-# Ordered preference list — regularly pruned to only include models with
-# live endpoints on OpenRouter free tier. Remove any model that starts
-# returning "No endpoints found" and replace with a working alternative.
-MODELS: list[ModelSpec] = [
-    # ── Tier 1: large, clean, reliably available ──────────────────────
-    ModelSpec("meta-llama/llama-4-scout:free",                   leakage=0,
-              notes="Fast, vision-capable"),
-    ModelSpec("meta-llama/llama-4-maverick:free",                leakage=0,
-              notes="128K ctx, vision-capable"),
-    ModelSpec("meta-llama/llama-3.3-70b-instruct:free",          leakage=0),
-    ModelSpec("deepseek/deepseek-chat-v3-0324:free",             leakage=0),
-    ModelSpec("google/gemini-2.5-pro-exp-03-25:free",            leakage=0,
-              notes="Vision-capable, generous context"),
-    # ── Tier 2: good but sometimes busy ──────────────────────────────
-    ModelSpec("qwen/qwen3-235b-a22b:free",                       leakage=1),
-    ModelSpec("qwen/qwen3-30b-a3b:free",                         leakage=0),
-    ModelSpec("qwen/qwen2.5-vl-72b-instruct:free",               leakage=0,
-              notes="Vision-capable"),
-    ModelSpec("deepseek/deepseek-r1:free",                       leakage=2,
-              notes="Reasoning model — may include <think> blocks"),
-    ModelSpec("microsoft/phi-4:free",                            leakage=0),
-    ModelSpec("mistralai/mistral-small-3.1-24b-instruct:free",   leakage=0),
-    # ── Tier 3: last resort ───────────────────────────────────────────
-    ModelSpec("nvidia/nemotron-3-super-120b-a12b:free",          leakage=5,
-              supports_reasoning_param=True,
-              notes="Heavy reasoning leakage — last resort only"),
-]
+# How much reasoning a model is known to leak into its answer, by id fragment.
+# The judge skips the leakiest models in its route.
+_LEAKAGE_HINTS = (("nemotron", 5), ("deepseek-r1", 2), ("qwen3", 1))
 
 
-def _groq_models() -> list[ModelSpec]:
+def _leakage(model_id: str) -> int:
+    low = model_id.lower()
+    return next((score for hint, score in _LEAKAGE_HINTS if hint in low), 0)
+
+
+def _spec(step: gateway.RouteStep) -> ModelSpec:
+    return ModelSpec(
+        step.model,
+        leakage=_leakage(step.model),
+        # `reasoning` is an OpenRouter extension; Groq rejects unknown fields.
+        supports_reasoning_param=step.provider.key == "openrouter",
+        provider=step.provider.key,
+        attempt=step.attempt,
+    )
+
+
+async def _ordered_models(task: str = "chat", *, vision: bool = False) -> list[ModelSpec]:
     """
-    The Groq fallback tier, or empty when no key is configured.
-
-    Groq is not in MODELS because its availability is conditional: with no key
-    these specs must not appear in the cascade at all, or every request would
-    end by trying models it cannot authenticate against and reporting those
-    failures to the user.
+    The task's route from Admin → AI gateway, in the order to try it. With
+    `vision`, steps known to read images go first and the rest follow.
     """
-    if not settings.groq_api_key:
-        return []
-    ids = [m.strip() for m in (settings.groq_models or "").split(",") if m.strip()]
-    # leakage=0: Groq serves instruction-tuned models that answer directly.
-    # supports_reasoning_param stays False — `reasoning` is an OpenRouter
-    # extension and Groq rejects unknown fields.
-    return [ModelSpec(mid, leakage=0, provider="groq",
-                      notes="Groq fallback") for mid in ids]
+    return [_spec(step) for step in await gateway.route_specs(task, vision=vision)]
 
 
-def _ordered_models() -> list[ModelSpec]:
-    """
-    Primary (from settings) first, then the registry, then the Groq fallback.
-
-    Groq goes last on purpose: OpenRouter's free tier is the intended path and
-    costs nothing, so Groq's quota is spent only once OpenRouter has actually
-    failed. The one exception is having no OpenRouter key at all, in which case
-    Groq is the only provider and leads.
-    """
-    seen: set[str] = set()
-    out: list[ModelSpec] = []
-
-    if settings.openrouter_api_key:
-        primary = settings.openrouter_model
-        if primary:
-            # If user-configured primary is in registry, use its spec; else assume clean.
-            match = next((m for m in MODELS if m.id == primary), None)
-            if match:
-                out.append(match); seen.add(primary)
-            else:
-                out.append(ModelSpec(primary, leakage=2)); seen.add(primary)
-        for m in MODELS:
-            if m.id not in seen:
-                out.append(m); seen.add(m.id)
-
-    for m in _groq_models():
-        if m.id not in seen:
-            out.append(m); seen.add(m.id)
-    return out
-
-
-def _any_provider_configured() -> bool:
-    return bool(settings.openrouter_api_key or settings.groq_api_key)
-
-
-def _no_provider_message() -> str:
-    return ("No AI provider is configured. Set OPENROUTER_API_KEY (and "
-            "optionally GROQ_API_KEY as a fallback) in the Space secrets.")
+async def _prompt_for(task: str, default: str) -> str:
+    """The task's saved prompt override, else `default`."""
+    return gateway.system_prompt(task, default, await gateway.get_config())
 
 
 def _short(model_id: str) -> str:
-    return model_id.split("/")[-1].replace(":free", "")
-
-
-# ── Vision-capable models (support image_url content blocks) ──────────
-VISION_MODEL_IDS = {
-    "meta-llama/llama-4-maverick:free",
-    "meta-llama/llama-4-scout:free",
-    "google/gemini-2.5-pro-exp-03-25:free",
-    "qwen/qwen2.5-vl-72b-instruct:free",
-    # Legacy — kept in case they come back
-    "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.2-90b-vision-instruct:free",
-    "qwen/qwen-2-vl-7b-instruct:free",
-}
-
-def _vision_models_first() -> list[ModelSpec]:
-    """Return model list with vision-capable models at the front."""
-    ordered = _ordered_models()
-    vision  = [m for m in ordered if m.id in VISION_MODEL_IDS]
-    others  = [m for m in ordered if m.id not in VISION_MODEL_IDS]
-    return vision + others
+    short = model_id.split("/")[-1].replace(":free", "")
+    # "openrouter/free" routes to whichever free model is up; "free" alone
+    # would name nothing.
+    return model_id if short == "free" else short
 
 
 # ── System prompt — strict, explicit, single-purpose ──────────────────
@@ -329,64 +258,51 @@ def _heuristic_strip(content: str) -> str:
 
 
 # ── HTTP layer ────────────────────────────────────────────────────────
-def _meter(model: str, started: float, tokens: dict | None = None,
-           ok: bool = True, error: str | None = None) -> None:
-    """
-    Record one model attempt.
-
-    Imported lazily to keep this module free of a database dependency: the
-    OpenRouter client is used by tests and scripts that never open a pool, and
-    accounting must never be the reason a model call fails.
-    """
+def _total_tokens(usage: Any) -> int | None:
+    """Prompt + answer tokens from a provider's usage block, or None."""
+    if not isinstance(usage, dict):
+        return None
     try:
-        from . import ai_usage
+        total = int(usage.get("prompt_tokens") or 0) + int(usage.get("completion_tokens") or 0)
+    except (TypeError, ValueError):
+        return None
+    return total or None
+
+
+def _meter(spec: ModelSpec, latency_ms: int, *, task: str, tokens: Any = None,
+           ok: bool = True, error: str | None = None, http_status: int | None = None,
+           requests: int = 1) -> None:
+    """
+    Record one model attempt in the call log and in the gateway's count of
+    today's usage. `requests` is how many provider requests the attempt sent,
+    retries included. Accounting must never be the reason a model call fails.
+    """
+    written = None
+    try:
+        written = gateway.note_usage(task, spec.provider, _total_tokens(tokens) or 0, ok, calls=requests)
+    except Exception:
+        pass
+    try:
         ai_usage.record(
-            model=model,
-            latency_ms=int((time.time() - started) * 1000),
+            model=spec.id,
+            latency_ms=latency_ms,
             tokens=tokens if isinstance(tokens, dict) else None,
             ok=ok,
             error=error,
+            task=task,
+            provider=spec.provider,
+            http_status=http_status,
+            attempt=spec.attempt or None,
+            requests=requests,
+            on_written=written,
         )
     except Exception:
         pass
 
 
-def _api_url(provider: str = "openrouter") -> str:
-    return GROQ_API_URL if provider == "groq" else OPENROUTER_API_URL
-
-
-# OpenRouter attributes calls to the site named in HTTP-Referer. The production
-# domain stands in when FRONTEND_URL names no origin (unset, or "*").
-_PRODUCTION_ORIGIN = "https://twfintracker.worksmayukh.space"
-
-
-def _referer() -> str:
-    for origin in (settings.frontend_url or "").split(","):
-        origin = origin.strip().rstrip("/")
-        if origin.startswith(("https://", "http://")):
-            return origin
-    return _PRODUCTION_ORIGIN
-
-
-def _make_headers(provider: str = "openrouter") -> dict[str, str]:
-    if provider == "groq":
-        # Groq wants only the bearer token; the HTTP-Referer/X-Title pair is an
-        # OpenRouter attribution convention and means nothing here.
-        return {
-            "Authorization": f"Bearer {settings.groq_api_key}",
-            "Content-Type": "application/json",
-        }
-    return {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": _referer(),
-        "X-Title": "FinTrack AI",
-    }
-
-
 def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, Any]:
     """
-    One payload builder for all three cascade loops.
+    One payload builder for every cascade loop.
 
     The `reasoning` field is an OpenRouter extension. Groq validates its request
     body strictly and rejects unknown fields, so sending it there would fail
@@ -396,93 +312,318 @@ def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, 
     payload: dict[str, Any] = {"model": spec.id, "messages": messages, **extra}
     if spec.supports_reasoning_param and spec.provider == "openrouter":
         payload["reasoning"] = {"exclude": True}
+    elif spec.provider == "groq" and "gpt-oss" in spec.id:
+        # gpt-oss reasons before it answers and the reasoning counts against
+        # max_tokens; at its default effort a short budget (the judge has 350)
+        # can be spent before any answer is written.
+        payload["reasoning_effort"] = "low"
     return payload
 
 
 def _provider_label(provider: str) -> str:
-    return "Groq" if provider == "groq" else "OpenRouter"
+    pdef = gateway.PROVIDERS.get(provider)
+    return pdef.label if pdef else provider
 
 
-def _auth_or_quota_error(status: int, provider: str) -> str | None:
+def _auth_or_quota_error(status: int) -> str | None:
     """
     Describe a provider-level failure, or None if the status is model-specific.
 
-    401 and 402 condemn every model behind that key, not just the one that was
-    asked for. These used to raise, which aborted the whole cascade — so an
-    expired OpenRouter key meant the Groq fallback could never be reached, and
-    the fallback would have been decorative. The caller now uses this to skip
-    the rest of that provider and carry on with the next one.
+    401, 402 and 403 condemn every model behind that key, not just the one that
+    was asked for. The caller skips the rest of that provider's steps and
+    carries on with the next provider, so a dead key on one cannot strand a
+    healthy other one.
     """
-    key_name = "GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY"
     if status == 401:
-        return f"invalid {key_name}"
+        return "key rejected (HTTP 401)"
     if status in (402, 403):
-        return f"{_provider_label(provider)} quota or permission exhausted"
+        return f"quota or permission exhausted (HTTP {status})"
     return None
 
 
+def _error_message(err: Any) -> str:
+    if isinstance(err, dict):
+        return str(err.get("message") or err.get("code") or err)
+    return str(err)
+
+
+def _error_text(text: str, status: int) -> str:
+    """A provider's error body as one readable line."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and data.get("error"):
+        message = _error_message(data["error"])
+    else:
+        message = (text or "").strip()
+    return message[:120] or f"HTTP {status}"
+
+
+def _message_text(data: dict) -> str:
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        message = choices[0].get("message")
+        if isinstance(message, dict) and isinstance(message.get("content"), str):
+            return message["content"]
+    return ""
+
+
+# ── Streaming chunks ──────────────────────────────────────────────────
+_SSE_DONE = object()
+
+# After the answer's end marker, how long to keep reading for the usage chunk
+# that providers send last.
+_USAGE_GRACE_S = 2.0
+
+
+def _sse_chunk(line: str) -> Any:
+    """One line of a chat-completions stream: the parsed chunk, _SSE_DONE at
+    the end marker, or None for anything else."""
+    if not line or not line.startswith("data:"):
+        return None
+    data = line[5:].strip()
+    if data == "[DONE]":
+        return _SSE_DONE
+    try:
+        chunk = json.loads(data)
+    except json.JSONDecodeError:
+        return None
+    return chunk if isinstance(chunk, dict) else None
+
+
+def _chunk_text(chunk: dict) -> str:
+    # The final usage chunk carries `choices: []`.
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ""
+    delta = choices[0].get("delta")
+    content = delta.get("content") if isinstance(delta, dict) else None
+    return content if isinstance(content, str) else ""
+
+
+def _chunk_usage(chunk: dict) -> dict | None:
+    """Token usage from a stream chunk: OpenAI-style `usage`, or Groq's `x_groq.usage`."""
+    usage = chunk.get("usage")
+    if not isinstance(usage, dict):
+        groq = chunk.get("x_groq")
+        usage = groq.get("usage") if isinstance(groq, dict) else None
+    return usage if isinstance(usage, dict) else None
+
+
 # Shared client — connection pool is reused across requests (faster than
-# spinning a new client per call).
+# spinning a new client per call). Timeouts are per provider, per request.
 _http_client: Optional[httpx.AsyncClient] = None
 
 
 def _client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = shared_client(
-            timeout=httpx.Timeout(180.0, connect=10.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        _http_client = shared_client()
     return _http_client
 
 
-async def _post_with_retries(payload: dict, retries: int = 2,
-                             provider: str = "openrouter") -> httpx.Response:
-    """POST with exponential back-off on transient failures only."""
-    last_err: Exception | None = None
+# The request never reached the provider, so trying again cannot run the
+# model a second time.
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+# How long a non-streamed call may spend on its whole route. The browser gives
+# AI requests 90 s (AI_TIMEOUT_MS in services/api.js): ending the route before
+# that hands the caller every attempt's error instead of a page that timed out
+# while providers were still being called.
+ROUTE_BUDGET_S = 80.0
+# No step, and no retry, starts with less time than this left.
+_MIN_STEP_S = 5.0
+
+
+def _time_left(deadline: float | None) -> float | None:
+    return None if deadline is None else deadline - time.monotonic()
+
+
+def _has_time(deadline: float | None, wait: float = 0.0) -> bool:
+    return deadline is None or deadline - time.monotonic() >= wait + _MIN_STEP_S
+
+
+# Request fields a provider may not know. If one is refused by name, the same
+# request goes once more without them rather than failing the step: an
+# optional tuning field should never be the reason a model is unreachable.
+_OPTIONAL_FIELDS = ("reasoning", "reasoning_effort", "stream_options")
+
+
+def _without_refused_fields(payload: dict, status: int, body: str) -> dict | None:
+    if status != 400 or not any(f in payload for f in _OPTIONAL_FIELDS):
+        return None
+    if not any(f in body for f in _OPTIONAL_FIELDS):
+        return None
+    return {k: v for k, v in payload.items() if k not in _OPTIONAL_FIELDS}
+
+
+async def _post_with_retries(payload: dict, *, provider: gateway.ProviderState, retries: int = 2,
+                             deadline: float | None = None,
+                             on_sent: Callable[[], None] | None = None) -> httpx.Response:
+    """
+    POST, with exponential back-off retries only where a retry cannot run the
+    model twice: a connection that never opened, or a 5xx. A read timeout is a
+    slow model, and asking again would only be slower, so it fails the step
+    at once. `on_sent` is called for every request that reached the provider.
+    With a `deadline` (time.monotonic()), each request's timeout is cut to the
+    time left and no retry starts too close to it.
+    """
     for attempt in range(retries + 1):
+        wait = 0.6 * (2 ** attempt)
+        retry = attempt < retries
         try:
-            r = await _client().post(_api_url(provider),
-                                     headers=_make_headers(provider), json=payload)
-            # 5xx → retry; everything else → return for caller to inspect
-            if r.status_code >= 500 and attempt < retries:
-                await asyncio.sleep(0.6 * (2 ** attempt))
-                continue
-            return r
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            last_err = e
-            if attempt < retries:
-                await asyncio.sleep(0.6 * (2 ** attempt))
+            r = await _client().post(gateway.chat_url(provider), headers=gateway.headers_for(provider),
+                                     json=payload,
+                                     timeout=gateway.timeout_for(provider, _time_left(deadline)))
+        except _NOT_SENT:
+            if retry and _has_time(deadline, wait):
+                await asyncio.sleep(wait)
                 continue
             raise
-    if last_err:
-        raise last_err
+        except Exception:
+            if on_sent:
+                on_sent()
+            raise
+        if on_sent:
+            on_sent()
+        lean = _without_refused_fields(payload, r.status_code, r.text)
+        if lean is not None:
+            payload = lean
+            r = await _client().post(gateway.chat_url(provider), headers=gateway.headers_for(provider),
+                                     json=payload,
+                                     timeout=gateway.timeout_for(provider, _time_left(deadline)))
+            if on_sent:
+                on_sent()
+        if r.status_code >= 500 and retry and _has_time(deadline, wait):
+            await asyncio.sleep(wait)
+            continue
+        return r
     raise RuntimeError("Unreachable")
 
 
-async def _stream_post_with_retries(payload: dict, retries: int = 1,
-                                    provider: str = "openrouter") -> httpx.Response:
-    """Open a streaming POST with one short retry on transient failures."""
-    last_err: Exception | None = None
+async def _stream_post_with_retries(payload: dict, *, provider: gateway.ProviderState, retries: int = 1,
+                                    on_sent: Callable[[], None] | None = None) -> httpx.Response:
+    """Open a streaming POST, with one short retry where a retry cannot run the
+    model twice (see _post_with_retries)."""
     for attempt in range(retries + 1):
+        wait = 0.6 * (2 ** attempt)
+        retry = attempt < retries
         try:
-            req = _client().build_request("POST", _api_url(provider),
-                                          headers=_make_headers(provider), json=payload)
+            req = _client().build_request("POST", gateway.chat_url(provider),
+                                          headers=gateway.headers_for(provider), json=payload,
+                                          timeout=gateway.timeout_for(provider))
             resp = await _client().send(req, stream=True)
-            if resp.status_code >= 500 and attempt < retries:
-                await resp.aclose()
-                await asyncio.sleep(0.6 * (2 ** attempt))
-                continue
-            return resp
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            last_err = e
-            if attempt < retries:
-                await asyncio.sleep(0.6 * (2 ** attempt))
+        except _NOT_SENT:
+            if retry:
+                await asyncio.sleep(wait)
                 continue
             raise
-    if last_err:
-        raise last_err
+        except Exception:
+            if on_sent:
+                on_sent()
+            raise
+        if on_sent:
+            on_sent()
+        if resp.status_code == 400 and any(f in payload for f in _OPTIONAL_FIELDS):
+            body = (await resp.aread()).decode("utf-8", errors="ignore")
+            lean = _without_refused_fields(payload, resp.status_code, body)
+            if lean is not None:
+                await resp.aclose()
+                payload = lean
+                req = _client().build_request("POST", gateway.chat_url(provider),
+                                              headers=gateway.headers_for(provider), json=payload,
+                                              timeout=gateway.timeout_for(provider))
+                resp = await _client().send(req, stream=True)
+                if on_sent:
+                    on_sent()
+        if resp.status_code >= 500 and retry:
+            await resp.aclose()
+            await asyncio.sleep(wait)
+            continue
+        return resp
     raise RuntimeError("Unreachable")
+
+
+class _Cascade:
+    """
+    One walk down a task's route: which steps can be tried, what each attempt
+    cost, and the error to raise when none of them answered.
+
+    Every attempt that reaches a provider is metered, failed ones included. A
+    route that burns three models before one answers costs three calls against
+    the provider's rate limit, and a log that counted only the answer would
+    understate the load exactly when it matters most. A step whose provider is
+    off, has no key or is at its daily cap is skipped without a log row; if
+    that leaves nothing contacted at all, the call is refused as not_sent.
+    """
+
+    def __init__(self, task: str, attempts: list | None = None):
+        self.task = task
+        self.attempts = attempts
+        self.errors: list[str] = []
+        self.contacted = False
+        # Providers whose key is dead or out of quota. Every later step behind
+        # the same key is skipped rather than re-attempted.
+        self.dead: set[str] = set()
+        # Requests the current step sent that reached its provider.
+        self.requests = 0
+
+    async def provider_for(self, spec: ModelSpec) -> gateway.ProviderState | None:
+        """The provider to call for `spec`, or None when the step is skipped."""
+        self.requests = 0
+        if spec.provider in self.dead:
+            self.skip(spec, "skipped: key rejected on an earlier step", report=False)
+            return None
+        p = (await gateway.get_config()).providers.get(spec.provider)
+        if p is None:
+            reason = "unknown provider"
+        elif not p.enabled:
+            reason = "provider off"
+        elif not p.api_key:
+            reason = "no key"
+        elif not await gateway.provider_has_capacity(p.key):
+            reason = "daily cap reached"
+        else:
+            return p
+        self.skip(spec, reason)
+        return None
+
+    def sent(self) -> None:
+        self.requests += 1
+
+    def skip(self, spec: ModelSpec, reason: str, *, report: bool = True) -> None:
+        """A step that was never sent. `report` names it in the final error."""
+        self._note(spec, ok=False, ms=0, error=reason, skipped=True, report=report)
+
+    def failed(self, spec: ModelSpec, started: float, error: str, *,
+               http_status: int | None = None, tokens: Any = None) -> None:
+        self._record(spec, started, ok=False, error=error or "failed",
+                     http_status=http_status, tokens=tokens)
+
+    def succeeded(self, spec: ModelSpec, started: float, *,
+                  http_status: int | None = None, tokens: Any = None) -> None:
+        self._record(spec, started, ok=True, http_status=http_status, tokens=tokens)
+
+    def _record(self, spec, started, *, ok, error=None, http_status=None, tokens=None) -> None:
+        self.contacted = True
+        ms = int((time.time() - started) * 1000)
+        _meter(spec, ms, task=self.task, tokens=tokens, ok=ok, error=error, http_status=http_status,
+               requests=max(1, self.requests))
+        self._note(spec, ok=ok, ms=ms, error=error)
+
+    def _note(self, spec: ModelSpec, *, ok: bool, ms: int, error: str | None,
+              skipped: bool = False, report: bool = True) -> None:
+        if not ok and report:
+            self.errors.append(f"{_short(spec.id)} ({_provider_label(spec.provider)}): {(error or '')[:120]}")
+        if self.attempts is not None:
+            self.attempts.append({"provider": spec.provider, "model": spec.id, "ok": ok,
+                                  "ms": ms, "error": None if ok else error, "skipped": skipped})
+
+    def give_up(self) -> NoReturn:
+        if not self.contacted:
+            gateway.refuse(self.task, gateway.no_provider_message(self.task))
+        raise ValueError("All AI models are unavailable right now. Tried: " + "; ".join(self.errors))
 
 
 # ── Core chat orchestrator ────────────────────────────────────────────
@@ -492,102 +633,113 @@ async def _try_chat(
     temperature: float = 0.5,
     extract: bool = True,
     models: list[ModelSpec] | None = None,
+    *,
+    task: str = "chat",
+    bypass_enabled: bool = False,
+    attempts: list | None = None,
+    budget_s: float = ROUTE_BUDGET_S,
 ) -> dict:
     """
-    Try each model in order until one returns usable content.
+    Try each step of the task's route until one returns usable content.
 
-    Returns {"content": str, "model": str, "model_short": str}.
-    Raises ValueError on hard failure (auth/quota) or after exhausting all models.
+    Returns {"content", "model", "model_short", "provider"}. Raises
+    GatewayRefused (a ValueError) when the call is not admitted, and a
+    ValueError naming every attempt when no model answered. `models` replaces
+    the route; `bypass_enabled` runs a switched-off task (the admin Test button
+    only); `attempts`, when given, receives {"provider", "model", "ok", "ms",
+    "error", "skipped"} for every step tried or skipped. The whole route gets
+    `budget_s` seconds: each request's timeout is cut to the time left, and
+    steps that would start too late are skipped as out of time.
     """
-    if not _any_provider_configured():
-        raise ValueError(_no_provider_message())
+    await gateway.admit(task, bypass_enabled=bypass_enabled)
+    cascade = _Cascade(task, attempts)
+    deadline = time.monotonic() + budget_s
 
-    errors: list[str] = []
-    # Providers whose key is dead or out of quota. Every later model behind the
-    # same key is skipped rather than re-attempted — that is what lets the
-    # cascade fall through to a different provider instead of stopping.
-    dead_providers: set[str] = set()
-
-    for spec in (models if models is not None else _ordered_models()):
-        if spec.provider in dead_providers:
+    for spec in (models if models is not None else await _ordered_models(task)):
+        if not _has_time(deadline):
+            cascade.skip(spec, "not tried: out of time")
             continue
-        attempt_started = time.time()
+        p = await cascade.provider_for(spec)
+        if p is None:
+            continue
+        started = time.time()
+        status: int | None = None
+        usage: dict | None = None
         try:
             payload = _build_payload(
                 spec, messages, max_tokens=max_tokens, temperature=temperature,
             )
 
-            r = await _post_with_retries(payload, provider=spec.provider)
+            r = await _post_with_retries(payload, provider=p, deadline=deadline, on_sent=cascade.sent)
+            status = r.status_code
 
-            provider_dead = _auth_or_quota_error(r.status_code, spec.provider)
+            provider_dead = _auth_or_quota_error(status)
             if provider_dead:
-                dead_providers.add(spec.provider)
-                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
+                cascade.dead.add(spec.provider)
+                cascade.failed(spec, started, provider_dead, http_status=status)
                 continue
-            if r.status_code == 429:
+            if status == 429:
+                if not _has_time(deadline, 1.2):
+                    cascade.failed(spec, started, "rate-limited", http_status=status)
+                    continue
                 # One short backoff retry before skipping to the next model
                 await asyncio.sleep(1.2)
-                r2 = await _post_with_retries(payload, retries=1, provider=spec.provider)
-                if r2.status_code == 429:
-                    errors.append(f"{_short(spec.id)}: rate-limited")
+                status = None
+                r = await _post_with_retries(payload, provider=p, retries=1, deadline=deadline,
+                                             on_sent=cascade.sent)
+                status = r.status_code
+                if status == 429:
+                    cascade.failed(spec, started, "rate-limited", http_status=status)
                     continue
-                r = r2  # use the retried response below
-            if r.status_code >= 400:
-                try:
-                    data = r.json()
-                    err = data.get("error", {})
-                    err_msg = err.get("message", r.text) if isinstance(err, dict) else str(err)
-                except Exception:
-                    err_msg = r.text[:200]
+            if status >= 400:
                 # Any error here condemns this model, not the run. Aborting
-                # would strand a healthy fallback provider behind a single bad
-                # response; the collected `errors` still name every failure in
-                # the final message, so nothing is hidden.
-                errors.append(
-                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
-                    f"{err_msg[:120] or 'HTTP ' + str(r.status_code)}"
-                )
+                # would strand a healthy fallback behind a single bad response;
+                # the collected errors still name every failure in the final
+                # message, so nothing is hidden.
+                cascade.failed(spec, started, _error_text(r.text, status), http_status=status)
                 continue
 
-            data = r.json()
+            try:
+                data = r.json()
+            except ValueError:
+                data = None
+            if not isinstance(data, dict):
+                cascade.failed(spec, started, "answered without a JSON body", http_status=status)
+                continue
+            if isinstance(data.get("usage"), dict):
+                usage = data["usage"]
             if "error" in data:
-                err = data["error"]
-                err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-                errors.append(
-                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): {err_msg[:120]}"
-                )
+                cascade.failed(spec, started, _error_message(data["error"]),
+                               http_status=status, tokens=usage)
                 continue
 
-            raw = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
+            raw = _message_text(data)
             if not raw.strip():
-                errors.append(f"{_short(spec.id)}: empty response")
+                cascade.failed(spec, started, "empty response", http_status=status, tokens=usage)
                 continue
 
             content = _extract_answer(raw) if extract else raw.strip()
             if not content:
-                _meter(spec.id, attempt_started, ok=False,
-                       error="response had no extractable answer")
-                errors.append(f"{_short(spec.id)}: response had no extractable answer")
+                cascade.failed(spec, started, "response had no extractable answer",
+                               http_status=status, tokens=usage)
                 continue
 
-            _meter(spec.id, attempt_started, tokens=data.get("usage"), ok=True)
-            return {"content": content, "model": spec.id, "model_short": _short(spec.id)}
+            cascade.succeeded(spec, started, http_status=status, tokens=usage)
+            return {"content": content, "model": spec.id, "model_short": _short(spec.id),
+                    "provider": spec.provider}
 
         except (httpx.TimeoutException, httpx.ConnectError):
-            _meter(spec.id, attempt_started, ok=False, error="timeout/network")
-            errors.append(f"{_short(spec.id)}: timeout/network")
-            continue
-        except ValueError:
-            raise
+            cascade.failed(spec, started, "timeout/network", http_status=status, tokens=usage)
         except Exception as e:
-            _meter(spec.id, attempt_started, ok=False, error=str(e))
-            errors.append(f"{_short(spec.id)}: {str(e)[:100]}")
-            continue
+            cascade.failed(spec, started, _failure_text(e, p), http_status=status, tokens=usage)
 
-    raise ValueError(
-        ("All AI models are unavailable right now. Tried: " + "; ".join(errors))
-        if errors else "No models configured."
-    )
+    cascade.give_up()
+
+
+def _failure_text(exc: Exception, p: gateway.ProviderState) -> str:
+    """An unexpected error as an attempt's error text. The HTTP library's own
+    messages can quote the request's headers, key included, so it is masked."""
+    return gateway.redact(str(exc), p)[:100] or type(exc).__name__
 
 
 async def stream_chat_with_ai(
@@ -599,12 +751,12 @@ async def stream_chat_with_ai(
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Stream chat deltas as {"type": "delta", "delta": "..."} events and finish
-    with {"type": "done", "content": "...", "model": "...", "model_short": "..."}.
+    with {"type": "done", "content", "model", "model_short", "tokens_used"};
+    `tokens_used` is prompt + answer tokens when the provider reported them.
     """
-    if not _any_provider_configured():
-        raise ValueError(_no_provider_message())
+    await gateway.admit("chat")
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": await _prompt_for("chat", SYSTEM_PROMPT)}]
     mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(response_mode or "brief")
     if mode_instruction:
         messages.append({"role": "system", "content": mode_instruction})
@@ -614,89 +766,95 @@ async def stream_chat_with_ai(
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
-    errors: list[str] = []
-    dead_providers: set[str] = set()
+    cascade = _Cascade("chat")
 
-    for spec in _ordered_models():
-        if spec.provider in dead_providers:
+    for spec in await _ordered_models("chat"):
+        p = await cascade.provider_for(spec)
+        if p is None:
             continue
+        started = time.time()
         resp: httpx.Response | None = None
+        status: int | None = None
+        usage: dict | None = None
+        settled = False
         try:
             payload = _build_payload(
                 spec, messages, max_tokens=1024,
                 temperature=0.5 if temperature is None else temperature,
-                stream=True,
+                stream=True, stream_options={"include_usage": True},
             )
 
-            resp = await _stream_post_with_retries(payload, provider=spec.provider)
+            resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
+            status = resp.status_code
 
-            provider_dead = _auth_or_quota_error(resp.status_code, spec.provider)
+            provider_dead = _auth_or_quota_error(status)
             if provider_dead:
-                dead_providers.add(spec.provider)
-                errors.append(f"{_provider_label(spec.provider)}: {provider_dead}")
-                await resp.aclose()
+                cascade.dead.add(spec.provider)
+                cascade.failed(spec, started, provider_dead, http_status=status)
                 continue
-            if resp.status_code >= 400:
+            if status >= 400:
                 body = await resp.aread()
-                text = body.decode("utf-8", errors="ignore")[:200]
-                errors.append(
-                    f"{_short(spec.id)} ({_provider_label(spec.provider)}): "
-                    f"{text or ('HTTP ' + str(resp.status_code))}"
-                )
-                await resp.aclose()
+                cascade.failed(spec, started, _error_text(body.decode("utf-8", errors="ignore"), status),
+                               http_status=status)
                 continue
 
             full_raw = ""
             emitted = ""
             opened = False
-            closed = False
+            closed_at: float | None = None
 
-            async for line in resp.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    payload = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-
-                delta = (
-                    payload.get("choices", [{}])[0]
-                    .get("delta", {})
-                    .get("content", "")
-                ) or ""
-                if not delta:
-                    continue
-
-                full_raw += delta
-
-                if not opened:
-                    idx = full_raw.find(ANSWER_OPEN)
-                    if idx == -1:
+            try:
+                async for line in resp.aiter_lines():
+                    chunk = _sse_chunk(line)
+                    if chunk is _SSE_DONE:
+                        break
+                    if chunk is None:
                         continue
-                    opened = True
-                    full_raw = full_raw[idx + len(ANSWER_OPEN):]
+                    usage = _chunk_usage(chunk) or usage
+                    if closed_at is not None:
+                        # The answer is complete; read on only for the usage chunk.
+                        if time.monotonic() - closed_at > _USAGE_GRACE_S:
+                            break
+                        continue
+                    if "error" in chunk:
+                        raise RuntimeError(_error_message(chunk["error"])[:100])
 
-                if ANSWER_CLOSE in full_raw:
-                    full_raw = full_raw.split(ANSWER_CLOSE, 1)[0]
-                    closed = True
+                    delta = _chunk_text(chunk)
+                    if not delta:
+                        continue
 
-                if len(full_raw) > len(emitted):
-                    chunk = full_raw[len(emitted):]
-                    emitted = full_raw
-                    if chunk:
-                        yield {"type": "delta", "delta": chunk}
+                    full_raw += delta
 
-                if closed:
-                    break
+                    if not opened:
+                        idx = full_raw.find(ANSWER_OPEN)
+                        if idx == -1:
+                            continue
+                        opened = True
+                        full_raw = full_raw[idx + len(ANSWER_OPEN):]
+
+                    if ANSWER_CLOSE in full_raw:
+                        full_raw = full_raw.split(ANSWER_CLOSE, 1)[0]
+                        closed_at = time.monotonic()
+
+                    if len(full_raw) > len(emitted):
+                        piece = full_raw[len(emitted):]
+                        emitted = full_raw
+                        if piece:
+                            yield {"type": "delta", "delta": piece}
+            except httpx.TransportError:
+                # Past the end marker only the usage chunk is lost; the answer
+                # itself arrived whole.
+                if closed_at is None:
+                    raise
 
             final_content = _extract_answer(full_raw if opened else full_raw or emitted).strip()
             if not final_content:
-                errors.append(f"{_short(spec.id)}: response had no extractable answer")
-                await resp.aclose()
+                cascade.failed(spec, started, "response had no extractable answer",
+                               http_status=status, tokens=usage)
                 continue
+
+            cascade.succeeded(spec, started, http_status=status, tokens=usage)
+            settled = True
 
             if final_content != emitted:
                 tail = final_content[len(emitted):]
@@ -708,29 +866,28 @@ async def stream_chat_with_ai(
                 "content": final_content,
                 "model": spec.id,
                 "model_short": _short(spec.id),
+                "tokens_used": _total_tokens(usage),
             }
-            await resp.aclose()
             return
 
         except (httpx.TimeoutException, httpx.ConnectError):
-            errors.append(f"{_short(spec.id)}: timeout/network")
-            if resp is not None:
-                await resp.aclose()
-            continue
-        except ValueError:
-            if resp is not None:
-                await resp.aclose()
+            cascade.failed(spec, started, "timeout/network", http_status=status, tokens=usage)
+        except (GeneratorExit, asyncio.CancelledError):
+            # The reader went away mid-answer; the provider still served it.
+            if not settled:
+                cascade.failed(spec, started, "stopped: the client disconnected",
+                               http_status=status, tokens=usage)
             raise
         except Exception as e:
-            errors.append(f"{_short(spec.id)}: {str(e)[:100]}")
+            cascade.failed(spec, started, _failure_text(e, p), http_status=status, tokens=usage)
+        finally:
             if resp is not None:
-                await resp.aclose()
-            continue
+                try:
+                    await resp.aclose()
+                except Exception:
+                    pass
 
-    raise ValueError(
-        ("All AI models are unavailable right now. Tried: " + "; ".join(errors))
-        if errors else "No models configured."
-    )
+    cascade.give_up()
 
 
 # ── Context formatters ────────────────────────────────────────────────
@@ -779,6 +936,15 @@ def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
 
 
 # ── Public API ────────────────────────────────────────────────────────
+_JUDGE_SYSTEM = (
+    "You are FinTrackAI Judge. Verify whether the draft answer is grounded in the supplied portfolio context. "
+    "Return ONLY compact JSON with keys verdict, confidence, issues, corrected_answer. "
+    "verdict must be 'pass' or 'soft-fail'. confidence must be 'high', 'medium', or 'low'. "
+    "Use soft-fail if the draft invents figures, contradicts the context, or misses the requested output style. "
+    "If soft-fail, provide a corrected_answer grounded strictly in context. Keep issues short."
+)
+
+
 async def judge_answer(
     message: str,
     answer: str,
@@ -789,13 +955,6 @@ async def judge_answer(
     and can suggest a corrected answer when the first draft overclaims.
     """
     judge_context = context[:14000] if context else ""
-    prompt = (
-        "You are FinTrackAI Judge. Verify whether the draft answer is grounded in the supplied portfolio context. "
-        "Return ONLY compact JSON with keys verdict, confidence, issues, corrected_answer. "
-        "verdict must be 'pass' or 'soft-fail'. confidence must be 'high', 'medium', or 'low'. "
-        "Use soft-fail if the draft invents figures, contradicts the context, or misses the requested output style. "
-        "If soft-fail, provide a corrected_answer grounded strictly in context. Keep issues short."
-    )
     payload = json.dumps({
         "question": message,
         "draft_answer": answer,
@@ -803,13 +962,14 @@ async def judge_answer(
     }, ensure_ascii=False)
     result = await _try_chat(
         [
-            {"role": "system", "content": prompt},
+            {"role": "system", "content": await _prompt_for("judge", _JUDGE_SYSTEM)},
             {"role": "user", "content": payload},
         ],
         max_tokens=350,
         temperature=0.0,
         extract=False,
-        models=[m for m in _ordered_models() if m.leakage <= 2][:4] or None,
+        models=[m for m in await _ordered_models("judge") if m.leakage <= 2][:4] or None,
+        task="judge",
     )
     raw = result.get("content", "").strip()
     try:
@@ -835,11 +995,14 @@ async def judge_answer(
     }
 
 
+_AUTOFILL_SYSTEM = (
+    "You are a JSON extraction assistant. Output ONLY the JSON object inside "
+    f"{ANSWER_OPEN} / {ANSWER_CLOSE} markers. No prose, no markdown, no commentary."
+)
+
+
 async def autofill_project(description: str) -> dict:
     """Extract structured project fields from free-text description."""
-    if not settings.openrouter_api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured.")
-
     prompt = (
         f'Extract project fields from: "{description}"\n\n'
         f'Output exactly this JSON object inside the {ANSWER_OPEN} / {ANSWER_CLOSE} markers '
@@ -857,12 +1020,10 @@ async def autofill_project(description: str) -> dict:
         '}'
     )
     messages = [
-        {"role": "system", "content":
-            "You are a JSON extraction assistant. Output ONLY the JSON object inside "
-            f"{ANSWER_OPEN} / {ANSWER_CLOSE} markers. No prose, no markdown, no commentary."},
+        {"role": "system", "content": await _prompt_for("project_autofill", _AUTOFILL_SYSTEM)},
         {"role": "user", "content": prompt},
     ]
-    result = await _try_chat(messages, max_tokens=512, temperature=0.05)
+    result = await _try_chat(messages, max_tokens=512, temperature=0.05, task="project_autofill")
     content = result["content"].strip()
     # Defensive markdown fence stripping
     content = re.sub(r'^```(?:json)?\s*', '', content)
@@ -897,10 +1058,10 @@ async def analyze_project(project_fields: dict) -> dict:
         f"Health Summary:\nKey Financial Metrics:\nRisks:\nRecommendations:\nTarget Status:"
     )
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": await _prompt_for("project_analysis", SYSTEM_PROMPT)},
         {"role": "user", "content": prompt},
     ]
-    return await _try_chat(messages, max_tokens=1024, temperature=0.5)
+    return await _try_chat(messages, max_tokens=1024, temperature=0.5, task="project_analysis")
 
 
 # Invoice text is read for the regex pre-pass and the first 3,000 characters of
@@ -1086,15 +1247,13 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
 
     Returns a dict matching InvoiceFields keys (snake_case, nulls omitted).
     """
-    if not settings.openrouter_api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured.")
-
     is_image = mime_type.startswith("image/")
     is_pdf   = "pdf" in mime_type.lower() or filename.lower().endswith(".pdf")
 
     regex_fields: dict = {}
     messages: list[dict] = []
-    specs: list[ModelSpec] = []
+    specs: list[ModelSpec] | None = None
+    system = await _prompt_for("invoice_parse", _INVOICE_EXTRACT_SYSTEM)
 
     prompt_text = (
         "Extract all invoice fields you can find. Apply the format rules from the system prompt strictly.\n\n"
@@ -1104,13 +1263,14 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
     if is_image:
         b64 = base64.b64encode(content).decode()
         messages = [
-            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
+            {"role": "system", "content": system},
             {"role": "user", "content": [
                 {"type": "text",      "text": prompt_text},
                 {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
             ]},
         ]
-        specs = _vision_models_first()
+        # Models known to read images go first; the rest still follow.
+        specs = await _ordered_models("invoice_parse", vision=True)
 
     elif is_pdf:
         # pypdf is pure Python and slow on large pages: off the loop, other
@@ -1136,15 +1296,15 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
                     context_lines.append(f"  {k}: {v}")
 
         messages = [
-            {"role": "system", "content": _INVOICE_EXTRACT_SYSTEM},
+            {"role": "system", "content": system},
             {"role": "user",   "content": "\n".join(context_lines) + "\n\n" + prompt_text},
         ]
-        specs = _ordered_models()
 
     else:
         raise ValueError(f"Unsupported file type '{mime_type}'. Upload a PDF, PNG, or JPG.")
 
-    result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs)
+    result = await _try_chat(messages, max_tokens=700, temperature=0.05, models=specs,
+                             task="invoice_parse")
     raw    = result["content"].strip()
 
     # Strip markdown fences if the model wrapped the JSON
@@ -1283,10 +1443,11 @@ async def ai_status_update(
     )
 
     messages = [
-        {"role": "system", "content": _AI_UPDATE_SYSTEM},
+        {"role": "system", "content": await _prompt_for("status_update", _AI_UPDATE_SYSTEM)},
         {"role": "user",   "content": prompt},
     ]
-    return await _try_chat(messages, max_tokens=1500, temperature=0.4, extract=False)
+    return await _try_chat(messages, max_tokens=1500, temperature=0.4, extract=False,
+                           task="status_update")
 
 
 # ── Status Briefing ───────────────────────────────────────────────────────────
@@ -1363,10 +1524,11 @@ async def generate_status_briefing(
     )
 
     messages = [
-        {"role": "system", "content": _STATUS_BRIEFING_SYSTEM},
+        {"role": "system", "content": await _prompt_for("status_briefing", _STATUS_BRIEFING_SYSTEM)},
         {"role": "user",   "content": prompt},
     ]
-    result = await _try_chat(messages, max_tokens=2000, temperature=0.3, extract=False)
+    result = await _try_chat(messages, max_tokens=2000, temperature=0.3, extract=False,
+                             task="status_briefing")
     raw = result.get("content", "")
     result["content"] = _clean_report_output(raw)
     return result

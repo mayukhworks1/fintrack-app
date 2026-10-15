@@ -575,17 +575,54 @@ export function SessionStatusChip({ status }) {
   )
 }
 
+// On/off switch. `label` names it for screen readers when no visible <label> wraps it.
+// The track is drawn inside the button so the phone touch-target min-height
+// grows the hit area without stretching the switch.
+export function Toggle({ checked, onChange, label, disabled = false, busy = false }) {
+  const off = disabled || busy
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={Boolean(checked)}
+      aria-label={label}
+      disabled={off}
+      onClick={() => onChange(!checked)}
+      className="inline-flex items-center flex-shrink-0 rounded-full"
+      style={{
+        background: 'transparent', border: 'none', padding: 0,
+        opacity: off ? 0.55 : 1,
+        cursor: busy ? 'wait' : disabled ? 'not-allowed' : 'pointer',
+        transition: 'opacity 150ms ease',
+      }}
+    >
+      <span aria-hidden="true" className="relative block rounded-full" style={{
+        width: 36, height: 20,
+        background: checked ? 'var(--accent-btn)' : 'var(--text-3)',
+        transition: 'background-color 150ms ease',
+      }}>
+        <span style={{
+          position: 'absolute', top: 2, left: checked ? 18 : 2,
+          width: 16, height: 16, borderRadius: '50%',
+          background: '#fff', transition: 'left 0.15s',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </span>
+    </button>
+  )
+}
+
 export function SubTabBar({ tabs, active, onSelect }) {
   return (
     <div className="flex gap-1 mb-3 p-1 rounded-xl w-fit"
       style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
       {tabs.map(({ id, label, icon: Icon }) => (
-        <button key={id} onClick={() => onSelect(id)}
+        <button key={id} type="button" aria-pressed={active === id} onClick={() => onSelect(id)}
           className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
           style={active === id
             ? { background: 'var(--card-bg)', color: 'var(--text-1)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
             : { color: 'var(--text-3)', background: 'transparent' }}>
-          <Icon size={11} />{label}
+          <Icon size={11} aria-hidden="true" />{label}
         </button>
       ))}
     </div>

@@ -28,6 +28,17 @@ function focusableWithin(root) {
   return visible.length ? visible : all
 }
 
+// Open traps, innermost last. Only the innermost acts on Tab (and, through
+// isTopmostTrap, on Escape): a dialog opened over another — a confirmation
+// over a form — keeps the keyboard to itself instead of both reacting.
+const openTraps = []
+
+/** True when `ref`'s trap is the innermost open one, or none is open. */
+export function isTopmostTrap(ref) {
+  const top = openTraps[openTraps.length - 1]
+  return !top || top === ref
+}
+
 /**
  * Confines Tab within `ref` while `active`, then restores focus on close.
  *
@@ -45,6 +56,7 @@ export function useFocusTrap(ref, active) {
   useEffect(() => {
     if (!active) return
     restoreTo.current = document.activeElement
+    openTraps.push(ref)
 
     const node = ref.current
     // Deferred a frame: on open the panel is still mid-transition and children
@@ -56,7 +68,7 @@ export function useFocusTrap(ref, active) {
     })
 
     const onKeyDown = (e) => {
-      if (e.key !== 'Tab') return
+      if (e.key !== 'Tab' || openTraps[openTraps.length - 1] !== ref) return
       const targets = focusableWithin(ref.current)
       if (!targets.length) {
         // Nothing to cycle through — keep focus in the dialog rather than
@@ -88,6 +100,8 @@ export function useFocusTrap(ref, active) {
     return () => {
       cancelAnimationFrame(raf)
       document.removeEventListener('keydown', onKeyDown, true)
+      const at = openTraps.lastIndexOf(ref)
+      if (at >= 0) openTraps.splice(at, 1)
       // Only restore if the element is still in the document and focusable —
       // it may have been unmounted by the very action that closed the dialog.
       const target = restoreTo.current

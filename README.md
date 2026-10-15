@@ -13,7 +13,7 @@ Full-stack app for agency project billing, invoice tracking, and portfolio healt
 | Primary DB | Teable REST API | app.teable.ai |
 | Mirror DB | Aiven PostgreSQL (asyncpg) | Aiven Cloud |
 | Cache / Rate-limit | Aiven Valkey (Redis-compatible, TLS) | Aiven Cloud |
-| AI | OpenRouter (free model cascade) | openrouter.ai |
+| AI | Groq + OpenRouter behind the AI gateway (routes, caps and prompts set in Admin → AI gateway) | groq.com, openrouter.ai |
 
 ---
 
@@ -214,6 +214,14 @@ All writes (projects, invoices, status) also write to `record_history` via the a
 
 ## AI Optimization
 
+### AI gateway (Admin → AI gateway, superadmin only)
+Every model call names a task (`chat`, `judge`, `project_autofill`, `project_analysis`, `status_briefing`, `status_update`, `invoice_parse`, `page_build`, `page_interview`, `studio_ask`, `studio_analyze`) and goes through `services/ai_gateway.py`:
+- **Providers** — Groq and OpenRouter, both OpenAI-compatible. Each has an on/off switch, base URL, timeout, daily request and token caps, and an API key saved encrypted in the database (never returned by the API; only the last 4 characters are shown). `GROQ_API_KEY` / `OPENROUTER_API_KEY` are an optional fallback for a provider with no saved key.
+- **Tasks** — each has an on/off switch, a route of up to 6 `provider · model` steps tried in order, a daily cap and a versioned prompt override. With nothing saved, every task runs `groq · openai/gpt-oss-120b → groq · openai/gpt-oss-20b → openrouter · openrouter/free`; invoice parsing leads with `openrouter · google/gemma-4-31b-it:free`, and invoice photos try models known to read images first.
+- **Failover** — a rejected key (401/402/403) skips the rest of that provider; 429, other errors, timeouts and empty answers move to the next step. A provider that is off, has no key or is at its cap is skipped.
+- **Call log** — every attempt that reaches a provider is a row in `ai_traces` (task, provider, model, status, HTTP status, latency, tokens — never the prompt or the answer), streaming included; a call refused before any provider is contacted is logged as `not_sent`. Workspace and per-task caps count today's calls from midnight IST.
+- If migration 0003 has not run, AI keeps working on the built-in routes and the env keys; the admin panel is read-only until it does.
+
 ### Chat context (<10ms)
 ```
 Request → Valkey "chat:context" HIT → 1ms
@@ -259,6 +267,7 @@ Accessible at `/admin` (editor role) or standalone (admin role):
 | Users & Sessions | 4-state status, active filter, user management |
 | **Permissions** | Role-based permission matrix per user (next to Users & Sessions) |
 | AI Chats | Session list + thread viewer |
+| AI gateway | Superadmin only: providers, keys and caps; task routes, switches and prompt versions; test calls; call log |
 | Sync Log | Per-table history + trigger button |
 | Projects | projects_mirror browser |
 | Invoices | All/Main/Web toggle |
@@ -292,12 +301,13 @@ cd frontend && npm install && npm run dev   # :5173; for the local backend set V
 Required `.env`:
 ```
 TEABLE_API_TOKEN=...
-OPENROUTER_API_KEY=...
 APP_PASSWORD=...
 APP_SECRET=...            # random 32-char string
 POSTGRES_URL=...          # postgres://user:pass@host:port/db?sslmode=require
 VALKEY_URL=...            # rediss://user:pass@host:port
 ```
+
+AI keys are set in Admin → AI gateway once the app is running. `GROQ_API_KEY` / `OPENROUTER_API_KEY` in `.env` are an optional fallback for a provider with no saved key.
 
 ---
 
@@ -309,7 +319,9 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 | `TEABLE_WEB_API_TOKEN` | Web invoices |
 | `TEABLE_ALL_API_TOKEN` | Web projects |
 | `TEABLE_STATUS_TABLE_ID` | Current Status table (default: `tblgdbV6T4Ly9n6YNCU`) |
-| `OPENROUTER_API_KEY` | AI API key |
+| `GROQ_API_KEY` | Optional — Groq key used when none is saved in Admin → AI gateway |
+| `OPENROUTER_API_KEY` | Optional — OpenRouter key used when none is saved in Admin → AI gateway (embeddings use OpenRouter) |
+| `AI_GATEWAY_SECRET` | Optional — derives the key that encrypts provider keys saved in the panel (default: `APP_SECRET`, so rotating `APP_SECRET` makes saved keys unreadable until they are set again). Keys saved before it was set stay readable through `APP_SECRET`; save them again before rotating `APP_SECRET` |
 | `APP_PASSWORD` | Editor role |
 | `APP_VIEW_PASSWORD` | Viewer role |
 | `APP_WEB_PASSWORD` | Web role |
