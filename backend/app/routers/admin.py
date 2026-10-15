@@ -37,6 +37,7 @@ from typing import Optional
 
 import httpx
 from ..utils.http import shared_client
+from ..utils.client_ip import client_ip
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -99,11 +100,6 @@ def _no_db():
         status_code=503,
         content={"error": "PostgreSQL unavailable"},
     )
-
-
-def _client_ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 # The commit a process is running cannot change while it runs. Computed once;
@@ -179,7 +175,7 @@ async def _write_auth_admin_event(
         role or actor_role,
         email,
         status,
-        _client_ip(request),
+        client_ip(request),
         request.headers.get("user-agent", ""),
         getattr(request.state, "request_id", None),
         json.dumps({"actor_role": actor_role, **(metadata or {})}),
@@ -1072,7 +1068,7 @@ async def admin_delete_auth_user(
                 user_id,
                 user["email"],
                 user["status"],
-                _client_ip(request) or None,
+                client_ip(request) or None,
                 request.headers.get("user-agent", ""),
                 json.dumps({"deleted_by": actor_role, "forced": force}),
             )
@@ -1325,7 +1321,7 @@ async def admin_resend_invite(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            _client_ip(request) or None,
+            client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -1424,7 +1420,7 @@ async def admin_force_password_reset(
             """INSERT INTO auth_password_resets (user_id, token_hash, expires_at, ip, user_agent)
                VALUES ($1::uuid, $2, $3, $4, $5)""",
             user_id, token_hash, expires_at,
-            _client_ip(request) or None,
+            client_ip(request) or None,
             request.headers.get("user-agent", ""),
         )
         await _write_auth_admin_event(
@@ -1751,7 +1747,6 @@ async def deployment_health(_: str = Depends(require_admin)):
 
 
 @router.post("/auth/email/test")
-@router.post("/auth/smtp/test")   # keep old path for backwards compat
 async def admin_test_email(
     body: AuthSmtpTest,
     request: Request,
@@ -1822,7 +1817,6 @@ async def admin_trigger_sync(
     The sync result will appear in the Sync Log within a few seconds.
     """
     from ..db.sync import run_sync, _all_tokens
-    from ..config import settings
 
     pool = get_pool()
     if not pool:
@@ -3095,30 +3089,6 @@ async def permission_matrix(_role: str = Depends(require_admin)):
     }
 
 
-@router.get("/users/avatar-map")
-async def user_avatar_map(_role: str = Depends(require_admin)):
-    """Return email → avatar_url mapping for all approved users (used by dashboards)."""
-    pool = get_pool()
-    if not pool:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT email, teable_email, avatar_url, first_name, last_name, full_name
-            FROM auth_users
-            WHERE status = 'active' AND avatar_url IS NOT NULL
-            """
-        )
-    result = {}
-    for r in rows:
-        url = r["avatar_url"]
-        entry = {"avatar_url": url, "name": " ".join(filter(None, [r["first_name"], r["last_name"]])) or r["full_name"] or r["email"]}
-        result[r["email"].lower()] = entry
-        if r["teable_email"]:
-            result[r["teable_email"].lower()] = entry
-    return result
-
-
 @router.put("/permissions/users/{user_id}/{permission_key}")
 async def set_user_permission(
     user_id: str,
@@ -3164,13 +3134,61 @@ async def set_user_permission(
 class SetPasswordBody(BaseModel):
     password: str = Field(..., min_length=10, max_length=256)
 
+
+# Registered before /impersonate/{user_id}, which would otherwise match /exit.
 @router.post("/impersonate/exit")
-async def admin_impersonate_exit_alias(
+async def admin_impersonate_exit(
     request: Request,
     _role: str = Depends(require_auth),
 ):
-    """Alias registered first so FastAPI doesn't swallow /exit as a {user_id}."""
-    return await admin_impersonate_exit(request, _role)
+    """
+    Exit impersonation — revoke the current impersonation session.
+    The client should swap back to the original admin token after calling this.
+    """
+    import json as _json
+    token_hint = getattr(request.state, "token_hint", None)
+    if not token_hint:
+        raise HTTPException(status_code=400, detail="No active session to exit")
+
+    pool = get_pool()
+    if not pool:
+        return _no_db()
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT s.id, s.user_id::text, s.metadata,
+                   u.email, u.first_name, u.last_name, u.full_name
+            FROM auth_sessions s
+            JOIN auth_users u ON u.id = s.user_id
+            WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+            """,
+            token_hint,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found or already expired")
+
+        # JSONB comes back from asyncpg as a str; .get() on it raised, so exit
+        # 500'd before the revoke and the session lived out its 2 h.
+        meta = session_metadata(row["metadata"])
+        impersonated_by = meta.get("impersonated_by")
+        if not impersonated_by:
+            raise HTTPException(status_code=400, detail="This session is not an impersonation session")
+
+        await conn.execute(
+            "UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1",
+            row["id"],
+        )
+        await conn.execute(
+            """
+            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
+            VALUES ($1::uuid, 'impersonation_ended', $2::uuid, $3::jsonb)
+            """,
+            row["user_id"], impersonated_by,
+            _json.dumps({"token_hint": token_hint}),
+        )
+
+    return {"ok": True}
 
 
 @router.post("/impersonate/{user_id}")
@@ -3185,7 +3203,6 @@ async def admin_impersonate(
     The session is flagged with impersonated_by in metadata.
     """
     import json as _json
-    import secrets as _secrets
     from datetime import timezone, timedelta
     from ..routers.auth import make_token
     from ..db.audit import parse_ua, parse_client_hint, build_device_label
@@ -3250,7 +3267,7 @@ async def admin_impersonate(
             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
             """,
             user_id, token_hint, expires_at,
-            _client_ip(request) or "unknown",
+            client_ip(request) or "unknown",
             ua[:500], os_str, browser, device, device_label, metadata,
         )
 
@@ -3275,61 +3292,6 @@ async def admin_impersonate(
             "auth_role": auth_role,
         },
     }
-
-
-@router.post("/impersonate/exit")
-async def admin_impersonate_exit(
-    request: Request,
-    _role: str = Depends(require_auth),
-):
-    """
-    Exit impersonation — revoke the current impersonation session.
-    The client should swap back to the original admin token after calling this.
-    """
-    import json as _json
-    token_hint = getattr(request.state, "token_hint", None)
-    if not token_hint:
-        raise HTTPException(status_code=400, detail="No active session to exit")
-
-    pool = get_pool()
-    if not pool:
-        return _no_db()
-
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT s.id, s.user_id::text, s.metadata,
-                   u.email, u.first_name, u.last_name, u.full_name
-            FROM auth_sessions s
-            JOIN auth_users u ON u.id = s.user_id
-            WHERE s.token_hint = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-            """,
-            token_hint,
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Session not found or already expired")
-
-        # JSONB comes back from asyncpg as a str; .get() on it raised, so exit
-        # 500'd before the revoke and the session lived out its 2 h.
-        meta = session_metadata(row["metadata"])
-        impersonated_by = meta.get("impersonated_by")
-        if not impersonated_by:
-            raise HTTPException(status_code=400, detail="This session is not an impersonation session")
-
-        await conn.execute(
-            "UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1",
-            row["id"],
-        )
-        await conn.execute(
-            """
-            INSERT INTO auth_events (target_user_id, event_type, actor_user_id, metadata)
-            VALUES ($1::uuid, 'impersonation_ended', $2::uuid, $3::jsonb)
-            """,
-            row["user_id"], impersonated_by,
-            _json.dumps({"token_hint": token_hint}),
-        )
-
-    return {"ok": True}
 
 
 @router.post("/auth/users/{user_id}/set-password")

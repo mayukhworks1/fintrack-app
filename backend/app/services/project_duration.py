@@ -38,7 +38,6 @@ from ..utils.http import shared_client
 
 from ..config import settings
 from ..db.postgres import get_pool
-from ..models import FIELD_IDS
 
 logger = logging.getLogger("fintrack.project_duration")
 
@@ -123,11 +122,6 @@ def _compute_elapsed(start_raw: Any) -> tuple[int, float] | None:
         return (elapsed_days, round(elapsed_days / _DAYS_PER_MONTH, 2))
     except Exception:
         return None
-
-
-def _compute_duration_months(start_raw: Any) -> float | None:
-    r = _compute_elapsed(start_raw)
-    return None if r is None else r[1]
 
 
 # ---------------------------------------------------------------------------

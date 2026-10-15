@@ -21,6 +21,7 @@ from fastapi import HTTPException, Request
 from ..config import settings
 from ..db.audit import log_login, parse_client_hint, parse_ua, build_device_label
 from ..db.postgres import get_pool
+from ..utils.client_ip import client_ip
 from .emailer import app_origin_from_request, email_wrap_html, send_email
 
 _HASH_ALG = "pbkdf2_sha256"
@@ -80,11 +81,6 @@ def _hash_oauth_state(state: str) -> str:
     return hashlib.sha256(state.encode()).hexdigest()
 
 
-def _client_ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
-
-
 def _legacy_role_for(role_key: str) -> str:
     # Compatibility bridge for current route guards and frontend routing.
     if role_key in {"superadmin", "admin"}:
@@ -135,7 +131,7 @@ async def _write_auth_event(
         role,
         email,
         status,
-        _client_ip(request),
+        client_ip(request),
         request.headers.get("user-agent", ""),
         getattr(request.state, "request_id", None),
         json.dumps(metadata or {}),
@@ -208,7 +204,7 @@ async def create_oauth_state(provider: str, redirect_to: str | None, request: Re
         _hash_oauth_state(state),
         provider,
         expires_at,
-        _client_ip(request),
+        client_ip(request),
         request.headers.get("user-agent", "")[:500],
         _safe_redirect_path(redirect_to),
         json.dumps({}),
@@ -293,7 +289,7 @@ async def _create_session_for_user(
             user["id"],
             token_hint,
             expires_at,
-            _client_ip(request),
+            client_ip(request),
             ua[:500],
             os_str,
             browser,
@@ -311,7 +307,7 @@ async def _create_session_for_user(
     spawn(log_login(
         role=legacy_role,
         token_hint=token_hint,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         user_agent=ua,
         ttl_secs=settings.app_session_ttl,
         client_hint=request.headers.get("x-client-hint", ""),
@@ -526,7 +522,7 @@ async def create_admin_invited_user(
                     row["id"],
                     token_hash,
                     expires_at,
-                    _client_ip(request),
+                    client_ip(request),
                     request.headers.get("user-agent", ""),
                 )
 
@@ -1009,7 +1005,7 @@ async def create_password_reset(email: str, request: Request) -> dict[str, Any]:
                 user["id"],
                 token_hash,
                 expires_at,
-                _client_ip(request),
+                client_ip(request),
                 request.headers.get("user-agent", ""),
             )
             reset_user = {"id": str(user["id"]), "email": user["email"], "status": user["status"]}

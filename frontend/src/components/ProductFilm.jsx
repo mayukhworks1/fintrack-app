@@ -1,14 +1,10 @@
 import { useRef, useState, useEffect } from 'react'
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
-  Sparkles, CheckCircle2, ShieldCheck, Database, Layers,
-  Clock, ArrowRight, ArrowUpRight, Zap, Film, RefreshCw,
-  Code2, Receipt, FolderKanban, FileSpreadsheet, ChevronRight, ChevronLeft
+  Sparkles, ArrowRight, ArrowUpRight, Film,
+  Code2, ChevronRight, ChevronLeft
 } from 'lucide-react'
-import {
-  TOTALS, INVOICES, AGEING, PROJECT_ROLLUP,
-  inr, inrShort
-} from './demoData'
+import { TOTALS } from './demoData'
 
 /* Chapter marks are the film's own scene boundaries, and they have to be
    re-derived every time the cut changes — a chapter list that does not match

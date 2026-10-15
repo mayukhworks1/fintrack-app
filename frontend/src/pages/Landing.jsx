@@ -15,7 +15,7 @@
  * browser from demoData.js, and no part of this route makes an API call.
  */
 import { Link } from 'react-router-dom'
-import { ArrowRight, Check } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
@@ -29,7 +29,6 @@ import {
 } from '../components/Glyphs'
 import Overstatement from '../components/Overstatement'
 import ProductFilm from '../components/ProductFilm'
-import ScrollLit from '../components/ScrollLit'
 import { Reveal, Rising, Stagger, Rule, Head, Card, Grid, Closing } from '../components/PublicBits'
 import {
   MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,

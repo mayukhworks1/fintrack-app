@@ -1,5 +1,5 @@
 /**
- * Two invoice-page actions, driven through the real pages.
+ * Invoice-page actions, driven through the real pages.
  *
  * CSV export: a remark is free text that editors and public edit links can
  * write, and the export copied it verbatim — so =HYPERLINK(...) became a live
@@ -9,6 +9,10 @@
  * amount_with_tax=0. The API refuses a non-positive invoice amount, so every
  * pause failed with a 422 (shown as "[object Object]") and the month stayed
  * "Missing". A pause carries no amount, and the fields are optional.
+ *
+ * Print: the print views are written into a new window as HTML, and the
+ * project and client names went in as markup, so a name like
+ * "<img onerror=…>" ran in a window that shares the app's origin.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
@@ -105,6 +109,7 @@ vi.mock('../context/ConfirmContext', () => ({
 
 import Invoices from '../pages/Invoices'
 import WebInvoices from '../pages/WebInvoices'
+import TaxLedger from '../pages/TaxLedger'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -164,5 +169,37 @@ describe('Retainer "Pause month"', () => {
     expect(payload.amount_with_tax).toBeUndefined()
     expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty('amount_raised')
     expect(retainerRecord.fields['Amount Raised']).toBe(50000)   // template untouched
+  })
+})
+
+describe('Print views', () => {
+  const HOSTILE = '<img src=x onerror="alert(1)">'
+  const hostile = { ...retainerRecord, id: 'recHostile', fields: { ...retainerRecord.fields, 'Project': HOSTILE, 'Client Name': HOSTILE, 'Invoice Number': '<b>INV-9</b>' } }
+
+  it.each([
+    ['WebInvoices', WebInvoices, '/?tab=invoices', () => api.webInvoices.list, 'Print invoice list'],
+    ['TaxLedger', TaxLedger, '/', () => api.invoices.list, /^Print$/],
+  ])('%s escapes record text in the printed HTML', async (name, Page, url, list, button) => {
+    const written = []
+    const win = { document: { write: (h) => written.push(h), close: vi.fn() }, focus: vi.fn(), print: vi.fn(), close: vi.fn() }
+    vi.stubGlobal('open', vi.fn(() => win))
+    list().mockResolvedValue({ records: [hostile], total: 1 })
+    try {
+      render(<MemoryRouter initialEntries={[url]}><Page /></MemoryRouter>)
+      const btn = typeof button === 'string'
+        ? await screen.findByTitle(button)
+        : await screen.findByRole('button', { name: button })
+      // Print again until the loaded records are in the page.
+      await waitFor(() => {
+        fireEvent.click(btn)
+        expect(written.at(-1)).toContain('&lt;img src=x onerror="alert(1)"&gt;')
+      })
+      const html = written.at(-1)
+      expect(html).toContain('&lt;b&gt;INV-9&lt;/b&gt;')
+      expect(html).not.toContain('<img')
+      expect(html).not.toContain('<b>INV-9')
+    } finally {
+      list().mockResolvedValue({ records: [retainerRecord], total: 1 })
+    }
   })
 })

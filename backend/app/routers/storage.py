@@ -1,7 +1,9 @@
 """
-File storage proxy — serves files from the private HF dataset.
+File storage proxy — serves profile pictures from the private HF dataset.
 
 All endpoints require authentication so the private dataset stays private.
+Only profiles/ is served: Studio documents are owner-scoped by their own
+routes, and page assets have a public route of their own.
 """
 from __future__ import annotations
 
@@ -13,6 +15,8 @@ from ..services.storage import read_bytes, MIME_FOR_EXT
 
 router = APIRouter(prefix="/api/storage", tags=["storage"])
 
+_SERVED_PREFIX = "profiles/"   # avatars, the only files this route links to
+
 
 @router.get("/file/{path:path}")
 async def proxy_file(path: str, _role: str = Depends(require_auth)):
@@ -22,6 +26,8 @@ async def proxy_file(path: str, _role: str = Depends(require_auth)):
     """
     if ".." in path or path.startswith("/"):
         raise HTTPException(400, "Invalid path")
+    if not path.startswith(_SERVED_PREFIX):
+        raise HTTPException(404, "File not found")
 
     data = await read_bytes(path)
     if data is None:

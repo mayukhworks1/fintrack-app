@@ -201,7 +201,6 @@
 
   /* Nav */
   --nav-active-bg:    transparent;
-  --nav-active-color: #2563eb;
 
   /* Skeleton */
   --skeleton-base:    #e8edf5;
@@ -220,11 +219,8 @@
   /* Legacy glass compat */
   --glass-bg:         rgba(255,255,255,0.90);
   --glass-bg-hover:   #f6f8fb;
-  --glass-bg-active:  #ffffff;
   --glass-border:     #dde3ed;
   --glass-border-hi:  #c4cfe2;
-  --glass-shine:      rgba(255,255,255,0.6);
-  --shadow-glass:     var(--card-shadow);
   --shadow-sm:        0 1px 2px rgba(15,23,42,0.06);
   --blur:             blur(8px);
   --border:           #dde3ed;
@@ -235,7 +231,6 @@
   --radius-card:      14px;
   --radius-pill:      999px;
   --border-strong:    #c4cfe2;
-  --shadow-elevated:  0 4px 8px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.08);
   --shadow-popover:   0 16px 48px rgba(15,23,42,0.14);
   --btn-shadow:       0 2px 4px rgba(37,99,235,0.18), 0 10px 22px rgba(37,99,235,0.18);
   --glow:             0 0 20px rgba(37,99,235,0.22);
@@ -312,7 +307,6 @@
   --fin-neg-bg:       #fff2f0;
   --fin-neg-border:   #f3d0ca;
   --nav-active-bg:    #eff4ff;
-  --nav-active-color: #2347d6;
   --skeleton-base:    #ecf1f7;
   --skeleton-shine:   #f8fbff;
   --kpi-1-bg: rgba(47,91,255,0.08);   --kpi-1-fg: #2347d6;
@@ -323,11 +317,8 @@
   --bg-2:             #eeece7;
   --glass-bg:         rgba(255,254,250,0.94);
   --glass-bg-hover:   #fbfaf7;
-  --glass-bg-active:  #ffffff;
   --glass-border:     #e8e4db;
   --glass-border-hi:  #ded8cc;
-  --glass-shine:      rgba(255,255,255,0.72);
-  --shadow-glass:     var(--card-shadow);
   --shadow-sm:        0 1px 2px rgba(15,23,42,0.04);
   --blur:             blur(10px);
   --border:           #e8e4db;
@@ -338,7 +329,6 @@
   --radius-card:      14px;
   --radius-pill:      999px;
   --border-strong:    #ded8cc;
-  --shadow-elevated:  0 4px 8px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.08);
   --shadow-popover:   0 16px 48px rgba(15,23,42,0.14);
   --btn-shadow:       0 2px 4px rgba(47,91,255,0.18), 0 10px 22px rgba(47,91,255,0.18);
   --glow:             0 0 20px rgba(47,91,255,0.22);
@@ -397,7 +387,6 @@ html.dark .main-app-theme {
   --fin-neg-bg:       rgba(240,130,118,0.10);
   --fin-neg-border:   rgba(240,130,118,0.22);
   --nav-active-bg:    rgba(92,132,255,0.14);
-  --nav-active-color: #8cabff;
   --skeleton-base:    #162131;
   --skeleton-shine:   #202d41;
   --kpi-1-bg: rgba(92,132,255,0.12);   --kpi-1-fg: #8cabff;
@@ -408,11 +397,8 @@ html.dark .main-app-theme {
   --bg-2:             #1c1d1a;
   --glass-bg:         rgba(23,24,23,0.94);
   --glass-bg-hover:   #1f211f;
-  --glass-bg-active:  #252722;
   --glass-border:     #2a2b28;
   --glass-border-hi:  #383a35;
-  --glass-shine:      rgba(255,255,255,0.04);
-  --shadow-glass:     var(--card-shadow);
   --shadow-sm:        0 1px 3px rgba(0,0,0,0.34);
   --blur:             blur(18px) saturate(140%);
   --border:           #2a2b28;
@@ -423,7 +409,6 @@ html.dark .main-app-theme {
   --radius-card:      14px;
   --radius-pill:      999px;
   --border-strong:    #383a35;
-  --shadow-elevated:  0 4px 8px rgba(0,0,0,0.28), 0 16px 40px rgba(0,0,0,0.36);
   --shadow-popover:   0 16px 48px rgba(0,0,0,0.48);
   --btn-shadow:       0 2px 4px rgba(92,132,255,0.18), 0 10px 22px rgba(92,132,255,0.18);
   --glow:             0 0 20px rgba(92,132,255,0.28);
@@ -483,7 +468,6 @@ html.dark .main-app-theme {
   --fin-neg-bg:       rgba(248,113,113,0.08);
   --fin-neg-border:   rgba(248,113,113,0.20);
   --nav-active-bg:    transparent;
-  --nav-active-color: #4a9eff;
   --skeleton-base:    #141d30;
   --skeleton-shine:   #1c2840;
   --kpi-1-bg: rgba(74,158,255,0.10);   --kpi-1-fg: #60a5fa;
@@ -494,11 +478,8 @@ html.dark .main-app-theme {
   --bg-2:             #111927;
   --glass-bg:         #0d1525;
   --glass-bg-hover:   #111927;
-  --glass-bg-active:  #1a2540;
   --glass-border:     #1a2540;
   --glass-border-hi:  #243050;
-  --glass-shine:      rgba(255,255,255,0.025);
-  --shadow-glass:     var(--card-shadow);
   --shadow-sm:        0 1px 3px rgba(0,0,0,0.40);
   --blur:             blur(20px) saturate(155%);
   --border:           #1a2540;
@@ -809,15 +790,6 @@ html.dark .main-app-theme {
   }
   @media (min-width: 640px) { .card { padding: 1.25rem; } }
 
-  /* Elevated card — same as card but with stronger shadow; use for modals / popovers */
-  .card-elevated {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    box-shadow: var(--shadow-elevated);
-    border-radius: var(--radius-md);
-    padding: 1.25rem;
-  }
-
   .card-hover {
     @apply card cursor-pointer;
     transition: box-shadow var(--dur-med), border-color var(--dur-med), transform var(--dur-med) var(--ease-spring);
@@ -827,16 +799,6 @@ html.dark .main-app-theme {
     border-color: var(--accent-soft);
   }
   .card-hover:active { transform: scale(0.99); }
-
-  /* Legacy glass — used by drawers/dropdowns */
-  .glass {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-glass);
-    transition: background 0.18s, border-color 0.18s;
-  }
-  .glass:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hi); }
-  .glass-hover:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hi); }
 
   /* ── Buttons ── */
   .btn-primary {
@@ -995,8 +957,6 @@ html.dark .main-app-theme {
     color: var(--accent);
   }
 
-  .page-header { @apply flex items-center justify-between mb-6; }
-
   /* ── Divider ── */
   .divider {
     height: 1px;
@@ -1010,7 +970,6 @@ html.dark .main-app-theme {
   .badge-completed { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold; background: var(--accent-dim); color: var(--accent);       border: 1px solid var(--accent-soft); }
   .badge-hold      { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold; background: var(--fin-warn-bg); color: var(--fin-warning);  border: 1px solid var(--fin-warn-border); }
   .badge-cancelled { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold; background: var(--fin-neg-bg);  color: var(--fin-negative); border: 1px solid var(--fin-neg-border); }
-  .badge-neutral   { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold; background: var(--bg-input);    color: var(--text-2);       border: 1px solid var(--border); }
 
   /* ── Skeleton ── */
   .skeleton {
@@ -1027,12 +986,6 @@ html.dark .main-app-theme {
     background: var(--fin-positive);
     animation: livePulse 2.5s ease-in-out infinite;
     flex-shrink: 0;
-  }
-
-  /* ── Nav active ── */
-  .nav-active {
-    background: var(--nav-active-bg);
-    color: var(--nav-active-color);
   }
 
   /* ── KPI icon tile ── */
@@ -1129,30 +1082,6 @@ html.dark .main-app-theme {
   @media (min-width: 640px) {
     .status-card-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  .workspace-kpi-grid {
-    display: grid;
-    gap: 0.85rem;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-
-  @media (min-width: 640px) {
-    .workspace-kpi-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .workspace-kpi-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 1280px) {
-    .workspace-kpi-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
 
@@ -1885,11 +1814,6 @@ h1 { letter-spacing: -0.03em; }
   .card-hover:active { transform: scale(0.98); }
 }
 
-/* iOS-style safe-area inset for sticky bottom nav */
-@supports (padding: max(0px)) {
-  .pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
-}
-
 /* ── Full-screen app shell — Safari-safe height ──────────────────
    Safari iOS has two problems with height: 100vh:
    1. 100vh is the "large" viewport (chrome hidden) — when chrome is
@@ -1931,11 +1855,6 @@ h1 { letter-spacing: -0.03em; }
   .btn-icon {
     min-width: 44px;
   }
-  /* Opt-out for genuinely dense inline controls (chips, table row icons) */
-  .touch-dense, .touch-dense button, .touch-dense [role="button"] {
-    min-height: 32px;
-    min-width: 32px;
-  }
 
   /* iOS Safari force-zooms the viewport whenever a focused form control has
      font-size < 16px, and never zooms back out. Any visually smaller field must
@@ -1963,12 +1882,6 @@ h1 { letter-spacing: -0.03em; }
 
   /* Reduce excessive horizontal padding in dense components */
   .px-3.py-1\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
-}
-
-/* ── Scroll indicator shadow — shows when content overflows ──── */
-.scroll-fade-right {
-  background: linear-gradient(to right, transparent 85%, var(--card-bg) 100%);
-  pointer-events: none;
 }
 
 /* ── Better scrollbar on mobile browsers ─────────────────────── */
@@ -2128,42 +2041,28 @@ h1 { letter-spacing: -0.03em; }
 }
 
 /* ── Animations ──────────────────────────────────────────────────── */
-@keyframes shimmer    { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 @keyframes slideIn    { from { opacity:0; transform:translateX(100%)  } to { opacity:1; transform:translateX(0) } }
-@keyframes slideOut   { from { opacity:1; transform:translateX(0)     } to { opacity:0; transform:translateX(100%) } }
 @keyframes slideUp    { from { opacity:0; transform:translateY(8px)   } to { opacity:1; transform:translateY(0) } }
 @keyframes slideDown  { from { opacity:0; transform:translateY(-6px)  } to { opacity:1; transform:translateY(0) } }
 @keyframes fadeIn     { from { opacity:0 } to { opacity:1 } }
-@keyframes fadeOut    { from { opacity:1 } to { opacity:0 } }
 @keyframes scaleIn    { from { opacity:0; transform:scale(0.97) } to { opacity:1; transform:scale(1) } }
-@keyframes scaleOut   { from { opacity:1; transform:scale(1)    } to { opacity:0; transform:scale(0.97) } }
-@keyframes modalIn    { from { opacity:0; transform:translateY(20px) scale(0.98) } to { opacity:1; transform:translateY(0) scale(1) } }
-@keyframes modalOut   { from { opacity:1; transform:translateY(0) scale(1)  } to { opacity:0; transform:translateY(12px) scale(0.98) } }
 
 /* ── FinTrack DS keyframes ── */
 @keyframes ft-fade-in  { from { opacity: 0 } to { opacity: 1 } }
 @keyframes ft-slide-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
-@keyframes ft-slide-in { from { opacity: 0; transform: translateX(120%) } to { opacity: 1; transform: translateX(0) } }
 @keyframes ft-shimmer  { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 @keyframes ft-pulse    { 0%, 100% { opacity: 1 } 50% { opacity: 0.45 } }
 
-.animate-fade-in  { animation: ft-fade-in  var(--dur-slow, 0.3s) ease both; }
-.animate-slide-up { animation: ft-slide-up var(--dur-slow, 0.3s) ease both; }
 @keyframes livePulse {
   0%,100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--fin-positive) 50%, transparent); }
   50%      { box-shadow: 0 0 0 5px transparent; }
 }
 
 .animate-slide-in   { animation: slideIn   0.26s cubic-bezier(0.4,0,0.2,1) both; }
-.animate-slide-out  { animation: slideOut  0.22s cubic-bezier(0.4,0,0.2,1) both; }
 .animate-slide-up   { animation: slideUp   0.22s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-slide-down { animation: slideDown 0.22s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-fade-in    { animation: fadeIn    0.20s ease both; }
-.animate-fade-out   { animation: fadeOut   0.18s ease both; }
 .animate-scale-in   { animation: scaleIn   0.20s cubic-bezier(0.22,1,0.36,1) both; }
-.animate-scale-out  { animation: scaleOut  0.16s cubic-bezier(0.22,1,0.36,1) both; }
-.animate-modal-in   { animation: modalIn   0.22s cubic-bezier(0.34,1.26,0.64,1) both; }
-.animate-modal-out  { animation: modalOut  0.18s ease both; }
 
 /* ── Runey-style application sidebar ───────────────────────────── */
 .app-layout-shell {
@@ -2484,42 +2383,6 @@ html.dark .web-invoices-shell {
   }
 }
 
-/* ── Professional nav item — left-border active indicator ──────── */
-.nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  width: 100%;
-  padding: 0.5rem 0.625rem;
-  border-radius: 7px;
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: var(--text-2);
-  transition: background 0.12s, color 0.12s;
-  cursor: pointer;
-  text-align: left;
-}
-.nav-item:hover { background: rgba(37,99,235,0.05); color: var(--text-1); }
-.nav-item.active {
-  background: var(--accent-dim);
-  color: var(--accent);
-  font-weight: 600;
-}
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 25%;
-  height: 50%;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
-}
-.dark .nav-item:hover { background: rgba(74,158,255,0.06); }
-.dark .nav-item.active { background: rgba(74,158,255,0.10); }
-.dark .nav-item.active::before { background: var(--accent); }
-
 /* ══════════════════════════════════════════════════════════════════
    Reduced motion
 
@@ -2558,9 +2421,7 @@ html.dark .web-invoices-shell {
 
   /* Purely decorative loops — no information is carried by the motion. */
   .animate-pulse,
-  .animate-pulse-slow,
   .animate-bounce,
-  .animate-shimmer,
   .skeleton {
     animation: none !important;
   }
@@ -2602,10 +2463,6 @@ html.dark .web-invoices-shell {
   box-shadow: var(--card-shadow-hover);
 }
 
-/* Content that should sit above the surface as it turns. Separate class
-   so a tile opts in per element — lifting everything flattens the effect
-   into a wobble instead of reading as depth. */
-.tilt-raise { transform: translateZ(22px); }
 .tilt > * { transform-style: preserve-3d; }
 
 /* Specular sheen tracking the pointer. Sits above the content but takes
@@ -2657,16 +2514,6 @@ html.dark .web-invoices-shell {
 }
 .ft-reveal[data-shown] { opacity: 1; transform: none; }
 
-/* A bar that grows to its value once revealed. --to is set per bar. */
-@keyframes ft-grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
-.ft-bar {
-  transform-origin: left center;
-  transform: scaleX(0);
-  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-[data-shown] .ft-bar { transform: scaleX(1); }
-
-
 /* Cursor-following glow on the primary call to action. */
 .ft-cta { position: relative; overflow: hidden; }
 .ft-cta::after {
@@ -2683,57 +2530,13 @@ html.dark .web-invoices-shell {
 /* Landing illustration keyframes — see components/LandingVisuals.jsx. */
 @keyframes ft-bar-rise { from { transform: scaleY(0) } to { transform: scaleY(1) } }
 @keyframes ft-draw     { to { stroke-dashoffset: 0 } }
-@keyframes ft-donut    { to { stroke-dashoffset: var(--ft-donut-to, 0) } }
 @keyframes ft-sheet    { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 
 /* The SVG pieces only animate once revealed, so the entrance is not spent
    while the cell is still below the fold. */
 .ft-reveal:not([data-shown]) [style*="ft-bar-rise"],
 .ft-reveal:not([data-shown]) [style*="ft-draw"],
-.ft-reveal:not([data-shown]) [style*="ft-donut"],
 .ft-reveal:not([data-shown]) [style*="ft-sheet"] { animation-play-state: paused; }
-
-/* Bento: a varied grid that reads as designed rather than as eight identical
-   boxes. Single column on a phone; the spans only apply once there is room. */
-.ft-bento {
-  display: grid;
-  gap: 1rem;
-  /* minmax(0, 1fr), never 1fr. A bare 1fr is minmax(auto, 1fr), so a wide
-     child — the SQL block in the analyst demo — sets a min-content floor and
-     pushes the whole column past the viewport. This is what was causing
-     horizontal scroll on a phone. */
-  grid-template-columns: minmax(0, 1fr);
-}
-@media (min-width: 680px) {
-  .ft-bento { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1.1rem; }
-  .ft-bento > .span-3 { grid-column: span 3 }
-  .ft-bento > .span-2 { grid-column: span 2 }
-  .ft-bento > .span-4 { grid-column: span 4 }
-  .ft-bento > .span-6 { grid-column: span 6 }
-}
-
-/* Gradient hairline that turns with the pointer, on top of the card border. */
-.ft-edge { position: relative; }
-.ft-edge::before {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  /* Brand blue → brand green. These are the two stops in the logo's top bar
-     (#4F86FF → #4ADE80), so the edge light is the mark's own gradient rather
-     than the violet that was here, which appears nowhere else in the product. */
-  background: linear-gradient(135deg,
-    color-mix(in srgb, #4F86FF 55%, transparent),
-    transparent 40%, transparent 60%,
-    color-mix(in srgb, #4ADE80 48%, transparent));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 320ms ease;
-  pointer-events: none;
-}
-.ft-edge[data-tilting]::before { opacity: 1; }
 
 /* Feature explorer: picker beside panel on a wide screen, stacked on a phone
    where a vertical list of eleven would push the panel off the fold. */
@@ -2857,10 +2660,6 @@ html.dark .web-invoices-shell {
   background: rgba(255,255,255,0.95); color: #141414;
   font-size: 10.5px; font-weight: 750; white-space: nowrap;
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
-.ft-rail-section {
-  padding: 9px 7px 3px; color: rgba(255,255,255,0.3);
-  font-size: 7.5px; font-weight: 850; letter-spacing: 0.18em; text-transform: uppercase;
 }
 .ft-rail-foot { margin-top: auto; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.07) }
 .ft-rail-user { display: flex; align-items: center; gap: 7px; padding: 6px 5px 2px }
@@ -3255,18 +3054,10 @@ html.dark .web-invoices-shell {
 .ft-tour-scene { animation: ft-scene-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 /* Scene-local motion. */
-@keyframes ft-row-in   { from { opacity: 0; transform: translateX(-6px) } to { opacity: 1; transform: none } }
 @keyframes ft-pop-in   { from { opacity: 0; transform: scale(0.92) }      to { opacity: 1; transform: none } }
 @keyframes ft-grow-y   { from { transform: scaleY(0) }                    to { transform: scaleY(1) } }
 @keyframes ft-grow-x   { from { transform: scaleX(0) }                    to { transform: scaleX(1) } }
-@keyframes ft-toast-in {
-  0%   { opacity: 0; transform: translateY(10px) }
-  12%  { opacity: 1; transform: none }
-  82%  { opacity: 1; transform: none }
-  100% { opacity: 0; transform: translateY(-4px) }
-}
 @keyframes ft-caret   { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
-@keyframes ft-ping    { 0% { opacity: 0.7; transform: scale(0.6) } 100% { opacity: 0; transform: scale(2.2) } }
 
 /* Clean ambient texture — structured and minimal without distracting grids/spotlights */
 .ft-dotgrid {
@@ -3282,25 +3073,6 @@ html.dark .web-invoices-shell {
   height: 1px; border: 0; margin: 0;
   background: linear-gradient(90deg, transparent,
     color-mix(in srgb, var(--accent) 45%, transparent), transparent);
-}
-
-/* ── Travelling pulse ──────────────────────────────────────────────
-   Rides the connector between the "how it works" steps, so the diagram
-   shows direction instead of asserting it in a caption. */
-@keyframes ft-travel {
-  0%   { offset-distance: 0%;   opacity: 0 }
-  10%  { opacity: 1 }
-  90%  { opacity: 1 }
-  100% { offset-distance: 100%; opacity: 0 }
-}
-@keyframes ft-travel-x {
-  0%   { transform: translateX(0);      opacity: 0 }
-  10%  { opacity: 1 }
-  90%  { opacity: 1 }
-  100% { transform: translateX(var(--ft-travel-to, 100px)); opacity: 0 }
-}
-.ft-travel {
-  animation: ft-travel-x 2600ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* ── Shine sweep ───────────────────────────────────────────────────
@@ -3345,7 +3117,6 @@ html.dark .web-invoices-shell {
    own timers in that case and shows the scene chips as a manual picker,
    so the walkthrough is still walkable — it just waits to be asked. */
 @media (prefers-reduced-motion: reduce) {
-  .ft-travel { animation: none; opacity: 1; }
   .ft-shine::after { display: none; }
 }
 
@@ -3356,8 +3127,7 @@ html.dark .web-invoices-shell {
    3D goes on chrome and never on a data mark. A bar chart drawn in
    perspective makes the near bar taller than the far one at equal
    value, which is a chart that lies. The window may tilt; what is
-   inside it may not, and the layer diagram below is a picture of the
-   architecture rather than of any quantity.
+   inside it may not.
 ══════════════════════════════════════════════════════════════════ */
 
 /* The sandbox arrives lying back slightly and straightens as it is
@@ -3374,28 +3144,8 @@ html.dark .web-invoices-shell {
 }
 .ft-3d[data-shown] > * { transform: none; opacity: 1; }
 
-/* ── Layer stack ───────────────────────────────────────────────────
-   The isometric planes are drawn in SVG rather than built from CSS
-   transforms. Rotating a div into the plane also rotates its text, and
-   counter-rotating that text back is a second transform to keep in sync
-   with the first — a diagram nobody can read is decoration. In SVG the
-   parallelograms are just paths and the labels are placed flat. */
-.ft-plane { transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1); }
-.ft-stack:hover .ft-plane { transform: translateY(var(--lift, 0px)); }
-
-/* Light travelling down the spine that joins the layers. */
-@keyframes ft-spark {
-  0%   { opacity: 0; transform: translateY(0) }
-  12%  { opacity: 1 }
-  88%  { opacity: 1 }
-  100% { opacity: 0; transform: translateY(var(--ft-spark-to, 120px)) }
-}
-.ft-spark { animation: ft-spark 2800ms cubic-bezier(0.5, 0, 0.5, 1) infinite; }
-
 @media (prefers-reduced-motion: reduce) {
   .ft-3d > * { transform: none; opacity: 1; }
-  .ft-plane, .ft-stack:hover .ft-plane { transition: none; transform: none; }
-  .ft-spark { animation: none; opacity: 1; }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3767,17 +3517,14 @@ html.dark .main-app-theme {
    DIAGRAM MOTION
    ──────────────────────────────────────────────────────────────────
    Each loop shows the thing its diagram is about: a permission being
-   switched on, a module arriving in a rail, a citation landing on its
-   page. Slow, and paused until the drawing has been scrolled to — a
-   page of animations all running at once is a page nobody can read.
+   switched on, a module arriving in a rail. Slow, and paused until the
+   drawing has been scrolled to — a page of animations all running at
+   once is a page nobody can read.
 ══════════════════════════════════════════════════════════════════ */
 @keyframes ft-switch-on   { 0%, 30% { opacity: 0.35 } 45%, 100% { opacity: 1 } }
 @keyframes ft-switch-knob { 0%, 30% { transform: translateX(-14px) } 45%, 100% { transform: none } }
 @keyframes ft-slot-in     { 0%, 12% { opacity: 0; transform: translateY(10px) }
                             30%, 88% { opacity: 1; transform: none }
-                            100% { opacity: 1; transform: none } }
-@keyframes ft-pop-cite    { 0%, 20% { opacity: 0; transform: scale(0.6) }
-                            34%, 90% { opacity: 1; transform: none }
                             100% { opacity: 1; transform: none } }
 @keyframes ft-dash-run    { to { stroke-dashoffset: -16 } }
 
@@ -4030,24 +3777,6 @@ html.dark .main-app-theme {
 .ft-card:focus-visible { outline: none; border-color: var(--accent) !important;
                          box-shadow: 0 0 0 2px var(--accent-glow); }
 @media (prefers-reduced-motion: reduce) { .ft-card:hover { transform: none } }
-
-/* Clean card borders without distracting animated neon beams */
-.ft-glow-border {
-  position: relative;
-}
-
-@keyframes ft-pop-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
-
-
 
 /* ─────────────────────────────────────────────────────────────────────────
    Live data motion — the signed-in app.
@@ -4524,7 +4253,6 @@ html.dark .main-app-theme {
 .ft-gallery-shot:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
 .ft-lightbox { animation: ft-fade-in 200ms ease both; }
 .ft-lightbox-img { animation: ft-zoom-in 260ms cubic-bezier(0.22,1,0.36,1) both; }
-@keyframes ft-fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes ft-zoom-in { from { opacity: 0; transform: scale(.97) } to { opacity: 1; transform: none } }
 @media (prefers-reduced-motion: reduce) {
   .ft-gallery-shot, .ft-gallery-shot img, .ft-gallery-zoom { transition: none; }

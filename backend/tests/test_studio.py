@@ -207,12 +207,6 @@ class TestQuota:
         usage = await ai_usage.usage_for(None)
         assert usage["calls"] == 0 and usage["failed"] == 0
 
-    async def test_breakdown_degrades_to_empty(self):
-        assert await ai_usage.breakdown() == []
-
-    async def test_model_health_degrades_to_empty(self):
-        assert await ai_usage.model_health() == []
-
 
 class TestLimits:
     def test_limit_comes_from_settings_not_a_constant(self, monkeypatch):

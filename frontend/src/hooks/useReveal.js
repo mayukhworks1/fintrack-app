@@ -53,5 +53,3 @@ export function useReveal({ threshold = 0.12, rootMargin = '0px 0px -8% 0px' } =
 
   return ref
 }
-
-export default useReveal

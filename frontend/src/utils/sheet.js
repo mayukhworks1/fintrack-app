@@ -33,8 +33,7 @@ export function gridToCSV(grid) {
   }).join(',')).join('\n')
 }
 
-export function colToIdx(s) { let n=0; for (const ch of s.toUpperCase()) n=n*26+(ch.charCodeAt(0)-64); return n-1 }
-export function idxToCol(i) { let s=''; i++; while(i>0){ s=String.fromCharCode(64+((i-1)%26+1))+s; i=Math.floor((i-1)/26) } return s }
+function colToIdx(s) { let n=0; for (const ch of s.toUpperCase()) n=n*26+(ch.charCodeAt(0)-64); return n-1 }
 
 function parseRef(ref) {
   const m = /^\$?([A-Za-z]+)\$?(\d+)$/.exec(ref.trim())
@@ -139,7 +138,7 @@ function evalArith(expr) {
   return (r==null || !isFinite(r)) ? null : r
 }
 
-export function evalFormula(raw, grid, visiting = new Set()) {
+function evalFormula(raw, grid, visiting = new Set()) {
   try {
     let s = String(raw).trim().replace(/^=/, '')
     const fnRe = /([A-Za-z][A-Za-z0-9]*)\s*\(([^()]*)\)/

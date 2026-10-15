@@ -3,10 +3,10 @@ from __future__ import annotations
 from io import BytesIO
 from datetime import datetime, timezone
 from typing import Any
+from xml.sax.saxutils import escape
 
 
 _REPORT_FONT = "FinTrackReport"
-_REPORT_FONT_BOLD = "FinTrackReportBold"
 
 
 def _ensure_report_fonts() -> tuple[str, str]:
@@ -30,10 +30,6 @@ def _ensure_report_fonts() -> tuple[str, str]:
             except Exception:
                 continue
     return "Helvetica", "Helvetica-Bold"
-
-
-def _escape_pdf_text(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _cell(value: Any) -> str:
@@ -262,18 +258,23 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         textColor=colors.HexColor("#16233B"),
     )
 
+    def text(value: str, style) -> Paragraph:
+        # Paragraph parses its input as markup, and every string in this
+        # report is data (titles, labels, cell values), so none may carry tags.
+        return Paragraph(escape(value), style)
+
     story: list[Any] = []
     page_label = _cell(meta.get("page_label") or meta.get("page") or title)
     source_label = _cell(meta.get("source_label") or meta.get("source") or "")
     summary_cards = meta.get("summary_cards") if isinstance(meta.get("summary_cards"), list) else []
 
-    story.append(Paragraph(title, title_style))
+    story.append(text(title, title_style))
     subtitle_bits = [page_label]
     if source_label:
         subtitle_bits.append(source_label)
     subtitle_bits.append(f"{len(rows):,} rows")
     subtitle_bits.append(f"{len(columns):,} columns")
-    story.append(Paragraph(" • ".join(subtitle_bits), subtitle_style))
+    story.append(text(" • ".join(subtitle_bits), subtitle_style))
 
     report_meta = _report_meta_lines(meta, rows, columns)
     if report_meta:
@@ -281,8 +282,8 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         for label, value in report_meta:
             meta_cells.append(
                 [
-                    Paragraph(label.upper(), label_style),
-                    Paragraph(value, value_style),
+                    text(label.upper(), label_style),
+                    text(value, value_style),
                 ]
             )
         meta_table = Table(meta_cells, colWidths=[30 * mm, 96 * mm], hAlign="LEFT")
@@ -309,7 +310,7 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         row = []
         for card in top_cards:
             cell = Table(
-                [[Paragraph(_cell(card.get("label") or ""), card_label_style)], [Paragraph(_format_metric_value(_cell(card.get("label")), card.get("value")), card_value_style)]],
+                [[text(_cell(card.get("label") or ""), card_label_style)], [text(_format_metric_value(_cell(card.get("label")), card.get("value")), card_value_style)]],
                 colWidths=[43 * mm],
             )
             cell.setStyle(
@@ -332,13 +333,13 @@ def build_simple_pdf(title: str, columns: list[str], rows: list[list[Any]], meta
         story.append(Spacer(1, 10))
 
     if not columns:
-        story.append(Paragraph("No columns selected for this report.", value_style))
+        story.append(text("No columns selected for this report.", value_style))
     else:
-        header_row = [Paragraph(_human_label(column), table_header_style) for column in columns]
+        header_row = [text(_human_label(column), table_header_style) for column in columns]
         body_rows = []
         for row in rows:
             body_rows.append(
-                [Paragraph(_format_report_cell(columns[idx], cell), table_cell_style) for idx, cell in enumerate(row)]
+                [text(_format_report_cell(columns[idx], cell), table_cell_style) for idx, cell in enumerate(row)]
             )
         table_data = [header_row] + body_rows
         available_width = doc.width

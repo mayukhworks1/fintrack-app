@@ -15,8 +15,6 @@ from ..config import settings
 
 logger = logging.getLogger("fintrack.storage")
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-
 _repo_ensured: bool = False
 
 
@@ -37,8 +35,6 @@ def _ensure_repo_sync() -> None:
         except Exception as create_exc:
             logger.warning("storage: could not create repo %s: %s", repo, create_exc)
     _repo_ensured = True
-MAX_AVATAR_BYTES = 4 * 1024 * 1024  # 4 MB
-
 MAX_PAGE_FILE_BYTES = 25 * 1024 * 1024  # 25 MB per page attachment
 
 EXT_FOR_MIME = {

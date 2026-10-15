@@ -28,7 +28,6 @@ logger = logging.getLogger("fintrack.status")
 
 _TTL_STATUS   = 5    # 5 s in-process cache — busted on every mutation; very short fallback
 _CHAT_CTX_KEY = "chat:context"
-_REPORT_KEY   = "report:executive"
 
 # ── SSE subscriber registry ─────────────────────────────────────────────────
 # Each connected frontend SSE client registers a queue here.

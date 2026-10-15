@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import {
-  TrendingDown, AlertTriangle, ShieldCheck, Clock,
-  ArrowRight, Layers, Sliders, Activity, Check
+  TrendingDown, Layers, Sliders, Activity, Check
 } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'

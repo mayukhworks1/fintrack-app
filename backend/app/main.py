@@ -14,14 +14,13 @@ from starlette.datastructures import Headers
 from starlette.middleware.gzip import GZipResponder
 from starlette.types import Message, Receive, Scope, Send
 
-from .config import settings
+from .config import settings, is_dev_env
 from .routers import projects, ai, auth, invoices, web_invoices, webhooks
 from .routers import admin
 from .routers import insights as insights_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
 from .routers import storage as storage_router
-from .routers import reports as reports_router
 from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
@@ -34,7 +33,7 @@ from .db.audit import enqueue_audit, init_audit_queue, audit_worker, touch_sessi
 from .services.invoice_aging import invoice_aging_refresh_loop
 from .services.project_duration import project_duration_refresh_loop
 from .services import alerts, scanner_trap
-from .routers.deps import require_auth, require_admin
+from .routers.deps import _get_token, require_admin, require_auth
 from .utils.uploads import UploadSizeLimitMiddleware
 
 logger = logging.getLogger("fintrack")
@@ -229,11 +228,24 @@ async def lifespan(app: FastAPI):
     logger.info("FinTrack API shutting down — cache stats: %s", cache.stats())
 
 
+def _docs_urls() -> dict:
+    """The interactive docs and the OpenAPI schema map every route, admin ones
+    included, for anyone who asks, so they are served on a developer's machine
+    (APP_ENV=development) and nowhere else."""
+    dev = is_dev_env()
+    return {
+        "docs_url":    "/docs" if dev else None,
+        "redoc_url":   "/redoc" if dev else None,
+        "openapi_url": "/openapi.json" if dev else None,
+    }
+
+
 app = FastAPI(
     title="FinTrack API",
     description="AI-powered project finance tracker backed by Teable",
     version=settings.app_version,
     lifespan=lifespan,
+    **_docs_urls(),
 )
 
 # Refuse an oversized multipart upload before its body is spooled. Added before
@@ -330,7 +342,7 @@ app.add_middleware(
     # leaving it out made the browser's preflight fail for both.
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time-Ms"],
+    expose_headers=["X-Request-ID", "X-Response-Time-Ms", "Content-Disposition"],
 )
 
 app.include_router(auth.router)
@@ -346,7 +358,6 @@ app.include_router(insights_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
 app.include_router(storage_router.router)
-app.include_router(reports_router.router)
 app.include_router(pages_router.router)
 app.include_router(studio_router.router)
 
@@ -421,11 +432,6 @@ def _install_access_log_redaction() -> None:
 _install_access_log_redaction()
 
 
-def _get_client_ip(request: Request) -> str:
-    """Real client IP — only proxy headers we trust (see utils/client_ip.py)."""
-    return client_ip(request)
-
-
 # ── Request ID + audit middleware ────────────────────────────────────────────
 @app.middleware("http")
 async def request_middleware(request: Request, call_next):
@@ -442,7 +448,7 @@ async def request_middleware(request: Request, call_next):
         # enqueue, the 5xx counter — still runs for these requests.
         _trap_hit = None
         if settings.scanner_trap_enabled:
-            _ip = _get_client_ip(request)
+            _ip = client_ip(request)
             _path = request.url.path
             if scanner_trap.is_banned(_ip):
                 scanner_trap.note_blocked()
@@ -478,7 +484,7 @@ async def request_middleware(request: Request, call_next):
         # the route handler returns, so they're available here.
         role       = getattr(request.state, "role",       None)
         token_hint = getattr(request.state, "token_hint", None)
-        ip         = _get_client_ip(request)
+        ip         = client_ip(request)
 
         # Non-blocking enqueue — audit_worker batches + inserts asynchronously.
         # enqueue_audit() is synchronous (just queue.put_nowait) so no await needed.
@@ -527,15 +533,29 @@ async def liveness():
     return {"status": "alive"}
 
 
+async def _health_detail(request: Request, detail: bool = False) -> bool:
+    """?detail=1 adds the internals to /health, for an admin only.
+
+    The anonymous answer stays small: the detail carries raw driver errors
+    (which can name the database host and user), the last sync error, pool
+    stats, alert and scanner state, migration state and feature flags.
+    """
+    if not detail:
+        return False
+    token = _get_token(request.headers.get("authorization"), request.query_params.get("token"))
+    await require_admin(request, await require_auth(request, token))
+    return True
+
+
 @app.get("/health", tags=["health"])
-async def health():
+async def health(detail: bool = Depends(_health_detail)):
     pg_ok = postgres.get_pool() is not None
     vk_ok = vk.get_client() is not None
     pg_err = get_init_error()
 
     # Round-trip times to the two stores, measured here so the number that
-    # explains most of this app's latency is visible without a profiler. All
-    # three probes run concurrently; /health costs one round trip, not three.
+    # explains most of this app's latency is visible without a profiler. The
+    # probes run concurrently; /health costs one round trip, not three.
     async def _pg_rtt() -> int:
         t0 = time.perf_counter()
         await asyncio.wait_for(postgres.get_pool().fetchval("SELECT 1"), timeout=5.0)  # type: ignore[union-attr]
@@ -568,26 +588,32 @@ async def health():
     pg_rtt, vk_rtt, sync_meta = await asyncio.gather(
         _pg_rtt() if pg_ok else _none(),
         _vk_rtt() if vk_ok else _none(),
-        _last_sync() if pg_ok else _none(),
+        _last_sync() if pg_ok and detail else _none(),
         return_exceptions=True,
     )
     pg_rtt_ms = pg_rtt if isinstance(pg_rtt, int) else None
     vk_rtt_ms = vk_rtt if isinstance(vk_rtt, int) else None
+    summary = {
+        "status":        "healthy",
+        "version":       app.version,
+        "postgres":      "connected" if pg_ok else "unavailable",
+        "pg_rtt_ms":     pg_rtt_ms,
+        "valkey":        "connected" if vk_ok else "unavailable",
+        "valkey_rtt_ms": vk_rtt_ms,
+    }
+    if not detail:
+        return summary
+
     if isinstance(sync_meta, BaseException):
         sync_meta = None
     from .services.embeddings import _pgvector_ok as _pgv
     return {
-        "status":            "healthy",
-        "version":           app.version,
+        **summary,
         "teable_configured": bool(settings.teable_api_token),
         "ai_configured":     bool(settings.openrouter_api_key),
         "storage_configured": bool(settings.hf_token and settings.hf_dataset_repo),
-        "postgres":          "connected" if pg_ok else "unavailable",
         "postgres_error":    pg_err,
-        "pg_rtt_ms":         pg_rtt_ms,
         "pool":              postgres.pool_stats(),
-        "valkey":            "connected" if vk_ok else "unavailable",
-        "valkey_rtt_ms":     vk_rtt_ms,
         "pgvector":          "available" if _pgv else ("unavailable" if _pgv is False else "unchecked"),
         "sync_running":      _sync_task is not None and not _sync_task.done(),
         "aging_running":     _aging_refresh_task is not None and not _aging_refresh_task.done(),

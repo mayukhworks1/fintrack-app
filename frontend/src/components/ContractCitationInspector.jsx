@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileSearch, Check, ChevronRight, Layers, ExternalLink, ShieldAlert, Sliders, Activity } from 'lucide-react'
+import { FileSearch, Check, ChevronRight, Layers, Sliders, Activity } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import LoopVideo from './LoopVideo'
 

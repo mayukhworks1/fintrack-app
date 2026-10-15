@@ -21,6 +21,7 @@ from typing import Any, Optional
 from ..db.audit import build_device_label, parse_client_hint, parse_ua
 from ..db.geo import lookup as geo_lookup
 from ..db.postgres import get_pool
+from ..utils.client_ip import client_ip
 
 logger = logging.getLogger("fintrack.shared_views")
 
@@ -647,7 +648,7 @@ class SharedViewService:
         public_vc = {k: v for k, v in (vc or {}).items() if k not in _PRIVATE_VIEW_CONFIG_KEYS} or None
 
         # Log access asynchronously
-        ip = _extract_ip(request)
+        ip = client_ip(request)
         ua = request.headers.get("user-agent", "")
         referer = (request.headers.get("referer") or request.headers.get("origin") or "")[:500]
         asyncio.create_task(self._log_access(
@@ -722,7 +723,7 @@ class SharedViewService:
         if request is not None:
             asyncio.create_task(self._log_access(
                 token,
-                _extract_ip(request),
+                client_ip(request),
                 request.headers.get("user-agent", ""),
                 (request.headers.get("referer") or request.headers.get("origin") or "")[:500],
                 request.headers.get("x-client-hint", ""),
@@ -932,13 +933,6 @@ class SharedViewService:
                     )
         except Exception as exc:
             logger.debug("shared_view_access insert failed: %s", exc)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _extract_ip(request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 # ── Owner-page filter semantics ───────────────────────────────────────────────

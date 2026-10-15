@@ -150,6 +150,17 @@ class TestRequestShape:
         assert headers["HTTP-Referer"].startswith("https://")
         assert headers["X-Title"] == "FinTrack AI"
 
+    @pytest.mark.parametrize("frontend_url,referer", [
+        ("https://app.example, https://www.app.example", "https://app.example"),
+        ("https://app.example/", "https://app.example"),
+        ("*", "https://twfintracker.worksmayukh.space"),
+        ("", "https://twfintracker.worksmayukh.space"),
+    ])
+    def test_the_referer_is_the_live_frontend(self, keys, monkeypatch, frontend_url, referer):
+        """It used to name a retired preview deployment."""
+        monkeypatch.setattr(settings, "frontend_url", frontend_url)
+        assert orr._make_headers("openrouter")["HTTP-Referer"] == referer
+
 
 class TestConfiguration:
     def test_groq_is_absent_from_the_cascade_when_unconfigured(self, monkeypatch):

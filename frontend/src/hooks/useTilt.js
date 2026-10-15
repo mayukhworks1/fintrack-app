@@ -101,5 +101,3 @@ export function useTilt({ max = 7, enabled = true } = {}) {
 
   return ref
 }
-
-export default useTilt

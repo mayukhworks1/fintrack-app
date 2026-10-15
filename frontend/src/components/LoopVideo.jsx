@@ -20,9 +20,9 @@ import { forwardRef } from 'react'
  * It is aria-hidden. These carry no information a screen reader needs, and
  * announcing a decorative loop is noise.
  */
-/* Forwards its ref: two callers restart the loop from the top when their tab
-   changes, so the new subject is not joined halfway through the last one's
-   motion. Without forwarding, that ref silently points at nothing and the
+/* Forwards its ref: ProductMediaShowcase restarts the loop from the top when
+   its tab changes, so the new subject is not joined halfway through the last
+   one's motion. Without forwarding, that ref silently points at nothing and the
    restart quietly stops happening — no error, just a behaviour that is gone. */
 const LoopVideo = forwardRef(function LoopVideo({ src, className = '', style }, ref) {
   // Callers name the mp4; the WebM sits beside it under the same stem.

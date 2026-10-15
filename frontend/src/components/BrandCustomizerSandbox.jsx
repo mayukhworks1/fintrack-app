@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
-  Palette, Globe, Check, ArrowRight,
-  Sliders, Shield, Layers, Activity, Sparkles
+  Palette, Check,
+  Sliders, Layers, Activity
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import { inr } from './demoData'

@@ -97,5 +97,3 @@ export function useFocusTrap(ref, active) {
     }
   }, [ref, active])
 }
-
-export default useFocusTrap

@@ -1,4 +1,6 @@
 // Extracted from StatusBoard.jsx — pure helpers.
+export { hexToRgba } from '../../utils/color'
+export { EXPIRY_OPTS, isExpired } from '../../utils/dates'
 
 export const STATUS_OPTIONS_FALLBACK = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
 
@@ -45,7 +47,7 @@ export const THEME_PRESETS = {
   },
 }
 
-export const STATUS_CONFIG = {
+const STATUS_CONFIG = {
   'Completed':     { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', dot: '#10b981', light: '#dcfce7' },
   'In progress':   { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.35)', dot: '#3b82f6', light: '#dbeafe' },
   'On Hold':       { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)', dot: '#f59e0b', light: '#fef3c7' },
@@ -93,18 +95,13 @@ export function getListLayout(columns, isEditor) {
 
 // ── Client colour palette ─────────────────────────────────────────────────────
 
-export const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316','#6366f1','#84cc16']
+const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316','#6366f1','#84cc16']
 
-export const _clientMap = {}
+const _clientMap = {}
 
 export function clientColor(name) {
   if (!_clientMap[name]) { _clientMap[name] = PALETTE[Object.keys(_clientMap).length % PALETTE.length] }
   return _clientMap[name]
-}
-
-export function hexToRgba(hex, a) {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-  return `rgba(${r},${g},${b},${a})`
 }
 
 export function parseAttachments(value) {
@@ -131,17 +128,6 @@ export function sanitizeAttachmentsForSave(value) {
     return next
   })
 }
-
-// ── Expiry presets ─────────────────────────────────────────────────────────────
-
-export const EXPIRY_OPTS = [
-  { label: 'Never',    value: 0   },
-  { label: '1 hour',   value: 1   },
-  { label: '24 hours', value: 24  },
-  { label: '3 days',   value: 72  },
-  { label: '7 days',   value: 168 },
-  { label: '30 days',  value: 720 },
-]
 
 export const MAX_SHARED_VIEW_RECORDS = 50
 
@@ -217,8 +203,6 @@ export function fmtShortDate(iso) {
   try { return new Date(iso).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) } catch { return iso }
 }
 
-export function isExpired(iso) { return iso ? new Date(iso) < new Date() : false }
-
 export function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
 
 // ── View config helpers ───────────────────────────────────────────────────────
@@ -227,7 +211,7 @@ export function encodeViewConfig(cfg) {
   try { return btoa(JSON.stringify(cfg)) } catch { return '' }
 }
 
-export function decodeViewConfig(s) {
+function decodeViewConfig(s) {
   try { return JSON.parse(atob(s)) } catch { return null }
 }
 

@@ -18,8 +18,7 @@ import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Receipt, FolderKanban, BarChart3, FileSearch, Code2, Globe,
-  Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck,
-  Play, Pause, Maximize2, Layers, X, Eye,
+  Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck, Play,
 } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { useReveal } from '../hooks/useReveal'
@@ -28,9 +27,9 @@ import PublicLayout from '../components/PublicLayout'
 import { Head, Reveal } from '../components/PublicBits'
 import ProductMediaShowcase from '../components/ProductMediaShowcase'
 import RoiCalculator from '../components/RoiCalculator'
-import { AnalystDemo, MiniBars, MiniDocs, Grain } from '../components/LandingVisuals'
+import { AnalystDemo, Grain } from '../components/LandingVisuals'
 import {
-  GlyphMargin, GlyphTaxSplit, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
+  GlyphMargin, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
 } from '../components/Glyphs'
 import AgingPreview from '../components/AgingPreview'
 import TaxFlowSimulator from '../components/TaxFlowSimulator'
@@ -233,8 +232,6 @@ const FEATURE_MEDIA = {
 export default function Features() {
   const [active, setActive] = useState(0)
   const [viewMode, setViewMode] = useState('demo') // 'demo' | 'isometric' | 'video'
-  const [isVideoPlaying, setIsVideoPlaying] = useState(true)
-  const videoRef = useRef(null)
   const tabsRef = useRef([])
   usePageMeta({
     title: 'Features — FinTrack',
@@ -259,17 +256,6 @@ export default function Features() {
   const media = FEATURE_MEDIA[f.id] || FEATURE_MEDIA.receivables
   const panelTilt = useTilt({ max: 2.5 })
   const headRef = useReveal()
-
-  const toggleVideo = () => {
-    if (!videoRef.current) return
-    if (isVideoPlaying) {
-      videoRef.current.pause()
-      setIsVideoPlaying(false)
-    } else {
-      videoRef.current.play().catch(() => {})
-      setIsVideoPlaying(true)
-    }
-  }
 
   return (
     <PublicLayout>
@@ -407,7 +393,7 @@ export default function Features() {
                        style={{ background: 'var(--bg-base)' }}>
                     <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
                          style={{ borderColor: 'var(--card-border)' }}>
-                      <LoopVideo ref={videoRef} src={media.video} className="w-full h-auto object-cover" />
+                      <LoopVideo src={media.video} className="w-full h-auto object-cover" />
                     </div>
                   </div>
                 )}

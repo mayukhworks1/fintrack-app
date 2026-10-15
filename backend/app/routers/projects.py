@@ -4,16 +4,12 @@ from ..services.teable import TeableService
 from ..models import ProjectCreate, ProjectUpdate, resolve_status
 from ..db.attribution import record_user_attribution
 from ..db.valkey import cache_bust, rate_check
+from ..utils.client_ip import client_ip
 from .deps import require_auth, require_editor, require_permission
 
 
-def _ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request) or "unknown"
-
-
 async def _check_project_rate(request: Request) -> None:
-    allowed, _ = await rate_check(_ip(request), limit=30, window_sec=60, bucket="project_mutate")
+    allowed, _ = await rate_check(client_ip(request) or "unknown", limit=30, window_sec=60, bucket="project_mutate")
     if not allowed:
         raise HTTPException(
             status_code=429,
@@ -114,6 +110,7 @@ async def search_projects(
     q: str = Query(..., min_length=1),
     limit: int = Query(20, le=100),
     _role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.projects.view")),
 ):
     teable = get_teable()
     records = await teable.search_records(q, take=limit)

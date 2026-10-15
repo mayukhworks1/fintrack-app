@@ -3,7 +3,6 @@ Smoke tests — fast, no external dependencies (DB/Teable/email are mocked).
 Run: cd backend && python -m pytest tests/smoke_test.py -v
 """
 
-import importlib
 import sys
 import types
 import pytest

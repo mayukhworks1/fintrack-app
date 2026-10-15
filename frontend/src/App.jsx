@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, useCallback, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useCallback, useMemo } from 'react'
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2, ShieldCheck } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
@@ -139,7 +139,7 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const { status, isWeb, isAll, isAdmin, isViewer, isImpersonating } = useAuth()
+  const { status, isWeb, isAll, isAdmin, isViewer } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 

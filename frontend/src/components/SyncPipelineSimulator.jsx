@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
-  Database, RefreshCw, ArrowRight, Zap, CheckCircle2,
-  Server, ShieldCheck, Code2, Play, Layers, Sliders, Activity, Check
+  Database, RefreshCw, Zap,
+  Server, Code2, Play, Layers, Sliders, Activity, Check
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import LoopVideo from './LoopVideo'

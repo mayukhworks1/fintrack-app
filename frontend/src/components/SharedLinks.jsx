@@ -1,23 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Check, CheckCheck, Clock, Copy, ExternalLink, Eye, Globe, Link2,
-  Loader2, MapPin, Monitor, Pencil, Shield, Smartphone, ToggleLeft,
+  CheckCheck, Clock, Copy, ExternalLink, Globe, Link2,
+  Loader2, MapPin, Monitor, Shield, Smartphone, ToggleLeft,
   ToggleRight, Trash2, X, Share2, Search, Filter, CheckSquare, Square, RefreshCw,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useDialog } from '../hooks/useDialog'
-
-const EXPIRY_OPTS = [
-  { label: 'Never', value: 0 },
-  { label: '1 hour', value: 1 },
-  { label: '24 hours', value: 24 },
-  { label: '3 days', value: 72 },
-  { label: '7 days', value: 168 },
-  { label: '30 days', value: 720 },
-]
+import { EXPIRY_OPTS, fmtDate, fmtDateTime, isExpired } from '../utils/dates'
 
 const MAX_SHARED_VIEW_RECORDS = 50
 
@@ -33,23 +25,6 @@ const DEFAULT_LABELS = {
   'tax-ledger': 'invoice',
 }
 
-function fmtDate(iso) {
-  if (!iso) return '—'
-  try { return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) }
-  catch { return String(iso).slice(0, 10) }
-}
-
-function fmtDateTime(iso) {
-  if (!iso) return '—'
-  try { return new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
-  catch { return String(iso) }
-}
-
-function isExpired(iso) {
-  if (!iso) return false
-  return new Date(iso) < new Date()
-}
-
 function defaultRecordChip(record, resourceType) {
   const f = record?.fields || {}
   if (resourceType === 'invoices' || resourceType === 'tax-ledger') {
@@ -63,12 +38,12 @@ function defaultRecordChip(record, resourceType) {
 
 // The owner's UTC offset travels with a link so the server reads months and
 // local date-times the way this browser did when it drew the view.
-export function ownerUtcOffsetMinutes() {
+function ownerUtcOffsetMinutes() {
   return -new Date().getTimezoneOffset() || 0
 }
 
 // Advanced FilterBuilder rules that actually filter (applyConditions skips the rest).
-export function activeRuleCount(viewConfig) {
+function activeRuleCount(viewConfig) {
   const rules = [
     ...(Array.isArray(viewConfig?.filterConditions) ? viewConfig.filterConditions : []),
     ...(Array.isArray(viewConfig?.advancedConditions) ? viewConfig.advancedConditions : []),

@@ -13,13 +13,15 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  FileText, Download, Printer, ChevronDown, ChevronUp,
-  CheckCircle2, AlertCircle, Info, Calendar, Filter,
-  TrendingUp, TrendingDown, Percent, IndianRupee,
-  ReceiptText, Building2, RefreshCw, Search, X, Share2, Link2,
+  Download, Printer, ChevronDown, ChevronUp,
+  CheckCircle2, AlertCircle, Info,
+  ReceiptText, RefreshCw, Search, X, Share2, Link2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { csvRow } from '../utils/csv'
+import { parseDate } from '../utils/dates'
+import { downloadBlob } from '../utils/download'
+import { escapeHtml } from '../utils/sanitize'
 import { useAuth } from '../context/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
@@ -27,7 +29,6 @@ import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLink
 import SkeletonList from '../components/SkeletonList'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const GST_RATE   = 0.18   // 18%
 const TDS_RATE   = 0.10   // 10%
 const FMT_INR    = (n) => `${Number(n || 0) < 0 ? '-' : ''}₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
 const FMT_PCT    = (n) => (n == null ? '—' : `${Math.round(n * 10) / 10}%`)
@@ -38,13 +39,8 @@ const today      = new Date()
 const thisYear   = today.getFullYear()
 const thisMonth  = today.getMonth()   // 0-indexed
 
-function isoToDate(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return isNaN(d) ? null : d
-}
 function dateKey(iso) {
-  const d = isoToDate(iso)
+  const d = parseDate(iso)
   if (!d) return ''
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
@@ -72,12 +68,6 @@ function buildPeriods() {
   }
   // Quarters: last 4
   for (let i = 0; i < 4; i++) {
-    const q = Math.floor(thisMonth / 3) - i
-    const adjQ = ((q % 4) + 4) % 4
-    const adjY = thisYear + Math.floor((Math.floor(thisMonth / 3) - i) / 4) * (Math.floor(thisMonth / 3) - i < 0 ? 1 : 0)
-    const qStartMonth = adjQ * 3
-    const qY = (qStartMonth > thisMonth && i === 0) ? thisYear - 1 : thisYear - Math.floor(i / 4)
-    // simpler: compute from offset
     const totalQ = Math.floor(thisMonth / 3) + thisYear * 4 - i
     const qm = totalQ % 4, qy = Math.floor(totalQ / 4)
     const from = `${qy}-${String(qm * 3 + 1).padStart(2, '0')}-01`
@@ -87,7 +77,6 @@ function buildPeriods() {
     periods.push({ type: 'quarter', key: `Q${totalQ}`, label: `${qLabel} ${qy}`, from, to })
   }
   // Half-years
-  const h1 = thisMonth < 6
   periods.push({ type: 'half', key: `H1-${thisYear}`, label: `H1 Jan–Jun ${thisYear}`, from: `${thisYear}-01-01`, to: `${thisYear}-06-30` })
   periods.push({ type: 'half', key: `H2-${thisYear}`, label: `H2 Jul–Dec ${thisYear}`, from: `${thisYear}-07-01`, to: `${thisYear}-12-31` })
   // Calendar years
@@ -123,8 +112,6 @@ function taxParts(fields = {}) {
   const tdsAmt  = isPaid && received < gross ? Math.max(0, gross - received) : 0
   const tdsPct  = base > 0 ? (tdsAmt / base) * 100 : 0
 
-  // Taxable base (pre-GST)
-  const taxable = base
   // Net receivable after TDS
   const netReceivable = gross - tdsAmt
   // Outstanding (unpaid invoices only)
@@ -163,11 +150,7 @@ function exportCSV(rows, filename) {
       r.tdsAmt, FMT_PCT(r.tdsPct).replace('%',''), r.received, r.status,
     ]))
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([lines.join('\n')], { type: 'text/csv' }), filename)
 }
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -480,7 +463,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
         <th>Taxable</th><th>GST</th><th>TDS</th><th>Gross</th><th>Received</th><th>O/S</th>
       </tr></thead>
       <tbody>${rows.map(r => `<tr>
-        <td class="l">${r.no}</td><td class="l">${r.date}</td><td class="l">${r.client || r.project}</td><td class="l">${r.status}</td>
+        <td class="l">${escapeHtml(r.no)}</td><td class="l">${escapeHtml(r.date)}</td><td class="l">${escapeHtml(r.client || r.project)}</td><td class="l">${escapeHtml(r.status)}</td>
         <td>${INR(r.base)}</td><td>${INR(r.gstAmt)}</td><td>${INR(r.tdsAmt)}</td><td>${INR(r.gross)}</td>
         <td class="green">${INR(r.received)}</td><td class="${r.outstanding > 0 ? 'red' : ''}">${INR(r.outstanding)}</td>
       </tr>`).join('')}</tbody>
@@ -834,7 +817,6 @@ export default function TaxLedger({ source = 'main' } = {}) {
             {clientRows.map(row => {
               const open = expandedClients.has(row.client)
               const gstOk = PCT_OK(row.gstPct, 18)
-              const tdsOk = row.tdsAmt === 0 || PCT_OK(row.tdsPct, 10, 2)
               return (
                 <div key={row.client} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
                   {/* Client header row */}

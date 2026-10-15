@@ -30,7 +30,7 @@ from dataclasses import dataclass
 class Direction:
     key: str
     label: str
-    summary: str          # shown to the author in the picker
+    summary: str          # one-line description of the look
     fonts_href: str       # Google Fonts, which the renderer's CSP allows
     tokens: str           # the :root block the model must build against
     notes: str            # layout character, in the model's terms
@@ -178,8 +178,3 @@ var(--token) — never a raw hex value in a rule:
 body {{ background:var(--ground); color:var(--ink); font-family:var(--font-body); }}
 
 Character: {direction.notes}"""
-
-
-def catalogue() -> list[dict]:
-    """The directions, for the editor's picker."""
-    return [{"key": d.key, "label": d.label, "summary": d.summary} for d in DIRECTIONS]

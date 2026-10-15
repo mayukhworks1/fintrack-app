@@ -8,7 +8,6 @@ Public endpoint: read-only, no auth, geo-tracked
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -16,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ..services.shared_views import SharedViewService
+from ..utils.client_ip import client_ip
 from .deps import require_editor, require_permission, get_effective_permissions
 
 router = APIRouter(tags=["shared-views"])
@@ -72,11 +72,6 @@ class PublicEventBody(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
-
-
 def _expiry(hours: Optional[int]) -> Optional[datetime]:
     if hours is None or hours == 0:
         return None
@@ -121,7 +116,7 @@ async def create_shared_view(
             title=body.title,
             record_ids=body.record_ids,
             role=role,
-            ip=_ip(request),
+            ip=client_ip(request),
             expires_at=_expiry(body.expires_hours),
             access_mode=body.access_mode or "read",
             view_config=body.view_config,
@@ -239,17 +234,6 @@ async def delete_shared_view_accesses(
     return {"deleted": deleted}
 
 
-@router.get("/api/shared-views/{token}/stats")
-async def get_shared_view_stats(
-    token: str,
-    _: str = Depends(require_editor),
-    _perm: str = Depends(require_permission("module.shared.manage")),
-):
-    """Aggregated analytics: unique visitors, event breakdown, locations, devices, timeline."""
-    svc = SharedViewService()
-    return await svc.get_accesses_stats(token)
-
-
 # ── Public endpoint (NO auth) ──────────────────────────────────────────────────
 
 @router.get("/api/public/view/{token}")
@@ -279,7 +263,7 @@ async def update_public_view_record(
 ):
     from ..db.valkey import rate_check
 
-    ip = _ip(request)
+    ip = client_ip(request)
     allowed, _ = await rate_check(f"public-share:{token}:{ip}", limit=30, window_sec=60)
     if not allowed:
         raise HTTPException(status_code=429, detail="Too many updates from this link. Try again shortly.")
@@ -345,7 +329,7 @@ async def record_public_event(token: str, body: PublicEventBody, request: Reques
 
     svc = SharedViewService()
     view = await svc.get_public_view(token)
-    ip = _ip(request)
+    ip = client_ip(request)
     ua = request.headers.get("user-agent", "")
     referer = request.headers.get("referer") or request.headers.get("origin") or ""
     ch = request.headers.get("x-client-hint", "")

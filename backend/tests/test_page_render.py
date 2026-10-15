@@ -137,6 +137,18 @@ class TestPolicy:
     def test_names_who_may_frame_the_page(self):
         assert "frame-ancestors" in page_render.csp_header()
 
+    def test_the_document_is_sandboxed_even_when_opened_top_level(self):
+        """Without this directive a render URL opened directly ran author script
+        unsandboxed on the API origin. The flags match the iframe attribute, so
+        a framed page is sandboxed exactly as before."""
+        sandbox = re.search(r"(?:^|; )sandbox ([^;]+)", page_render.csp_header())
+        assert sandbox, "the policy carries no sandbox directive"
+        assert sandbox.group(1).split() == page_render.PAGE_SANDBOX.split()
+        assert "allow-same-origin" not in sandbox.group(1)
+
+    def test_rendered_documents_send_the_sandbox(self):
+        assert "sandbox allow-scripts" in page_render.render_headers()["Content-Security-Policy"]
+
     # Pinning this to a configured host list is what would break it: the origin
     # a visitor types (custom domain, apex vs www, a preview deployment) need
     # not be the one the backend was configured with, and a mismatch shows an

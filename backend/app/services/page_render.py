@@ -24,9 +24,10 @@ stayed empty, and Fraunces/Inter/Plex fell back to Georgia.
 
 A document fetched over the network carries its own CSP instead of inheriting
 the embedder's, so serving it from here fixes all of that at the root. The
-isolation that mattered is NOT lost: it never came from the CSP, it comes from
-the iframe's sandbox attribute. Without allow-same-origin the document has an
-opaque origin and cannot reach the embedding app — see PAGE_SANDBOX.
+isolation that mattered is NOT lost: it comes from the sandbox, which the
+iframe's attribute applies and the CSP sandbox directive repeats for a render
+URL opened on its own. Without allow-same-origin the document has an opaque
+origin and cannot reach the embedding app — see PAGE_SANDBOX.
 """
 
 from __future__ import annotations
@@ -104,6 +105,11 @@ def frame_ancestors() -> str:
 def csp_header() -> str:
     parts = [f"{k} {v}" for k, v in _SOURCES.items()]
     parts.append(f"frame-ancestors {frame_ancestors()}")
+    # The iframe's sandbox attribute only applies when the SPA frames the
+    # document. A render URL opened directly, as a top-level page, would run
+    # author script on the API origin; the same flags here sandbox it there too.
+    # Inside the iframe the two sets are identical, so nothing changes.
+    parts.append(f"sandbox {PAGE_SANDBOX}")
     parts.append("upgrade-insecure-requests")
     return "; ".join(parts)
 

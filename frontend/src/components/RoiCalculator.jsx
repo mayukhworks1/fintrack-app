@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import {
-  Calculator, TrendingUp, Clock, ShieldAlert,
-  Layers, ArrowRight, CheckCircle2, Zap, Sparkles,
-  ShieldCheck, IndianRupee, Activity, HelpCircle, Sliders, Check, Copy, Share2
+  Calculator, Clock,
+  ArrowRight, CheckCircle2, Zap, Sparkles,
+  ShieldCheck, IndianRupee, Activity, Sliders, Check, Copy
 } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 

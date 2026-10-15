@@ -355,6 +355,19 @@ def _api_url(provider: str = "openrouter") -> str:
     return GROQ_API_URL if provider == "groq" else OPENROUTER_API_URL
 
 
+# OpenRouter attributes calls to the site named in HTTP-Referer. The production
+# domain stands in when FRONTEND_URL names no origin (unset, or "*").
+_PRODUCTION_ORIGIN = "https://twfintracker.worksmayukh.space"
+
+
+def _referer() -> str:
+    for origin in (settings.frontend_url or "").split(","):
+        origin = origin.strip().rstrip("/")
+        if origin.startswith(("https://", "http://")):
+            return origin
+    return _PRODUCTION_ORIGIN
+
+
 def _make_headers(provider: str = "openrouter") -> dict[str, str]:
     if provider == "groq":
         # Groq wants only the bearer token; the HTTP-Referer/X-Title pair is an
@@ -366,7 +379,7 @@ def _make_headers(provider: str = "openrouter") -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://fintrack-app-beta.vercel.app",
+        "HTTP-Referer": _referer(),
         "X-Title": "FinTrack AI",
     }
 
@@ -720,53 +733,12 @@ async def stream_chat_with_ai(
     )
 
 
-# Backwards-compat alias used elsewhere
-_strip_reasoning = _extract_answer
-
-
 # ── Context formatters ────────────────────────────────────────────────
 _PROJECT_CURRENCY_FIELDS = {
     'Amount Billed So far', 'Actual Profit', 'Target Revenue',
     'Input cost so far', 'Total Overhead Cost',
     'Combined monthly salary of all the resources', 'Revenue per Resource',
 }
-
-
-def _format_records_context(records: list[dict]) -> str:
-    if not records:
-        return "No project records found."
-    lines = ["=== LIVE PROJECT DATA ==="]
-    for i, rec in enumerate(records, 1):
-        f = rec.get("fields", {})
-        lines.append(f"[Project {i}] {f.get('Client', '?')} / {f.get('Project Name', '?')}")
-        lines.append(f"  Status: {f.get('Project Status', 'N/A')}")
-        lines.append(f"  Health: {f.get('Health', 'N/A')}")
-        lines.append(f"  Duration: {f.get('Duration (Months)', 'N/A')} months")
-        lines.append(f"  Resources: {f.get('Resource Count', 'N/A')}")
-        lines.append(f"  Target Achieved: {f.get('Target Achieved', 'N/A')}")
-        for field in ('Amount Billed So far', 'Target Revenue', 'Actual Profit',
-                      'Input cost so far', 'Total Overhead Cost',
-                      'Combined monthly salary of all the resources'):
-            val = f.get(field)
-            if val is not None:
-                try:
-                    lines.append(f"  {field}: ₹{float(val):,.0f}")
-                except (ValueError, TypeError):
-                    lines.append(f"  {field}: {val}")
-        pct = f.get('Profit percentage')
-        if pct is not None:
-            try:
-                raw = float(pct)
-                # Teable stores profit % as a decimal fraction (0.4479 = 44.79%),
-                # losses included (-0.25 = -25%)
-                pct_display = raw * 100 if -2.0 < raw < 2.0 else raw
-                lines.append(f"  Profit %: {pct_display:.2f}%")
-            except (ValueError, TypeError): pass
-        contrib = f.get('Resource contribution percentage')
-        if contrib is not None:
-            lines.append(f"  Resource Contribution: {contrib}%")
-        lines.append("")
-    return "\n".join(lines)
 
 
 def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
@@ -807,40 +779,6 @@ def format_chat_records_context(records: list[dict], limit: int = 120) -> str:
 
 
 # ── Public API ────────────────────────────────────────────────────────
-async def chat_with_ai(message: str, history: list[dict], context: str = "") -> dict:
-    """Chat with full DB context. Returns extracted user-facing content."""
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.append({"role": "system", "content": RESPONSE_MODE_INSTRUCTIONS["brief"]})
-    if context:
-        messages.append({"role": "system", "content": context})
-    for h in history[-12:]:
-        messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": message})
-    return await _try_chat(messages, max_tokens=1024, temperature=0.5)
-
-
-async def chat_with_ai_tuned(
-    message: str,
-    history: list[dict],
-    context: str = "",
-    response_mode: str = "brief",
-    temperature: float | None = None,
-) -> dict:
-    """Chat with explicit response-mode and temperature controls."""
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    mode_instruction = RESPONSE_MODE_INSTRUCTIONS.get(response_mode or "brief")
-    if mode_instruction:
-        messages.append({"role": "system", "content": mode_instruction})
-    if context:
-        messages.append({"role": "system", "content": context})
-    for h in history[-12:]:
-        messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": message})
-    max_tokens = 1300 if response_mode == "board" else 1024
-    final_temp = 0.4 if temperature is None else temperature
-    return await _try_chat(messages, max_tokens=max_tokens, temperature=final_temp)
-
-
 async def judge_answer(
     message: str,
     answer: str,
@@ -1250,260 +1188,6 @@ async def parse_invoice_document(content: bytes, filename: str, mime_type: str) 
         clean["remark"] = f"Due: {regex_fields['_due_date']}"
 
     return clean
-
-
-_REPORT_SYSTEM_PROMPT = """You are FinTrackAI, a senior financial analyst writing an executive board report.
-
-You will receive structured portfolio data and must produce a complete, honest, detailed report.
-
-CRITICAL FORMATTING RULES — non-negotiable:
-- Output ONLY the formatted report. No reasoning, no planning, no working notes, no preamble.
-- Start your output IMMEDIATELY with ===ANSWER=== on its own line.
-- End your output with ===END=== on its own line.
-- Between those markers: the complete report and nothing else.
-- Use every data point given. Do not omit, vague-ify, or approximate any number.
-- Name specific projects, clients, and invoices — never use "a project" or "some clients".
-- Use ₹ with Indian grouping (₹2,47,200). Shorthand only if space is tight.
-- Structure using section headers like "Portfolio Overview:" on their own line, followed by bullet points.
-- Bullet points start with "- " on a new line.
-- Be direct and decisive. No filler, no "Based on the data...", no thinking out loud.
-- If collection rate < 80%, call it critical explicitly.
-- Negative-margin projects must be named and flagged as losses.
-"""
-
-
-async def generate_report(
-    summary: dict,
-    records: list[dict],
-    invoice_summary: dict | None = None,
-    invoice_records: list[dict] | None = None,
-    status_records: list[dict] | None = None,
-) -> dict:
-    """
-    Full executive report for the portfolio.
-
-    Produces a detailed, honest report covering every material data point:
-    project P&L, per-client breakdown, at-risk projects, invoice aging,
-    collection health, and concrete action items.
-    """
-
-    def _sf(v) -> float:
-        try:
-            return float(v) if v not in (None, "") else 0.0
-        except (TypeError, ValueError):
-            return 0.0
-
-    # ── 1. Project lines — capped to keep prompt within context limits ─────
-    # Sort: at-risk first (negative profit %), then by billed amount descending.
-    # We include full stats for all of them but cap total lines at 60 to avoid
-    # 500 context-overflow errors from OpenRouter on large portfolios.
-    def _sort_key(r):
-        f = r.get("fields", {})
-        pct = _sf(f.get("Profit percentage"))
-        billed = _sf(f.get("Amount Billed So far"))
-        return (0 if pct < 0 else 1, -billed)
-
-    sorted_records = sorted(records, key=_sort_key)
-    capped = sorted_records[:60]
-    omitted = len(records) - len(capped)
-
-    project_lines = []
-    for r in capped:
-        f = r.get("fields", {})
-        billed     = _sf(f.get("Amount Billed So far"))
-        profit_abs = _sf(f.get("Actual Profit"))
-        profit_pct = _sf(f.get("Profit percentage"))
-        if -2.0 < profit_pct < 2.0:   # a decimal fraction (0.4479 = 44.79%)
-            profit_pct *= 100
-        inp_cost   = _sf(f.get("Input cost so far"))
-        overhead   = _sf(f.get("Total Overhead Cost"))
-        target     = "YES" if f.get("Target Achieved ") else "no"
-        project_lines.append(
-            f"- {f.get('Client','?')} / {f.get('Project Name','?')}: "
-            f"Status={f.get('Project Status','?')}, Health={f.get('Health','N/A')}, "
-            f"Billed=₹{billed:,.0f}, Profit=₹{profit_abs:,.0f} ({profit_pct:.1f}%), "
-            f"InputCost=₹{inp_cost:,.0f}, Overhead=₹{overhead:,.0f}, TargetAchieved={target}"
-        )
-    if omitted > 0:
-        project_lines.append(
-            f"  [+ {omitted} more projects not shown — their totals ARE included in the summary above]"
-        )
-
-    # ── 2. At-risk callout ─────────────────────────────────────────────────
-    at_risk = summary.get("at_risk", [])
-    at_risk_block = ""
-    if at_risk:
-        lines = [
-            f"- {p['name']}: Profit={p['pct']}%, Health={p['health']}, "
-            f"Status={p['status']}, Billed=₹{p.get('billed', 0):,.0f}"
-            for p in at_risk
-        ]
-        at_risk_block = "\nAT-RISK PROJECTS (" + str(len(at_risk)) + " flagged):\n" + "\n".join(lines) + "\n"
-    else:
-        at_risk_block = "\nAT-RISK PROJECTS: None — all projects are within healthy margins.\n"
-
-    # ── 3. Per-client P&L ─────────────────────────────────────────────────
-    client_billed = summary.get("client_billed", {})
-    client_profit = summary.get("client_profit", {})
-    client_lines  = []
-    for cl in sorted(client_billed.keys(), key=lambda c: -client_billed[c]):
-        b   = client_billed.get(cl, 0.0)
-        p   = client_profit.get(cl, 0.0)
-        pct = (p / b * 100) if b > 0 else 0.0
-        client_lines.append(f"- {cl}: Billed=₹{b:,.0f}, Profit=₹{p:,.0f} ({pct:.1f}%)")
-
-    # ── 4. Invoice blocks ──────────────────────────────────────────────────
-    invoice_block    = ""
-    pending_block    = ""
-    bp_block         = ""
-
-    if invoice_summary:
-        bsa    = invoice_summary.get("by_status_amounts", {})
-        active = invoice_summary.get("active_invoices", invoice_summary.get("total_invoices", 0))
-        coll   = invoice_summary.get("collection_rate", 0)
-        coll_flag = " [CRITICAL — BELOW 80%]" if coll < 80 else ""
-
-        invoice_block = (
-            "\nINVOICE SUMMARY:\n"
-            f"- Total: {invoice_summary.get('total_invoices', 0)} invoices "
-            f"(Active: {active}, Cancelled: {invoice_summary.get('by_status', {}).get('Cancelled', 0)})\n"
-            f"- Raised (pre-GST): ₹{invoice_summary.get('total_raised', 0):,.0f}\n"
-            f"- With Tax (18% GST): ₹{invoice_summary.get('total_with_tax', 0):,.0f}\n"
-            f"- Collected: ₹{invoice_summary.get('total_received', 0):,.0f}\n"
-            f"- Outstanding: ₹{invoice_summary.get('total_outstanding', 0):,.0f}\n"
-            f"- Collection Rate: {coll:.1f}%{coll_flag}\n"
-            f"- By status (₹): { {k: f'₹{v:,.0f}' for k, v in bsa.items()} }\n"
-        )
-
-        pending = invoice_summary.get("pending_invoices", [])
-        if pending:
-            lines = []
-            for inv in pending:
-                fdate = str(inv.get("raised_date", "") or "")[:10] or "?"
-                lines.append(
-                    f"- [{inv.get('invoice_no','?')}] {inv.get('project','?')}: "
-                    f"₹{_sf(inv.get('amount')):,.0f}, Raised={fdate}, "
-                    f"Aging={int(inv.get('aging', 0))}d, "
-                    f"Followup={inv.get('followup') or 'NOT SET'}"
-                )
-            pending_block = (
-                f"\nPENDING INVOICES — {len(pending)} total (sorted oldest first):\n"
-                + "\n".join(lines) + "\n"
-            )
-
-        bp = invoice_summary.get("by_project", {})
-        if bp:
-            lines = [
-                f"- {proj}: Raised=₹{pd.get('raised',0):,.0f}, "
-                f"Received=₹{pd.get('received',0):,.0f}, "
-                f"Outstanding=₹{pd.get('outstanding',0):,.0f} "
-                f"({pd.get('count',0)} invoices)"
-                for proj, pd in sorted(bp.items(), key=lambda x: -x[1].get("outstanding", 0))
-            ]
-            bp_block = "\nINVOICE BREAKDOWN BY PROJECT:\n" + "\n".join(lines) + "\n"
-
-    # ── 5. Assemble prompt ─────────────────────────────────────────────────
-    best  = summary.get("best_project")  or {}
-    worst = summary.get("worst_project") or {}
-    today = __import__("datetime").date.today().isoformat()
-
-    # ── TOON context block ─────────────────────────────────────────────────
-    # Structured token representation of all entities for reliable AI parsing.
-    toon_block = ""
-    try:
-        from .toon import encode_portfolio
-        toon_block = "\n\nTOON CONTEXT (structured tokens — use these for exact figures):\n" + encode_portfolio(
-            projects=capped,
-            invoices=invoice_records or [],
-            statuses=status_records or [],
-            max_projects=60,
-            max_invoices=80,
-        ) + "\n"
-    except Exception:
-        pass  # TOON is additive — never block the report
-
-    # ── Status updates block ───────────────────────────────────────────────
-    status_block = ""
-    if status_records:
-        lines = []
-        for r in status_records:
-            f = r.get("fields", {})
-            client  = f.get("Client", "?")
-            project = f.get("Project", "?")
-            short   = f.get("Short Status", "")
-            detail  = f.get("Current Status (Detailed)", "")
-            entry   = f"- {client} / {project}"
-            if short:
-                entry += f": {short}"
-            if detail and detail.strip() != short.strip():
-                entry += f" — {detail[:200]}"
-            lines.append(entry)
-        status_block = f"\nLIVE PROJECT STATUS UPDATES ({len(status_records)} entries):\n" + "\n".join(lines) + "\n"
-
-    prompt = (
-        f"Write a complete executive board report dated {today}.\n"
-        f"Use ALL numbers below exactly as given. No approximation.\n\n"
-
-        f"PORTFOLIO SUMMARY:\n"
-        f"- Projects: {summary['total_projects']} total, "
-        f"{summary.get('target_achieved_count', 0)} hit target\n"
-        f"- Revenue Billed: ₹{summary['total_billed']:,.0f}\n"
-        f"- Actual Profit: ₹{summary['total_profit']:,.0f} "
-        f"(avg margin {summary['avg_profit_pct']:.1f}%)\n"
-        f"- Input Cost: ₹{summary.get('total_input_cost', 0):,.0f} | "
-        f"Overhead: ₹{summary.get('total_overhead', 0):,.0f} | "
-        f"Total Cost Base: ₹{summary.get('total_cost', 0):,.0f}\n"
-        f"- Best margin: {best.get('name','N/A')} at {best.get('pct','N/A')}%\n"
-        f"- Worst margin: {worst.get('name','N/A')} at {worst.get('pct','N/A')}%\n"
-        f"- By status: {summary['by_status']}\n"
-        f"- By health: {summary['by_health']}\n\n"
-
-        f"PER-CLIENT P&L:\n"
-        + ("\n".join(client_lines) if client_lines else "- (no client data)") + "\n"
-
-        + at_risk_block
-        + invoice_block
-        + pending_block
-        + bp_block
-        + status_block
-
-        + f"\nPROJECT DETAIL (top {len(capped)} by priority):\n"
-        + "\n".join(project_lines) + "\n"
-        + toon_block + "\n"
-
-        "Now write the full report using these sections in order:\n\n"
-        "Portfolio Overview:\n"
-        "Financial Performance:\n"
-        "Per-Client Breakdown:\n"
-        + ("Cash Flow & Collections:\n" if invoice_summary else "")
-        + ("Current Project Status:\n" if status_records else "")
-        + "Project Health Analysis:\n"
-        "Risks & Concerns:\n"
-        "Recommendations:\n"
-        "Action Items This Week:\n\n"
-        "Each section: write the section label exactly as shown above (e.g. 'Portfolio Overview:') "
-        "on its own line, then bullet points starting with '- '. "
-        "Name every at-risk project and every pending invoice explicitly. "
-        "For Current Project Status: include each project's short status and any critical detail. "
-        "No filler sentences. No preamble before the first section."
-    )
-
-    # Remind the user turn to use the markers (belt-and-suspenders for models
-    # that ignore system-prompt-only instructions when generating long text).
-    prompt += (
-        "\n\nIMPORTANT: Output ONLY the report. "
-        "Wrap it in ===ANSWER=== ... ===END=== markers. "
-        "Do NOT include any reasoning, planning, or working notes."
-    )
-
-    messages = [
-        {"role": "system", "content": _REPORT_SYSTEM_PROMPT},
-        {"role": "user",   "content": prompt},
-    ]
-    result = await _try_chat(messages, max_tokens=4096, temperature=0.4, extract=False)
-    raw = result.get("content", "")
-    result["content"] = _clean_report_output(raw)
-    return result
 
 
 def _clean_report_output(text: str) -> str:

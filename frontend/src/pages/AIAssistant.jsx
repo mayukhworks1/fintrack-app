@@ -5,16 +5,15 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { csvRow } from '../utils/csv'
+import { downloadBlob } from '../utils/download'
+import { escapeHtml } from '../utils/sanitize'
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts'
 
 /* ───────── Inline text formatting (bold, strip stray markdown) ───────── */
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-}
 function formatInline(text) {
-  return escHtml(text)
+  return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-1);font-weight:600">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/[`#*_]/g, '')
@@ -110,16 +109,8 @@ function AiText({ text }) {
 
 const DASHBOARD_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#f97316', '#94a3b8', '#ec4899']
 
-function downloadBlob(filename, content, type = 'text/plain;charset=utf-8') {
-  const blob = new Blob([content], { type })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+function downloadText(filename, content, type = 'text/plain;charset=utf-8') {
+  downloadBlob(new Blob([content], { type }), filename)
 }
 
 function dashboardToCsv(dashboard) {
@@ -166,7 +157,7 @@ function DashboardActions({ dashboard }) {
     <div className="flex flex-wrap items-center gap-2">
       <CopyButton text={dashboard.copyText || dashboard.title || 'Dashboard'} />
       <button
-        onClick={() => downloadBlob(`${base}.txt`, dashboard.copyText || dashboard.title || 'Dashboard')}
+        onClick={() => downloadText(`${base}.txt`, dashboard.copyText || dashboard.title || 'Dashboard')}
         className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
         style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
       >
@@ -175,7 +166,7 @@ function DashboardActions({ dashboard }) {
       </button>
       {Array.isArray(dashboard?.table?.rows) && dashboard.table.rows.length > 0 && (
         <button
-          onClick={() => downloadBlob(`${base}.csv`, dashboardToCsv(dashboard), 'text/csv;charset=utf-8')}
+          onClick={() => downloadText(`${base}.csv`, dashboardToCsv(dashboard), 'text/csv;charset=utf-8')}
           className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
           style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
         >
@@ -185,7 +176,7 @@ function DashboardActions({ dashboard }) {
       )}
       {Array.isArray(dashboard?.detailTable?.rows) && dashboard.detailTable.rows.length > 0 && (
         <button
-          onClick={() => downloadBlob(`${base}-details.csv`, detailTableToCsv(dashboard), 'text/csv;charset=utf-8')}
+          onClick={() => downloadText(`${base}-details.csv`, detailTableToCsv(dashboard), 'text/csv;charset=utf-8')}
           className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
           style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
         >
@@ -194,7 +185,7 @@ function DashboardActions({ dashboard }) {
         </button>
       )}
       <button
-        onClick={() => downloadBlob(`${base}.json`, JSON.stringify(dashboard, null, 2), 'application/json;charset=utf-8')}
+        onClick={() => downloadText(`${base}.json`, JSON.stringify(dashboard, null, 2), 'application/json;charset=utf-8')}
         className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
         style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
       >
@@ -239,7 +230,7 @@ function ArtifactCard({ artifact }) {
       <div className="flex flex-wrap items-center gap-2">
         <CopyButton text={copyText} />
         <button
-          onClick={() => downloadBlob(`${artifact.downloadName || 'artifact'}.txt`, copyText)}
+          onClick={() => downloadText(`${artifact.downloadName || 'artifact'}.txt`, copyText)}
           className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
           style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
         >
@@ -247,7 +238,7 @@ function ArtifactCard({ artifact }) {
           TXT
         </button>
         <button
-          onClick={() => downloadBlob(`${artifact.downloadName || 'artifact'}.json`, JSON.stringify(artifact, null, 2), 'application/json;charset=utf-8')}
+          onClick={() => downloadText(`${artifact.downloadName || 'artifact'}.json`, JSON.stringify(artifact, null, 2), 'application/json;charset=utf-8')}
           className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-all hover:bg-white/5"
           style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
         >

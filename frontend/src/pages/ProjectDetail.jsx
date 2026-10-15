@@ -8,6 +8,7 @@ import {
 import ProjectForm from '../components/ProjectForm'
 import { api, clientCacheBust } from '../services/api'
 import { formatInr, formatPct } from '../utils/format'
+import { hexToRgba } from '../utils/color'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 
@@ -20,11 +21,6 @@ function clientColor(name = '') {
   return PALETTE[h % PALETTE.length]
 }
 
-function hexToRgba(hex, a) {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-  return `rgba(${r},${g},${b},${a})`
-}
-
 const STATUS_COLORS = {
   'Active':      { bg: 'rgba(16,185,129,0.12)', color: '#10b981', dot: '#10b981' },
   'Completed':   { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8', dot: '#6366f1' },
@@ -34,16 +30,6 @@ const STATUS_COLORS = {
 }
 function statusStyle(s) {
   return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: '#94a3b8' }
-}
-
-const INV_STATUS = {
-  'Paid':           '#10b981',
-  'Received':       '#10b981',
-  'Partially Paid': '#f59e0b',
-  'Pending':        '#f97316',
-  'Overdue':        '#ef4444',
-  'Raised':         '#6366f1',
-  'Cancelled':      '#94a3b8',
 }
 
 // ── AI text renderer ───────────────────────────────────────────────────────────

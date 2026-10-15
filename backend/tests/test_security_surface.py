@@ -7,6 +7,10 @@ Regression cover for the security-surface fixes landed together.
   * uvicorn's access log no longer carries ?token= and friends
   * one helper decides the client IP, and it ignores client-set headers
   * client-controlled values cannot drop audit_log batches or history rows
+  * the storage proxy serves profile pictures only
+  * project search needs module.projects.view, like the other project reads
+  * anonymous /health is a summary; the internals are for admins
+  * the API docs and OpenAPI schema are off outside development
 """
 
 import asyncio
@@ -27,6 +31,21 @@ def _main():
 def _client():
     from fastapi.testclient import TestClient
     return TestClient(_main().app, raise_server_exceptions=False)
+
+
+@pytest.fixture
+def large_json_route():
+    """A JSON route on the real app, past gzip's minimum size. No anonymous
+    route returns that much in production, where the OpenAPI schema is off."""
+    app = _main().app
+    path = "/api/test/large-json"
+
+    @app.get(path)
+    async def large_json():
+        return {"rows": [{"id": i, "name": f"row {i}"} for i in range(200)]}
+
+    yield path
+    app.router.routes[:] = [r for r in app.router.routes if getattr(r, "path", None) != path]
 
 
 # ── 1. /api/smtp-test is gone ────────────────────────────────────────────────
@@ -73,6 +92,13 @@ class TestCorsPreflight:
         assert "PUT" in methods   # PUT /api/pages/{id}, PUT /permissions/users/...
         for method in sorted(methods):
             assert _preflight(method).status_code == 200, method
+
+
+def test_download_filename_header_is_readable_cross_origin():
+    r = _client().get("/health/live", headers={"Origin": _allowed_origin()})
+    assert r.status_code == 200, r.text
+    exposed = {h.strip().lower() for h in r.headers["access-control-expose-headers"].split(",")}
+    assert "content-disposition" in exposed
 
 
 # ── 3. gzip skips event streams ──────────────────────────────────────────────
@@ -194,8 +220,8 @@ class TestGzipSkipsEventStreams:
         bodies = [m["body"] for m in sent if m["type"] == "http.response.body" and m.get("body")]
         assert [b.split(b" ")[1] for b in bodies] == [b"frame-0", b"frame-1", b"frame-2"]
 
-    def test_large_json_is_still_gzipped(self):
-        r = _client().get("/openapi.json", headers={"Accept-Encoding": "gzip"})
+    def test_large_json_is_still_gzipped(self, large_json_route):
+        r = _client().get(large_json_route, headers={"Accept-Encoding": "gzip"})
         assert r.status_code == 200
         assert r.headers.get("content-encoding") == "gzip"
 
@@ -364,28 +390,43 @@ class TestClientIp:
     def test_no_client_and_no_headers_gives_empty(self, ip_settings):
         assert self._ip([], client=None) == ""
 
-    @pytest.mark.parametrize("module,fn,empty", [
-        ("app.main", "_get_client_ip", ""),
-        ("app.routers.auth", "_get_client_ip", ""),
-        ("app.services.auth_master", "_client_ip", ""),
-        ("app.routers.admin", "_client_ip", ""),
-        ("app.routers.ai", "_get_client_ip", ""),
-        ("app.routers.ai", "_client_ip", "unknown"),
-        ("app.routers.invoices", "_ip", "unknown"),
-        ("app.routers.projects", "_ip", "unknown"),
-        ("app.routers.status", "_ip", ""),
-        ("app.routers.shared_views", "_ip", ""),
-        ("app.services.shared_views", "_extract_ip", ""),
-        ("app.routers.pages", "_get_client_ip", ""),
-        ("app.db.attribution", "_get_client_ip", ""),
+    def test_no_module_reads_the_ip_headers_itself(self):
+        import pathlib
+        import re
+        import app
+        root = pathlib.Path(app.__file__).parent
+        helper = root / "utils" / "client_ip.py"
+        direct = re.compile(
+            r"cf-connecting-ip|x-real-ip|x-forwarded-for|\.client\.host|\.client\[|scope\[[\"']client[\"']\]", re.I
+        )
+        offenders = [
+            f"{path.relative_to(root)}:{n}"
+            for path in sorted(root.rglob("*.py")) if path != helper
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            if direct.search(line) and not line.lstrip().startswith("#")
+        ]
+        assert offenders == []
+
+    @pytest.mark.parametrize("module,guard,empty", [
+        ("app.routers.invoices", "_check_mutation_rate", "unknown"),
+        ("app.routers.projects", "_check_project_rate", "unknown"),
+        ("app.routers.status", "_check_write_rate", ""),
     ])
-    def test_every_call_site_uses_the_helper(self, ip_settings, module, fn, empty):
+    def test_mutation_rate_limits_key_on_the_trusted_ip(self, ip_settings, monkeypatch, module, guard, empty):
         import importlib
-        get_ip = getattr(importlib.import_module(module), fn)
+        mod = importlib.import_module(module)
+        keys = []
+
+        async def fake_rate_check(ip, limit=60, window_sec=60, bucket="ratelimit"):
+            keys.append(ip)
+            return True, limit
+
+        monkeypatch.setattr(mod, "rate_check", fake_rate_check)
         spoofed = _req([("CF-Connecting-IP", "6.6.6.6"), ("X-Real-IP", "6.6.6.7"),
                         ("X-Forwarded-For", "6.6.6.8, 198.51.100.4")])
-        assert get_ip(spoofed) == "198.51.100.4"
-        assert get_ip(_req([], client=None)) == empty
+        asyncio.run(getattr(mod, guard)(spoofed))
+        asyncio.run(getattr(mod, guard)(_req([], client=None)))
+        assert keys == ["198.51.100.4", empty]
 
     def test_login_rate_limit_bucket_cannot_be_rotated(self, ip_settings, monkeypatch):
         # Rotating CF-Connecting-IP / leftmost XFF used to give every attempt a
@@ -825,3 +866,173 @@ class TestRecordHistoryAttribution:
         assert len(actor["actor_role"]) == 20
         assert actor["actor_lat"] is None
         assert set(A.empty_actor()) <= set(actor)
+
+
+# ── 7. The storage proxy serves profile pictures only ────────────────────────
+
+class TestStorageProxyScope:
+    @pytest.fixture
+    def reads(self, monkeypatch):
+        import app.routers.storage as R
+        paths = []
+
+        async def read_bytes(path):
+            paths.append(path)
+            return b"\x89PNG data"
+        monkeypatch.setattr(R, "read_bytes", read_bytes)
+        return paths
+
+    def _get(self, path):
+        import app.routers.storage as R
+        return asyncio.run(R.proxy_file(path, "viewer"))
+
+    def test_an_avatar_is_served(self, reads):
+        res = self._get("profiles/u1/avatar.png")
+        assert res.status_code == 200 and res.media_type == "image/png"
+        assert reads == ["profiles/u1/avatar.png"]
+
+    @pytest.mark.parametrize("path", ["studio/2026/10/0123456789abcdef-contract.pdf",
+                                      "pages/u1/img.png", "backups/db.sql.gz", "profiles"])
+    def test_anything_outside_profiles_is_404_without_a_read(self, reads, path):
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as e:
+            self._get(path)
+        assert e.value.status_code == 404
+        assert reads == []
+
+    @pytest.mark.parametrize("path", ["profiles/../studio/x.pdf", "/profiles/u1/avatar.png"])
+    def test_traversal_is_still_400(self, reads, path):
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as e:
+            self._get(path)
+        assert e.value.status_code == 400
+        assert reads == []
+
+
+# ── 8. Project search needs the same permission as the project list ─────────
+
+class TestProjectSearchPermission:
+    def _client(self, monkeypatch, perms):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import app.routers.deps as deps
+        import app.routers.projects as R
+
+        async def fake_auth(request: Request):
+            request.state.is_email_auth = True
+            request.state.auth_role = "finance"
+            request.state.auth_user_id = "u1"
+            return "editor"
+
+        async def fake_perms(user_id, *, fresh=False):
+            return set(perms)
+
+        async def search_records(self, q, take=20):
+            return [{"id": "rec1", "fields": {"Project Name": "Acme"}}]
+
+        monkeypatch.setattr(deps, "get_effective_permissions", fake_perms)
+        monkeypatch.setattr(R.TeableService, "search_records", search_records)
+        app = FastAPI()
+        app.include_router(R.router)
+        app.dependency_overrides[deps.require_auth] = fake_auth
+        return TestClient(app)
+
+    def test_without_projects_view_search_is_403(self, monkeypatch):
+        res = self._client(monkeypatch, {"module.invoices.view"}).get("/api/projects/search", params={"q": "a"})
+        assert res.status_code == 403
+        assert "module.projects.view" in res.json()["detail"]
+
+    def test_with_projects_view_search_works(self, monkeypatch):
+        res = self._client(monkeypatch, {"module.projects.view"}).get("/api/projects/search", params={"q": "a"})
+        assert res.status_code == 200 and res.json()["count"] == 1
+
+
+# ── 9. Anonymous /health is a summary; the internals are for admins ──────────
+
+class TestHealthDisclosure:
+    SUMMARY = {"status", "version", "postgres", "pg_rtt_ms", "valkey", "valkey_rtt_ms"}
+
+    @pytest.fixture
+    def stores(self, monkeypatch):
+        import app.db.postgres as pg
+        import app.db.valkey as vk
+
+        class Pool:
+            async def fetchval(self, sql, *a):
+                return 1
+
+            async def fetchrow(self, sql, *a):
+                if "sync_log" in sql:
+                    return {"source": "projects", "synced_at": None, "error": "teable 500 at 10.0.0.4"}
+                return None
+
+            def get_size(self): return 2
+            def get_idle_size(self): return 2
+            def get_min_size(self): return 1
+            def get_max_size(self): return 4
+
+        class Valkey:
+            async def ping(self):
+                return True
+
+        monkeypatch.setattr(pg, "_pool", Pool())
+        monkeypatch.setattr(pg, "_init_error", "OSError: could not reach db.internal as fintrack_admin")
+        monkeypatch.setattr(vk, "_client", Valkey())
+
+    def _token(self, role):
+        from app.routers.auth import make_token
+        return {"Authorization": f"Bearer {make_token(role)}"}
+
+    def test_anonymous_health_carries_only_the_summary(self, stores):
+        res = _client().get("/health")
+        assert res.status_code == 200
+        body = res.json()
+        assert set(body) == self.SUMMARY
+        assert body["postgres"] == "connected" and body["valkey"] == "connected"
+        assert isinstance(body["pg_rtt_ms"], int) and isinstance(body["valkey_rtt_ms"], int)
+        assert "db.internal" not in res.text and "10.0.0.4" not in res.text
+
+    def test_detail_without_a_token_is_401(self, stores):
+        assert _client().get("/health", params={"detail": 1}).status_code == 401
+
+    @pytest.mark.parametrize("role", ["editor", "viewer", "all"])
+    def test_detail_for_a_non_admin_is_403(self, stores, role):
+        res = _client().get("/health", params={"detail": 1}, headers=self._token(role))
+        assert res.status_code == 403
+
+    def test_an_admin_gets_the_detail(self, stores):
+        res = _client().get("/health", params={"detail": 1}, headers=self._token("admin"))
+        assert res.status_code == 200
+        body = res.json()
+        assert self.SUMMARY <= set(body)
+        assert body["postgres_error"].startswith("OSError")
+        assert body["last_sync"]["error"] == "teable 500 at 10.0.0.4"
+        for key in ("pool", "alerting", "scanner_trap", "migrations", "teable_configured"):
+            assert key in body, key
+
+    def test_liveness_is_unchanged(self):
+        assert _client().get("/health/live").json() == {"status": "alive"}
+
+
+# ── 10. The API docs and OpenAPI schema are off outside development ──────────
+
+class TestApiDocs:
+    @pytest.mark.parametrize("env,served", [("production", False), ("staging", False), ("", False),
+                                            ("development", True), ("local", True), ("test", True)])
+    def test_docs_follow_app_env(self, monkeypatch, env, served):
+        M = _main()
+        monkeypatch.setattr(M.settings, "app_env", env)
+        urls = M._docs_urls()
+        assert set(urls) == {"docs_url", "redoc_url", "openapi_url"}
+        if served:
+            assert urls == {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+        else:
+            assert set(urls.values()) == {None}
+
+    def test_a_production_app_publishes_no_schema(self):
+        from app.config import is_dev_env
+        if is_dev_env():
+            pytest.skip("APP_ENV marks this machine as a development one")
+        client = _client()
+        for path in ("/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"):
+            assert client.get(path).status_code == 404, path

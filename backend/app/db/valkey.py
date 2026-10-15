@@ -37,14 +37,6 @@ except ImportError:
 _client: "aioredis.Redis | None" = None  # type: ignore[name-defined]
 
 _GEO_TTL    = 24 * 3600   # 24 h for IP geo cache
-_KEY_SEP    = ":"
-
-# Key prefixes — all Valkey keys follow  prefix:discriminator  convention
-KEY_GEO        = "geo"          # geo:{ip}
-KEY_ATTRIB     = "attrib"       # attrib:{teable_id}
-KEY_RATELIMIT  = "ratelimit"    # ratelimit:{ip}
-KEY_SESSION    = "session_touch"# session_touch:{token_hint}
-KEY_CACHE      = "cache"        # cache:{name}  (generic app cache)
 
 
 # ---------------------------------------------------------------------------
@@ -166,16 +158,6 @@ async def set_nx(key: str, value: str, ttl: int) -> bool:
     except Exception as exc:
         logger.debug("set_nx(%s) error: %s", key, exc)
         return True   # fail open
-
-
-async def key_exists(key: str) -> bool:
-    """Return True if key exists, False otherwise (including when Valkey is down)."""
-    if not _client:
-        return False
-    try:
-        return bool(await _client.exists(key))
-    except Exception:
-        return False
 
 
 # ---------------------------------------------------------------------------

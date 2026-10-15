@@ -29,9 +29,9 @@
  *   )
  */
 
-import { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Filter, Plus, X, ChevronDown, Search, Check, SlidersHorizontal } from 'lucide-react'
+import { Plus, X, ChevronDown, Search, Check, SlidersHorizontal } from 'lucide-react'
 
 // ─── Operator tables ──────────────────────────────────────────────────────────
 

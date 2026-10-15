@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Landmark, ArrowRight, ShieldCheck, RefreshCw, Layers, Sliders, Activity, Check } from 'lucide-react'
+import { Landmark, Layers, Sliders, Activity, Check } from 'lucide-react'
 import { inr, inrShort } from './demoData'
 import { useTilt } from '../hooks/useTilt'
 import LoopVideo from './LoopVideo'

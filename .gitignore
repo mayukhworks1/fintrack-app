@@ -6,17 +6,31 @@ __pycache__/
 venv/
 *.egg-info/
 dist/
-.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # Node
 node_modules/
-dist/
 .cache/
+coverage/
+npm-debug.log*
+*.log
 
 # Env files
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+
+# Vercel CLI project link
+.vercel/
+
+# Database dumps (docs/BACKUPS.md): a full copy holds login accounts.
+fintrack-*.sql
+fintrack-*.sql.gz
+*.dump
 
 # OS
 .DS_Store

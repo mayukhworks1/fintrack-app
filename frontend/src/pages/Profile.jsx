@@ -2,20 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   User, Mail, Shield, Calendar, Clock, Key, Check, AlertCircle,
   Pencil, X, Phone, Briefcase, Building2, MapPin, Globe2,
-  Link2, Unlink, LogOut, RefreshCw, ChevronRight, Info,
+  Unlink, LogOut, RefreshCw, Info,
   Camera, Trash2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import { useToast } from '../context/ToastContext'
-
-/* ── Helpers ─────────────────────────────────────────────────────────── */
-function ts(v) {
-  if (!v) return '—'
-  try { return new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
-  catch { return v }
-}
+import { ts } from '../utils/dates'
 
 function Avatar({ name, email, avatarUrl, size = 56 }) {
   const src = useAvatarSrc(avatarUrl)
@@ -96,19 +90,6 @@ function InfoRow({ icon: Icon, label, value, mono = false, accent = false }) {
       </span>
     </div>
   )
-}
-
-
-const PROVIDER_META = {
-  google: {
-    label: 'Google',
-    icon: (
-      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
-        style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.4)' }}>
-        G
-      </span>
-    ),
-  },
 }
 
 /* ── Main component ──────────────────────────────────────────────────── */

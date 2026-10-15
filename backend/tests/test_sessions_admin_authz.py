@@ -829,3 +829,11 @@ class TestImpersonation:
         client, db = admin_api("email_admin", metadata=json.dumps({"auth_role": "admin"}))
         assert client.post("/api/admin/impersonate/exit").status_code == 400
         assert db.writes == []
+
+    def test_exit_is_registered_once_and_ahead_of_the_user_id_route(self):
+        paths = [r.path for r in admin.router.routes if "POST" in getattr(r, "methods", ())]
+        assert paths.count("/api/admin/impersonate/exit") == 1
+        exit_handler = next(r.endpoint for r in admin.router.routes
+                            if r.path == "/api/admin/impersonate/exit")
+        assert exit_handler is admin.admin_impersonate_exit
+        assert paths.index("/api/admin/impersonate/exit") < paths.index("/api/admin/impersonate/{user_id}")

@@ -1,10 +1,10 @@
-import { NavLink, Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, FileSpreadsheet, Layers, Globe, Sparkles
+  Plus, Landmark, Globe, Sparkles
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -69,7 +69,7 @@ function OfflineBanner({ collapsed }) {
 
 function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
   const { dark, toggle } = useTheme()
-  const { logout, isEditor, isViewer, role, user, hasPerm } = useAuth()
+  const { logout, isEditor, role, user, hasPerm } = useAuth()
   // Filter by role first; then split into accessible vs permission-restricted
   const roleNav = NAV_ITEMS.filter(item => item.roles.includes(role))
   const visibleNav = roleNav.filter(item => !item.perm || hasPerm(item.perm))

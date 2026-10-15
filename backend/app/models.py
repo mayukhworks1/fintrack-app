@@ -1,5 +1,7 @@
+import re
+from datetime import date
 from typing import Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +42,6 @@ STATUS_TABLE_FIELD_IDS = {
     "Status":                   "fldKC43dvuXF91zMTaU",
     "Attachments":             "fldieCxA0yJyG764AWc",
 }
-
-STATUS_OPTIONS = ["Completed", "On Hold", "Input Pending", "In progress", "Not started"]
 
 STATUS_ALIAS = {
     "active": "🟢 Active",
@@ -194,3 +194,90 @@ class StatusUpdate(BaseModel):
         if self.attachments is not None:
             m["Attachments"] = self.attachments
         return m
+
+
+# ---------------------------------------------------------------------------
+# Invoice models
+# ---------------------------------------------------------------------------
+
+class InvoiceFieldsBase(BaseModel):
+    """Fields and checks shared by the invoice and web-invoice request bodies.
+    Each subclass adds its own columns and its own to_teable_fields."""
+    invoice_number:   Optional[str]   = None
+    project:          Optional[str]   = None
+    category:         Optional[str]   = None
+    description:      Optional[str]   = None
+    milestone:        Optional[str]   = None
+    raised_by:        Optional[str]   = None
+    raised_date:      Optional[str]   = None   # ISO 8601
+    cleared_date:     Optional[str]   = None   # ISO 8601
+    amount_raised:    Optional[float] = None
+    amount_with_tax:  Optional[float] = None
+    amount_received:  Optional[float] = None
+    payment_status:   Optional[str]   = None
+    remark:           Optional[str]   = None
+    next_followup:    Optional[str]   = None   # ISO 8601
+    reference:        Optional[List[Any]] = None   # attachment objects from Teable
+    invoice_pdf:      Optional[List[Any]] = None   # attachment objects from Teable
+
+    @field_validator('raised_by')
+    @classmethod
+    def validate_raised_by(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        # Email-like format check
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v.strip()):
+            raise ValueError('Raised By must be a valid email format')
+        return v.strip()
+
+    @field_validator('invoice_number')
+    @classmethod
+    def validate_invoice_number(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 50:
+            raise ValueError('Invoice Number cannot exceed 50 characters')
+        return v.strip()
+
+    @field_validator('amount_raised', 'amount_with_tax')
+    @classmethod
+    def validate_positive_amounts(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError('Amount must be greater than zero')
+        if v > 10_000_000:  # 1 crore max
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('amount_received')
+    @classmethod
+    def validate_non_negative_received(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v < 0:
+            raise ValueError('Amount Received cannot be negative')
+        if v > 10_000_000:
+            raise ValueError('Amount cannot exceed 1 crore')
+        return v
+
+    @field_validator('raised_date', 'cleared_date', 'next_followup', mode='before')
+    @classmethod
+    def validate_iso_dates(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        try:
+            # Try parsing as ISO date (YYYY-MM-DD or with time)
+            date.fromisoformat(v[:10])
+            return v
+        except (ValueError, TypeError):
+            raise ValueError('Dates must be in ISO 8601 format (YYYY-MM-DD)')
+
+    @field_validator('description', 'remark')
+    @classmethod
+    def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == '':
+            return v
+        if len(v) > 1000:
+            raise ValueError('Text fields cannot exceed 1000 characters')
+        return v.strip()

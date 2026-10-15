@@ -18,11 +18,11 @@ import re
 import secrets
 import string
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import quote
 
-import httpx
 from ..utils.http import shared_client
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
@@ -32,7 +32,7 @@ from ..config import settings
 from ..db import valkey as vk
 from ..db.postgres import get_pool
 from ..utils.uploads import read_upload, upload_limit
-from ..services import page_design
+from ..utils.client_ip import client_ip
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from ..services import page_share
@@ -129,11 +129,6 @@ def _random_suffix(n: int = 6) -> str:
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
-
-
-def _get_client_ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 async def _geo_lookup(ip: str) -> dict:
@@ -277,14 +272,22 @@ async def _log_view_bg(
         pass
 
 
-def _is_privileged(role: str) -> bool:
-    return role in ("superadmin", "admin", "manager")
-
-
 def _can_see_all(role: str) -> bool:
     """Only the superadmin sees/manages every user's pages. Everyone else is
     scoped to the pages they created (row-level isolation)."""
     return role == "superadmin"
+
+
+def _page_uuid(page_id: str) -> str:
+    """Path dependency for {page_id}. Page ids are UUIDs, and anything else sent
+    to the uuid column raises in asyncpg — a 500 for what is a missing page."""
+    try:
+        return str(uuid.UUID(page_id))
+    except ValueError:
+        raise HTTPException(404, "Page not found")
+
+
+PageId = Annotated[str, Depends(_page_uuid)]
 
 
 _ASSET_PATH_RE = re.compile(r"/api/public/pages/asset/([^\s)\"'<>]+)")
@@ -578,10 +581,6 @@ class PublishBody(BaseModel):
     published: bool
 
 
-class RestoreVersionBody(BaseModel):
-    note: str | None = None
-
-
 class VerifyPasswordBody(BaseModel):
     password: str
 
@@ -706,12 +705,6 @@ async def create_page(
             expires_at,
         )
         return _page_dict(row)
-
-
-@router.get("/api/pages/ai/styles")
-async def list_styles(role: str = Depends(require_auth)):
-    """The design directions a page can be generated in."""
-    return {"styles": page_design.catalogue()}
 
 
 # The five model-calling routes below sit behind the same two gates as the AI
@@ -1040,47 +1033,9 @@ async def list_pages(
     return [_page_list_dict(r) for r in rows]
 
 
-@router.get("/api/pages/admin/all-views")
-async def admin_all_views(
-    request: Request,
-    limit: int = 50,
-    offset: int = 0,
-    role: str = Depends(require_auth),
-):
-    auth_role = getattr(request.state, "auth_role", role) or role
-    if not _can_see_all(auth_role):
-        raise HTTPException(403, "Admin access required")
-
-    pool = get_pool()
-    if not pool:
-        raise HTTPException(503, "Database unavailable")
-
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT pv.id, pv.page_id, pp.title, pp.slug,
-                   pv.viewer_ip, pv.country, pv.city, pv.region, pv.isp,
-                   pv.user_agent, pv.referer, pv.viewed_at
-            FROM page_views pv
-            JOIN published_pages pp ON pp.id = pv.page_id
-            ORDER BY pv.viewed_at DESC
-            LIMIT $1 OFFSET $2
-            """,
-            limit,
-            offset,
-        )
-        total = await conn.fetchval("SELECT COUNT(*) FROM page_views")
-    def _view_dict(r):
-        d = dict(r)
-        d["viewed_at"] = _dt(d.get("viewed_at"))
-        d["page_id"] = str(d["page_id"]) if d.get("page_id") else None
-        return d
-    return {"total": total, "items": [_view_dict(r) for r in rows]}
-
-
 @router.get("/api/pages/{page_id}")
 async def get_page(
-    page_id: str,
+    page_id: PageId,
     request: Request,
     role: str = Depends(require_auth),
 ):
@@ -1104,7 +1059,7 @@ async def get_page(
 
 @router.put("/api/pages/{page_id}")
 async def update_page(
-    page_id: str,
+    page_id: PageId,
     body: UpdatePageBody,
     request: Request,
     role: str = Depends(require_auth),
@@ -1176,7 +1131,7 @@ async def update_page(
 
 @router.delete("/api/pages/{page_id}")
 async def delete_page(
-    page_id: str,
+    page_id: PageId,
     request: Request,
     role: str = Depends(require_auth),
 ):
@@ -1203,11 +1158,16 @@ async def delete_page(
 
 @router.delete("/api/pages/{page_id}/views/{view_id}")
 async def delete_page_view(
-    page_id: str,
+    page_id: PageId,
     view_id: str,
     request: Request,
     role: str = Depends(require_auth),
 ):
+    try:
+        view_pk = int(view_id)
+    except ValueError:
+        raise HTTPException(404, "View not found")
+
     pool = get_pool()
     if not pool:
         raise HTTPException(503, "Database unavailable")
@@ -1226,7 +1186,7 @@ async def delete_page_view(
 
         result = await conn.execute(
             "DELETE FROM page_views WHERE id = $1 AND page_id = $2",
-            int(view_id), page_id,
+            view_pk, page_id,
         )
         # Decrement view_count to stay in sync
         if result != "DELETE 0":
@@ -1239,7 +1199,7 @@ async def delete_page_view(
 
 @router.post("/api/pages/{page_id}/publish")
 async def publish_page(
-    page_id: str,
+    page_id: PageId,
     body: PublishBody,
     request: Request,
     role: str = Depends(require_auth),
@@ -1260,7 +1220,6 @@ async def publish_page(
         if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
-        published_at = datetime.now(timezone.utc) if body.published else None
         updated = await conn.fetchrow(
             """
             UPDATE published_pages
@@ -1279,7 +1238,7 @@ async def publish_page(
 
 @router.get("/api/pages/{page_id}/analytics")
 async def page_analytics(
-    page_id: str,
+    page_id: PageId,
     request: Request,
     limit: int = 50,
     offset: int = 0,
@@ -1356,7 +1315,7 @@ SELECT json_build_object(
 
 
 @router.get("/api/pages/{page_id}/insights")
-async def page_insights(page_id: str, request: Request, role: str = Depends(require_auth)):
+async def page_insights(page_id: PageId, request: Request, role: str = Depends(require_auth)):
     """Totals and breakdowns over every view of a page, for the insights
     charts. The analytics list only carries the latest rows, so charts drawn
     from it undercounted any page past its first hundred views."""
@@ -1384,7 +1343,7 @@ async def page_insights(page_id: str, request: Request, role: str = Depends(requ
 
 @router.get("/api/pages/{page_id}/versions")
 async def list_page_versions(
-    page_id: str,
+    page_id: PageId,
     request: Request,
     limit: int = 50,
     role: str = Depends(require_auth),
@@ -1430,7 +1389,7 @@ async def list_page_versions(
 
 @router.get("/api/pages/{page_id}/versions/{version_id}")
 async def get_page_version(
-    page_id: str,
+    page_id: PageId,
     version_id: int,
     request: Request,
     role: str = Depends(require_auth),
@@ -1474,7 +1433,7 @@ async def get_page_version(
 
 @router.post("/api/pages/{page_id}/versions/{version_id}/restore")
 async def restore_page_version(
-    page_id: str,
+    page_id: PageId,
     version_id: int,
     request: Request,
     role: str = Depends(require_auth),
@@ -1740,7 +1699,7 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
     if not row or not row["is_published"]:
         return {"ok": True}
 
-    ip = _get_client_ip(request)
+    ip = client_ip(request)
     ua = request.headers.get("user-agent", "")
     page_id = str(row["id"])
 

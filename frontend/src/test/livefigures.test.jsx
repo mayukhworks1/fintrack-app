@@ -8,7 +8,7 @@
  * tests pin down.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, act, waitFor } from '@testing-library/react'
 import { renderHook } from '@testing-library/react'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { DashboardMetric, KpiCard as WebKpiCard } from '../pages/webinvoices/ui'

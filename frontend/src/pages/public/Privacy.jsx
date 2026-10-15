@@ -1,6 +1,6 @@
 import PublicLayout from '../../components/PublicLayout'
 import { Reveal } from '../../components/PublicBits'
-import { ShieldCheck, Lock, Database, FileCheck, EyeOff, ArrowRight } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function Privacy() {

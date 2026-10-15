@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
-  ShieldCheck, Lock, KeyRound, Zap, CheckCircle2,
-  Trash2, RefreshCw, AlertTriangle, Layers, Sliders, Activity, Check,
+  ShieldCheck, KeyRound, Zap, CheckCircle2,
+  Layers, Sliders, Activity, Check,
   Fingerprint, Laptop, Smartphone, Monitor
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'

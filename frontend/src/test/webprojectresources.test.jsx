@@ -50,10 +50,6 @@ const { api, toast } = vi.hoisted(() => {
 
 vi.mock('../services/api', () => ({ api, API_BASE_URL: '' }))
 vi.mock('../context/ToastContext', () => ({ useToast: () => toast }))
-vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ isEditor: true, hasPerm: () => true, authRole: 'superadmin' }),
-}))
-vi.mock('../context/ThemeContext', () => ({ useTheme: () => ({ dark: false, toggle: vi.fn() }) }))
 
 import { ProjectsWorkspace } from '../pages/WebProjects'
 

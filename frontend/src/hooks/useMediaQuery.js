@@ -27,6 +27,3 @@ export function useMediaQuery(query) {
 
   return matches
 }
-
-/** Convenience: true on viewports below the lg breakpoint (1024px). */
-export const useIsMobile = () => useMediaQuery('(max-width: 1023px)')

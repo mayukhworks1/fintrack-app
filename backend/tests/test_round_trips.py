@@ -18,8 +18,6 @@ These pin the fixes by what they cost, not by what they are called:
 import asyncio
 import time
 
-import pytest
-
 import app.db.postgres as pg
 import app.utils.cache as C
 
@@ -163,7 +161,14 @@ class TestHealthTimings:
         monkeypatch.setattr(pg, "_pool", P())
         monkeypatch.setattr(vk, "_client", V())
         from fastapi.testclient import TestClient
-        body = TestClient(M.app).get("/health").json()
+        from app.routers.auth import make_token
+        client = TestClient(M.app)
+        body = client.get("/health").json()
+        assert body["pg_rtt_ms"] >= 20 and body["valkey_rtt_ms"] >= 20
+        # Pool stats are internals: an admin asks for them with ?detail=1.
+        assert "pool" not in body
+        admin = {"Authorization": f"Bearer {make_token('admin')}"}
+        body = client.get("/health", params={"detail": 1}, headers=admin).json()
         assert body["pg_rtt_ms"] >= 20 and body["valkey_rtt_ms"] >= 20
         assert body["pool"]["size"] == 4 and body["pool"]["idle"] == 3
         assert "keepalive" in body["pool"]

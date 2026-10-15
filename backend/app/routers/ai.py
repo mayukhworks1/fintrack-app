@@ -31,9 +31,8 @@ from ..services.invoice import InvoiceService
 from ..services.status import StatusService
 from ..services.ai_retrieval import build_retrieval_pack
 from ..services.openrouter import (
-    chat_with_ai, chat_with_ai_tuned, judge_answer, autofill_project, analyze_project, generate_report,
+    judge_answer, autofill_project, analyze_project,
     generate_status_briefing,
-    _format_records_context,
     format_chat_records_context,
     stream_chat_with_ai,
 )
@@ -46,7 +45,7 @@ async def _ai_quota(request: Request) -> None:
     """Refuse the call once the user's rolling-24h AI allowance is spent.
 
     This is the same gate Studio enforces. It was never wired to this router,
-    so the six LLM-calling endpoints here — chat, stream, autofill, analyze,
+    so the LLM-calling endpoints here — streaming chat, autofill, analyze,
     report, briefing — had no per-user cap at all, while every call was
     already being counted into ai_traces. The counter existed; only the check
     was missing. Metering is per email-auth user. Legacy role tokens carry no
@@ -91,6 +90,7 @@ async def _legacy_ai_quota(role: str) -> None:
 
 from ..db.postgres import get_pool
 from ..db.valkey import rate_check
+from ..utils.client_ip import client_ip
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -185,74 +185,6 @@ AI_TASK_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
-async def _write_ai_trace(
-    pool,
-    *,
-    endpoint: str,
-    model: str,
-    retrieval: str,
-    latency_ms: int | None,
-    tokens: Any = None,
-    session_id: str | None = None,
-    request_id: str | None = None,
-    query: str | None = None,
-    user_id: Any = None,
-) -> None:
-    """Write a single row to ai_traces (fire-and-forget). Never raises."""
-    try:
-        prompt_tok = answer_tok = None
-        if isinstance(tokens, dict):
-            prompt_tok = tokens.get("prompt_tokens")
-            answer_tok = tokens.get("completion_tokens")
-        elif isinstance(tokens, (int, float)):
-            answer_tok = int(tokens)
-        await pool.execute(
-            """
-            INSERT INTO ai_traces
-              (endpoint, model, retrieval, latency_ms, prompt_tokens, answer_tokens,
-               session_id, request_id, query_snippet, user_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-            """,
-            endpoint, model[:120] if model else None,
-            retrieval, latency_ms,
-            prompt_tok, answer_tok,
-            session_id, request_id,
-            query, str(user_id) if user_id else None,
-        )
-    except Exception as exc:
-        logger.debug("_write_ai_trace failed: %s", exc)
-
-
-def _fmt_invoice_context(summary: dict, records: list[dict]) -> str:
-    """Build concise invoice context string for the AI."""
-    lines = [
-        "=== INVOICE TRACKING SUMMARY ===",
-        f"Total Invoices: {summary['total_invoices']}",
-        f"Total Raised (pre-tax): ₹{summary['total_raised']:,.0f}",
-        f"Total with GST: ₹{summary['total_with_tax']:,.0f}",
-        f"Total Received: ₹{summary['total_received']:,.0f}",
-        f"Outstanding: ₹{summary['total_outstanding']:,.0f}",
-        f"Collection Rate: {summary['collection_rate']:.1f}%",
-        f"By Status: {summary['by_status']}",
-        "",
-        "=== LIVE INVOICE RECORDS ===",
-    ]
-    for r in records[:50]:
-        f = r.get("fields", {})
-        lines.append(
-            f"[{f.get('Invoice Number','?')}] {f.get('Project','?')} | "
-            f"{f.get('Category','?')} | {f.get('Payment Status','?')} | "
-            f"Raised By: {f.get('Raised By','?')} | "
-            f"Raised: ₹{float(f.get('Amount Raised') or 0):,.0f} | "
-            f"Tax: ₹{float(f.get('Amount with Tax') or 0):,.0f} | "
-            f"Received: ₹{float(f.get('Amount Received') or 0):,.0f} | "
-            f"Outstanding: ₹{float(f.get('Outstanding Amount') or 0):,.0f} | "
-            f"Raised Date: {f.get('Raised Date','?')} | "
-            f"Aging: {f.get('Agening (Days)','0')} days"
-        )
-    return "\n".join(lines)
-
-
 def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 60) -> str:
     """Compact invoice context for interactive chat.
 
@@ -292,11 +224,6 @@ def _fmt_chat_invoice_context(summary: dict, records: list[dict], limit: int = 6
             f"Outstanding ₹{float(f.get('Outstanding Amount') or 0):,.0f}"
         )
     return "\n".join(lines)
-
-
-def _get_client_ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 def _append_status_context(context: str, status_records: list[dict]) -> str:
@@ -991,6 +918,19 @@ async def _execute_structured_task(
 
 # ── Context builder — PG mirror + Valkey cache ────────────────────────────────
 
+# asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
+def _to_dict(v) -> dict:
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
 async def _build_context_pg(pool) -> str:
     """
     Build the AI system context from PostgreSQL mirror tables.
@@ -1026,18 +966,6 @@ async def _build_context_pg(pool) -> str:
         pool.fetchrow("SELECT MAX(synced_at) AS last_sync FROM projects_mirror WHERE deleted_at IS NULL"),
     )
 
-    # asyncpg returns JSONB as dict; fall back to json.loads for text/string rows
-    def _to_dict(v) -> dict:
-        if isinstance(v, dict):
-            return v
-        if isinstance(v, str):
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, dict) else {}
-            except Exception:
-                return {}
-        return {}
-
     proj_fields = [_to_dict(r["fields"]) for r in proj_rows]
     inv_fields  = [_to_dict(r["fields"]) for r in inv_rows]
 
@@ -1059,7 +987,6 @@ async def _build_context_pg(pool) -> str:
         c = f.get("Client", "Unknown");         by_client[c] = by_client.get(c, 0) + 1
         h = f.get("Health", "Unknown");         by_health[h] = by_health.get(h, 0) + 1
 
-    import datetime as _dt
     last_sync = last_sync_row["last_sync"] if last_sync_row else None
     freshness = (
         last_sync.strftime("Data last synced: %d %b %Y %H:%M UTC")
@@ -1161,7 +1088,7 @@ async def _ensure_session(pool, session_id: Optional[str], role: str, request: R
     from ..db.audit import parse_ua
     from ..db.geo import lookup as geo_lookup
 
-    ip = _get_client_ip(request)
+    ip = client_ip(request)
     ua = request.headers.get("user-agent", "")
     os_str, browser, _ = parse_ua(ua)
 
@@ -1254,176 +1181,6 @@ async def _save_messages(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-def _client_ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request) or "unknown"
-
-
-@router.post("/chat")
-async def ai_chat(
-    body: ChatRequest, request: Request,
-    role: str = Depends(require_auth),
-    _perm: str = Depends(require_permission("module.ai.use")),
-    _quota: None = Depends(_ai_quota),
-):
-    """
-    Natural language chat about projects + invoices.
-
-    Context source (priority order):
-      1. Valkey cache  — sub-millisecond, valid for 5 min after last sync
-      2. PG mirror     — ~10 ms, used when cache is cold/expired
-      3. Live Teable   — ~1 s fallback when PG is unavailable
-
-    Chat history source (priority order):
-      1. Server-side   — last 12 messages from chat_messages (if session_id given)
-      2. Client-sent   — body.history (backward-compat / no PG)
-
-    Rate limit: 30 messages / minute per IP.
-    """
-    # ── Rate limiting (30 req/min per IP) ────────────────────────────────────
-    ip = _client_ip(request)
-    allowed, remaining = await rate_check(ip, limit=30, window_sec=60)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many requests — AI chat is limited to 30 messages/min. Try again shortly.",
-            headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
-        )
-
-    try:
-        pool       = get_pool()
-        session_id = body.session_id
-        user_message = _normalize_chat_message(body.message)
-        response_mode = _resolve_response_mode(body.response_mode)
-        temperature = _resolve_temperature(response_mode, body.temperature)
-
-        # ── Context: PG mirror + Valkey cache (fast) ──────────────────────
-        if pool:
-            context = await _build_context_pg(pool)
-        else:
-            context = await _build_context_teable()
-
-        # ── Session management ────────────────────────────────────────────
-        if pool:
-            session_id = await _ensure_session(pool, session_id, role, request)
-
-        # ── History: server-side (PG) preferred over client-sent ─────────
-        history: list[dict] = []
-        if pool and session_id:
-            history = await _load_session_history(pool, session_id, limit=12)
-        if not history:
-            # Fallback: client-provided history (backward compat / no PG)
-            history = [{"role": m.role, "content": m.content} for m in body.history]
-
-        structured_plan = _plan_structured_task(user_message, history)
-        if structured_plan:
-            structured = await _execute_structured_task(
-                structured_plan,
-                pool=pool,
-                response_mode=response_mode,
-                role=role,
-                ip=ip,
-                session_id=session_id,
-                prompt=user_message,
-                persist_path="chat",
-                persist_generation=True,
-            )
-            return structured["response"]
-
-        # ── Grounded retrieval layer for general chat ────────────────────
-        retrieval = await build_retrieval_pack(pool, user_message, history) if pool else {"context_block": "", "summary": {}}
-        grounded_context = context
-        if retrieval.get("context_block"):
-            grounded_context += "\n\n" + retrieval["context_block"]
-
-        # ── AI call ───────────────────────────────────────────────────────
-        t0 = time.time()
-        result = await chat_with_ai_tuned(user_message, history, grounded_context, response_mode=response_mode, temperature=temperature)
-        verification = _build_verification_metadata(
-            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
-            task="chat",
-            mode=response_mode,
-            confidence="medium",
-        )
-        planner = _build_planner_metadata(
-            task_type="chat",
-            response_mode=response_mode,
-            source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
-            retrieval=retrieval.get("summary") or {},
-            structured=False,
-        )
-        if _should_run_judge(user_message, response_mode):
-            judged = await judge_answer(user_message, result["content"], grounded_context)
-            if judged.get("verdict") == "soft-fail" and judged.get("corrected_answer"):
-                result["content"] = judged["corrected_answer"]
-            verification = _build_verification_metadata(
-                source="hybrid-rag" if retrieval.get("context_block") else ("pg-mirror" if pool else "teable-live"),
-                task="chat",
-                mode=response_mode,
-                confidence=str(judged.get("confidence") or "medium"),
-                issues=list(judged.get("issues") or []),
-                judge_model=judged.get("model"),
-                corrected=bool(judged.get("corrected_answer")) and judged.get("verdict") == "soft-fail",
-            )
-        duration_ms = int((time.time() - t0) * 1000)
-
-        # ── Persist turn (fire-and-forget) ────────────────────────────────
-        if pool and session_id:
-            asyncio.create_task(_save_messages(
-                pool, session_id,
-                user_message,
-                result["content"],
-                result.get("model", ""),
-                result.get("tokens_used"),
-                duration_ms,
-            ))
-            asyncio.create_task(_save_ai_generation(
-                pool,
-                session_id=session_id,
-                task_type="chat",
-                response_mode=response_mode,
-                model=result.get("model_short", ""),
-                role=role,
-                ip=ip,
-                prompt=user_message,
-                output_text=result["content"],
-                verification=verification,
-                metadata={"path": "chat", "structured": False, "retrieval": retrieval.get("summary") or {}, "planner": planner},
-                duration_ms=duration_ms,
-            ))
-
-        retrieval_method = retrieval.get("retrieval_method", "lexical")
-        resp = {
-            "reply": result["content"],
-            "model": result["model_short"],
-            "verification": verification,
-            "planner": planner,
-            "retrieval_method": retrieval_method,
-            "latency_ms": duration_ms,
-        }
-        if session_id:
-            resp["session_id"] = session_id
-
-        # Fire-and-forget AI trace
-        if pool:
-            asyncio.create_task(_write_ai_trace(
-                pool,
-                endpoint="chat",
-                model=result.get("model", ""),
-                retrieval=retrieval_method,
-                latency_ms=duration_ms,
-                tokens=result.get("tokens_used"),
-                session_id=session_id,
-                request_id=getattr(request.state, "request_id", None),
-                query=user_message[:200],
-                user_id=getattr(request.state, "auth_user_id", None),
-            ))
-        return resp
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/chat/stream")
 async def ai_chat_stream(
     body: ChatRequest, request: Request,
@@ -1432,7 +1189,7 @@ async def ai_chat_stream(
     _quota: None = Depends(_ai_quota),
 ):
     """Streaming variant of chat for lower perceived latency."""
-    ip = _client_ip(request)
+    ip = client_ip(request) or "unknown"
     allowed, _remaining = await rate_check(ip, limit=30, window_sec=60)
     if not allowed:
         raise HTTPException(
@@ -1949,17 +1706,6 @@ async def _build_report_payload_pg(pool) -> dict:
         pool.fetch("SELECT fields FROM invoices_mirror WHERE deleted_at IS NULL ORDER BY raised_date DESC NULLS LAST LIMIT 500"),
     )
 
-    def _to_dict(v) -> dict:  # noqa: E306
-        if isinstance(v, dict):
-            return v
-        if isinstance(v, str):
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, dict) else {}
-            except Exception:
-                return {}
-        return {}
-
     def _safe_float(v) -> float:
         try:
             return float(v) if v not in (None, "") else 0.0
@@ -2078,7 +1824,6 @@ async def _build_report_payload_pg(pool) -> dict:
         for f in inv_fields:
             raised      = _safe_float(f.get("Amount Raised"))
             with_tax    = _safe_float(f.get("Amount with Tax"))
-            received    = _safe_float(f.get("Amount Received"))
             status      = f.get("Payment Status", "Unknown")
             project     = f.get("Project") or "Unknown"
             cancelled   = (status == "Cancelled")
@@ -2183,11 +1928,9 @@ def _build_template_report(template: str, payload: dict, status_records: list[di
     project_summary = payload.get("project_summary") or {}
     invoice_summary = payload.get("invoice_summary") or {}
     project_records = payload.get("project_records") or []
-    invoice_records = payload.get("invoice_records") or []
 
     if template == "collections-report":
         overdue = invoice_summary.get("overdue_invoices") or []
-        pending = invoice_summary.get("pending_invoices") or []
         lines = [
             "Collections Report",
             "",
@@ -2369,7 +2112,7 @@ async def ai_report(
 
     try:
         pool = get_pool()
-        ip = _client_ip(request)
+        ip = client_ip(request) or "unknown"
 
         template_key = template if template in _REPORT_TEMPLATE_TITLES else "board-pack"
         cache_key = f"{_REPORT_CACHE_KEY}:{template_key}"
@@ -2497,19 +2240,6 @@ async def ai_report(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/report/invalidate")
-async def ai_report_invalidate(_role: str = Depends(require_auth)):
-    """Bust the report cache. Useful after a manual Teable resync."""
-    from ..utils.cache import cache
-    n = cache.bust(_REPORT_CACHE_KEY)
-    try:
-        from ..db import valkey as vk
-        await vk.cache_bust(_REPORT_CACHE_KEY)
-    except Exception:
-        pass
-    return {"ok": True, "purged": n}
-
-
 @router.get("/report/history")
 async def ai_report_history(
     limit: int = 20,
@@ -2635,7 +2365,7 @@ async def ai_status_briefing(
             content=report_text,
             model=result.get("model_short", result.get("model", "")),
             role=role,
-            ip=_client_ip(request),
+            ip=client_ip(request) or "unknown",
             metadata={"statuses": len(status_records)},
         )
         return {

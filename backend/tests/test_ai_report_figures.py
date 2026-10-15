@@ -11,14 +11,17 @@ drops the filter or the totals that lean on a LIMIT both show up in the output.
 
 import asyncio
 import datetime as dt
+import gc
 import re
+import warnings
 
 import pytest
 
 import app.routers.ai as ai
 from app.db.sync import _extract_invoice
+from app.services.ai_retrieval import build_retrieval_pack
 from app.services.invoice import InvoiceService
-from app.services.openrouter import _format_records_context, format_chat_records_context
+from app.services.openrouter import format_chat_records_context
 
 T0 = dt.datetime(2026, 10, 1, 12, 0, tzinfo=dt.timezone.utc)
 
@@ -230,12 +233,53 @@ class TestNegativeMargins:
         out = format_chat_records_context([{"fields": {"Client": "C", "Profit percentage": raw}}])
         assert f"Margin {shown}" in out
 
-    def test_report_records_context(self):
-        out = _format_records_context([{"fields": {"Client": "C", "Profit percentage": -0.25}}])
-        assert "Profit %: -25.00%" in out
-
     def test_margin_helper(self):
         assert ai._margin_pct(-0.25) == -25.0
         assert ai._margin_pct(0.5) == 50.0
         assert ai._margin_pct(45) == 45
         assert ai._margin_pct(None) == 0
+
+
+# ── grounded retrieval for chat ──────────────────────────────────────────────
+
+class _EmptyRetrievalPool:
+    """Answers the retrieval SELECTs with no rows and records what was asked."""
+
+    def __init__(self):
+        self.queries: list[str] = []
+
+    async def fetch(self, sql, *args):
+        self.queries.append(" ".join(sql.split()))
+        return []
+
+    async def fetchrow(self, sql, *args):
+        self.queries.append(" ".join(sql.split()))
+        return None
+
+
+class TestRetrievalPack:
+    @pytest.fixture(autouse=True)
+    def no_pgvector(self, monkeypatch):
+        async def unavailable():
+            return False
+        monkeypatch.setattr("app.services.embeddings.is_pgvector_available", unavailable)
+
+    @pytest.mark.parametrize("query", ["hi", "ok", "show all"])
+    def test_a_message_with_no_search_terms_returns_an_empty_pack(self, query):
+        # This path called asyncio.coroutine, which Python 3.11 removed, so a
+        # first chat message such as "hi" raised AttributeError.
+        pool = _EmptyRetrievalPool()
+        pack = asyncio.run(build_retrieval_pack(pool, query))
+        assert pack["terms"] == [] and pack["retrieval_method"] == "none"
+        assert pack["context_block"] == ""
+        assert not any("LIKE ANY" in q for q in pool.queries)
+
+    def test_every_search_coroutine_is_awaited(self):
+        pool = _EmptyRetrievalPool()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pack = asyncio.run(build_retrieval_pack(pool, "show acme invoices"))
+            gc.collect()
+        assert pack["terms"] == ["acme", "invoices"]
+        assert sum("LIKE ANY" in q for q in pool.queries) == 3
+        assert not [w for w in caught if "never awaited" in str(w.message)]

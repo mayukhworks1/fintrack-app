@@ -57,6 +57,13 @@ export function ExecutiveStatGrid({ children, className = '' }) {
   return <div className={clsx('executive-stat-grid', className)}>{children}</div>
 }
 
+// Spelled out in full so Tailwind's content scan keeps these component rules.
+const STAT_ACCENT_CLASS = {
+  positive: 'executive-stat-positive',
+  warning: 'executive-stat-warning',
+  negative: 'executive-stat-negative',
+}
+
 export function ExecutiveStatCard({
   label,
   value,
@@ -75,7 +82,7 @@ export function ExecutiveStatCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="executive-stat-label">{label}</p>
-          <p className={clsx('executive-stat-value', accent !== 'default' && `executive-stat-${accent}`)}>{value}</p>
+          <p className={clsx('executive-stat-value', STAT_ACCENT_CLASS[accent])}>{value}</p>
           {sub && <p className="executive-stat-sub">{sub}</p>}
         </div>
         {Icon && (
@@ -115,23 +122,5 @@ export function ExecutiveChip({ children, accent = false }) {
     <span className={clsx('executive-chip', accent && 'executive-chip-accent')}>
       {children}
     </span>
-  )
-}
-
-export function ExecutiveMetricList({ items }) {
-  return (
-    <div className="space-y-2">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{item.label}</p>
-            {item.sub && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{item.sub}</p>}
-          </div>
-          <span className={clsx('text-sm font-bold tabular-nums', item.accent === 'positive' && 'executive-stat-positive', item.accent === 'warning' && 'executive-stat-warning', item.accent === 'negative' && 'executive-stat-negative')} style={{ color: item.accent ? undefined : 'var(--text-1)' }}>
-            {item.value}
-          </span>
-        </div>
-      ))}
-    </div>
   )
 }

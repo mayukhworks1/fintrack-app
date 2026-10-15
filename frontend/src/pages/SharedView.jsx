@@ -8,6 +8,8 @@ import { api } from '../services/api'
 import { DocPreviewModal, AttachmentList, fileTypeInfo } from '../components/DocPreviewModal'
 import { useDialog } from '../hooks/useDialog'
 import SkeletonList from '../components/SkeletonList'
+import { hexToRgba } from '../utils/color'
+import { fmtDate, fmtDateTime, isExpired } from '../utils/dates'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -102,26 +104,9 @@ const BOARD_GROUP_OPTIONS = {
 }
 
 function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
-function fmtDate(iso) {
-  if (!iso) return '—'
-  try { return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) }
-  catch { return String(iso).slice(0, 10) }
-}
-function fmtDateTime(iso) {
-  if (!iso) return '—'
-  try { return new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
-  catch { return String(iso) }
-}
-function isExpired(iso) { return iso ? new Date(iso) < new Date() : false }
 function clientColor(name) {
   if (!_clientMap[name]) _clientMap[name] = PALETTE[Object.keys(_clientMap).length % PALETTE.length]
   return _clientMap[name]
-}
-function hexRgba(hex, a) {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r},${g},${b},${a})`
 }
 function fmtInr(value) {
   const num = Number(value || 0)
@@ -591,7 +576,7 @@ function CardView({
           <section key={groupValue}>
             <div className="flex items-center gap-3 mb-4">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold"
-                style={{ background: showClientAccents ? hexRgba(clrHex, 0.1) : '#fff', border: `1.5px solid ${showClientAccents ? hexRgba(clrHex, 0.3) : '#e5e7eb'}`, color: showClientAccents ? clrHex : '#334155' }}>
+                style={{ background: showClientAccents ? hexToRgba(clrHex, 0.1) : '#fff', border: `1.5px solid ${showClientAccents ? hexToRgba(clrHex, 0.3) : '#e5e7eb'}`, color: showClientAccents ? clrHex : '#334155' }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: clrHex }} />
                 {groupValue}
               </span>
@@ -721,7 +706,7 @@ function cellContent(col, f, clr, resourceType, meta, showClientAccents) {
   if (col === meta.clientField) return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full max-w-full"
       title={f[col] || ''}
-      style={{ background: showClientAccents ? hexRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexRgba(clr, 0.2) : '#e2e8f0'}` }}>
+      style={{ background: showClientAccents ? hexToRgba(clr, 0.1) : '#f1f5f9', color: showClientAccents ? clr : '#475569', border: `1px solid ${showClientAccents ? hexToRgba(clr, 0.2) : '#e2e8f0'}` }}>
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: clr }} />
       <span className="truncate">{f[col] || '—'}</span>
     </span>
@@ -840,9 +825,9 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                   paddingBottom: 10,
                   background: i % 2 === 0 ? '#fff' : '#fafafa',
                   borderBottom: '1px solid #f1f5f9',
-                  borderLeft: showClientAccents ? `3px solid ${hexRgba(clr, 0.5)}` : '3px solid transparent',
+                  borderLeft: showClientAccents ? `3px solid ${hexToRgba(clr, 0.5)}` : '3px solid transparent',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = hexRgba(clr, 0.03) }}
+                onMouseEnter={e => { e.currentTarget.style.background = hexToRgba(clr, 0.03) }}
                 onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa' }}
               >
                 {cols.map(col => (
@@ -1043,11 +1028,11 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="px-6 pt-6 pb-5 flex-shrink-0"
-          style={{ borderBottom: '1px solid #f1f5f9', background: `linear-gradient(135deg, ${hexRgba(accent, 0.07)} 0%, #fff 70%)` }}>
+          style={{ borderBottom: '1px solid #f1f5f9', background: `linear-gradient(135deg, ${hexToRgba(accent, 0.07)} 0%, #fff 70%)` }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold mb-2"
-                style={{ background: hexRgba(accent, 0.1), border: `1px solid ${hexRgba(accent, 0.22)}`, color: accent }}>
+                style={{ background: hexToRgba(accent, 0.1), border: `1px solid ${hexToRgba(accent, 0.22)}`, color: accent }}>
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: accent }} />
                 {groupValue}
               </div>

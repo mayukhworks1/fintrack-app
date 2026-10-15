@@ -522,15 +522,11 @@ def _client(monkeypatch, perms):
     async def delete_accesses(self, token, ids):
         return len(ids)
 
-    async def stats(self, token):
-        return {"total_events": 1}
-
     monkeypatch.setattr(SharedViewService, "create", create)
     monkeypatch.setattr(SharedViewService, "get", get)
     monkeypatch.setattr(SharedViewService, "update", update)
     monkeypatch.setattr(SharedViewService, "get_accesses", accesses)
     monkeypatch.setattr(SharedViewService, "delete_accesses", delete_accesses)
-    monkeypatch.setattr(SharedViewService, "get_accesses_stats", stats)
 
     app = FastAPI()
     app.include_router(R.router)
@@ -567,7 +563,6 @@ class TestAccessLogPermissions:
     @pytest.mark.parametrize("method,path,body", [
         ("get", "/api/shared-views/inv/accesses", None),
         ("delete", "/api/shared-views/inv/accesses", {"access_ids": ["a1"]}),
-        ("get", "/api/shared-views/inv/stats", None),
     ])
     def test_access_log_endpoints_need_shared_manage(self, monkeypatch, method, path, body):
         denied = _client(monkeypatch, {"module.finance.view"})

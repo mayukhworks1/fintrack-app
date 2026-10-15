@@ -43,14 +43,9 @@ from fastapi import Request
 from . import valkey as vk
 from .audit import parse_ua, parse_client_hint, build_device_label
 from .geo import lookup as geo_lookup
+from ..utils.client_ip import client_ip
 
 logger = logging.getLogger("fintrack.db.attribution")
-
-
-def _get_client_ip(request: Request) -> str:
-    """The real client IP — only proxy headers we trust (utils/client_ip.py)."""
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 # record_history column widths for the actor fields. Values are capped to these
@@ -162,7 +157,7 @@ async def build_actor_context(
     Geolocation is async (Valkey-cached, ~1 ms for repeat IPs).
     """
     ua = request.headers.get("user-agent", "") or ""
-    ip = _get_client_ip(request)
+    ip = client_ip(request)
     os_str, browser, device = parse_ua(ua)
 
     # ── Decode the X-Client-Hint header (rich device fingerprint from JS) ──

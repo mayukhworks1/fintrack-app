@@ -134,8 +134,8 @@ class TestLegacyRevocation:
 
 # ── 3. AI quota gates exactly the LLM callers ────────────────────────────────
 
-LLM_ENDPOINTS  = ["ai_chat", "ai_chat_stream", "ai_autofill", "ai_analyze", "ai_report", "ai_status_briefing"]
-CRUD_ENDPOINTS = ["ai_report_invalidate", "ai_report_history", "ai_report_history_detail", "ai_report_history_delete"]
+LLM_ENDPOINTS  = ["ai_chat_stream", "ai_autofill", "ai_analyze", "ai_report", "ai_status_briefing"]
+CRUD_ENDPOINTS = ["ai_report_history", "ai_report_history_detail", "ai_report_history_delete"]
 
 
 def _gated(fn):
@@ -214,8 +214,8 @@ class TestAIQuotaCoverage:
     LLM_ENTRY_POINTS = {
         "generate_page", "analyze_prompt_needs", "stream_generate_page",
         "edit_page_section", "fix_page_script_error",
-        "_try_chat", "chat_with_ai", "chat_with_ai_tuned", "stream_chat_with_ai",
-        "judge_answer", "autofill_project", "analyze_project", "generate_report",
+        "_try_chat", "stream_chat_with_ai",
+        "judge_answer", "autofill_project", "analyze_project",
         "generate_status_briefing", "ai_status_update", "parse_invoice_document",
     }
 
@@ -296,8 +296,19 @@ class TestGzip:
         import app.main as M
         # A subclass that also passes event streams through untouched.
         assert any(issubclass(m.cls, GZipMiddleware) for m in M.app.user_middleware)
-        c = TestClient(M.app)
-        big = c.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
-        small = c.get("/health/live", headers={"Accept-Encoding": "gzip"})
+        # No anonymous route returns a large body in production (the OpenAPI
+        # schema is off there), so the test mounts one for the duration.
+        path = "/api/test/large-json"
+
+        @M.app.get(path)
+        async def large_json():
+            return {"rows": [{"id": i, "name": f"row {i}"} for i in range(200)]}
+
+        try:
+            c = TestClient(M.app)
+            big = c.get(path, headers={"Accept-Encoding": "gzip"})
+            small = c.get("/health/live", headers={"Accept-Encoding": "gzip"})
+        finally:
+            M.app.router.routes[:] = [r for r in M.app.router.routes if getattr(r, "path", None) != path]
         assert big.headers.get("content-encoding") == "gzip"
         assert small.headers.get("content-encoding") is None

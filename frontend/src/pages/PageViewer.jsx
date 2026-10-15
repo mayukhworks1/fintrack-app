@@ -4,6 +4,7 @@ import { api, API_BASE_URL } from '../services/api'
 import { csvToGrid, cellDisplay } from '../utils/sheet'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { toCsv } from '../utils/csv'
+import { downloadBlob } from '../utils/download'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 
@@ -234,7 +235,7 @@ function CSVTable({ text }) {
       </div>
       <div style={{ marginTop:8, fontSize:12, color:'var(--pv-mute)' }}>
         {rows.length} row{rows.length!==1?'s':''} · {headers.length} column{headers.length!==1?'s':''}
-        {' '}· <button onClick={()=>{const csv=toCsv([headers,...rows]);const b=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='data.csv';a.click()}} style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:12, padding:0, textDecoration:'underline' }}>Download CSV ↓</button>
+        {' '}· <button onClick={()=>downloadBlob(new Blob([toCsv([headers,...rows])],{type:'text/csv'}),'data.csv')} style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:12, padding:0, textDecoration:'underline' }}>Download CSV ↓</button>
       </div>
     </div>
   )

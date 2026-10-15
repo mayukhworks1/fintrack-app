@@ -21,13 +21,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
   Play, Pause, ChevronLeft, ChevronRight, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
-  KanbanSquare, Rows3, Radio, Mail, FileText, SlidersHorizontal,
+  KanbanSquare, Rows3, Mail, FileText, SlidersHorizontal,
   Download, CheckSquare, Square, LayoutDashboard, FileSpreadsheet,
-  Globe, Layers, TrendingUp, ShieldCheck, ArrowRight, ExternalLink,
-  Plus, Eye, Code, RefreshCw, CheckCircle2, AlertTriangle, Clock,
-  Cpu, Database, HelpCircle, Bell, User, MessageSquare, Send,
-  Printer, Share2, Check, List, Sliders, CheckSquare2, FileCheck,
-  IndianRupee, Activity, Upload, Lock, Unlock, Compass, Moon, LogOut,
+  Globe, Layers, TrendingUp, ShieldCheck, ArrowRight,
+  Plus, RefreshCw, CheckCircle2, AlertTriangle, Clock,
+  Cpu, Database, Bell, MessageSquare, Send,
+  Printer, Share2, Check, List, CheckSquare2,
+  IndianRupee, Activity, Upload, Lock, Unlock, Moon, LogOut,
 } from 'lucide-react'
 import {
   INVOICES, AGEING, PROJECT_ROLLUP, TOTALS, QUESTIONS, BANDS,
@@ -39,10 +39,11 @@ import {
   ask, bandOf, monthly, inr, inrShort, shortDate, GST_RATE, TDS_RATE,
   // CLIENTS backs the generated report's Risk tab. It was referenced there and
   // never imported, so opening that tab threw and took the landing page down.
-  CLIENTS, DELIVERY, LANES, boardBy, TAX_SUMMARY, TAX_CLIENTS, PAGES_MOCK,
-  PAGE_TEMPLATES, STUDIO_DOCS, STUDIO_RAG_PRESETS, AI_CHAT_PRESETS,
+  CLIENTS, DELIVERY, LANES, TAX_SUMMARY, TAX_CLIENTS, PAGES_MOCK,
+  PAGE_TEMPLATES, STUDIO_DOCS, STUDIO_RAG_PRESETS,
   REPORT_TEMPLATES, CUSTOM_DASHBOARD_WIDGETS,
 } from './demoData'
+import { downloadBlob } from '../utils/download'
 
 export const TABS = [
 /* Labels are the signed-in app's, exactly. This is a replica, so a visitor
@@ -738,8 +739,6 @@ function Receivables({ state, set, onOpen, searchRef }) {
   const [viewMode, setViewMode] = useState('table') // 'table' | 'cards' | 'timeline'
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchCopied, setBatchCopied] = useState(false)
-  const [liveInvoices, setLiveInvoices] = useState(INVOICES)
-  const [timelinePreset, setTimelinePreset] = useState('60d')
 
   const onRowKeys = (e) => {
     const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
@@ -757,7 +756,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
   }
 
   const rows = useMemo(() => {
-    let r = liveInvoices
+    let r = INVOICES
     if (status !== 'all') r = r.filter(i => i.status === status)
     if (category !== 'all') r = r.filter(i => i.category === category)
     if (band) r = r.filter(i => bandOf(i) === band)
@@ -772,7 +771,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
       if (y == null) return -1
       return (x > y ? 1 : x < y ? -1 : 0) * dir
     })
-  }, [liveInvoices, status, category, band, query, sort])
+  }, [status, category, band, query, sort])
 
   const shown = rows.reduce((t, r) => t + r.amount, 0)
 
@@ -810,13 +809,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
       ].join(','))
     })
     const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `fintrack_sample_ledger_${status}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    downloadBlob(blob, `fintrack_sample_ledger_${status}.csv`)
   }
 
   const selectedRowsList = rows.filter(r => selectedIds.has(r.id))
@@ -1297,12 +1290,7 @@ function TaxLedger({ set }) {
       'Client,Invoices,Taxable Value,GST (18%),TDS (10%),Gross Invoiced,Share',
       ...TAX_CLIENTS.map(c => `"${c.client}",${c.invoices},${c.taxable},${c.gst},${c.tds},${c.gross},${c.share}`),
     ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'GSTR1_FY26_Q2_Reconciliation.csv'
-    a.click()
+    downloadBlob(new Blob([csv], { type: 'text/csv' }), 'GSTR1_FY26_Q2_Reconciliation.csv')
     setDownloaded(true)
     setTimeout(() => setDownloaded(false), 2000)
   }
@@ -1527,7 +1515,7 @@ function Analytics({ state, set }) {
 
       {/* Custom Dashboard Widget Configurator Drawer */}
       {showCustomizer && (
-        <div className="rounded-xl p-3 border space-y-2 animate-fadeIn"
+        <div className="rounded-xl p-3 border space-y-2 animate-fade-in"
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)]">Custom Analytics Dashboard Builder</span>
@@ -2379,7 +2367,7 @@ function Delivery({ state, set }) {
 
       {/* Share View Modal */}
       {showShareModal && (
-        <div className="rounded-xl p-3 border space-y-2.5 animate-fadeIn"
+        <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in"
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
@@ -2462,7 +2450,7 @@ function Delivery({ state, set }) {
 
       {/* Create Custom View Modal */}
       {showCreateViewModal && (
-        <div className="rounded-xl p-3 border space-y-2 animate-fadeIn"
+        <div className="rounded-xl p-3 border space-y-2 animate-fade-in"
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)]">Create New Custom Delivery View</span>
@@ -2819,7 +2807,7 @@ function Pages() {
 
       {/* Template Gallery Modal */}
       {showTemplateGallery && (
-        <div className="rounded-xl p-3 border space-y-2.5 animate-fadeIn"
+        <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in"
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
@@ -2912,7 +2900,7 @@ function Pages() {
 
       {/* Live Interactive Page Preview Modal */}
       {previewPage && (
-        <div className="rounded-xl p-3 border space-y-2.5 animate-fadeIn" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
+        <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -3018,7 +3006,7 @@ function Pages() {
 
       {/* AI Page Generator Drawer Modal */}
       {showEditor && (
-        <div className="rounded-xl p-3 border space-y-2.5 animate-fadeIn" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
+        <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
               <Sparkles size={12} className="text-[var(--accent)]" /> AI Real-Time Page & Portal Builder
@@ -3216,7 +3204,7 @@ function Studio() {
 
       {/* Upload Document Modal */}
       {showUploadModal && (
-        <div className="rounded-xl p-3 border space-y-2.5 animate-fadeIn" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
+        <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
               <Upload size={12} className="text-[var(--accent)]" /> Upload Business Document for RAG Indexing
@@ -3378,7 +3366,7 @@ function Studio() {
 
           {/* RAG Answer Display */}
           {activeRagResult && (
-            <div className="rounded-xl p-3.5 border space-y-2.5 animate-fadeIn" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
+            <div className="rounded-xl p-3.5 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Sparkles size={13} className="text-[var(--accent)]" />
@@ -3632,7 +3620,7 @@ const CAPTION = {
   ageing:      'Bands are predicates, not colours. Pick one and it opens the invoice list already filtered to it.',
 }
 
-export const TOUR_STEPS = [
+const TOUR_STEPS = [
   {
     tab: 'receivables',
     badge: 'Step 1 of 6 · Core Ledger',
@@ -3692,7 +3680,6 @@ export default function DemoWorkspace() {
   const [tourIndex, setTourIndex] = useState(0)
   const [tourPaused, setTourPaused] = useState(false)
   const [tourProgress, setTourProgress] = useState(0)
-  const [onScreen, setOnScreen] = useState(true)
   const [hints, setHints] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -3713,7 +3700,6 @@ export default function DemoWorkspace() {
     setTourPaused(false)
     setTourIndex(0)
     setTourProgress(0)
-    setOnScreen(true)
     setState(s => ({
       ...s,
       tab: TOUR_STEPS[0].tab,
@@ -3724,17 +3710,6 @@ export default function DemoWorkspace() {
       board: 'lane',
     }))
   }
-
-  useEffect(() => {
-    const el = hostRef.current
-    if (!el || typeof IntersectionObserver === 'undefined') { setOnScreen(true); return }
-    const io = new IntersectionObserver(([e]) => {
-      // Any visibility counts as on-screen
-      setOnScreen(e.isIntersecting || e.intersectionRatio > 0)
-    }, { threshold: [0, 0.05, 0.1] })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
 
   // Auto-advance guided tour with dynamic simulated actions
   useEffect(() => {
@@ -3871,15 +3846,6 @@ export default function DemoWorkspace() {
       return
     }
     if (e.key === '?') { e.preventDefault(); setHints(h => !h) }
-  }
-
-  const restart = () => {
-    setDriving(false)
-    setState({
-      tab: 'receivables', status: 'all', band: null, query: '',
-      sort: { key: 'amount', dir: 'desc' }, project: PROJECT_ROLLUP[0].id,
-      months: 6, question: 0, detail: null, board: 'lane', card: null,
-    })
   }
 
   return (

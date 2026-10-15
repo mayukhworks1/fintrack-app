@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Receipt, FolderKanban, BarChart3, Landmark, FileSearch, Sparkles,
   FileText, Globe, Activity, Share2, ShieldCheck, RotateCcw, Check,
-  Lock, Eye, EyeOff, Layers, Sliders, Shield
+  Lock, Layers, Sliders
 } from 'lucide-react'
 import { useReveal } from '../hooks/useReveal'
 import { inr } from './demoData'

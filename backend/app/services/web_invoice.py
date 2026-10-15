@@ -17,6 +17,15 @@ from ..db.sync import fields_with_lmt
 from ..utils.cache import cache
 from ..utils.sorting import cell_sort_key
 from ..utils.tasks import spawn
+from .invoice_common import (
+    AGING_FIELD_META_TTL,
+    AGING_FORMULA_FIELD,
+    AGING_REFRESH_HELPER_FIELD,
+    _apply_runtime_invoice_derivatives,
+    _clean_fields,
+    _runtime_aging,
+    _teable_error,
+)
 
 # ── Field IDs (filter/sort must use IDs, not names) ───────────────────────
 WEB_INVOICE_FIELD_IDS = {
@@ -83,40 +92,6 @@ async def _mirror_write_through(teable_id: str, fields: dict | None, *, deleted:
         )
     except Exception as exc:
         logger.warning("mirror write-through failed for %s (sync will reconcile): %s", teable_id, exc)
-
-def _teable_error(res: httpx.Response) -> str:
-    try:
-        payload = res.json()
-    except Exception:
-        payload = res.text
-    return f"Teable {res.status_code}: {payload}"
-
-AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
-AGING_FORMULA_FIELD = "Agening (Days)"
-AGING_FIELD_META_TTL = 60
-
-
-def _runtime_aging(fields: dict[str, Any]) -> int | None:
-    status = str(fields.get("Payment Status") or "").strip()
-    if status != "Pending":
-        return None
-    raised_raw = fields.get("Raised Date")
-    if not raised_raw:
-        return None
-    try:
-        raised_dt = datetime.fromisoformat(str(raised_raw).replace("Z", "+00:00"))
-        return max(0, (datetime.now(timezone.utc) - raised_dt).days)
-    except Exception:
-        return None
-
-
-def _apply_runtime_invoice_derivatives(record: dict[str, Any]) -> dict[str, Any]:
-    fields = dict(record.get("fields") or {})
-    aging = _runtime_aging(fields)
-    if aging is not None:
-        fields["Agening (Days)"] = aging
-    record["fields"] = fields
-    return record
 
 
 class WebInvoiceService:
@@ -238,20 +213,6 @@ class WebInvoiceService:
         }
 
         # Teable's convert endpoint expects the full mutable config where present.
-        for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
-            if key in field:
-                payload[key] = field.get(key)
-        for key in ("unique", "notNull", "isLookup", "isConditionalLookup"):
-            if key in field:
-                payload[key] = bool(field.get(key))
-        return payload
-
-    def _generic_field_convert_payload(self, field: dict, options_override: dict | None = None) -> dict:
-        payload = {
-            "type": field["type"],
-            "name": field["name"],
-            "options": options_override if options_override is not None else (field.get("options") or {}),
-        }
         for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
             if key in field:
                 payload[key] = field.get(key)
@@ -925,7 +886,6 @@ class WebInvoiceService:
 
         # ── Finalise per-currency stats ──
         for cur_data in by_currency.values():
-            r_ = cur_data["raised"]
             rec_ = cur_data["received"]
             gross_ = cur_data["with_tax"]
             cur_data["collection_rate"] = round((rec_ / gross_ * 100), 2) if gross_ > 0 else 0.0
@@ -982,16 +942,3 @@ class WebInvoiceService:
         }
         cache.set(cache_key, summary, ttl=_TTL_SUMMARY)
         return summary
-
-
-_READ_ONLY = {"Days To Clear", "Speed", "Agening (Days)", "Outstanding Amount"}
-
-def _clean_fields(fields: dict, allow_null_fields: set[str] | None = None) -> dict:
-    allow_null = allow_null_fields or set()
-    return {
-        k: v for k, v in fields.items()
-        if k not in _READ_ONLY and (
-            (v is not None and v != "" and v != []) or
-            (k in allow_null and v is None)
-        )
-    }

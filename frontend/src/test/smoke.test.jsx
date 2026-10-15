@@ -44,7 +44,6 @@ vi.mock('../services/api', () => ({
       authRoles:        vi.fn().mockResolvedValue({ roles: [] }),
       deploymentHealth:     vi.fn().mockResolvedValue({ overall: true }),
       userTimeline:         vi.fn().mockResolvedValue({ user: {}, timeline: [], sessions: [], audit_request_count: 0 }),
-      userTimelineExportUrl:(id, fmt) => `/api/admin/auth/users/${id}/timeline/export?fmt=${fmt}`,
       resendInvite:         vi.fn().mockResolvedValue({ ok: true, delivery: { sent: true } }),
       forcePasswordReset:   vi.fn().mockResolvedValue({ ok: true, sessions_revoked: 1, delivery: { sent: true } }),
     },
@@ -196,13 +195,6 @@ describe('api service structure', () => {
     expect(typeof api.admin.userTimeline).toBe('function')
     expect(typeof api.admin.resendInvite).toBe('function')
     expect(typeof api.admin.forcePasswordReset).toBe('function')
-  })
-
-  it('timeline export URL is formatted correctly', async () => {
-    const { api } = await import('../services/api')
-    const url = api.admin.userTimelineExportUrl('abc-123', 'csv')
-    expect(url).toContain('abc-123')
-    expect(url).toContain('fmt=csv')
   })
 })
 

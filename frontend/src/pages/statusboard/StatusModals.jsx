@@ -550,7 +550,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
 // Manage Shares Modal — fully redesigned
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose, onSave }) {
+function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose, onSave }) {
   const dialog = useDialog({ label: 'Edit share scope', onClose })
   const [mode, setMode] = useState(view?.is_dynamic ? 'live' : 'snapshot')
   const [saving, setSaving] = useState(false)

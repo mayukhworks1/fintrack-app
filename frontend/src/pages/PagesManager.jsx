@@ -10,13 +10,13 @@ import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from 
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { csvCell } from '../utils/csv'
+import { downloadBlob } from '../utils/download'
 import AgentInterviewCard from '../components/AgentInterviewCard'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
-  Download, RefreshCw, X, MapPin, Wifi, Monitor, Smartphone,
-  Clock, Link2, ExternalLink, ChevronDown, ChevronRight,
-  LayoutGrid, List, Layers, Folder, FolderInput, ShieldCheck, Timer,
+  Download, RefreshCw, X, Link2, ExternalLink,
+  Layers, Folder, FolderInput, ShieldCheck, Timer,
   MoreHorizontal, EyeOff, Check, ArrowUpDown,
 } from 'lucide-react'
 import Modal from '../components/Modal'
@@ -55,11 +55,11 @@ function Overlay({ children }) {
 // ---------------------------------------------------------------------------
 // Mobile hook
 // ---------------------------------------------------------------------------
-// Deliberately 767px, not the 1023px of the shared hooks/useMediaQuery
-// useIsMobile: this module switches to cards at the md breakpoint, and adopting
-// the shared hook wholesale would flip tablets from table to cards. Expressed
-// through the shared primitive so the resize plumbing is not duplicated —
-// matchMedia also tracks orientation changes a resize listener can miss.
+// Deliberately 767px, not the 1023px lg breakpoint the rest of the app treats
+// as mobile: this module switches to cards at the md breakpoint, so tablets
+// keep the table. Expressed through the shared useMediaQuery primitive so the
+// resize plumbing is not duplicated — matchMedia also tracks orientation
+// changes a resize listener can miss.
 const useIsMobile = () => useMediaQuery('(max-width: 767px)')
 
 // ---------------------------------------------------------------------------
@@ -219,28 +219,6 @@ function TypeIcon({ type, size = 15 }) {
 }
 
 // ---------------------------------------------------------------------------
-// Badge
-// ---------------------------------------------------------------------------
-function Badge({ label, color }) {
-  const map = {
-    published:    { bg:'#d1fae5', text:'#065f46', border:'#a7f3d0', dot:'#10b981' },
-    draft:        { bg:'var(--bg-base)', text:'var(--text-2)', border:'var(--border)', dot:null },
-    markdown:     { bg:'#ede9fe', text:'#5b21b6', border:'#ddd6fe', dot:null },
-    html:         { bg:'#fef3c7', text:'#92400e', border:'#fde68a', dot:null },
-    csv:          { bg:'#d1fae5', text:'#065f46', border:'#a7f3d0', dot:null },
-    spreadsheet:  { bg:'#d1fae5', text:'#065f46', border:'#a7f3d0', dot:null },
-    text:         { bg:'#e0f2fe', text:'#0369a1', border:'#bae6fd', dot:null },
-  }
-  const c = map[color] || { bg:'var(--card-bg)', text:'var(--text-2)', border:'var(--border)', dot:null }
-  return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:6, fontSize:11, fontWeight:600, background:c.bg, color:c.text, border:`1px solid ${c.border}`, textTransform:'capitalize', letterSpacing:'0.01em' }}>
-      {c.dot && <span style={{ width:5, height:5, borderRadius:'50%', background:c.dot, display:'inline-block', flexShrink:0 }} />}
-      {label}
-    </span>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Flag emoji
 // ---------------------------------------------------------------------------
 function flagEmoji(code) {
@@ -267,9 +245,7 @@ function exportAnalyticsCSV(items, pageTitle) {
     return [v.viewed_at?new Date(v.viewed_at).toISOString():'',v.viewer_ip,loc.source||(gps.lat?'gps':'ip'),gps.lat,gps.lon,gps.accuracy,gps.city,gps.country,v.country,geo.country_code,geo.region||v.region,v.city,geo.zip,geo.lat,geo.lon,v.isp,geo.org,geo.as,cli.platform,cli.touch_support!=null?(cli.touch_support?'Yes':'No'):'',cli.screen_width?`${cli.screen_width}x${cli.screen_height}`:'',cli.viewport_width?`${cli.viewport_width}x${cli.viewport_height}`:'',cli.pixel_ratio,cli.color_depth,cli.language,cli.timezone||geo.timezone,fmtB(v.user_agent),cli.connection_type,cli.connection_downlink,v.referer,cli.page_url,cli.utm_source,cli.utm_medium,cli.utm_campaign].map(esc).join(',')
   })
   const csv=[headers.join(','),...rows].join('\n')
-  const blob=new Blob([csv],{type:'text/csv'})
-  const url=URL.createObjectURL(blob)
-  const a=document.createElement('a'); a.href=url; a.download=`analytics-${pageTitle||'page'}-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
+  downloadBlob(new Blob([csv],{type:'text/csv'}), `analytics-${pageTitle||'page'}-${new Date().toISOString().slice(0,10)}.csv`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1060,7 +1036,6 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
 function SpreadsheetEditor({ value, onChange }) {
   const [grid, setGrid] = useState(() => csvToGrid(value))
   const [selectedCell, setSelectedCell] = useState(null)
-  const [editingCell, setEditingCell] = useState(null)
   const [formulaBar, setFormulaBar] = useState('')
   const [suggest, setSuggest] = useState([])   // formula autosuggest list
   const inputRefs = useRef({})

@@ -21,7 +21,6 @@ fire-and-forget) with IP, user-agent, OS, browser, geo, and expiry.
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import hmac
@@ -31,8 +30,8 @@ from ..utils.tasks import spawn
 from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
-import httpx
 from ..utils.http import shared_client
+from ..utils.client_ip import client_ip
 from pydantic import BaseModel
 from ..config import settings
 
@@ -210,12 +209,6 @@ def token_is_session_bound(token: str) -> bool:
     return bool(claims and claims["session_bound"])
 
 
-def _get_client_ip(request: Request) -> str:
-    # The rate limit below keys on this, so it must not trust client-set headers.
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
-
-
 async def _auth_rate_limit(request: Request) -> None:
     """
     Throttle credential/email endpoints per client IP to blunt brute force,
@@ -223,7 +216,7 @@ async def _auth_rate_limit(request: Request) -> None:
     Valkey is unavailable so a cache outage never locks people out.
     """
     from ..db.valkey import rate_check
-    ip = _get_client_ip(request) or "unknown"
+    ip = client_ip(request) or "unknown"
     allowed, _ = await rate_check(ip, limit=10, window_sec=60, bucket="authrl")
     if not allowed:
         raise HTTPException(
@@ -325,7 +318,7 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
         spawn(log_login(
             role=role,
             token_hint=token_hint,
-            ip=_get_client_ip(request),
+            ip=client_ip(request),
             user_agent=request.headers.get("user-agent", ""),
             ttl_secs=settings.app_session_ttl,
             client_hint=request.headers.get("x-client-hint", ""),

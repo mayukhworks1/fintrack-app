@@ -10,7 +10,6 @@ import logging
 import traceback
 from typing import Iterable
 
-import httpx
 from ..utils.http import shared_client
 
 from ..config import settings

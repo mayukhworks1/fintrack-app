@@ -2,20 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BarChart3, Download, GripVertical, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useDialog } from '../hooks/useDialog'
+import { downloadBlob } from '../utils/download'
 import SkeletonList from './SkeletonList'
 
 const NO_SOURCE_ROWS = {}
-
-function downloadFile(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 function ModalShell({ title, subtitle, onClose, children }) {
   const dialog = useDialog({ label: title, onClose })
@@ -118,7 +108,6 @@ export default function InsightWorkbench({
   const [blockDenominatorAggregate, setBlockDenominatorAggregate] = useState('sum')
   const [blockFormulaOp, setBlockFormulaOp] = useState('ratio_percent')
   const [draggingBlockId, setDraggingBlockId] = useState('')
-  const [dashboardHydrated, setDashboardHydrated] = useState(false)
 
   const baselineWidgetIds = factoryWidgetIds.length ? factoryWidgetIds : defaultWidgetIds
 
@@ -323,22 +312,18 @@ export default function InsightWorkbench({
   useEffect(() => {
     let cancelled = false
     async function hydrateActiveDashboard() {
-      try {
-        const res = await api.insights.listConfigs({ page_key: pageKey, config_kind: 'dashboard' })
-        if (cancelled) return
-        const configs = res.configs || []
-        setDashboardConfigs(configs)
-        let savedId = ''
-        try { savedId = localStorage.getItem(activeDashboardStorageKey) || '' } catch {}
-        const target = configs.find((config) => config.id === savedId) || configs[0]
-        if (target) {
-          applyWidgetSelection(target?.config?.widgetIds || [])
-          applyCustomBlockSelection(target?.config?.customBlocks || [])
-          setDashboardTitle(target.title || `${pageLabel} custom board`)
-          setEditingDashboardId(target.id)
-        }
-      } finally {
-        if (!cancelled) setDashboardHydrated(true)
+      const res = await api.insights.listConfigs({ page_key: pageKey, config_kind: 'dashboard' })
+      if (cancelled) return
+      const configs = res.configs || []
+      setDashboardConfigs(configs)
+      let savedId = ''
+      try { savedId = localStorage.getItem(activeDashboardStorageKey) || '' } catch {}
+      const target = configs.find((config) => config.id === savedId) || configs[0]
+      if (target) {
+        applyWidgetSelection(target?.config?.widgetIds || [])
+        applyCustomBlockSelection(target?.config?.customBlocks || [])
+        setDashboardTitle(target.title || `${pageLabel} custom board`)
+        setEditingDashboardId(target.id)
       }
     }
     hydrateActiveDashboard()
@@ -415,7 +400,7 @@ export default function InsightWorkbench({
           summary_cards: summaryCards,
         },
       })
-      downloadFile(res.blob, res.filename || `${exportTitle}.${exportFormat === 'pdf' ? 'pdf' : 'xls'}`)
+      downloadBlob(res.blob, res.filename || `${exportTitle}.${exportFormat === 'pdf' ? 'pdf' : 'xls'}`)
       setShowExport(false)
     } finally {
       setExporting(false)

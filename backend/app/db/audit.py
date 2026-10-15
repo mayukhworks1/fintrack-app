@@ -36,9 +36,7 @@ import json
 import logging
 import math
 import re
-import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 from .postgres import get_pool
 from .geo import lookup as geo_lookup
@@ -590,89 +588,6 @@ async def audit_worker() -> None:
         pool = get_pool()
         if good and pool:
             await _batch_insert_audit(pool, good)
-
-
-# ── Direct writer for login events (not batched — called once per login) ──────
-
-async def log_request(
-    *,
-    role:         Optional[str],
-    token_hint:   Optional[str],
-    method:       str,
-    path:         str,
-    status:       int,
-    duration_ms:  int,
-    request_id:   Optional[str],
-    ip:           str,
-    user_agent:   str,
-    referer:      Optional[str] = None,
-    body_size:    Optional[int] = None,
-    query_params: Optional[str] = None,
-    resp_size:    Optional[int] = None,
-    extra:        Optional[dict] = None,
-) -> None:
-    """
-    Direct (awaited) audit log write.
-    Kept for backward-compat — the middleware now uses enqueue_audit() instead.
-    Use this for non-HTTP events that must not be dropped.
-    """
-    pool = get_pool()
-    if not pool:
-        return
-
-    try:
-        os_str, browser, device = parse_ua(user_agent or "")
-        geo = await geo_lookup(ip or "")
-
-        await pool.execute(
-            """
-            INSERT INTO audit_log (
-                role, token_hint,
-                method, path, status, duration_ms, request_id,
-                ip, user_agent, os, browser, device,
-                country, country_code, region, city, isp,
-                lat, lon, timezone, org,
-                referer, body_size, query_params, resp_size,
-                extra
-            ) VALUES (
-                $1,  $2,
-                $3,  $4,  $5,  $6,  $7,
-                $8,  $9,  $10, $11, $12,
-                $13, $14, $15, $16, $17,
-                $18, $19, $20, $21,
-                $22, $23, $24, $25,
-                $26::jsonb
-            )
-            """,
-            role,
-            (token_hint or "")[:20] or None,
-            (method or "")[:10],
-            (path or "")[:500],
-            status,
-            duration_ms,
-            (request_id or "")[:50] or None,
-            (ip or "")[:45]           or None,
-            (user_agent or "")[:500]  or None,
-            os_str[:100],
-            browser[:100],
-            device[:20],
-            geo.get("country",      "")[:80]  or None,
-            geo.get("country_code", "")[:4]   or None,
-            geo.get("region",       "")[:100] or None,
-            geo.get("city",         "")[:100] or None,
-            geo.get("isp",          "")[:150] or None,
-            geo.get("lat") if isinstance(geo.get("lat"), (int, float)) else None,
-            geo.get("lon") if isinstance(geo.get("lon"), (int, float)) else None,
-            (geo.get("timezone") or "")[:50]  or None,
-            (geo.get("org")      or "")[:200] or None,
-            (referer or "")[:500]    or None,
-            body_size,
-            (query_params or "")[:500] or None,
-            resp_size,
-            json.dumps(extra or {}),
-        )
-    except Exception as exc:
-        logger.warning("audit.log_request failed: %s", exc)
 
 
 # ── Login session writer ──────────────────────────────────────────────────────

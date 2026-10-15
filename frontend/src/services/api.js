@@ -306,19 +306,6 @@ export const api = {
     names:   (opts = {})         => request('/api/projects/names', { fresh: true, cacheTtl: 0, ...opts }),
   },
   ai: {
-    chat:     (message, history = [], opts = {}) =>
-      request('/api/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message,
-          history,
-          session_id: opts.sessionId || null,
-          response_mode: opts.responseMode || 'brief',
-          temperature: typeof opts.temperature === 'number' ? opts.temperature : null,
-        }),
-        signal: opts.signal,
-        timeout: AI_TIMEOUT_MS,
-      }),
     chatStream: async (message, history = [], opts = {}) => {
       const token = getAuthToken()
       const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
@@ -374,8 +361,6 @@ export const api = {
     },
     statusBriefing: (opts = {}) =>
       request('/api/ai/status-briefing', { signal: opts.signal, timeout: AI_TIMEOUT_MS }),
-    reportInvalidate: () =>
-      request('/api/ai/report/invalidate', { method: 'POST' }),
     reportHistory: (limit = 20) =>
       request(`/api/ai/report/history?limit=${limit}`),
     reportHistoryDetail: (id) =>
@@ -413,7 +398,6 @@ export const api = {
     },
     picklists: (opts = {}) => request('/api/invoices/picklists', { fresh: true, cacheTtl: 0, ...opts }),
     summary: (opts = {})         => request('/api/invoices/summary', opts),
-    get:     (id, opts = {})       => request(`/api/invoices/${id}`, opts),
     create:  async (data) => {
       const result = await request('/api/invoices', { method: 'POST', body: JSON.stringify(data) })
       bustInvoiceReads()
@@ -438,13 +422,6 @@ export const api = {
       return request(`/api/invoices/dashboard-activity?${q}`, { fresh: true, cacheTtl: 0, ...opts })
     },
     sendReminder: (id, body = {}) => request(`/api/invoices/${id}/send-reminder`, { method: 'POST', body: JSON.stringify(body) }),
-    exportUrl: (params = {}) => {
-      const q = new URLSearchParams({ fmt: 'csv' })
-      Object.entries(params).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
-      const token = getAuthToken()
-      if (token) q.set('token', token)
-      return `${BASE_URL}/api/invoices/export?${q}`
-    },
     // Upload an invoice file (PDF/image) and get AI-extracted fields back.
     // Uses multipart/form-data — do NOT set Content-Type header (browser sets boundary).
     parse: (file) => {
@@ -499,7 +476,6 @@ export const api = {
       return request(`/api/web-invoices?${q}`, { fresh, cacheTtl })
     },
     summary:  (opts = {})          => request('/api/web-invoices/summary', opts),
-    get:      (id, opts = {})        => request(`/api/web-invoices/${id}`, opts),
     create:   async (data) => {
       const result = await request('/api/web-invoices', { method: 'POST', body: JSON.stringify(data) })
       bustWebInvoiceReads()
@@ -518,16 +494,6 @@ export const api = {
     clientNames:  ()              => request('/api/web-invoices/client-names'),
     agingBuckets: (opts = {})    => request('/api/web-invoices/aging-buckets', { fresh: true, cacheTtl: 0, ...opts }),
     avatarMap: ()                => request('/api/web-invoices/avatar-map', { cacheTtl: 120_000 }),
-    exportUrl: (params = {}) => {
-      const q = new URLSearchParams()
-      const token = getAuthToken()
-      if (token) q.set('token', token)
-      if (params.status)  q.set('status',  params.status)
-      if (params.project) q.set('project', params.project)
-      if (params.from)    q.set('from',    params.from)
-      if (params.to)      q.set('to',      params.to)
-      return `${BASE_URL}/api/web-invoices/export?${q}`
-    },
     parse: (file) => {
       const form = new FormData()
       form.append('file', file)
@@ -596,21 +562,6 @@ export const api = {
       unassign: (resourceId, projectId) => request(`/api/web-resources/${resourceId}/assign/${projectId}`, { method: 'DELETE' }),
     },
   },
-  reports: {
-    gstSummary: (params = {}) => {
-      const q = new URLSearchParams()
-      if (params.from) q.set('from', params.from)
-      if (params.to)   q.set('to',   params.to)
-      return request(`/api/reports/gst-summary?${q}`, { fresh: true, cacheTtl: 0 })
-    },
-    webGstSummary: (params = {}) => {
-      const q = new URLSearchParams()
-      if (params.from) q.set('from', params.from)
-      if (params.to)   q.set('to',   params.to)
-      return request(`/api/reports/web-gst-summary?${q}`, { fresh: true, cacheTtl: 0 })
-    },
-  },
-
   status: {
     upload: (recordId, fieldName, file) => {
       const form = new FormData()
@@ -638,7 +589,6 @@ export const api = {
       return request(`/api/status?${q}`)
     },
     options: (opts = {}) => request('/api/status/options', { fresh: true, cacheTtl: 0, ...opts }),
-    get:    (id)       => request(`/api/status/${id}`),
     create: (data)     => request('/api/status',      { method: 'POST',   body: JSON.stringify(data) }),
     update: (id, data) => request(`/api/status/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
     delete: (id)       => request(`/api/status/${id}`, { method: 'DELETE' }),
@@ -658,7 +608,6 @@ export const api = {
   },
   sharedViews: {
     list: (resourceType = '') => request(resourceType ? `/api/shared-views?resource_type=${encodeURIComponent(resourceType)}` : '/api/shared-views'),
-    get:  (token)     => request(`/api/shared-views/${token}`),
     create: (data)    => request('/api/shared-views', { method: 'POST', body: JSON.stringify(data) }),
     update: (token, data) => request(`/api/shared-views/${token}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (token)   => request(`/api/shared-views/${token}`, { method: 'DELETE' }),
@@ -688,7 +637,6 @@ export const api = {
       }
       fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/json' } }).catch(() => {})
     },
-    stats: (token) => request(`/api/shared-views/${token}/stats`),
   },
   admin: {
     stats:              (opts = {})       => request('/api/admin/stats', opts),
@@ -710,7 +658,8 @@ export const api = {
     setTeableEmail: (id, data = {}) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/teable-email`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteAuthUser:       (id, force = false) => request(`/api/admin/auth/users/${encodeURIComponent(id)}?force=${force}`, { method: 'DELETE' }),
     userTimeline:         (id, p = {})  => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && q.set(k,v)); return request(`/api/admin/auth/users/${encodeURIComponent(id)}/timeline?${q}`) },
-    userTimelineExportUrl:(id, fmt='csv') => `${typeof window !== 'undefined' ? '' : ''}/api/admin/auth/users/${encodeURIComponent(id)}/timeline/export?fmt=${fmt}`,
+    // Fetched, not linked: a plain link carries no Authorization header.
+    userTimelineExport:   (id, fmt = 'csv') => requestBlob(`/api/admin/auth/users/${encodeURIComponent(id)}/timeline/export?fmt=${encodeURIComponent(fmt)}`),
     resendInvite:         (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/resend-invite`, { method: 'POST' }),
     forcePasswordReset:   (id)          => request(`/api/admin/auth/users/${encodeURIComponent(id)}/force-password-reset`, { method: 'POST' }),
     setUserPassword:      (id, password) => request(`/api/admin/auth/users/${encodeURIComponent(id)}/set-password`, { method: 'POST', body: JSON.stringify({ password }) }),
@@ -718,8 +667,7 @@ export const api = {
     // Pass the impersonation token: the server ends the session the request is authenticated with.
     exitImpersonation:    (token)        => request('/api/admin/impersonate/exit', { method: 'POST', ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) }),
     deploymentHealth:     (opts = {})   => request('/api/admin/deployment-health', opts),
-    testEmail: (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }),
-    testSmtp:  (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }), // alias
+    testSmtp:  (data = {}) => request('/api/admin/auth/email/test', { method: 'POST', body: JSON.stringify(data) }),
     chatSessions:  (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/chat-sessions?${q}`) },
     chatMessages:  (id)         => request(`/api/admin/chat-sessions/${id}`),
     aiGenerations: (p = {})     => { const q = new URLSearchParams(); Object.entries(p).forEach(([k,v]) => v != null && v !== '' && q.set(k,v)); return request(`/api/admin/ai-generations?${q}`) },
@@ -753,14 +701,12 @@ export const api = {
     deleteConfig: (id) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     export: (data, opts = {}) => requestBlob('/api/insights/export', { method: 'POST', body: JSON.stringify(data), signal: opts.signal, timeout: AI_TIMEOUT_MS }),
   },
-  health: () => request('/health', {}, 0),
   auth: {
     // Password is sent once over HTTPS, never stored client-side.
     // Only the returned token persists in localStorage.
     login:  (password) => request('/api/auth/login',  { method: 'POST', body: JSON.stringify({ password }) }),
     emailLogin: (email, password) => request('/api/auth/email/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     emailRegister: (data) => request('/api/auth/email/register', { method: 'POST', body: JSON.stringify(data) }),
-    emailBootstrap: (data) => request('/api/auth/email/bootstrap', { method: 'POST', body: JSON.stringify(data) }),
     providers: () => request('/api/auth/providers', {}, 0),
     googleStartUrl: (next = '/') => `${API_BASE_URL}/api/auth/google/start?next=${encodeURIComponent(next || '/')}`,
     zohoStartUrl:   (next = '/') => `${API_BASE_URL}/api/auth/zoho/start?next=${encodeURIComponent(next || '/')}`,
@@ -781,7 +727,6 @@ export const api = {
   },
   studio: {
     documents:     ()          => request('/api/studio/documents'),
-    document:      (id)        => request(`/api/studio/documents/${id}`),
     deleteDocument:(id)        => request(`/api/studio/documents/${id}`, { method: 'DELETE' }),
     // XMLHttpRequest rather than fetch: fetch reports download progress but not
     // upload progress, and a 15 MB PDF over a phone connection is exactly when
@@ -840,7 +785,6 @@ export const api = {
     analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
     insights:      (id)         => request(`/api/pages/${id}/insights`),
     deleteView:    (pageId, viewId) => request(`/api/pages/${pageId}/views/${viewId}`, { method: 'DELETE' }),
-    allViews:      (params)    => request(`/api/pages/admin/all-views?${new URLSearchParams(params || {})}`),
     // A 410 means the page's link has expired; flagged so the viewer can say
     // so instead of showing "not found".
     publicGet:     (slug)      => fetch(`${BASE_URL}/api/public/pages/${slug}`).then(async r => {

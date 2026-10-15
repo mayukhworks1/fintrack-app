@@ -340,13 +340,6 @@ def require_editor(role: str = Depends(require_auth)) -> str:
     return role
 
 
-def require_web(role: str = Depends(require_auth)) -> str:
-    """Requires web role (web invoice module)."""
-    if role != "web":
-        raise HTTPException(status_code=403, detail="Access restricted to web invoice module")
-    return role
-
-
 def require_web_access(role: str = Depends(require_auth)) -> str:
     """Accepts 'web' OR 'all' — both can access the web invoice module."""
     if role not in ("web", "all"):

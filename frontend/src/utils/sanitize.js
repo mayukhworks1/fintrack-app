@@ -4,7 +4,7 @@
 // dangerouslySetInnerHTML. Page content is authored by users and, for public
 // pages, rendered to anonymous visitors — so any raw HTML in the source must be
 // neutralised and any URL placed into an attribute must be both scheme-checked
-// and attribute-escaped. Keep these two helpers as the single source of truth.
+// and attribute-escaped. Keep these helpers as the single source of truth.
 
 /** Escape a value destined for an HTML attribute (src, href, alt, …). */
 export function escapeAttr(value) {

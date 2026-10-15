@@ -177,9 +177,6 @@ async def build_retrieval_pack(pool, query: str, history: list[dict] | None = No
     terms = _extract_terms(query, history)
 
     # Run lexical and vector searches concurrently
-    lexical_task = _lexical_search(pool, terms) if terms else asyncio.coroutine(lambda: ([], [], []))()
-    vector_task  = _vector_search(pool, query)
-
     (lex_proj, lex_inv, lex_status), (vec_proj, vec_inv) = await asyncio.gather(
         _lexical_search(pool, terms) if terms else asyncio.sleep(0, result=([], [], [])),
         _vector_search(pool, query),

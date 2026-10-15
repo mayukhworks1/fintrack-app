@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
 
-export const SCREENS = [
+const SCREENS = [
   { id: 'dashboard', title: 'Dashboard',     line: 'Portfolio balance, margin and runway on one screen.' },
   { id: 'invoices',  title: 'Invoices',      line: 'Outstanding, collected and overdue, every row traceable.' },
   { id: 'projects',  title: 'Projects',      line: 'Billed, cost, profit and margin per engagement.' },

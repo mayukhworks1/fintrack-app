@@ -1,6 +1,6 @@
 import PublicLayout from '../../components/PublicLayout'
 import { Reveal } from '../../components/PublicBits'
-import { FileText, ShieldCheck, Scale, Lock, Database, ArrowRight } from 'lucide-react'
+import { Scale } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function Terms() {

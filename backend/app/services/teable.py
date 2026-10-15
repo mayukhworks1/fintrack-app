@@ -49,65 +49,6 @@ class TeableService:
             return None
         return {"conjunction": "and", "filterSet": filter_set}
 
-    async def list_records_from_pg(
-        self,
-        status: Optional[str] = None,
-        client: Optional[str] = None,
-        order_by_field: Optional[str] = None,
-        order_dir: str = "desc",
-        take: int = 100,
-        skip: int = 0,
-    ) -> list[dict[str, Any]] | None:
-        pool = get_pool()
-        if not pool:
-            return None
-        try:
-            where: list[str] = []
-            params: list[Any] = []
-            idx = 1
-            if status:
-                where.append(f"status = ${idx}")
-                params.append(status)
-                idx += 1
-            if client:
-                where.append(f"client = ${idx}")
-                params.append(client)
-                idx += 1
-
-            where_sql = "WHERE deleted_at IS NULL"
-            if where:
-                where_sql += " AND " + " AND ".join(where)
-            sort_map = {
-                "Amount Billed So far": "amount_billed",
-                "Profit percentage": "profit_pct",
-                "Project Name": "project_name",
-                "Modified Time": "modified_time",
-            }
-            if order_by_field == "Target Revenue":
-                order_sql = f"ORDER BY COALESCE(NULLIF(fields->>'Target Revenue', '')::numeric, 0) {order_dir.upper()}, synced_at DESC"
-            else:
-                sort_col = sort_map.get(order_by_field or "", "synced_at")
-                order_sql = f"ORDER BY {sort_col} {order_dir.upper()} NULLS LAST, synced_at DESC"
-
-            rows = await pool.fetch(
-                f"""
-                SELECT teable_id, fields
-                FROM projects_mirror
-                {where_sql}
-                {order_sql}
-                LIMIT ${idx} OFFSET ${idx+1}
-                """,
-                *params, take, skip,
-            )
-            out: list[dict[str, Any]] = []
-            for row in rows:
-                fields = row["fields"] if isinstance(row["fields"], dict) else json.loads(row["fields"] or "{}")
-                out.append({"id": row["teable_id"], "fields": fields or {}})
-            return out
-        except Exception as exc:
-            logger.debug("projects_mirror PG list failed: %s", exc)
-            return None
-
     def _compute_summary(self, records: list[dict[str, Any]]) -> dict:
         total = len(records)
         total_billed = total_profit = total_input_cost = total_overhead = 0.0
@@ -218,7 +159,7 @@ class TeableService:
                 last_err = e
                 if attempt < 2:
                     await _async_sleep(0.5 * (2 ** attempt))
-            except httpx.HTTPStatusError as e:
+            except httpx.HTTPStatusError:
                 raise  # don't retry 4xx
         raise last_err or RuntimeError("Request failed after retries")
 

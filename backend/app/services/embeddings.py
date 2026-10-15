@@ -13,7 +13,8 @@ Graceful degradation
 ────────────────────
 If pgvector is not installed in the Aiven PG instance, or if the OpenRouter
 embedding API fails, the system falls back cleanly to lexical-only search.
-Set PGVECTOR_ENABLED=false in env to skip all vector ops.
+Without OPENROUTER_API_KEY no query embedding is requested, so vector search
+is skipped as well.
 """
 from __future__ import annotations
 
@@ -21,7 +22,6 @@ import asyncio
 import logging
 from typing import Optional
 
-import httpx
 from ..utils.http import shared_client
 
 from ..config import settings
@@ -30,7 +30,6 @@ from ..db.postgres import get_pool
 logger = logging.getLogger("fintrack.embeddings")
 
 EMBED_MODEL   = "openai/text-embedding-3-small"
-EMBED_DIM     = 1536
 EMBED_API_URL = "https://openrouter.ai/api/v1/embeddings"
 BATCH_DELAY   = 0.25   # seconds between embedding API calls (rate limit courtesy)
 

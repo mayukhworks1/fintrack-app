@@ -1,0 +1,8 @@
+# Build context for the HF Space image. Tests and local secrets stay out of it;
+# README.md must stay in, its front matter configures the Space.
+tests/
+.env
+.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/

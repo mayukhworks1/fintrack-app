@@ -12,7 +12,7 @@
  */
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Search, X, Filter, Sparkles, Check, RotateCcw } from 'lucide-react'
+import { ArrowRight, Search, X, Filter, Check, RotateCcw } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import { Grain } from '../../components/LandingVisuals'

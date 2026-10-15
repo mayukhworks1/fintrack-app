@@ -6,8 +6,12 @@
  *
  * Resend invite: when the email does not go out, only a superadmin gets the
  * link back (copied to the clipboard); anyone else is told to fix delivery.
+ *
+ * Timeline export: the CSV/JSON links were relative URLs with no token, so in
+ * production they hit the static host and never downloaded anything. The
+ * drawer now fetches the export through the API client and saves the file.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -24,6 +28,8 @@ vi.mock('../services/api', () => ({
       authRoles: vi.fn(),
       authUsers: vi.fn(),
       resendInvite: vi.fn(),
+      userTimeline: vi.fn(),
+      userTimelineExport: vi.fn(),
     },
   },
 }))
@@ -119,5 +125,59 @@ describe('resend invite when the email did not go out', () => {
     await resend()
     expect(writeText).toHaveBeenCalledWith('https://app.example/login?reset_token=abc&invite=1')
     expect(toast).toHaveBeenCalledWith(expect.stringContaining('Link copied to clipboard'), 'warning')
+  })
+})
+
+describe('timeline export', () => {
+  let saved
+  let spies
+  beforeEach(() => {
+    saved = []
+    api.admin.userTimeline.mockResolvedValue({
+      user: { id: 'u-staff', email: 'staff@x.test' }, timeline: [], sessions: [], audit_request_count: 0,
+    })
+    spies = [
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:timeline'),
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}),
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+        saved.push({ href: this.getAttribute('href'), download: this.download })
+      }),
+    ]
+  })
+  afterEach(() => { for (const spy of spies) spy.mockRestore() })
+
+  const openTimeline = async () => {
+    await mountAs('admin')
+    fireEvent.click(screen.getAllByRole('button', { name: /Timeline/ })[1])
+    return screen.findByRole('button', { name: /CSV/ })
+  }
+
+  it('downloads through the API client instead of linking to a relative URL', async () => {
+    const blob = new Blob(['timestamp\n'], { type: 'text/csv' })
+    api.admin.userTimelineExport.mockResolvedValue({ blob, filename: null, contentType: 'text/csv' })
+    const csv = await openTimeline()
+    expect(document.querySelector('a[href*="timeline/export"]')).toBeNull()
+
+    await act(async () => { fireEvent.click(csv) })
+
+    expect(api.admin.userTimelineExport).toHaveBeenCalledWith('u-staff', 'csv')
+    expect(URL.createObjectURL).toHaveBeenCalledWith(blob)
+    expect(saved).toEqual([{ href: 'blob:timeline', download: 'timeline_staff_at_x_test.csv' }])
+  })
+
+  it('keeps the server-provided file name when it is readable', async () => {
+    api.admin.userTimelineExport.mockResolvedValue({ blob: new Blob(['{}']), filename: 'timeline_named.json' })
+    await openTimeline()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /JSON/ })) })
+    expect(api.admin.userTimelineExport).toHaveBeenCalledWith('u-staff', 'json')
+    expect(saved.map(s => s.download)).toEqual(['timeline_named.json'])
+  })
+
+  it('reports a failed export instead of failing silently', async () => {
+    api.admin.userTimelineExport.mockRejectedValue(new Error('Admin access required'))
+    const csv = await openTimeline()
+    await act(async () => { fireEvent.click(csv) })
+    expect(toast).toHaveBeenCalledWith('Admin access required', 'error')
+    expect(saved).toEqual([])
   })
 })

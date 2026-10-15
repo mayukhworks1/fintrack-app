@@ -38,10 +38,9 @@ route to the correct mirror table.
 import hashlib
 import hmac
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..db.postgres import get_pool

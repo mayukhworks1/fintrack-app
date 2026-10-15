@@ -28,7 +28,7 @@ import datetime
 import json
 import logging
 import time
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from ..utils.http import shared_client
@@ -136,42 +136,36 @@ def _coerce_str(v, maxlen: int) -> Optional[str]:
 
 # ── Field extractors ────────────────────────────────────────────────────────
 
-def _extract_project(fields: dict) -> dict:
-    def _num(k):
-        v = fields.get(k)
-        try:
-            return float(v) if v not in (None, "") else None
-        except (TypeError, ValueError):
-            return None
+def _num(fields: dict, key: str) -> Optional[float]:
+    v = fields.get(key)
+    try:
+        return float(v) if v not in (None, "", []) else None
+    except (TypeError, ValueError):
+        return None
 
+
+def _extract_project(fields: dict) -> dict:
     return {
         "project_name":  str(fields.get("Project Name", "") or "")[:255] or None,
         "client":        str(fields.get("Client", "") or "")[:255] or None,
         "status":        str(fields.get("Project Status", "") or "")[:80] or None,
-        "amount_billed": _num("Amount Billed So far"),
-        "actual_profit": _num("Actual Profit"),
-        "profit_pct":    _num("Profit percentage"),
+        "amount_billed": _num(fields, "Amount Billed So far"),
+        "actual_profit": _num(fields, "Actual Profit"),
+        "profit_pct":    _num(fields, "Profit percentage"),
         "created_time":  fields.get("createdTime"),
         "modified_time": _parse_datetime(fields.get("lastModifiedTime")),
     }
 
 
 def _extract_invoice(fields: dict) -> dict:
-    def _num(k):
-        v = fields.get(k)
-        try:
-            return float(v) if v not in (None, "", []) else None
-        except (TypeError, ValueError):
-            return None
-
     return {
         "invoice_number":  _coerce_str(fields.get("Invoice Number"),  120),
         "project":         _coerce_str(fields.get("Project"),         255),
         "category":        _coerce_str(fields.get("Category"),        120),
         "payment_status":  _coerce_str(fields.get("Payment Status"),   60),
-        "amount_raised":   _num("Amount Raised"),
-        "amount_with_tax": _num("Amount with Tax"),
-        "amount_received": _num("Amount Received"),
+        "amount_raised":   _num(fields, "Amount Raised"),
+        "amount_with_tax": _num(fields, "Amount with Tax"),
+        "amount_received": _num(fields, "Amount Received"),
         # _parse_date returns datetime.date (or None) — asyncpg requires this
         # for DATE columns; passing a string raises "invalid input for $N".
         "raised_date":     _parse_date(fields.get("Raised Date")),
@@ -181,13 +175,6 @@ def _extract_invoice(fields: dict) -> dict:
 
 def _extract_web_invoice(fields: dict) -> dict:
     """Extract typed columns from the web invoice Teable table."""
-    def _num(k):
-        v = fields.get(k)
-        try:
-            return float(v) if v not in (None, "", []) else None
-        except (TypeError, ValueError):
-            return None
-
     return {
         "invoice_number":  _coerce_str(fields.get("Invoice Number"), 120),
         "project":         _coerce_str(fields.get("Project"),        255),
@@ -196,9 +183,9 @@ def _extract_web_invoice(fields: dict) -> dict:
         "milestone":       _coerce_str(fields.get("Milestone"),      255),
         "raised_by":       _coerce_str(fields.get("Raised By"),      255),
         "payment_status":  _coerce_str(fields.get("Payment Status"),  60),
-        "amount_raised":   _num("Amount Raised"),
-        "amount_with_tax": _num("Amount with Tax"),
-        "amount_received": _num("Amount Received"),
+        "amount_raised":   _num(fields, "Amount Raised"),
+        "amount_with_tax": _num(fields, "Amount with Tax"),
+        "amount_received": _num(fields, "Amount Received"),
         # _parse_date returns datetime.date (or None) — asyncpg requires this
         # for DATE columns; passing a string raises "invalid input for $N".
         "raised_date":     _parse_date(fields.get("Raised Date")),
@@ -215,28 +202,21 @@ def _extract_web_project(fields: dict) -> dict:
     of the record stays in the `fields` JSONB, so a new Teable field needs no
     migration.
     """
-    def _num(k):
-        v = fields.get(k)
-        try:
-            return float(v) if v not in (None, "", []) else None
-        except (TypeError, ValueError):
-            return None
-
     return {
         "project_name":      _coerce_str(fields.get("Project Name"), 255),
         "client":            _coerce_str(fields.get("Client"),       255),
         "status":            _coerce_str(fields.get("Status"),        60),
         "priority":          _coerce_str(fields.get("Priority"),      60),
         "project_lead":      _coerce_str(fields.get("Project Lead"), 255),
-        "progress_pct":      _num("Progress (%)"),
+        "progress_pct":      _num(fields, "Progress (%)"),
         # _parse_date returns datetime.date (or None) — asyncpg needs that for
         # DATE columns; a string raises "invalid input for $N".
         "est_start_date":    _parse_date(fields.get("Est. Start Date")),
         "est_end_date":      _parse_date(fields.get("Est. End Date")),
         "actual_start_date": _parse_date(fields.get("Actual Start Date")),
         "actual_end_date":   _parse_date(fields.get("Actual End Date")),
-        "estimated_budget":  _num("Estimated Budget"),
-        "client_charge":     _num("Client Charge"),
+        "estimated_budget":  _num(fields, "Estimated Budget"),
+        "client_charge":     _num(fields, "Client Charge"),
     }
 
 
@@ -821,7 +801,7 @@ async def _sync_records(
             lmt = rec.get("lastModifiedTime") or rec.get("fields", {}).get("lastModifiedTime")
             if lmt:
                 try:
-                    from datetime import datetime, timezone
+                    from datetime import datetime
                     ts = datetime.fromisoformat(lmt.replace("Z", "+00:00")).timestamp()
                     if ts <= since:
                         skipped += 1
@@ -933,14 +913,14 @@ async def run_sync(incremental: bool = False) -> None:
 
     now = time.time()
 
-    for (source, mirror_table, _tid, preferred_tok, extractor), result in zip(tasks, fetched):
+    for (source, mirror_table, _tid, _tok, extractor), result in zip(tasks, fetched):
         if isinstance(result, Exception):
             err_msg = str(result)
             logger.error("[%s] Fetch failed for %s: %s", label, source, err_msg)
             await _write_sync_log(pool, source, 0, 0, 0, 0, 0, err_msg[:500])
             continue
 
-        records, winning_tok = result if isinstance(result, tuple) else (result, preferred_tok)
+        records = result[0] if isinstance(result, tuple) else result
 
         try:
             stats = await _sync_records(pool, source, mirror_table, records, extractor,

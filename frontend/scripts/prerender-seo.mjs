@@ -17,7 +17,7 @@ const { SITE, APP_LD, FAQ_LD, crumbs, graph } = await import('../src/content/pub
 
 // Titles lead with what the page is about, brand last: a result is truncated
 // from the right, and the words someone searched for should be the ones shown.
-export const PAGES = [
+const PAGES = [
   {
     path: '/',
     title: 'FinTrack — Project finance, invoices, GST & TDS on one set of records',

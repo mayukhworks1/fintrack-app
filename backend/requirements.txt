@@ -9,18 +9,18 @@ python-multipart==0.0.18
 # decompression bomb in an uploaded PDF whole, in the API's only process.
 pypdf==6.19.0
 reportlab==4.2.2
+# Draws the link-preview cards (services/page_share.py). reportlab depends on
+# it too, but only with a loose lower bound.
+Pillow==12.3.0
 asyncpg==0.29.0
-redis[asyncio]==5.0.8
+redis==5.0.8
 # Schema migrations. Exact pins, per the note below: a loose bound here would
 # send the resolver searching on every Space build. greenlet is SQLAlchemy's
 # async dependency and is pinned for the same reason.
 alembic==1.14.0
 SQLAlchemy==2.0.36
 greenlet==3.1.1
-pytest==8.3.4
-pytest-asyncio==0.24.0
 huggingface_hub>=0.26.0
-pgvector>=0.3.2
 
 # langchain, langchain-openai and langchain-community were removed here.
 #

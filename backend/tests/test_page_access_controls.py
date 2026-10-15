@@ -207,6 +207,117 @@ class TestInsights:
         assert e.value.status_code == 403
 
 
+class _CountingPool(_InsightsPool):
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.ids = []
+
+    async def fetchrow(self, sql, *args):
+        self.ids.append(args[0])
+        return await super().fetchrow(sql, *args)
+
+
+class TestPageIdMustBeAUuid:
+    """A page id that is not a UUID used to reach the uuid column and come back
+    as an asyncpg error, so GET /api/pages/admin was a 500, not a 404."""
+
+    ROUTES = [
+        ("GET", "/api/pages/{}", None),
+        ("PUT", "/api/pages/{}", {"title": "t"}),
+        ("DELETE", "/api/pages/{}", None),
+        ("DELETE", "/api/pages/{}/views/1", None),
+        ("POST", "/api/pages/{}/publish", {"published": True}),
+        ("GET", "/api/pages/{}/analytics", None),
+        ("GET", "/api/pages/{}/insights", None),
+        ("GET", "/api/pages/{}/versions", None),
+        ("GET", "/api/pages/{}/versions/1", None),
+        ("POST", "/api/pages/{}/versions/1/restore", None),
+    ]
+
+    @pytest.fixture
+    def api(self, monkeypatch):
+        from fastapi import FastAPI, Request
+        from fastapi.testclient import TestClient
+        owner = str(uuid.uuid4())
+        pool = _CountingPool(owner)
+
+        async def fake_auth(request: Request):
+            request.state.auth_user_id = owner
+            request.state.auth_role = "user"
+            return "editor"
+
+        app = FastAPI()
+        app.include_router(P.router)
+        app.dependency_overrides[P.require_auth] = fake_auth
+        monkeypatch.setattr(P, "get_pool", lambda: pool)
+        return TestClient(app, raise_server_exceptions=False), pool
+
+    @pytest.mark.parametrize("method,path,body", ROUTES)
+    @pytest.mark.parametrize("page_id", ["admin", "not-a-uuid", "1 OR 1=1"])
+    def test_a_non_uuid_id_is_404_before_the_database(self, api, method, path, body, page_id):
+        client, pool = api
+        kwargs = {"json": body} if body is not None else {}
+        res = client.request(method, path.format(page_id), **kwargs)
+        assert res.status_code == 404, res.text
+        assert res.json()["detail"] == "Page not found"
+        assert pool.ids == []
+
+    def test_a_uuid_reaches_the_database(self, api):
+        client, pool = api
+        page_id = str(uuid.uuid4())
+        res = client.get(f"/api/pages/{page_id.upper()}/insights")
+        assert res.status_code == 200 and res.json()["total"] == 3
+        assert pool.ids == [page_id]
+
+
+class _ViewDeletePool(_CountingPool):
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.executed = []
+
+    async def execute(self, sql, *args):
+        self.executed.append((sql.split()[0], args))
+        return "DELETE 1"
+
+
+class TestViewIdMustBeAnInteger:
+    """A view id that is not an integer went straight into int() and came back
+    as a 500, not a 404."""
+
+    @pytest.fixture
+    def api(self, monkeypatch):
+        from fastapi import FastAPI, Request
+        from fastapi.testclient import TestClient
+        owner = str(uuid.uuid4())
+        pool = _ViewDeletePool(owner)
+
+        async def fake_auth(request: Request):
+            request.state.auth_user_id = owner
+            request.state.auth_role = "user"
+            return "editor"
+
+        app = FastAPI()
+        app.include_router(P.router)
+        app.dependency_overrides[P.require_auth] = fake_auth
+        monkeypatch.setattr(P, "get_pool", lambda: pool)
+        return TestClient(app, raise_server_exceptions=False), pool
+
+    @pytest.mark.parametrize("view_id", ["abc", "1.5", "1 OR 1=1"])
+    def test_a_non_integer_view_id_is_404_before_the_database(self, api, view_id):
+        client, pool = api
+        res = client.delete(f"/api/pages/{uuid.uuid4()}/views/{view_id}")
+        assert res.status_code == 404, res.text
+        assert res.json()["detail"] == "View not found"
+        assert pool.ids == [] and pool.executed == []
+
+    def test_an_integer_view_id_is_deleted_and_the_count_dropped(self, api):
+        client, pool = api
+        page_id = str(uuid.uuid4())
+        res = client.delete(f"/api/pages/{page_id}/views/42")
+        assert res.status_code == 200 and res.json() == {"ok": True}
+        assert pool.executed == [("DELETE", (42, page_id)), ("UPDATE", (page_id,))]
+
+
 def test_card_lines_never_run_past_the_image_edge():
     from PIL import Image, ImageDraw
     from app.services import page_share as S

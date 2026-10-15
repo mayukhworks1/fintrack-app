@@ -52,7 +52,7 @@ export const CLIENTS = [
    `cost` is what the work took to deliver. Billed comes from the invoices,
    so margin is derived rather than stated — a project cannot claim a margin
    its invoices do not support. */
-export const PROJECTS = [
+const PROJECTS = [
   { id: 'p1', name: 'Brand system',    client: 'Ravensbourne Studio', cost: 278000, status: 'Active' },
   { id: 'p2', name: 'Q3 retainer',     client: 'Halcyon Group',       cost: 196000, status: 'Active' },
   { id: 'p3', name: 'Site rebuild',    client: 'Meridian Labs',       cost: 439000, status: 'Active' },
@@ -231,7 +231,7 @@ export const shortDate = (d) =>
    the real product is to choose those two; the code writes the statement and
    runs it. That is why the demo can show the SQL next to the answer and have
    them agree — the same selection produces both. */
-export const MEASURES = {
+const MEASURES = {
   outstanding: {
     label: 'Outstanding',
     sql: 'SUM(amount_raised)',
@@ -267,7 +267,7 @@ export const MEASURES = {
   },
 }
 
-export const GROUPINGS = {
+const GROUPINGS = {
   client:   { label: 'client',   column: 'client',           of: (i) => i.client },
   project:  { label: 'project',  column: 'project_name',     of: (i) => i.project },
   category: { label: 'category', column: 'work_category',    of: (i) => i.category },
@@ -364,14 +364,6 @@ export const DELIVERY = PROJECT_ROLLUP.map(p => {
     health: p.health,
   }
 })
-
-/** The board, grouped the way the real one groups. */
-export const boardBy = (key) => {
-  const keys = key === 'lane' ? LANES : [...new Set(DELIVERY.map(d => d[key]))]
-  return keys
-    .map(name => ({ name, cards: DELIVERY.filter(d => d[key] === name) }))
-    .filter(col => col.cards.length > 0 || key === 'lane')
-}
 
 /* ── Enriched Institutional Modules Mock Data ──────────────────────────── */
 
@@ -579,41 +571,6 @@ export const STUDIO_RAG_PRESETS = [
     matchScore: '92.5%',
     answer: 'Clause 5.3 establishes a 40% pre-production advance upon script approval, followed by two 30% milestone tranches upon rough cut and final master delivery.',
     citation: 'Clause 5.3 (Production Invoicing), Page 4',
-  },
-]
-
-export const AI_CHAT_PRESETS = [
-  {
-    q: 'What are current outstanding ?',
-    get a() {
-      const top = [...open].sort((a, b) => b.amount - a.amount)[0]
-      return `Outstanding invoices total ${inr(TOTALS.outstanding)} across ${open.length} pending invoices. The largest single receivable is ${top?.id} (${top?.client}) for ${inr(top?.amount)} (${top?.daysOverdue} days overdue).`
-    },
-    tag: 'Portfolio Q&A',
-    model: 'nemotron-3-super-120b-a12b',
-    confidence: 'Verified 100%',
-  },
-  {
-    q: 'Check project margins across portfolio',
-    get a() {
-      const totalBilled = sum(PROJECT_ROLLUP, p => p.billed)
-      const totalProfit = sum(PROJECT_ROLLUP, p => p.profit)
-      const avgMargin = totalBilled ? Math.round((totalProfit / totalBilled) * 100) : 0
-      const topProj = [...PROJECT_ROLLUP].sort((a, b) => b.margin - a.margin)[0]
-      return `Overall portfolio margin is ${avgMargin}% across ${inr(totalBilled)} billed. Highest margin project is ${topProj?.name} (${topProj?.client}) at ${topProj?.margin}% margin (${inr(topProj?.profit)} profit).`
-    },
-    tag: 'Margin Analysis',
-    model: 'deterministic-sql-transpiler',
-    confidence: 'Exact 100%',
-  },
-  {
-    q: 'Summarize GST liabilities for Q2',
-    get a() {
-      return `FY26 Q2 taxable turnover is ${inr(sum(INVOICES, i => i.amount))} with ${inr(sum(INVOICES, i => i.gst))} in gross GST collected (CGST ${inr(Math.round(sum(INVOICES, i => i.gst)/2))} + SGST ${inr(Math.round(sum(INVOICES, i => i.gst)/2))}). TDS credit claims total ${inr(sum(INVOICES, i => i.tds))} with Form 26AS matching 100%.`
-    },
-    tag: 'Tax Compliance',
-    model: 'tax-ledger-ast',
-    confidence: 'Reconciled',
   },
 ]
 

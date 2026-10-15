@@ -1,6 +1,6 @@
 # FinTrack — AI-Powered Project Finance Manager
 
-Full-stack app for agency project billing, invoice tracking, and portfolio health monitoring. Built with React + FastAPI, deployed on Cloudflare Pages + Hugging Face Spaces.
+Full-stack app for agency project billing, invoice tracking, and portfolio health monitoring. Built with React + FastAPI, deployed on Vercel + Hugging Face Spaces.
 
 ---
 
@@ -8,7 +8,7 @@ Full-stack app for agency project billing, invoice tracking, and portfolio healt
 
 | Layer | Tech | Hosting |
 |-------|------|---------|
-| Frontend | React 18 + Vite + Tailwind | Cloudflare Pages |
+| Frontend | React 18 + Vite + Tailwind | Vercel |
 | Backend | FastAPI (Python 3.11) | Hugging Face Spaces (Docker) |
 | Primary DB | Teable REST API | app.teable.ai |
 | Mirror DB | Aiven PostgreSQL (asyncpg) | Aiven Cloud |
@@ -20,7 +20,7 @@ Full-stack app for agency project billing, invoice tracking, and portfolio healt
 ## Architecture
 
 ```
-Browser  ──→  Cloudflare Pages (React/Vite)
+Browser  ──→  Vercel (React/Vite)
                   │  REST /api/*
                   ▼
            HF Space — FastAPI (Python 3.11)
@@ -174,7 +174,7 @@ Token: `base64url("{nonce}:{expiry}:{role}[:s]").base64url(HMAC-SHA256)` — 7-d
 | `shared_views` | Manager share links (token, title, record_ids, expiry, is_active, access_mode, view_config, access_count) |
 | `shared_view_accesses` | Per-access tracking: IP, geo, OS, browser, device, user-agent |
 
-Schema is bootstrapped idempotently: `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
+Schema is bootstrapped idempotently: `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Changes after that are Alembic revisions in `backend/migrations/`, applied at startup — new DDL goes in a revision (see `backend/migrations/README.md`).
 
 ---
 
@@ -281,12 +281,12 @@ Accessible at `/admin` (editor role) or standalone (admin role):
 # Backend
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # requirements.txt + pytest
 cp .env.example .env   # fill in tokens
 uvicorn app.main:app --reload --port 8000
 
 # Frontend
-cd frontend && npm install && npm run dev   # :5173, proxies /api → :8000
+cd frontend && npm install && npm run dev   # :5173; for the local backend set VITE_API_URL in .env.local (see .env.example)
 ```
 
 Required `.env`:
@@ -328,6 +328,10 @@ VALKEY_URL=...            # rediss://user:pass@host:port
 
 ## CI/CD
 
-- Push to `main` → GitHub Actions
-  - `deploy-backend.yml` → Hugging Face Spaces (Docker)
-  - `deploy-frontend.yml` → Cloudflare Pages
+- `ci.yml` → frontend tests + build, backend import check + pytest, on every pull request and push to `main`
+- `deploy-backend.yml` → Hugging Face Spaces (Docker), after CI passes on `main`
+- Frontend → Vercel, deployed from GitHub by Vercel's Git integration (project Root Directory `frontend/`, config in `frontend/vercel.json`); it does not wait for CI
+- `keepalive.yml` → pings `/health/live` on a schedule so the Space does not sleep
+- `backup.yml` → nightly database backup to Google Drive (setup and restore: `docs/BACKUPS.md`)
+
+`scripts/production_check.sh` runs the same tests and build locally, plus a live health check when `HEALTH_URL` is set.

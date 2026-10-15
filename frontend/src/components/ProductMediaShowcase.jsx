@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Code2, Receipt, FolderKanban, ShieldCheck, Check, X,
-  ArrowRight, Activity
+  Code2, Receipt, FolderKanban, ShieldCheck, Check,
+  Activity
 } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 import LoopVideo from './LoopVideo'

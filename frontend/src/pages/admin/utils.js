@@ -1,5 +1,9 @@
 // Extracted from AdminDashboard.jsx — pure helpers + admin data fetch/export.
 import { api } from '../../services/api'
+import { downloadBlob } from '../../utils/download'
+
+export { ts } from '../../utils/dates'
+
 // ── Module-level tab cache (TTL = 45s, stale-while-revalidate) ───────────────
 const _tabCache = new Map() // key → { data, ts }
 const TAB_CACHE_TTL = 45_000
@@ -13,22 +17,12 @@ export function cacheGet(key) {
 
 export function cacheSet(key, data) { _tabCache.set(key, { data, ts: Date.now() }) }
 
-export function cacheInvalidate(key) { _tabCache.delete(key) }
-
-export function cacheInvalidateAll() { _tabCache.clear() }
-
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
 export function fmt(n) {
   if (n == null) return '—'
   if (typeof n === 'number') return n.toLocaleString()
   return String(n)
-}
-
-export function ts(v) {
-  if (!v) return '—'
-  try { return new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
-  catch { return v }
 }
 
 export function relTime(v) {
@@ -40,17 +34,6 @@ export function relTime(v) {
     if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`
     return `${Math.round(diff / 86400000)}d ago`
   } catch { return v }
-}
-
-export function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export async function exportAdminDataset({
@@ -73,6 +56,14 @@ export async function exportAdminDataset({
     metadata,
   })
   downloadBlob(res.blob, res.filename || `${title}.${format === 'pdf' ? 'pdf' : 'xls'}`)
+}
+
+// The server names the file; the fallback follows the same pattern in case
+// the name is missing from the response.
+export async function exportUserTimeline(userId, email, format) {
+  const res = await api.admin.userTimelineExport(userId, format)
+  const safeEmail = (email || 'user').replace(/@/g, '_at_').replace(/\./g, '_')
+  downloadBlob(res.blob, res.filename || `timeline_${safeEmail}.${format}`)
 }
 
 export async function fetchAdminAllPages(fetchPage, { pageSize = 500, maxPages = 100 } = {}) {

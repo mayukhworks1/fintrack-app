@@ -7,7 +7,7 @@ import { useConfirm } from '../../context/ConfirmContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { AuthStatusBadge, Badge, EditableName, Empty, Err, FMulti, FPill, FSel, FilterBar, Pager, Skeleton, UserAvatar } from './ui'
-import { relTime, ts } from './utils'
+import { exportUserTimeline, relTime, ts } from './utils'
 import { useDialog } from '../../hooks/useDialog'
 
 function displayName(user) {
@@ -17,7 +17,7 @@ function displayName(user) {
   return [fn, ln].filter(Boolean).join(' ') || user?.full_name || ''
 }
 
-export function SetPasswordModal({ userId, userEmail, onClose, toast }) {
+function SetPasswordModal({ userId, userEmail, onClose, toast }) {
   const dialog = useDialog({ label: 'Set a new password', onClose })
   // Named askConfirm, not confirm: `confirm` is already the password
   // confirmation field in this component.
@@ -695,11 +695,24 @@ export function AuthUsersTab() {
 
 // ── Tab: AI Chats ─────────────────────────────────────────────────────────────
 
-export function UserTimelineDrawer({ userId, onClose }) {
+function UserTimelineDrawer({ userId, onClose }) {
   const dialog = useDialog({ label: 'User activity', onClose })
+  const toast = useToast()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [exporting, setExporting] = useState(null)
+
+  const exportTimeline = async (format) => {
+    setExporting(format)
+    try {
+      await exportUserTimeline(userId, data?.user?.email, format)
+    } catch (e) {
+      toast(e.message || 'Export failed', 'error')
+    } finally {
+      setExporting(null)
+    }
+  }
 
   useEffect(() => {
     if (!userId) return
@@ -763,18 +776,13 @@ export function UserTimelineDrawer({ userId, onClose }) {
               )}
             </div>
             <div className="flex gap-1 flex-shrink-0">
-              <a href={api.admin.userTimelineExportUrl(userId, 'csv')}
-                download
-                className="text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1"
-                style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--card-bg)', textDecoration: 'none' }}>
-                <Download size={10} /> CSV
-              </a>
-              <a href={api.admin.userTimelineExportUrl(userId, 'json')}
-                download
-                className="text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1"
-                style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--card-bg)', textDecoration: 'none' }}>
-                <Download size={10} /> JSON
-              </a>
+              {['csv', 'json'].map(format => (
+                <button key={format} type="button" onClick={() => exportTimeline(format)} disabled={exporting !== null}
+                  className="text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1"
+                  style={{ color: 'var(--text-2)', borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
+                  <Download size={10} /> {exporting === format ? 'Exporting…' : format.toUpperCase()}
+                </button>
+              ))}
             </div>
           </div>
         )}

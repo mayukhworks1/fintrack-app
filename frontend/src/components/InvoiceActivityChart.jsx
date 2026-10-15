@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
+import { parseDate } from '../utils/dates'
 
 /* ── AvatarChip — shows resolved photo or initial circle + name ── */
 function AvatarChip({ email, avatarMap }) {
@@ -24,11 +25,6 @@ function AvatarChip({ email, avatarMap }) {
 }
 
 /* ── helpers ── */
-function parseDate(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return isNaN(d) ? null : d
-}
 function toDateKey(d) { return d.toISOString().slice(0, 10) }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 function initials(name = '') {

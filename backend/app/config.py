@@ -132,10 +132,6 @@ class Settings(BaseSettings):
     # Set HF_DATASET_REPO to override (or leave as default).
     hf_dataset_repo: str = "Mayukhj24/fintrackstorage"
 
-    # ── AI/ML: embedding model + LangChain tracing ──────────────────────────
-    # OpenRouter embedding model for pgvector RAG.
-    openrouter_embed_model: str = "openai/text-embedding-3-small"
-    # Optional LangSmith tracing (set LANGCHAIN_API_KEY + LANGCHAIN_TRACING_V2=true)
     # ── AI usage limits ────────────────────────────────────────────────────
     # Calls per user per rolling 24 hours, across every AI feature. Every model
     # in the cascade is on OpenRouter's free tier, which is rate-limited per
@@ -152,6 +148,7 @@ class Settings(BaseSettings):
     # role with ai_daily_limit_by_role {"legacy:viewer": 50}; 0 blocks AI for it.
     legacy_ai_daily_call_limit: int = 1000
 
+    # Optional LangSmith tracing (set LANGCHAIN_API_KEY + LANGCHAIN_TRACING_V2=true)
     langchain_api_key:    Optional[str] = None
     langchain_tracing_v2: bool = False
     langchain_project:    str = "fintrack"

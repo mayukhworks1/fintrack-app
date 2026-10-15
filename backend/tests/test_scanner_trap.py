@@ -55,15 +55,15 @@ REAL_ROUTES = [
     "/", "/health", "/health/live", "/openapi.json", "/docs",
     "/api/auth/verify", "/api/auth/login", "/api/auth/google/callback", "/api/auth/logout",
     "/api/invoices", "/api/invoices/summary", "/api/invoices/aging-buckets",
-    "/api/invoices/dashboard-activity", "/api/invoices/recXYZ123", "/api/invoices/export",
+    "/api/invoices/dashboard-activity", "/api/invoices/recXYZ123", "/api/invoices/picklists",
     "/api/web-invoices", "/api/web-invoices/summary", "/api/web-projects",
     "/api/projects", "/api/projects/summary", "/api/status",
     "/api/pages", "/api/pages/d25dcddc-eb6a-4f8b-8f07-bbef42b43959",
     "/api/public/pages/asset/pages/img.png",
     "/api/admin/deployment-health", "/api/admin/alerts/test", "/api/admin/watchdog",
-    "/api/ai/chat", "/api/ai/report", "/api/studio/ask",
+    "/api/ai/chat/stream", "/api/ai/report", "/api/studio/ask",
     "/api/shared-views/abc123", "/api/webhooks/teable", "/api/storage/file",
-    "/api/insights", "/api/reports",
+    "/api/insights",
 ]
 
 

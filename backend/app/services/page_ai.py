@@ -19,7 +19,6 @@ from . import page_design, page_edit
 from .openrouter import (
     _try_chat,
     _stream_post_with_retries,
-    _make_headers,
     _ordered_models,
     _build_payload,
     _auth_or_quota_error,
@@ -898,11 +897,6 @@ async def stream_generate_page(
 
 
 # --- surgical section editor ------------------------------------------------
-
-_SECTION_EXTRACT = re.compile(
-    r'(<section[^>]*\bdata-agent-section\s*=\s*["\']%s["\'][^>]*>)(.*?)(</section>)',
-    re.DOTALL | re.IGNORECASE,
-)
 
 _SECTION_EDIT_SYSTEM = """You are a surgical HTML component editor. You will receive:
 1. The FULL HTML of a complete page (for context only).

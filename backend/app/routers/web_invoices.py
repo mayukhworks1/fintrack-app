@@ -4,23 +4,16 @@ Routes accept 'web' OR 'all' role (require_web_access).
 'web'  — invoice tracker only (APP_WEB_PASSWORD)
 'all'  — invoice tracker + project tracker (APP_ALL_PASSWORD)
 """
-import csv as _csv
-import io as _io
 import httpx
-from ..utils.http import shared_client
-import re
-from datetime import date as _date
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
-from fastapi.responses import StreamingResponse as _StreamingResponse
-from typing import Optional, List, Any
+from typing import Optional
 from pydantic import BaseModel, field_validator
+from ..models import InvoiceFieldsBase
 from ..services.web_invoice import WebInvoiceService
 from ..db.attribution import record_user_attribution
 from ..db.postgres import get_pool
-from ..config import settings
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
-from ..utils.csv_safe import csv_safe_row
 from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
 from .ai import _ai_quota
@@ -72,84 +65,8 @@ _NULLABLE_TEABLE_FIELDS = frozenset({"Raised Date", "Cleared Date", "Next follow
 _ATTACHMENT_FIELDS = frozenset({"Reference", "Invoice PDF"})
 
 
-class WebInvoiceFields(BaseModel):
-    invoice_number:  Optional[str]        = None
-    project:         Optional[str]        = None
-    category:        Optional[str]        = None
-    description:     Optional[str]        = None
-    milestone:       Optional[str]        = None
-    raised_by:       Optional[str]        = None
-    raised_date:     Optional[str]        = None
-    cleared_date:    Optional[str]        = None
-    amount_raised:   Optional[float]      = None
-    amount_with_tax: Optional[float]      = None
-    amount_received: Optional[float]      = None
-    payment_status:  Optional[str]        = None
-    remark:          Optional[str]        = None
-    next_followup:   Optional[str]        = None
-    reference:       Optional[List[Any]]  = None  # attachment objects from Teable
-    invoice_pdf:     Optional[List[Any]]  = None  # attachment objects from Teable
+class WebInvoiceFields(InvoiceFieldsBase):
     currency:        Optional[str]        = None  # e.g. "RS", "USD"
-
-    @field_validator('raised_by')
-    @classmethod
-    def validate_raised_by(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v.strip()):
-            raise ValueError('Raised By must be a valid email format')
-        return v.strip()
-
-    @field_validator('invoice_number')
-    @classmethod
-    def validate_invoice_number(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        if len(v) > 50:
-            raise ValueError('Invoice Number cannot exceed 50 characters')
-        return v.strip()
-
-    @field_validator('amount_raised', 'amount_with_tax')
-    @classmethod
-    def validate_positive_amounts(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        if v <= 0:
-            raise ValueError('Amount must be greater than zero')
-        if v > 10_000_000:
-            raise ValueError('Amount cannot exceed 1 crore')
-        return v
-
-    @field_validator('amount_received')
-    @classmethod
-    def validate_non_negative_received(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        if v < 0:
-            raise ValueError('Amount Received cannot be negative')
-        if v > 10_000_000:
-            raise ValueError('Amount cannot exceed 1 crore')
-        return v
-
-    @field_validator('raised_date', 'cleared_date', 'next_followup', mode='before')
-    @classmethod
-    def validate_iso_dates(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        try:
-            _date.fromisoformat(v[:10])
-            return v
-        except (ValueError, TypeError):
-            raise ValueError('Dates must be in ISO 8601 format (YYYY-MM-DD)')
-
-    @field_validator('description', 'remark')
-    @classmethod
-    def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        if len(v) > 1000:
-            raise ValueError('Text fields cannot exceed 1000 characters')
-        return v.strip()
 
     @field_validator('currency')
     @classmethod
@@ -212,33 +129,6 @@ class WebInvoiceFields(BaseModel):
             elif attr in provided and teable_name in _NULLABLE_TEABLE_FIELDS:
                 out[teable_name] = None
         return out
-
-
-@router.get("/debug-config")
-async def debug_config(_role: str = Depends(require_web_access)):
-    """Returns active table ID and masked token — for diagnosing connection issues."""
-    svc = WebInvoiceService()
-    token = svc.token or ""
-    masked = (token[:6] + "…" + token[-4:]) if len(token) > 10 else ("(not set)" if not token else token)
-    # Try a single lightweight read to see if Teable responds
-    try:
-        async with shared_client(timeout=10) as client:
-            res = await client.get(
-                f"{svc.base_url}/api/table/{svc.table_id}/record?take=1&fieldKeyType=name",
-                headers=svc._headers,
-            )
-            teable_status = res.status_code
-            teable_total  = res.json().get("total", "?") if res.status_code == 200 else None
-    except Exception as exc:
-        teable_status = f"error: {exc}"
-        teable_total  = None
-    return {
-        "table_id":      svc.table_id,
-        "base_url":      svc.base_url,
-        "token_preview": masked,
-        "teable_status": teable_status,
-        "teable_total":  teable_total,
-    }
 
 
 @router.get("/client-names")
@@ -365,76 +255,6 @@ async def list_web_invoices(
         # Teable unreachable — attempt PG mirror fallback for web invoices
         # (no formal mirror table for web invoices, so surface the error with a stale flag hint)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── CSV Export ────────────────────────────────────────────────────────────────
-
-@router.get("/export")
-async def export_web_invoices(
-    request:   Request,
-    status:    Optional[str] = Query(None),
-    project:   Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None, alias="from"),
-    date_to:   Optional[str] = Query(None, alias="to"),
-    _role:     str           = Depends(require_web_access),
-    _perm:     str           = Depends(require_permission("module.invoices.view")),
-):
-    """Download all matching web invoices as CSV."""
-    svc = WebInvoiceService()
-    scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        status=status, project=project, raised_by=scoped_email,
-        limit=2000, skip=0, order_by="Raised Date", order="desc",
-    )
-    records = (result or {}).get("records", [])
-
-    if date_from or date_to:
-        def _d(s):
-            try: return _date.fromisoformat(s)
-            except Exception: return None
-        df, dt = _d(date_from), _d(date_to)
-        def in_range(r):
-            rd_str = r.get("fields", {}).get("Raised Date", "")
-            if not rd_str: return True
-            try: rd = _date.fromisoformat(rd_str[:10])
-            except Exception: return True
-            if df and rd < df: return False
-            if dt and rd > dt: return False
-            return True
-        records = [r for r in records if in_range(r)]
-
-    COLS = [
-        ("Invoice Number",  "Invoice Number"),
-        ("Raised Date",     "Raised Date"),
-        ("Project",         "Project"),
-        ("Category",        "Category"),
-        ("Milestone",       "Milestone"),
-        ("Raised By",       "Raised By"),
-        ("Currency",        "Currency"),
-        ("Payment Status",  "Payment Status"),
-        ("Amount Raised",   "Amount Raised"),
-        ("Amount with Tax", "Amount with Tax"),
-        ("Amount Received", "Amount Received"),
-        ("Outstanding Amount", "Outstanding Amount"),
-        ("Cleared Date",    "Cleared Date"),
-        ("Agening (Days)",  "Aging Days"),
-        ("Next followup",   "Next Follow-up"),
-        ("Remark",          "Remark"),
-    ]
-
-    buf = _io.StringIO()
-    writer = _csv.writer(buf)
-    writer.writerow([label for _, label in COLS])
-    for r in records:
-        f = r.get("fields", {})
-        writer.writerow(csv_safe_row(f.get(key, "") for key, _ in COLS))
-
-    filename = f"web_invoices_{_date.today().isoformat()}.csv"
-    return _StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────

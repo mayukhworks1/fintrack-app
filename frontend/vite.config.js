@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => {
   // index.html carries <link rel="preconnect" href="%VITE_API_URL%">. Vite only
   // substitutes %VITE_*% for variables that are set; unset, the literal is
   // emitted and the browser gets an invalid preconnect. Production sets this
-  // in the deploy workflow; this default covers local and ad-hoc builds so the
-  // hint always names a real origin.
+  // in the Vercel project's environment variables; this default covers local
+  // and ad-hoc builds so the hint always names a real origin.
   process.env.VITE_API_URL ||= env.VITE_API_URL || 'https://mayukhj24-fintrack-api.hf.space'
   return {
   test: {

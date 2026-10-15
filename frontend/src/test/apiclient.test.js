@@ -12,9 +12,13 @@
  * Separately, error bodies were read as err.error.message || err.detail, which
  * showed FastAPI's 422 detail array as "[object Object]" and an admin
  * { error: "..." } body as "HTTP 503".
+ *
+ * And the admin timeline export was a relative link: it never reached the API
+ * host, and a link sends no Authorization header, so it could not have
+ * authenticated there either.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { api, apiErrorMessage } from '../services/api'
+import { api, apiErrorMessage, API_BASE_URL, setAuthToken } from '../services/api'
 
 const reply = (status, body) => ({
   ok: status >= 200 && status < 300,
@@ -155,5 +159,36 @@ describe('error messages', () => {
     expect(apiErrorMessage({ message: 'Bare message' }, 500)).toBe('Bare message')
     expect(apiErrorMessage(null, 502)).toBe('HTTP 502')
     expect(apiErrorMessage({ detail: [] }, 422)).toBe('HTTP 422')
+  })
+})
+
+describe('admin timeline export', () => {
+  afterEach(() => setAuthToken(''))
+
+  it('fetches from the API host with the bearer token, never with the token in the URL', async () => {
+    setAuthToken('tok-123')
+    const blob = new Blob(['timestamp,event_type\n'], { type: 'text/csv' })
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/csv' }),
+      blob: async () => blob,
+    })
+    const call = track(api.admin.userTimelineExport('user 1', 'csv'))
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(call.value.blob).toBe(blob)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(`${API_BASE_URL}/api/admin/auth/users/user%201/timeline/export?fmt=csv`)
+    expect(url).not.toContain('tok-123')
+    expect(init.headers.Authorization).toBe('Bearer tok-123')
+  })
+
+  it('rejects with the server message when the export is refused', async () => {
+    fetchMock.mockResolvedValue(reply(403, { error: { message: 'Admin access required' } }))
+    const call = track(api.admin.userTimelineExport('u-1', 'json'))
+    await vi.advanceTimersByTimeAsync(100)
+    expect(call.error.message).toBe('Admin access required')
   })
 })

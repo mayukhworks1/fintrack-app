@@ -9,17 +9,17 @@
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Maximize2, X } from 'lucide-react'
+import { ArrowRight, X } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
 import AnalystPipeline from '../../components/AnalystPipeline'
 import StackStory from '../../components/StackStory'
 import SyncPipelineSimulator from '../../components/SyncPipelineSimulator'
 import { Grain } from '../../components/LandingVisuals'
-import { StaysPut, CitedAnswer, PermissionRows, OneBuildTwoHomes } from '../../components/SceneDiagrams'
-import { Head, PageHead, Card, Grid, Closing, Reveal, Stagger, Rule } from '../../components/PublicBits'
+import { StaysPut } from '../../components/SceneDiagrams'
+import { Head, PageHead, Closing, Reveal, Stagger, Rule } from '../../components/PublicBits'
 import ScrollLit from '../../components/ScrollLit'
-import { TRUST, STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
+import { STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
 import LoopVideo from '../../components/LoopVideo'
 
 const LD = graph(APP_LD, crumbs([{ name: 'How it works', path: '/how-it-works' }]))

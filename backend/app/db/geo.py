@@ -10,7 +10,6 @@ per day.  Falls back to empty dict if the lookup fails or Valkey is down.
 """
 
 import logging
-import httpx
 from ..utils.http import shared_client
 from .valkey import geo_get, geo_set
 

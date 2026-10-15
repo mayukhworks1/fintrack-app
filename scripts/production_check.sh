@@ -16,14 +16,14 @@ echo "== Backend import smoke =="
 
 echo "== Backend tests =="
 (
-  cd "$ROOT_DIR"
-  "$BACKEND_PY" -m pytest backend/tests/smoke_test.py -q
+  cd "$ROOT_DIR/backend"
+  APP_SECRET="${APP_SECRET:-local-check-secret}" "$BACKEND_PY" -m pytest tests -q
 )
 
 echo "== Frontend tests =="
 (
   cd "$ROOT_DIR/frontend"
-  npm run test -- --run
+  npm test
 )
 
 echo "== Frontend build =="

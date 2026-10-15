@@ -6,11 +6,9 @@ Web Project Tracker service — tables:
 Handles CRUD + summary for the Web Project Tracker module.
 Accessible only to the "all" role.
 """
-import asyncio
 import json
 import logging
 from typing import Any, Optional
-import httpx
 from ..utils.http import shared_client
 from ..config import settings
 from ..db.postgres import get_pool
@@ -107,7 +105,6 @@ _RESOURCE_EDITABLE = {
 }
 
 _TTL_LIST    = 15
-_TTL_ALL     = 30
 _TTL_SUMMARY = 30
 
 

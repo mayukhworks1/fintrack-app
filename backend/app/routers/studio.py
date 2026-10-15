@@ -743,15 +743,3 @@ async def my_usage(
         "usage": await ai_usage.usage_for(user_id),
         "quota": await ai_usage.quota_state(user_id, getattr(request.state, 'auth_role', None)),
     }
-
-
-@router.get("/usage/all")
-async def all_usage(
-    request: Request,
-    hours: int = 24,
-    role: str = Depends(require_auth),
-    _perm: str = Depends(require_permission("module.admin.audit.view")),
-):
-    """Who is spending the AI budget. Gated on the existing audit permission."""
-    _require_email_auth(request)
-    return {"hours": hours, "users": await ai_usage.breakdown(hours=hours)}

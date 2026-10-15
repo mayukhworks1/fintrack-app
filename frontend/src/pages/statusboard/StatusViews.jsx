@@ -1,6 +1,5 @@
 // Extracted from StatusBoard.jsx — StatusViews.
 import { AttachmentList, DocPreviewModal, fileTypeInfo } from '../../components/DocPreviewModal'
-import { useToast } from '../../context/ToastContext'
 import { Check, Clock, Eye, GripVertical, Loader2, Paperclip, Pencil, Plus, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -80,7 +79,6 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
   const modified = f['lastModifiedTime'] || record?.createdTime || ''
   const clrHex  = clientColor(client)
   const sc      = statusStyle(status)
-  const toast   = useToast()
   const openInvoices = () => {
     const params = new URLSearchParams()
     if (project) params.set('project', project)
@@ -488,7 +486,7 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
 // Kanban Board — drag-and-drop
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false , landed = false }) {
+function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, updating, onDragStart, onDragEnd, isDragging, compact = false, showClientAccents = true, dragDisabled = false , landed = false }) {
   const f = record.fields || {}
   const client  = f['Client']  || '?'
   const project = f['Project'] || '?'

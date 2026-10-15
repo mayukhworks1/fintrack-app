@@ -10,7 +10,7 @@
  * arrives. Order matters — the first matching pattern wins, so more specific
  * paths are listed before the ones that would also match them.
  */
-export const BRAND = 'FinTrack'
+const BRAND = 'FinTrack'
 
 // Title first, brand last: a browser tab truncates from the right, so the part
 // that distinguishes one tab from another has to lead.

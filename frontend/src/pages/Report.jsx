@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  FileText, Loader2, Download, RefreshCw, Sparkles, Database, Copy, Check,
+  FileText, Download, RefreshCw, Sparkles, Database, Copy, Check,
   Square, Printer, Zap, Clock, Activity, BarChart2,
   History, Eye, Trash2,
 } from 'lucide-react'
 import { api } from '../services/api'
 import BrandMark from '../components/BrandMark'
+import { escapeHtml } from '../utils/sanitize'
+import { downloadBlob } from '../utils/download'
 import { useConfirm } from '../context/ConfirmContext'
 
 /* ── Markdown-lite renderer (tuned for the new professional theme) ───────── */
@@ -17,8 +19,7 @@ function AiText({ text }) {
 
   const isBullet   = (s) => /^[-•·]\s/.test(s)
   const isNumbered = (s) => /^\d+\.\s/.test(s)
-  const escHtml    = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-  const cleanMd    = (s) => escHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g, '')
+  const cleanMd    = (s) => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[`#*_]/g, '')
 
   while (i < lines.length) {
     const line = lines[i].trim()
@@ -237,12 +238,7 @@ export default function Report() {
 
   const downloadTxt = () => {
     const blob = new Blob([report], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `fintrack-report-${new Date().toISOString().split('T')[0]}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `fintrack-report-${new Date().toISOString().split('T')[0]}.txt`)
   }
 
   const copy = async () => {

@@ -317,7 +317,7 @@ export function DeploymentChecklist() {
   )
 }
 
-export function FLabel({ label, children }) {
+function FLabel({ label, children }) {
   return (
     <label className="flex flex-col gap-0.5 flex-shrink-0">
       <span style={{ color: 'var(--text-3)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

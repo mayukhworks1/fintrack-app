@@ -4,39 +4,32 @@ GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Request
-from typing import Optional, Iterable, List, Any
-from pydantic import BaseModel, field_validator
+from typing import Optional, Iterable
+from pydantic import BaseModel
 import httpx
 import logging
 import re
 from datetime import date as _date
+from ..models import InvoiceFieldsBase
 from ..services.invoice import InvoiceService
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
 from ..utils.ownership import is_record_owner
 from ..utils.teable_errors import translate_teable_error
-from ..utils.csv_safe import csv_safe_row
 from ..utils.uploads import read_upload, upload_limit
+from ..utils.client_ip import client_ip
 from .deps import require_auth, owner_scope_email, require_permission, get_effective_permissions
 from .ai import _ai_quota
-import csv
-import io
-from fastapi.responses import StreamingResponse as _StreamingResponse
 
 logger = logging.getLogger("fintrack.invoices")
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
 
-def _ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request) or "unknown"
-
-
 async def _check_mutation_rate(request: Request) -> None:
     """60 invoice mutations / min / IP — prevents bulk-scripted abuse."""
-    allowed, _ = await rate_check(_ip(request), limit=60, window_sec=60, bucket="invoice_mutate")
+    allowed, _ = await rate_check(client_ip(request) or "unknown", limit=60, window_sec=60, bucket="invoice_mutate")
     if not allowed:
         raise HTTPException(
             status_code=429,
@@ -116,87 +109,9 @@ _INVOICE_ATTR_BY_TEABLE_NAME = {
 }
 
 
-class InvoiceFields(BaseModel):
+class InvoiceFields(InvoiceFieldsBase):
     """Fields that callers can set. Read-only computed fields are ignored."""
-    invoice_number:   Optional[str]   = None
-    project:          Optional[str]   = None
-    category:         Optional[str]   = None
-    description:      Optional[str]   = None
-    milestone:        Optional[str]   = None
-    raised_by:        Optional[str]   = None
-    raised_date:      Optional[str]   = None   # ISO 8601
-    cleared_date:     Optional[str]   = None   # ISO 8601
-    amount_raised:    Optional[float] = None
-    amount_with_tax:  Optional[float] = None
-    amount_received:  Optional[float] = None
-    payment_status:   Optional[str]   = None
-    remark:           Optional[str]   = None
-    next_followup:    Optional[str]   = None   # ISO 8601
     client_name:      Optional[str]   = None   # single-select: Birla Open Minds / Maitrimetal / Innovine
-    reference:        Optional[List[Any]] = None
-    invoice_pdf:      Optional[List[Any]] = None
-
-    @field_validator('raised_by')
-    @classmethod
-    def validate_raised_by(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        # Email-like format check
-        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v.strip()):
-            raise ValueError('Raised By must be a valid email format')
-        return v.strip()
-
-    @field_validator('invoice_number')
-    @classmethod
-    def validate_invoice_number(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        if len(v) > 50:
-            raise ValueError('Invoice Number cannot exceed 50 characters')
-        return v.strip()
-
-    @field_validator('amount_raised', 'amount_with_tax')
-    @classmethod
-    def validate_positive_amounts(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        if v <= 0:
-            raise ValueError('Amount must be greater than zero')
-        if v > 10_000_000:  # 1 crore max
-            raise ValueError('Amount cannot exceed 1 crore')
-        return v
-
-    @field_validator('amount_received')
-    @classmethod
-    def validate_non_negative_received(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        if v < 0:
-            raise ValueError('Amount Received cannot be negative')
-        if v > 10_000_000:
-            raise ValueError('Amount cannot exceed 1 crore')
-        return v
-
-    @field_validator('raised_date', 'cleared_date', 'next_followup', mode='before')
-    @classmethod
-    def validate_iso_dates(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        try:
-            # Try parsing as ISO date (YYYY-MM-DD or with time)
-            _date.fromisoformat(v[:10])
-            return v
-        except (ValueError, TypeError):
-            raise ValueError('Dates must be in ISO 8601 format (YYYY-MM-DD)')
-
-    @field_validator('description', 'remark')
-    @classmethod
-    def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == '':
-            return v
-        if len(v) > 1000:
-            raise ValueError('Text fields cannot exceed 1000 characters')
-        return v.strip()
 
     def to_teable_fields(self, include_null_fields: Iterable[str] | None = None) -> dict:
         m = {
@@ -333,82 +248,6 @@ async def list_invoices(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── CSV / Excel Export ────────────────────────────────────────────────────────
-
-@router.get("/export")
-async def export_invoices(
-    request:    Request,
-    fmt:        str           = Query("csv", pattern="^(csv)$"),
-    status:     Optional[str] = Query(None),
-    project:    Optional[str] = Query(None),
-    date_from:  Optional[str] = Query(None, alias="from"),
-    date_to:    Optional[str] = Query(None, alias="to"),
-    _role:      str           = Depends(require_auth),
-    _perm:      str           = Depends(require_permission("module.invoices.view")),
-):
-    """Download all matching invoices as CSV."""
-    svc = InvoiceService()
-    scoped_email = owner_scope_email(request)
-    result = await svc.list_invoices(
-        status=status, project=project, raised_by=scoped_email,
-        limit=2000, skip=0, order_by="Raised Date", order="desc",
-    )
-    if result is None:
-        result = await svc.list_invoices_from_pg(
-            status=status, project=project, raised_by=scoped_email,
-            limit=2000, skip=0,
-        )
-    records = (result or {}).get("records", [])
-
-    if date_from or date_to:
-        def _d(s):
-            try: return _date.fromisoformat(s)
-            except Exception: return None
-        df, dt = _d(date_from), _d(date_to)
-        def in_range(r):
-            rd_str = r.get("fields", {}).get("Raised Date", "")
-            if not rd_str: return True
-            try: rd = _date.fromisoformat(rd_str[:10])
-            except Exception: return True
-            if df and rd < df: return False
-            if dt and rd > dt: return False
-            return True
-        records = [r for r in records if in_range(r)]
-
-    COLS = [
-        ("Invoice Number",  "Invoice Number"),
-        ("Raised Date",     "Raised Date"),
-        ("Project",         "Project"),
-        ("Client Name",     "Client Name"),
-        ("Category",        "Category"),
-        ("Milestone",       "Milestone"),
-        ("Raised By",       "Raised By"),
-        ("Payment Status",  "Payment Status"),
-        ("Amount Raised",   "Amount Raised"),
-        ("Amount with Tax", "Amount with Tax"),
-        ("Amount Received", "Amount Received"),
-        ("Outstanding Amount", "Outstanding Amount"),
-        ("Cleared Date",    "Cleared Date"),
-        ("Agening (Days)",  "Aging Days"),
-        ("Next Follow-up",  "Next Follow-up"),
-        ("Remark",          "Remark"),
-    ]
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow([label for _, label in COLS])
-    for r in records:
-        f = r.get("fields", {})
-        writer.writerow(csv_safe_row(f.get(key, "") for key, _ in COLS))
-
-    filename = f"invoices_{_date.today().isoformat()}.csv"
-    return _StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────

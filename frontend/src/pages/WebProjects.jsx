@@ -3,22 +3,19 @@
  *
  * Exports:
  *   ProjectsWorkspace (named) — embeddable inside WebInvoices as a workspace tab
- *   WebProjects       (default) — standalone full-page app (kept for potential future use)
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft, Plus, Edit2, Trash2, X, Check, Loader2, RefreshCw,
-  Search, Users, Briefcase, Moon, Sun, LogOut, AlertTriangle, Clock,
+  Search, Users, Briefcase, AlertTriangle, Clock,
   TrendingUp, TrendingDown, IndianRupee, Calendar, Tag, FileText,
-  ChevronRight, Receipt, CheckCircle2, XCircle, AlertOctagon, Filter,
+  Receipt, CheckCircle2, XCircle, AlertOctagon, Filter,
 } from 'lucide-react'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 import { api } from '../services/api'
-import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
-import { useTheme } from '../context/ThemeContext'
 import { formatInr } from '../utils/format'
 import clsx from 'clsx'
 import { useDialog } from '../hooks/useDialog'
@@ -201,43 +198,6 @@ function SectionLabel({ icon: Icon, children }) {
       <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{children}</p>
       <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
     </div>
-  )
-}
-
-// ── Simple Drawer (non-project, e.g. resource) ────────────────────────────────
-
-function Drawer({ open, onClose, title, children, footer }) {
-  const dialog = useDialog({ label: title, onClose, active: open })
-  useEffect(() => {
-    if (!open) return
-    const h = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [open, onClose])
-
-  if (!open) return null
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} onClick={onClose} />
-      <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full w-full max-w-md shadow-2xl"
-        style={{ background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
-          style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
-          <h2 className="font-bold text-base" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ color: 'var(--text-3)' }}>
-            <X size={16} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">{children}</div>
-        {footer && (
-          <div className="px-5 py-4 flex gap-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
   )
 }
 
@@ -941,14 +901,12 @@ function ProjectDetailView({
   const budget       = Number(f['Estimated Budget'] || 0)
   const inputCost    = Number(f['Total Input Cost'] || 0)
   const budgetVar    = Number(f['Budget Variance'] || 0)
-  const budgetVarPct = Number(f['Budget Variance %'] || 0)
   const schedVar     = Number(f['Schedule Variance (Days)'] || 0)
   // Use rollup fields from the project record (more reliable than summing local resources array)
   const totalManHours   = Number(f['Total Man Hours']    || 0)
   const totalPlannedHrs = Number(f['Total Planned Hours']|| 0)
   const hoursVariance   = Number(f['Hours Variance']     || 0)
   const totalRevenue    = Number(f['Total Revenue Generated'] || 0)
-  const resourceCount   = Number(f['Resource Count']     || 0)
   const effCostPerHr    = Number(f['Effective Cost Per Hour']         || 0)
   const effBillPerHr    = Number(f['Effective Billing Rate Per Hour'] || 0)
   // Progress — try multiple field name variants since Teable may use different casing
@@ -1375,9 +1333,6 @@ export function ProjectsWorkspace() {
   const [editingRecord, setEditingRecord] = useState(null)
   const [saving,        setSaving]        = useState(false)
 
-  // Deleting
-  const [deletingResourceId, setDeletingResourceId] = useState(null)
-
   // Resource assignment panel
   const [assignPanelOpen,  setAssignPanelOpen]  = useState(false)
   const [allSystemResources, setAllSystemResources] = useState([])
@@ -1539,7 +1494,6 @@ export function ProjectsWorkspace() {
   // record, as this used to, also took it — with its hours and cost — off
   // every other project it was assigned to.
   const handleDeleteResource = async (resourceId) => {
-    setDeletingResourceId(resourceId)
     try {
       await api.webProjects.resources.unassign(resourceId, selectedProjectId)
       toast('Resource removed from this project', 'info')
@@ -1548,7 +1502,6 @@ export function ProjectsWorkspace() {
       const proj = await api.webProjects.get(selectedProjectId)
       setSelectedProject(proj)
     } catch (e) { toast('Delete failed: ' + e.message, 'error') }
-    finally { setDeletingResourceId(null) }
   }
 
   const handleAssignResource = async (resourceId) => {
@@ -1821,410 +1774,6 @@ export function ProjectsWorkspace() {
         // (links change through Assign), so offering one misleads.
         projectNames={drawer === 'edit-resource' ? [] : projectNames}
       />
-    </div>
-  )
-}
-
-// ── AllResourcesView — global resources table (named export) ─────────────────
-
-export function AllResourcesView() {
-  const toast = useToast()
-  const [resources,    setResources]    = useState([])
-  const [projectNames, setProjectNames] = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState(null)
-  const [search,       setSearch]       = useState('')
-  const [typeFilter,   setTypeFilter]   = useState('')
-  const [drawer,       setDrawer]       = useState(null)  // null | 'new' | 'edit'
-  const [editingRec,   setEditingRec]   = useState(null)
-  const [saving,       setSaving]       = useState(false)
-
-  const load = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const [data, names] = await Promise.all([
-        api.webProjects.resources.listAll(),
-        api.webProjects.names().catch(() => []),
-      ])
-      setResources(data.records || [])
-      setProjectNames(Array.isArray(names) ? names : [])
-    } catch (e) {
-      setError(e.message)
-      toast('Failed to load resources: ' + e.message, 'error')
-    } finally { setLoading(false) }
-  }, [toast])
-
-  useEffect(() => { load() }, [load])
-
-  const handleSave = async (payload) => {
-    setSaving(true)
-    try {
-      if (drawer === 'new') {
-        await api.webProjects.resources.create(payload)
-        toast('Resource added!', 'success')
-      } else {
-        // The picker shows one link, the first. A PATCH's lone project_id only
-        // adds a link, so a changed pick goes as the full list with the shown
-        // project swapped for the new one (a move, other links kept), and an
-        // unchanged pick sends no link change at all.
-        const { project_id: picked, ...fields } = payload
-        const shown = editingRec.initial?.project_id || ''
-        if (picked && picked !== shown) {
-          const rec = resources.find(r => r.id === editingRec.id)
-          const linked = (Array.isArray(rec?.fields?.Project) ? rec.fields.Project : [])
-            .map(p => p?.id).filter(Boolean)
-          const next = shown && linked.includes(shown)
-            ? linked.map(id => (id === shown ? picked : id))
-            : [...linked, picked]
-          fields.project_ids = [...new Set(next)]
-        }
-        await api.webProjects.resources.update(editingRec.id, fields)
-        toast('Resource updated!', 'success')
-      }
-      setDrawer(null); setEditingRec(null)
-      await load()
-    } catch (e) { toast('Save failed: ' + e.message, 'error') }
-    finally { setSaving(false) }
-  }
-
-  const handleDelete = async () => {
-    if (!editingRec) return
-    try {
-      await api.webProjects.resources.delete(editingRec.id)
-      toast('Resource removed', 'info')
-      setDrawer(null); setEditingRec(null)
-      await load()
-    } catch (e) { toast('Delete failed: ' + e.message, 'error') }
-  }
-
-  const displayed = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    return resources.filter(r => {
-      const f = r.fields || {}
-      if (typeFilter && f['Type'] !== typeFilter) return false
-      if (q) {
-        const name    = (f['Resource Name'] || '').toLowerCase()
-        const role    = (f['Role'] || '').toLowerCase()
-        const project = Array.isArray(f['Project'])
-          ? f['Project'].map(p => (p.title || '')).join(' ').toLowerCase()
-          : (f['Project'] || '').toString().toLowerCase()
-        if (!name.includes(q) && !role.includes(q) && !project.includes(q)) return false
-      }
-      return true
-    })
-  }, [resources, search, typeFilter])
-
-  // Aggregate KPIs
-  const totalCost    = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Total Cost'] || 0), 0), [displayed])
-  const totalRevenue = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Revenue Generated'] || 0), 0), [displayed])
-  const totalHours   = useMemo(() => displayed.reduce((s, r) => s + Number(r.fields?.['Man Hours'] || 0), 0), [displayed])
-
-  return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>All Resources</h2>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-            {loading ? 'Loading…' : `${resources.length} resource${resources.length !== 1 ? 's' : ''} across all projects`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button onClick={() => { setEditingRec(null); setDrawer('new') }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
-            <Plus size={14} /><span className="hidden sm:inline">Add Resource</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      {!loading && resources.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <KpiCard label="Total Cost"    value={formatInr(totalCost)} />
-          <KpiCard label="Total Revenue" value={formatInr(totalRevenue)} accent={totalRevenue > 0 ? '#4ade80' : undefined} />
-          <KpiCard label="Total Hours"   value={totalHours > 0 ? `${totalHours}h` : '—'} />
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-          <input className="w-full rounded-xl pl-8 pr-3 py-2.5 text-sm outline-none"
-            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
-            placeholder="Search by name, role or project…"
-            value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="rounded-xl px-3 py-2.5 text-sm outline-none"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
-          <option value="">All types</option>
-          {RESOURCE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
-          <AlertTriangle size={15} /> {error}
-          <button onClick={load} className="underline ml-1">retry</button>
-        </div>
-      )}
-
-      {/* Table */}
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card flex items-center gap-3" aria-hidden="true">
-              <div className="skeleton w-9 h-9 rounded-full flex-shrink-0" />
-              <div className="flex-1 space-y-2"><div className="skeleton h-4 rounded w-1/3" /><div className="skeleton h-3 rounded w-1/4" /></div>
-              <div className="skeleton h-4 rounded w-20" />
-            </div>
-          ))}
-        </div>
-      ) : displayed.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Users size={28} className="mb-3 opacity-20" style={{ color: 'var(--text-3)' }} />
-          <p className="font-semibold" style={{ color: 'var(--text-2)' }}>
-            {search || typeFilter ? 'No resources match filters' : 'No resources yet'}
-          </p>
-          <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>Click "Add Resource" above to get started</p>
-        </div>
-      ) : (
-        <>
-        {/* Mobile cards for resources */}
-        <div className="md:hidden space-y-2">
-          {displayed.map(r => {
-            const f = r.fields || {}
-            const projLabel = Array.isArray(f['Project'])
-              ? f['Project'].map(p => p.title || p.value || '').filter(Boolean).join(', ')
-              : f['Project'] || '—'
-            const cost    = Number(f['Total Cost'] || 0)
-            const hours   = Number(f['Man Hours'] || 0)
-            const revenue = Number(f['Revenue Generated'] || 0)
-            const margin  = Number(f['Resource Margin %'] || 0)
-            const linkedProjId = Array.isArray(f['Project']) && f['Project'][0]?.id
-            return (
-              <div key={r.id} className="card p-3">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
-                    style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
-                    {(f['Resource Name'] || '?')[0].toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>{f['Resource Name'] || '—'}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                      {f['Role'] || '—'}{f['Type'] ? ` · ${f['Type']}` : ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setEditingRec({
-                        id: r.id,
-                        initial: {
-                          resource_name:  f['Resource Name'] || '',
-                          role:           f['Role']          || '',
-                          type_:          f['Type']          || 'Employee',
-                          rate:           f['Rate (₹)']      != null ? String(f['Rate (₹)'])      : '',
-                          rate_unit:      f['Rate Unit']     || 'Per Month',
-                          units:          f['Units']         != null ? String(f['Units'])         : '',
-                          man_hours:      f['Man Hours']     != null ? String(f['Man Hours'])     : '',
-                          planned_hours:  f['Planned Hours'] != null ? String(f['Planned Hours']) : '',
-                          billing_rate:   f['Billing Rate (₹)'] != null ? String(f['Billing Rate (₹)']) : '',
-                          billable_units: f['Billable Units'] != null ? String(f['Billable Units']) : '',
-                          from_date:      f['From Date']?.split('T')[0] || '',
-                          to_date:        f['To Date']?.split('T')[0]   || '',
-                          notes:          f['Notes']         || '',
-                          project_id:     linkedProjId || '',
-                        },
-                      })
-                      setDrawer('edit')
-                    }}
-                    className="btn-ghost flex items-center gap-1 flex-shrink-0"
-                    style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
-                    <Edit2 size={11} /> Edit
-                  </button>
-                </div>
-                <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
-                  Project: <span style={{ color: 'var(--text-2)' }}>{projLabel}</span>
-                </p>
-                <div className="grid grid-cols-3 gap-2 text-[11px]">
-                  <div>
-                    <p style={{ color: 'var(--text-3)' }}>Cost</p>
-                    <p className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{cost ? formatInr(cost) : '—'}</p>
-                  </div>
-                  <div>
-                    <p style={{ color: 'var(--text-3)' }}>Hours</p>
-                    <p className="font-semibold tabular-nums" style={{ color: 'var(--text-2)' }}>{hours > 0 ? `${hours}h` : '—'}</p>
-                  </div>
-                  <div>
-                    <p style={{ color: 'var(--text-3)' }}>Revenue</p>
-                    <p className="font-semibold tabular-nums" style={{ color: revenue > 0 ? '#4ade80' : 'var(--text-3)' }}>
-                      {revenue > 0 ? formatInr(revenue) : '—'}
-                    </p>
-                    {margin > 0 && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{margin.toFixed(1)}%</p>}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Desktop table */}
-        <div className="hidden md:block card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: 640 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Resource', 'Project', 'Role / Type', 'Cost', 'Hours', 'Revenue', ''].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider"
-                      style={{ color: 'var(--text-3)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {displayed.map(r => {
-                  const f = r.fields || {}
-                  const projLabel = Array.isArray(f['Project'])
-                    ? f['Project'].map(p => p.title || p.value || '').filter(Boolean).join(', ')
-                    : f['Project'] || '—'
-                  const cost    = Number(f['Total Cost'] || 0)
-                  const hours   = Number(f['Man Hours'] || 0)
-                  const revenue = Number(f['Revenue Generated'] || 0)
-                  const margin  = Number(f['Resource Margin %'] || 0)
-                  const linkedProjId = Array.isArray(f['Project']) && f['Project'][0]?.id
-                  return (
-                    <tr key={r.id} className="tbl-row" style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td className="tbl-cell">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                            style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
-                            {(f['Resource Name'] || '?')[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{f['Resource Name'] || '—'}</p>
-                            {f['Rate (₹)'] && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{formatInr(f['Rate (₹)'])}/{f['Rate Unit'] || 'unit'}</p>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="tbl-cell">
-                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{projLabel}</p>
-                      </td>
-                      <td className="tbl-cell">
-                        <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f['Role'] || '—'}</p>
-                        {f['Type'] && <span className="text-[10px] px-1.5 py-0.5 rounded-full"
-                          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>{f['Type']}</span>}
-                      </td>
-                      <td className="tbl-cell">
-                        <p className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>
-                          {cost ? formatInr(cost) : '—'}
-                        </p>
-                      </td>
-                      <td className="tbl-cell">
-                        <p className="text-sm tabular-nums" style={{ color: 'var(--text-2)' }}>
-                          {hours > 0 ? `${hours}h` : '—'}
-                        </p>
-                      </td>
-                      <td className="tbl-cell">
-                        {revenue > 0 ? (
-                          <div>
-                            <p className="text-sm font-semibold tabular-nums" style={{ color: '#4ade80' }}>{formatInr(revenue)}</p>
-                            {margin > 0 && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{margin.toFixed(1)}% margin</p>}
-                          </div>
-                        ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                      </td>
-                      <td className="tbl-cell" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => {
-                            setEditingRec({
-                              id: r.id,
-                              initial: {
-                                resource_name:  f['Resource Name'] || '',
-                                role:           f['Role']          || '',
-                                type_:          f['Type']          || 'Employee',
-                                rate:           f['Rate (₹)']      != null ? String(f['Rate (₹)'])      : '',
-                                rate_unit:      f['Rate Unit']     || 'Per Month',
-                                units:          f['Units']         != null ? String(f['Units'])         : '',
-                                man_hours:      f['Man Hours']     != null ? String(f['Man Hours'])     : '',
-                                planned_hours:  f['Planned Hours'] != null ? String(f['Planned Hours']) : '',
-                                billing_rate:   f['Billing Rate (₹)'] != null ? String(f['Billing Rate (₹)']) : '',
-                                billable_units: f['Billable Units'] != null ? String(f['Billable Units']) : '',
-                                from_date:      f['From Date']?.split('T')[0] || '',
-                                to_date:        f['To Date']?.split('T')[0]   || '',
-                                notes:          f['Notes']         || '',
-                                project_id:     linkedProjId || '',
-                              },
-                            })
-                            setDrawer('edit')
-                          }}
-                          className="btn-ghost flex items-center gap-1.5"
-                          style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
-                          <Edit2 size={11} /><span className="text-[11px] font-semibold">Edit</span>
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
-      )}
-
-      {/* Resource Drawer */}
-      <ResourceDrawer
-        open={drawer === 'new' || drawer === 'edit'}
-        onClose={() => { setDrawer(null); setEditingRec(null) }}
-        initial={editingRec?.initial || {}}
-        onSubmit={handleSave}
-        onDelete={drawer === 'edit' ? handleDelete : undefined}
-        saving={saving}
-        isEdit={drawer === 'edit'}
-        projectNames={projectNames}
-      />
-    </div>
-  )
-}
-
-// ── WebProjects — standalone shell (for potential future standalone routing) ──
-
-export default function WebProjects() {
-  const { logout } = useAuth()
-  const { dark, toggle } = useTheme()
-  return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-base)' }}>
-      <header className="sticky top-0 z-30 px-4 sm:px-6 py-3 flex items-center gap-3"
-        style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent-btn)' }}>
-            <Briefcase size={14} color="#fff" />
-          </div>
-          <p className="font-bold text-sm" style={{ color: 'var(--text-1)' }}>Web Projects</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={toggle}
-            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-            {dark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <button onClick={logout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-            style={{ color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-            <LogOut size={12} /> Sign out
-          </button>
-        </div>
-      </header>
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-        <ProjectsWorkspace />
-      </div>
     </div>
   )
 }

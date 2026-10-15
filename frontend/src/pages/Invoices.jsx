@@ -15,6 +15,7 @@ import { DocPreviewModal } from '../components/DocPreviewModal'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import clsx from 'clsx'
 import { csvCell } from '../utils/csv'
+import { downloadBlob } from '../utils/download'
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
@@ -24,7 +25,7 @@ import { InvoiceDetail } from './invoices/InvoiceDetail'
 import { InvoiceDrawer } from './invoices/InvoiceDrawer'
 import { OverdueAlert } from './invoices/OverdueAlert'
 import { AgingBadge, AttachThumb, MonthStatusPill, RaisedByBadge, ResizableHead, SkeletonRow, StatusPill } from './invoices/ui'
-import { DEFAULT_INVOICE_COLUMN_VISIBILITY, DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_COLUMNS, INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, normalizeColumnVisibility, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, classifyAgingBand, currentMonthKey, dateOnlyValue, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './invoices/utils'
+import { DEFAULT_INVOICE_COLUMN_VISIBILITY, DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_COLUMNS, INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, normalizeColumnVisibility, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, buildRetainerGroups, classifyAgingBand, currentMonthKey, dateOnlyValue, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel } from './invoices/utils'
 
 /* ── RaisedByBadge ──────────────────────────────────────────────────────── */
 export default function Invoices() {
@@ -33,7 +34,6 @@ export default function Invoices() {
   // Granular permission flags — these override the coarse isEditor check for email-auth users
   const canCreate  = isEditor && hasPerm('module.invoices.create')
   const canEdit    = isEditor && hasPerm('module.invoices.edit')
-  const canDelete  = isEditor && hasPerm('module.invoices.delete')
   const canPayment = isEditor && hasPerm('module.invoices.payment')
   const toast = useToast()
   const initialStatus = searchParams.get('status') || ''
@@ -219,90 +219,10 @@ export default function Invoices() {
     [...new Set([currentMonthKey(), ...monthOptions])].sort().reverse()
   ), [monthOptions])
 
-  const retainerGroups = useMemo(() => {
-    const retainerRecords = allRecords.filter(r => isRetainerCategory(r.fields?.['Category']))
-    const grouped = new Map()
-    for (const record of retainerRecords) {
-      const project = String(record.fields?.['Project'] || '').trim() || 'Unnamed Retainer'
-      if (!grouped.has(project)) grouped.set(project, [])
-      grouped.get(project).push(record)
-    }
-    return [...grouped.entries()].map(([project, items]) => {
-      const sorted = sortByRaisedDateDesc(items)
-      const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
-      // Build recordByMonth preferring active (non-cancelled) records when a month
-      // has multiple invoices (e.g. original cancelled + re-raised paid replacement).
-      const recordByMonth = {}
-      for (const r of sorted) {
-        const key = monthKey(r.fields?.['Raised Date'])
-        if (!key) continue
-        const existing = recordByMonth[key]
-        const thisCancelled = r.fields?.['Payment Status'] === 'Cancelled'
-        if (!existing || (existing.fields?.['Payment Status'] === 'Cancelled' && !thisCancelled)) {
-          recordByMonth[key] = r
-        }
-      }
-      // For the selected month, prefer the active record over a cancelled one
-      const monthRecord =
-        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth && r.fields?.['Payment Status'] !== 'Cancelled') ||
-        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
-      const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
-      const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
-      const monthStatus = !monthRecord
-        ? 'Missing'
-        : monthRecord.fields?.['Payment Status'] === 'Cancelled'
-          ? 'Paused'
-          : monthRecord.fields?.['Payment Status'] || 'Pending'
-      const timelineMonths = Array.from({ length: 8 }, (_, i) => shiftMonthKey(currentMonthKey(), i - 3))
-      const timeline = timelineMonths.map((key) => {
-        const rec = recordByMonth[key]
-        const recStatus = !rec
-          ? 'Missing'
-          : rec.fields?.['Payment Status'] === 'Cancelled'
-            ? 'Paused'
-            : rec.fields?.['Payment Status'] === 'Paid'
-              ? 'Raised'
-              : 'Pending'
-        return {
-          key,
-          label: shortMonthLabel(key),
-          fullLabel: monthLabel(key),
-          record: rec,
-          status: recStatus,
-          active: key === retainerMonth,
-          current: key === currentMonthKey(),
-        }
-      })
-      const currentTimeline = timeline.find(t => t.current)
-      const currentMonthRaised = currentTimeline ? currentTimeline.status !== 'Missing' : false
-      let nextDueMonth = currentMonthKey()
-      for (let i = 0; i < 12; i++) {
-        const key = shiftMonthKey(currentMonthKey(), i)
-        const rec = recordByMonth[key]
-        const paused = rec?.fields?.['Payment Status'] === 'Cancelled'
-        if (!rec || paused) {
-          nextDueMonth = paused ? shiftMonthKey(key, 1) : key
-          break
-        }
-        nextDueMonth = shiftMonthKey(key, 1)
-      }
-      return {
-        project,
-        records: sorted,
-        latestActive,
-        recordByMonth,
-        monthRecord,
-        amount,
-        withTax,
-        monthStatus,
-        timeline,
-        currentMonthRaised,
-        nextDueMonth,
-        raisedBy: latestActive?.fields?.['Raised By'] || '',
-        description: latestActive?.fields?.['Description'] || '',
-      }
-    }).sort((a, b) => a.project.localeCompare(b.project))
-  }, [allRecords, retainerMonth])
+  const retainerGroups = useMemo(
+    () => buildRetainerGroups(allRecords, retainerMonth),
+    [allRecords, retainerMonth],
+  )
 
   useEffect(() => {
     if (!retainerGroups.length) { setSelectedRetainer(''); return }
@@ -749,12 +669,7 @@ export default function Invoices() {
       return CSV_FIELDS.map(k => csvCell(f[k])).join(',')
     }).join('\n')
     const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0, 10)}.csv`)
     setShowExportMenu(false)
   }
 
@@ -1456,7 +1371,6 @@ export default function Invoices() {
                 const group = selectedRetainerGroup
                 const monthRec = group.monthRecord?.fields || null
                 const missing = !monthRec
-                const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
                 const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
                 return (
                   <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>

@@ -14,6 +14,15 @@ from ..db import valkey as vk
 from ..utils.cache import cache
 from ..utils.sorting import cell_sort_key
 from ..db.postgres import get_pool
+from .invoice_common import (
+    AGING_FIELD_META_TTL,
+    AGING_FORMULA_FIELD,
+    AGING_REFRESH_HELPER_FIELD,
+    _apply_runtime_invoice_derivatives,
+    _clean_fields,
+    _runtime_aging,
+    _teable_error,
+)
 
 # ── Field IDs for filter/sort params (must use IDs, not names) ─────────────
 INVOICE_FIELD_IDS = {
@@ -57,43 +66,10 @@ _TTL_ALL     = 30   # full record dump (used by summary + AI)
 _TTL_SUMMARY = 30   # computed summary
 
 logger = logging.getLogger("fintrack.invoices")
-AGING_REFRESH_HELPER_FIELD = "Aging Refresh Tick"
-AGING_FORMULA_FIELD = "Agening (Days)"
-AGING_FIELD_META_TTL = 60
-
-def _teable_error(res: httpx.Response) -> str:
-    try:
-        payload = res.json()
-    except Exception:
-        payload = res.text
-    return f"Teable {res.status_code}: {payload}"
 
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
     cache.bust(prefix="invoice:")
-
-
-def _runtime_aging(fields: dict[str, Any]) -> int | None:
-    status = str(fields.get("Payment Status") or "").strip()
-    if status != "Pending":
-        return None
-    raised_raw = fields.get("Raised Date")
-    if not raised_raw:
-        return None
-    try:
-        raised_dt = datetime.fromisoformat(str(raised_raw).replace("Z", "+00:00"))
-        return max(0, (datetime.now(timezone.utc) - raised_dt).days)
-    except Exception:
-        return None
-
-
-def _apply_runtime_invoice_derivatives(record: dict[str, Any]) -> dict[str, Any]:
-    fields = dict(record.get("fields") or {})
-    aging = _runtime_aging(fields)
-    if aging is not None:
-        fields["Agening (Days)"] = aging
-    record["fields"] = fields
-    return record
 
 
 class InvoiceService:
@@ -190,20 +166,6 @@ class InvoiceService:
             "actor_device_model": "Aging refresh worker",
         })
         return actor
-
-    def _field_convert_payload(self, field: dict, options_override: dict | None = None) -> dict:
-        payload = {
-            "type": field["type"],
-            "name": field["name"],
-            "options": options_override if options_override is not None else (field.get("options") or {}),
-        }
-        for key in ("description", "dbFieldName", "lookupOptions", "aiConfig"):
-            if key in field:
-                payload[key] = field.get(key)
-        for key in ("unique", "notNull", "isLookup", "isConditionalLookup"):
-            if key in field:
-                payload[key] = bool(field.get(key))
-        return payload
 
     async def _get_fields_meta(self) -> list[dict[str, Any]]:
         async def _load():
@@ -716,19 +678,3 @@ class InvoiceService:
         summary = self._compute_summary(records)
         cache.set(cache_key, summary, ttl=_TTL_SUMMARY)
         return summary
-
-
-# ── Strip read-only / None fields before write ─────────────────────────────
-_READ_ONLY = {"Days To Clear", "Speed", "Agening (Days)", "Outstanding Amount"}
-
-def _clean_fields(fields: dict, allow_null_fields: set[str] | None = None) -> dict:
-    allow_null = allow_null_fields or set()
-    return {
-        k: v for k, v in fields.items()
-        if k not in _READ_ONLY and (
-            # Send the value if it is truthy, or a legitimate 0 / False
-            (v is not None and v != "" and v != []) or
-            # Explicitly allow null for date-clearable fields
-            (k in allow_null and v is None)
-        )
-    }

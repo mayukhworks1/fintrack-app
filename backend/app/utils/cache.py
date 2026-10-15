@@ -11,7 +11,7 @@ no changes.  The module-level `cache` singleton is what all services import.
 from __future__ import annotations
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
 from .tasks import spawn

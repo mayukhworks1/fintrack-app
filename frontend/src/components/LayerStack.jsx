@@ -10,12 +10,12 @@
  * into an isometric plane also rotates the text inside it, and the usual fix —
  * counter-rotating the label back — is a second transform that has to be kept
  * in sync with the first for ever. Here the planes are parallelogram paths and
- * the labels are placed flat beside them, which is both simpler and readable.
+ * the text about them sits flat beside the drawing (StackStory), which is both
+ * simpler and readable.
  *
  * The one rule this respects: perspective distorts magnitude, so depth is used
  * on structure and never on a quantity. Nothing here is a measurement.
  */
-import { useReveal } from '../hooks/useReveal'
 
 /* Isometric projection: x runs right-and-down, y runs left-and-down. Keeping
    the two skews equal and opposite is what stops the planes from looking like
@@ -132,86 +132,5 @@ export function StackDrawing({ active = null, className = '' }) {
             x2={originX - 9} y2={originY + THICK + GAP * (LAYERS.length - 1)}
             stroke="url(#ft-spine-2)" strokeWidth="1.6" opacity="0.5" />
     </svg>
-  )
-}
-
-export default function LayerStack() {
-  const ref = useReveal({ threshold: 0.2 })
-
-  const height = GAP * (LAYERS.length - 1) + D * SKEW_X + THICK + 80
-  const originX = 16
-  const originY = 46
-
-  return (
-    // Sized rather than split in half: an auto-fit pair gave the drawing a
-    // 520px cell it did not fill and pushed the labels to the far edge, so the
-    // legend read as a separate block instead of as the key to the thing
-    // beside it.
-    <div ref={ref} className="ft-reveal ft-stack grid gap-6 sm:gap-10 items-center"
-         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), auto))',
-                  justifyContent: 'start' }}>
-      <svg viewBox={`0 0 ${W + D + 32} ${height}`} aria-hidden="true"
-           style={{ width: '100%', maxWidth: 420, display: 'block', overflow: 'visible' }}>
-        <defs>
-          <linearGradient id="ft-spine" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4ADE80" />
-            <stop offset="100%" stopColor="#4F86FF" />
-          </linearGradient>
-        </defs>
-
-        {/* Painted far-to-near so the near slabs overlap the far ones. */}
-        {[...LAYERS].reverse().map((layer, ri) => {
-          const i = LAYERS.length - 1 - ri
-          const y = originY + (LAYERS.length - 1 - i) * GAP
-          // Lifts apart on hover — the stack can be taken to pieces rather
-          // than only looked at. Higher layers travel further.
-          const lift = -(i * 7)
-          return (
-            <g key={layer.id} className="ft-plane" style={{ ['--lift']: `${lift}px` }}>
-              <path d={sidePath(originX, y, THICK)} fill={layer.side} />
-              <path d={frontPath(originX, y, THICK)} fill={layer.front} />
-              <path d={facePath(originX, y)} fill={layer.top} />
-              {/* Hairline along the top edge — an isometric slab with no
-                  highlight reads as flat colour, not as a surface. */}
-              <path d={facePath(originX, y)} fill="none"
-                    stroke="rgba(255,255,255,0.22)" strokeWidth="0.8" />
-            </g>
-          )
-        })}
-
-        {/* The spine runs just outside the left edge of the stack, with light
-            climbing it in the direction the data travels — records up into
-            the mirror, out to the modules, up to the analyst. Drawn beside
-            the slabs rather than across them: a line over an opaque
-            isometric face reads as a rendering artefact, not as flow. */}
-        <line x1={originX - 9} y1={originY + THICK}
-              x2={originX - 9} y2={originY + THICK + GAP * (LAYERS.length - 1)}
-              stroke="url(#ft-spine)" strokeWidth="1.6" opacity="0.5" />
-        <circle className="ft-spark" cx={originX - 9}
-                cy={originY + THICK + GAP * (LAYERS.length - 1)} r="3.4"
-                fill="#4ADE80"
-                style={{ ['--ft-spark-to']: `${-GAP * (LAYERS.length - 1)}px`,
-                         filter: 'drop-shadow(0 0 4px #4ADE80)' }} />
-      </svg>
-
-      <ol className="flex flex-col gap-3 m-0 p-0" style={{ listStyle: 'none' }}>
-        {[...LAYERS].reverse().map((layer) => (
-          <li key={layer.id} className="flex items-start gap-3">
-            <span aria-hidden="true" style={{
-              width: 11, height: 11, borderRadius: 3, marginTop: 4, flexShrink: 0,
-              background: layer.top, boxShadow: `0 0 0 3px color-mix(in srgb, ${layer.top} 18%, transparent)`,
-            }} />
-            <span className="min-w-0">
-              <span className="block font-bold" style={{ fontSize: '0.95rem', color: 'var(--text-1)' }}>
-                {layer.title}
-              </span>
-              <span className="block text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                {layer.body}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
   )
 }

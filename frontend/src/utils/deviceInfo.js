@@ -193,6 +193,3 @@ export async function getDeviceHintHeader() {
   })()
   return _cachedPromise
 }
-
-/** For local diagnostics — returns the decoded object (with whatever geo has arrived) */
-export async function getDeviceInfo() { return { ...(await _collect()), browserGeo: _geo } }

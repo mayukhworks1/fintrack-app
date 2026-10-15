@@ -26,6 +26,7 @@ from .deps import require_auth, require_editor, require_permission
 from .ai import _ai_quota
 from ..db.valkey import rate_check, cache_bust
 from ..utils.uploads import read_upload, upload_limit
+from ..utils.client_ip import client_ip
 
 # Valkey is NOT used for status list reads — we go straight to PG mirror
 # (1-3 ms) so there's no stale-cache window to worry about.
@@ -40,11 +41,6 @@ router = APIRouter(prefix="/api/status", tags=["status"])
 
 def _svc() -> StatusService:
     return StatusService()
-
-
-def _ip(request: Request) -> str:
-    from ..utils.client_ip import client_ip
-    return client_ip(request)
 
 
 def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
@@ -65,7 +61,7 @@ def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
 
 async def _check_write_rate(request: Request) -> None:
     """30 status mutations / min per IP."""
-    allowed, _ = await rate_check(_ip(request), limit=30, window_sec=60)
+    allowed, _ = await rate_check(client_ip(request), limit=30, window_sec=60)
     if not allowed:
         raise HTTPException(
             status_code=429,

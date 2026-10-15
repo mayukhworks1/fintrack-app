@@ -19,6 +19,8 @@ import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
 
 import clsx from 'clsx'
 import { csvCell } from '../utils/csv'
+import { downloadBlob } from '../utils/download'
+import { escapeHtml } from '../utils/sanitize'
 import EmptyState from '../components/EmptyState'
 import InvoiceActivityChart from '../components/InvoiceActivityChart'
 import MonthlyCollectionsChart from '../components/MonthlyCollectionsChart'
@@ -28,7 +30,7 @@ import { InvoiceDetail } from './webinvoices/InvoiceDetail'
 import { InvoiceDrawer } from './webinvoices/InvoiceDrawer'
 import { AppSidebar, MobileBottomNav, MobileHeader } from './webinvoices/nav'
 import { AgingBadge, AttachThumb, DashboardMetric, DashboardSignal, KpiCard, MonthStatusPill, RaisedByBadge, SkeletonRow, StatusPill } from './webinvoices/ui'
-import { DEFAULT_PICKLISTS, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, STATUS_META, classifyAgingBand, currencySymbol, currentMonthKey, dateOnlyValue, endOfMonthIso, firstDayIso, fmt, fmtCurrency, fmtDate, getRetainerCategoryOption, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, parseIsoDate, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './webinvoices/utils'
+import { DEFAULT_PICKLISTS, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, STATUS_META, buildRetainerGroups, classifyAgingBand, currencySymbol, currentMonthKey, dateOnlyValue, endOfMonthIso, firstDayIso, fmt, fmtCurrency, fmtDate, getRetainerCategoryOption, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, parseIsoDate, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './webinvoices/utils'
 import { useConfirm } from '../context/ConfirmContext'
 
 /* ── Constants ── */
@@ -39,9 +41,7 @@ export default function WebInvoices() {
   const { isAll, logout, hasPerm } = useAuth()
   const canCreateInvoice  = hasPerm('module.invoices.create')
   const canEditInvoice    = hasPerm('module.invoices.edit')
-  const canDeleteInvoice  = hasPerm('module.invoices.delete')
   const canPayInvoice     = hasPerm('module.invoices.payment')
-  const canViewInvoice    = hasPerm('module.invoices.view')
   // Projects and Tax tabs are shown for web_admin (isAll) OR if the user has been granted
   // the permission explicitly via the Permission Matrix — this lets web-role users access
   // these sections without needing to be promoted to web_admin.
@@ -140,10 +140,8 @@ export default function WebInvoices() {
   }
 
   const [agingBuckets,  setAgingBuckets]  = useState(null)
-  // GST summary computed client-side from allRecords — no extra API call needed
   const [avatarMap,     setAvatarMap]     = useState({})
   const [hoveredRow,    setHoveredRow]    = useState(null)
-  const [gstMonths,     setGstMonths]     = useState(3)
   const [chartPreset,   setChartPreset]   = useState('60d')
   const [chartFrom,     setChartFrom]     = useState('')
   const [chartTo,       setChartTo]       = useState('')
@@ -298,92 +296,10 @@ export default function WebInvoices() {
     return entries.map(([project, metrics]) => ({ project, metrics }))
   }, [s])
 
-  const retainerGroups = useMemo(() => {
-    const retainerRecords = allRecords.filter(r => isRetainerCategory(r.fields?.['Category']))
-    const grouped = new Map()
-    for (const record of retainerRecords) {
-      const project = String(record.fields?.['Project'] || '').trim() || 'Unnamed Retainer'
-      if (!grouped.has(project)) grouped.set(project, [])
-      grouped.get(project).push(record)
-    }
-
-    return [...grouped.entries()].map(([project, items]) => {
-      const sorted = sortByRaisedDateDesc(items)
-      const latestActive = sorted.find(r => r.fields?.['Payment Status'] !== 'Cancelled') || sorted[0]
-      // Build recordByMonth preferring active (non-cancelled) records when a month
-      // has multiple invoices (e.g. original cancelled + re-raised paid replacement).
-      const recordByMonth = {}
-      for (const r of sorted) {
-        const key = monthKey(r.fields?.['Raised Date'])
-        if (!key) continue
-        const existing = recordByMonth[key]
-        const thisCancelled = r.fields?.['Payment Status'] === 'Cancelled'
-        if (!existing || (existing.fields?.['Payment Status'] === 'Cancelled' && !thisCancelled)) {
-          recordByMonth[key] = r
-        }
-      }
-      // For the selected month, prefer the active record over a cancelled one
-      const monthRecord =
-        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth && r.fields?.['Payment Status'] !== 'Cancelled') ||
-        sorted.find(r => monthKey(r.fields?.['Raised Date']) === retainerMonth)
-      const amount = Number(latestActive?.fields?.['Amount Raised'] || 0)
-      const withTax = Number(latestActive?.fields?.['Amount with Tax'] || 0)
-      const monthStatus = !monthRecord
-        ? 'Missing'
-        : monthRecord.fields?.['Payment Status'] === 'Cancelled'
-          ? 'Paused'
-          : monthRecord.fields?.['Payment Status'] || 'Pending'
-      const timelineMonths = Array.from({ length: 8 }, (_, i) => shiftMonthKey(currentMonthKey(), i - 3))
-      const timeline = timelineMonths.map((key) => {
-        const rec = recordByMonth[key]
-        const recStatus = !rec
-          ? 'Missing'
-          : rec.fields?.['Payment Status'] === 'Cancelled'
-            ? 'Paused'
-            : rec.fields?.['Payment Status'] === 'Paid'
-              ? 'Raised'
-              : 'Pending'
-        return {
-          key,
-          label: shortMonthLabel(key),
-          fullLabel: monthLabel(key),
-          record: rec,
-          status: recStatus,
-          active: key === retainerMonth,
-          current: key === currentMonthKey(),
-        }
-      })
-      const currentTimeline = timeline.find(t => t.current)
-      const currentMonthRaised = currentTimeline ? currentTimeline.status !== 'Missing' : false
-      let nextDueMonth = currentMonthKey()
-      for (let i = 0; i < 12; i++) {
-        const key = shiftMonthKey(currentMonthKey(), i)
-        const rec = recordByMonth[key]
-        const paused = rec?.fields?.['Payment Status'] === 'Cancelled'
-        if (!rec || paused) {
-          nextDueMonth = paused ? shiftMonthKey(key, 1) : key
-          break
-        }
-        nextDueMonth = shiftMonthKey(key, 1)
-      }
-
-      return {
-        project,
-        records: sorted,
-        latestActive,
-        recordByMonth,
-        monthRecord,
-        amount,
-        withTax,
-        monthStatus,
-        timeline,
-        currentMonthRaised,
-        nextDueMonth,
-        raisedBy: latestActive?.fields?.['Raised By'] || '',
-        description: latestActive?.fields?.['Description'] || '',
-      }
-    }).sort((a, b) => a.project.localeCompare(b.project))
-  }, [allRecords, retainerMonth])
+  const retainerGroups = useMemo(
+    () => buildRetainerGroups(allRecords, retainerMonth),
+    [allRecords, retainerMonth],
+  )
 
   useEffect(() => {
     if (!retainerGroups.length) {
@@ -559,35 +475,6 @@ export default function WebInvoices() {
     [lastThreeMonthBalance]
   )
 
-  // GST summary computed from already-loaded allRecords — instant, no extra API call
-  const gstSummary = useMemo(() => {
-    const now = new Date()
-    const cutoff = new Date(now.getFullYear(), now.getMonth() - gstMonths + 1, 1)
-    const months = {}
-    const totals = { base: 0, gst: 0, gross: 0, received: 0, outstanding: 0, count: 0 }
-    for (const r of allRecords) {
-      const f = r.fields || {}
-      const rd = f['Raised Date'] ? new Date(f['Raised Date']) : null
-      if (!rd || isNaN(rd) || rd < cutoff) continue
-      const base        = Number(f['Amount Raised'] || 0)
-      const gross       = Number(f['Amount with Tax'] || base)
-      const received    = Number(f['Amount Received'] || 0)
-      const outstanding = Number(f['Outstanding Amount'] || Math.max(0, gross - received))
-      const gst         = Math.max(0, gross - base)
-      const mk = `${rd.getFullYear()}-${String(rd.getMonth() + 1).padStart(2, '0')}`
-      if (!months[mk]) {
-        const label = rd.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-        months[mk] = { month: mk, label, base: 0, gst: 0, gross: 0, received: 0, outstanding: 0, count: 0, paid_count: 0, pending_count: 0 }
-      }
-      months[mk].base += base; months[mk].gst += gst; months[mk].gross += gross
-      months[mk].received += received; months[mk].outstanding += outstanding; months[mk].count += 1
-      if (f['Payment Status'] === 'Paid') months[mk].paid_count += 1; else months[mk].pending_count += 1
-      totals.base += base; totals.gst += gst; totals.gross += gross
-      totals.received += received; totals.outstanding += outstanding; totals.count += 1
-    }
-    return { months: Object.values(months).sort((a, b) => a.month.localeCompare(b.month)), totals }
-  }, [allRecords, gstMonths])
-
   async function createRetainerMonth(group, mode) {
     if (!canCreateInvoice) return
     if (!group?.latestActive) {
@@ -724,7 +611,7 @@ export default function WebInvoices() {
         <th>Amount</th><th>With GST</th><th>Received</th><th>O/S</th>
       </tr></thead>
       <tbody>${printRows.map(r => `<tr>
-        <td class="l">${r.no}</td><td class="l">${r.date}</td><td class="l">${r.project}</td><td class="l">${r.category}</td><td class="l">${r.status}</td>
+        <td class="l">${escapeHtml(r.no)}</td><td class="l">${escapeHtml(r.date)}</td><td class="l">${escapeHtml(r.project)}</td><td class="l">${escapeHtml(r.category)}</td><td class="l">${escapeHtml(r.status)}</td>
         <td>${INR(r.raised)}</td><td>${INR(r.withTax)}</td><td class="green">${INR(r.received)}</td><td class="${Number(r.outstanding) > 0 ? 'red' : ''}">${INR(r.outstanding)}</td>
       </tr>`).join('')}</tbody>
     </table>
@@ -749,12 +636,7 @@ export default function WebInvoices() {
       return CSV_FIELDS.map(k => csvCell(f[k])).join(',')
     }).join('\n')
     const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0,10)}.csv`)
     setShowExportMenu(false)
   }
 
@@ -1811,7 +1693,6 @@ export default function WebInvoices() {
                   const group = selectedRetainerGroup
                   const monthRec = group.monthRecord?.fields || null
                   const missing = !monthRec
-                  const busyCreate = retainerActionBusy === `create:${group.project}:${retainerMonth}`
                   const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
                   return (
                     <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>

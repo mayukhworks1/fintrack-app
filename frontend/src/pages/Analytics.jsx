@@ -1,15 +1,13 @@
-import { useCallback, useMemo, useState, useRef } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
+  PieChart, Pie, Cell, Legend, AreaChart, Area,
   ComposedChart, ReferenceLine,
 } from 'recharts'
 import {
   RefreshCw, AlertCircle, TrendingUp, TrendingDown, IndianRupee,
-  Wallet, Receipt, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
-  Target, Sparkles, Activity, CalendarClock, CheckCircle2, Hourglass,
-  Users, Layers, Zap, ArrowRight, Filter, BarChart2, PieChart as PieIcon,
-  ChevronRight, DollarSign, Percent, Timer,
+  Wallet, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
+  Target, Sparkles, Hourglass, Users, Zap, ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
@@ -18,6 +16,7 @@ import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct, formatInt } from '../utils/format'
+import { EXECUTIVE_VARS_DARK as BASE_EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT as BASE_EXECUTIVE_VARS_LIGHT } from '../utils/executiveVars'
 import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
 
@@ -57,56 +56,20 @@ const PERIODS = [
   { id: 'ytd',  label: 'YTD',      days: 'ytd' },
 ]
 
+// Analytics also sets the status border colours; Dashboard keeps the ones
+// from index.css, which differ.
 const EXECUTIVE_VARS_DARK = {
-  '--bg-base': '#090b10',
-  '--bg-layer': '#0e1118',
-  '--card-bg': '#141820',
-  '--card-border': 'rgba(255,255,255,0.08)',
-  '--card-shadow': '0 24px 60px rgba(0,0,0,0.32)',
-  '--card-shadow-hover': '0 28px 70px rgba(0,0,0,0.4)',
-  '--bg-input': '#10141d',
-  '--text-1': '#f4f7fb',
-  '--text-2': '#c0c8d6',
-  '--text-3': '#7f8a9c',
-  '--accent': '#7d95ff',
-  '--accent-dim': 'rgba(125,149,255,0.12)',
-  '--accent-soft': 'rgba(125,149,255,0.22)',
-  '--fin-positive': '#84e254',
-  '--fin-pos-bg': 'rgba(132,226,84,0.12)',
+  ...BASE_EXECUTIVE_VARS_DARK,
   '--fin-pos-border': 'rgba(132,226,84,0.18)',
-  '--fin-warning': '#f3b45d',
-  '--fin-warn-bg': 'rgba(243,180,93,0.13)',
   '--fin-warn-border': 'rgba(243,180,93,0.18)',
-  '--fin-negative': '#ff7d80',
-  '--fin-neg-bg': 'rgba(255,125,128,0.13)',
   '--fin-neg-border': 'rgba(255,125,128,0.18)',
-  '--border': 'rgba(255,255,255,0.08)',
 }
 
 const EXECUTIVE_VARS_LIGHT = {
-  '--bg-base': '#f5f7fb',
-  '--bg-layer': '#fbfcff',
-  '--card-bg': '#ffffff',
-  '--card-border': 'rgba(15,23,42,0.08)',
-  '--card-shadow': '0 24px 60px rgba(15,23,42,0.08)',
-  '--card-shadow-hover': '0 28px 70px rgba(15,23,42,0.12)',
-  '--bg-input': '#f5f7fb',
-  '--text-1': '#152033',
-  '--text-2': '#536175',
-  '--text-3': '#8b97aa',
-  '--accent': '#4b67ff',
-  '--accent-dim': 'rgba(75,103,255,0.10)',
-  '--accent-soft': 'rgba(75,103,255,0.18)',
-  '--fin-positive': '#16915f',
-  '--fin-pos-bg': 'rgba(22,145,95,0.10)',
+  ...BASE_EXECUTIVE_VARS_LIGHT,
   '--fin-pos-border': 'rgba(22,145,95,0.14)',
-  '--fin-warning': '#ca7f14',
-  '--fin-warn-bg': 'rgba(202,127,20,0.10)',
   '--fin-warn-border': 'rgba(202,127,20,0.14)',
-  '--fin-negative': '#d85f58',
-  '--fin-neg-bg': 'rgba(216,95,88,0.10)',
   '--fin-neg-border': 'rgba(216,95,88,0.14)',
-  '--border': 'rgba(15,23,42,0.08)',
 }
 
 const ANALYTICS_WIDGET_CATALOG = [
@@ -234,35 +197,6 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
   )
 }
 
-/* Custom tooltip wrapper for recharts with consistent design */
-function CustomTooltip({ active, payload, label, formatter, dark: _dark }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={{
-      background: 'var(--card-bg)',
-      border: '1px solid var(--card-border)',
-      borderRadius: 14,
-      padding: '10px 14px',
-      fontSize: 12,
-      boxShadow: 'var(--card-shadow)',
-      minWidth: 140,
-    }}>
-      {label && <p style={{ color: 'var(--text-1)', fontWeight: 700, marginBottom: 6 }}>{label}</p>}
-      {payload.map((item, i) => (
-        <div key={i} className="flex items-center justify-between gap-4">
-          <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0, display: 'inline-block' }} />
-            {item.name}
-          </span>
-          <span style={{ color: 'var(--text-1)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-            {formatter ? formatter(item.value, item.name, item) : item.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /* Pipeline funnel stages */
 function PipelineFunnel({ data, dark }) {
   if (!data) return null
@@ -321,7 +255,7 @@ export default function Analytics() {
     }))
   , [])
 
-  const { data, loading, error, refresh, lastUpdated, changedAt, changeCount, syncing } = useAutoRefresh(fetchAll, 10_000)
+  const { data, loading, error, refresh, changedAt, changeCount, syncing } = useAutoRefresh(fetchAll, 10_000)
   // The changed time, not the polled time — `lastUpdated` moves every ten
   // seconds whether or not a figure did.
   const changedLabel = useRelativeTime(changedAt)
@@ -351,15 +285,6 @@ export default function Analytics() {
       return raised && raised >= cutoff
     })
   }, [allInvoices, cutoff])
-
-  const tooltipStyle = {
-    contentStyle: {
-      background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-      borderRadius: 10, fontSize: 12, boxShadow: 'var(--card-shadow)',
-    },
-    labelStyle: { color: 'var(--text-1)', fontWeight: 600 },
-    itemStyle:  { color: 'var(--text-2)' },
-  }
 
   /* ── Derived metrics from filtered invoices ── */
   const filtered = useMemo(() => {
@@ -663,17 +588,6 @@ export default function Analytics() {
   const isEarlyMonth = new Date().getDate() < 20
   const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
 
-  const executiveTooltip = {
-    contentStyle: {
-      background: dark ? '#171b23' : '#ffffff',
-      border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)',
-      borderRadius: 16,
-      fontSize: 12,
-      boxShadow: dark ? '0 24px 60px rgba(0,0,0,0.32)' : '0 24px 60px rgba(15,23,42,0.12)',
-    },
-    labelStyle: { color: dark ? '#f4f7fb' : '#152033', fontWeight: 700 },
-    itemStyle: { color: dark ? '#c0c8d6' : '#536175' },
-  }
   const visibleWidgets = useMemo(
     () => new Set(activeWidgetIds.length ? activeWidgetIds : ANALYTICS_DEFAULT_WIDGET_IDS),
     [activeWidgetIds]

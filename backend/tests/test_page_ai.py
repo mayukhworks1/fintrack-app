@@ -537,8 +537,3 @@ class TestDesignDirections:
         from app.services.page_ai import _rules_for
         assert "DESIGN DIRECTION" in _rules_for("html", "a landing page")
         assert "DESIGN DIRECTION" not in _rules_for("markdown", "a report")
-
-    def test_the_catalogue_is_renderable_by_the_editor(self):
-        from app.services import page_design
-        for entry in page_design.catalogue():
-            assert entry["key"] and entry["label"] and entry["summary"]

@@ -53,7 +53,6 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetToken] = useState(() => new URLSearchParams(window.location.search).get('reset_token') || '')
   const [isInvite]   = useState(() => new URLSearchParams(window.location.search).get('invite') === '1')
-  const [inviteEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '')
   const [sessionReason] = useState(() => new URLSearchParams(window.location.search).get('reason') || '')
   const [legacyMode, setLegacyMode] = useState(false)
   const [registerMode, setRegisterMode] = useState(false)
