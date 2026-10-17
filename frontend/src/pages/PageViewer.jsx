@@ -1,12 +1,10 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, API_BASE_URL } from '../services/api'
-import { csvToGrid, cellDisplay } from '../utils/sheet'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
-import { toCsv } from '../utils/csv'
-import { downloadBlob } from '../utils/download'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
+import SheetView from '../components/sheet/SheetView'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -176,72 +174,6 @@ const MD_CSS = `
 `
 
 // ---------------------------------------------------------------------------
-// CSV table
-// ---------------------------------------------------------------------------
-function CSVTable({ text }) {
-  const [sortCol, setSortCol] = useState(null)
-  const [sortAsc, setSortAsc] = useState(true)
-  const [filter, setFilter] = useState('')
-
-  // Build the grid once, then compute display values (evaluating any =formulas
-  // against absolute cell positions). Sorting/filtering operates on results.
-  const disp = useMemo(() => {
-    if (!text) return []
-    const grid = csvToGrid(text)
-    return grid.map((row, r) => row.map((_, c) => { const v = cellDisplay(grid, r, c); return v == null ? '' : String(v) }))
-  }, [text])
-
-  if (!text) return <p style={{ color: 'var(--pv-mute)' }}>Empty.</p>
-  const totalRows = Math.max(disp.length - 1, 0)
-  const headers = disp[0] || []
-  let rows = disp.slice(1)
-
-  if (filter) rows = rows.filter(r => r.some(c => c.toLowerCase().includes(filter.toLowerCase())))
-  if (sortCol !== null) {
-    rows = [...rows].sort((a,b)=>{
-      const av=a[sortCol]||''; const bv=b[sortCol]||''
-      const n = parseFloat(av)-parseFloat(bv)
-      if (!isNaN(n)) return sortAsc?n:-n
-      return sortAsc?av.localeCompare(bv):bv.localeCompare(av)
-    })
-  }
-
-  return (
-    <div>
-      <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
-        <input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter rows…"
-          style={{ padding:'6px 12px', border:'1px solid var(--pv-line)', borderRadius:8, fontSize:13, outline:'none', minWidth:160 }} />
-        <span style={{ fontSize:12, color:'var(--pv-mute)' }}>{rows.length} of {totalRows} rows</span>
-        {sortCol!==null&&<button onClick={()=>setSortCol(null)} style={{ fontSize:12, color:'var(--pv-mute)', background:'none', border:'1px solid var(--pv-line)', borderRadius:6, padding:'3px 8px', cursor:'pointer' }}>Clear sort</button>}
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 14 }}>
-          <thead>
-            <tr>{headers.map((h, i) => (
-              <th key={i} onClick={()=>{ if(sortCol===i)setSortAsc(a=>!a); else{setSortCol(i);setSortAsc(true)} }}
-                style={{ border: '1px solid var(--pv-line)', padding: '10px 14px', background: 'var(--pv-subtle)', textAlign: 'left', fontWeight: 700, whiteSpace: 'nowrap', cursor:'pointer', userSelect:'none', color:'var(--pv-text)' }}>
-                {h}{sortCol===i?<span style={{ marginLeft:4, fontSize:11 }}>{sortAsc?'↑':'↓'}</span>:<span style={{ marginLeft:4, fontSize:11, opacity:.3 }}>↕</span>}
-              </th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri} style={{ background: ri % 2 ? 'var(--pv-subtle)' : 'var(--pv-card)' }}>
-                {row.map((cell, ci) => <td key={ci} style={{ border: '1px solid var(--pv-line)', padding: '9px 14px' }}>{cell}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ marginTop:8, fontSize:12, color:'var(--pv-mute)' }}>
-        {rows.length} row{rows.length!==1?'s':''} · {headers.length} column{headers.length!==1?'s':''}
-        {' '}· <button onClick={()=>downloadBlob(new Blob([toCsv([headers,...rows])],{type:'text/csv'}),'data.csv')} style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:12, padding:0, textDecoration:'underline' }}>Download CSV ↓</button>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // HTML — author content in an isolated frame
 // ---------------------------------------------------------------------------
 function HTMLPage({ slug, token, title }) {
@@ -386,7 +318,9 @@ function PageContent({ page, slug }) {
   // its source blanked and is shown only through its render URL.
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
-  if (content_type === 'csv') return <CSVTable text={content} />
+  if (content_type === 'csv') {
+    return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
+  }
   if (content_type === 'text') {
     return (
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.7, color: 'var(--pv-ink)', background: 'var(--pv-subtle)', border: '1px solid var(--pv-line)', borderRadius: 10, padding: '20px 24px', margin: 0, fontFamily: 'ui-monospace,"SF Mono",Menlo,monospace' }}>
@@ -479,7 +413,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   return (
     <div style={{ minHeight: '100vh', background: 'var(--pv-bg)', fontFamily: 'var(--font-sans)', color: 'var(--pv-ink)' }}>
       <ReadingProgress />
-      <div style={{ maxWidth: showTOC ? 1060 : 820, margin: '0 auto', padding: '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
+      <div style={{ maxWidth: showTOC ? 1060 : contentType === 'csv' ? 1240 : 820, margin: '0 auto', padding: '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
         {/* Main content */}
         <div style={{ flex:1, minWidth:0 }}>
           {title && (

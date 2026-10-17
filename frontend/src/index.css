@@ -4368,3 +4368,191 @@ html.dark .main-app-theme {
   .ft-marquee-track { animation: none; flex-wrap: wrap; width: auto; justify-content: center; }
   .ft-marquee-track > [aria-hidden="true"] { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   SHEET EDITOR (Pages spreadsheets)
+   Every colour comes from the theme tokens, so the grid follows light and
+   dark mode. Tints are layered over the cell background with
+   background-image, which keeps frozen cells opaque while they are tinted.
+   ══════════════════════════════════════════════════════════════════ */
+.ft-sheet {
+  --ft-sheet-sel: var(--accent-soft);
+  --ft-sheet-find: var(--fin-warn-bg);
+  --ft-sheet-head: var(--bg-input);
+  --ft-sheet-edge: var(--text-3);
+  display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0;
+  position: relative; background: var(--card-bg); color: var(--text-1); font-size: 13px; outline: none;
+}
+.ft-sheet-bar {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap; flex-shrink: 0;
+  padding: 4px 6px; border-bottom: 1px solid var(--border); background: var(--card-bg);
+}
+.ft-sheet-tb {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px; flex: 0 0 auto;
+  min-width: 30px; height: 30px; padding: 0 6px; border: none; border-radius: 6px;
+  background: transparent; color: var(--text-2); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ft-sheet-tb:hover:not(:disabled) { background: var(--bg-input); color: var(--text-1); }
+.ft-sheet-tb[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.ft-sheet-tb:disabled { opacity: 0.4; cursor: default; }
+.ft-sheet-tb:focus-visible, .ft-sheet-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ft-sheet-tb-text { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.ft-sheet-sep { width: 1px; height: 18px; margin: 0 4px; background: var(--border); flex: 0 0 auto; }
+.ft-sheet-select {
+  height: 28px; flex: 0 0 auto; padding: 0 6px; margin: 0 2px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); color: var(--text-1); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ft-sheet-fx {
+  display: flex; align-items: flex-start; gap: 6px; flex-shrink: 0;
+  padding: 4px 6px; border-bottom: 1px solid var(--border); background: var(--card-bg);
+}
+.ft-sheet-name, .ft-sheet-fxin, .ft-sheet-findin {
+  height: 28px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); color: var(--text-1); font-size: 13px; outline: none; min-width: 0;
+}
+.ft-sheet-name { width: 96px; flex: 0 0 auto; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; }
+.ft-sheet-fxin {
+  flex: 1 1 auto; height: auto; min-height: 28px; padding: 4px 8px; line-height: 18px; resize: none; overflow: hidden;
+  white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ft-sheet-name:focus, .ft-sheet-fxin:focus, .ft-sheet-findin:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ft-sheet-fxlabel { flex: 0 0 auto; color: var(--text-3); font: italic 600 14px/28px Georgia, serif; padding: 0 2px; }
+.ft-sheet-strip {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+  padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg-base); color: var(--text-2); font-size: 12px;
+}
+.ft-sheet-find { flex-wrap: nowrap; }
+.ft-sheet-findin { flex: 1 1 160px; max-width: 280px; }
+.ft-sheet-findcount { min-width: 64px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ft-sheet-widthin { flex: 0 0 96px; }
+.ft-sheet-btn {
+  height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card-bg); color: var(--text-1); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ft-sheet-btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--card-bg); }
+
+.ft-sheet-scroll {
+  position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; outline: none;
+  background: var(--card-bg); overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.ft-sheet-sizer { position: relative; }
+.ft-sheet-top { position: sticky; top: 0; z-index: 5; }
+.ft-sheet-row { display: flex; position: absolute; left: 0; }
+.ft-sheet-row.is-flow { position: relative; }
+.ft-sheet-cell {
+  position: relative; flex: 0 0 auto; box-sizing: border-box; height: 100%; padding: 0 8px;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  background-color: var(--card-bg); overflow: hidden; white-space: nowrap; line-height: 29px; cursor: cell;
+}
+.ft-sheet-txt { display: block; overflow: hidden; height: 100%; }
+.ft-sheet-cell.is-head { font-weight: 700; background-color: var(--ft-sheet-head); }
+.ft-sheet-cell.is-num { font-variant-numeric: tabular-nums; }
+.ft-sheet-cell.is-err { color: var(--fin-negative); font-weight: 600; }
+.ft-sheet-cell.is-wrap { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 17px; padding-top: 6px; padding-bottom: 6px; }
+.ft-sheet-cell.is-active { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ft-sheet-cell.is-found { outline: 2px solid var(--fin-warning); outline-offset: -2px; }
+.ft-sheet-cell.has-fill { overflow: visible; z-index: 1; }
+.ft-sheet-cell.is-fc-edge, .ft-sheet-ch.is-fc-edge { border-right: 2px solid var(--ft-sheet-edge); }
+.ft-sheet-row.is-fr-edge > .ft-sheet-cell, .ft-sheet-row.is-fr-edge > .ft-sheet-rn { border-bottom: 2px solid var(--ft-sheet-edge); }
+.ft-sheet-fill {
+  position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; z-index: 2;
+  background: var(--accent); border: 1px solid var(--card-bg); cursor: crosshair; touch-action: none;
+}
+.ft-sheet-fill::after { content: ""; position: absolute; inset: -5px; }
+.ft-sheet-hrow { display: flex; position: relative; }
+.ft-sheet-ch, .ft-sheet-rn, .ft-sheet-corner {
+  flex: 0 0 auto; box-sizing: border-box; height: 100%; display: flex; align-items: center; justify-content: center;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  background-color: var(--ft-sheet-head); color: var(--text-2); font-size: 11px; font-weight: 600;
+  user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums;
+}
+.ft-sheet-ch { position: relative; cursor: default; }
+.ft-sheet-rn { position: sticky; left: 0; z-index: 3; }
+.ft-sheet-corner { position: sticky; left: 0; z-index: 4; cursor: pointer; }
+.ft-sheet-ch.is-hl, .ft-sheet-rn.is-hl { background-image: linear-gradient(var(--accent-soft), var(--accent-soft)); color: var(--text-1); }
+.ft-sheet-ch.is-full, .ft-sheet-rn.is-full, .ft-sheet-corner.is-full { background-color: var(--accent); color: var(--card-bg); }
+.ft-sheet-grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; z-index: 3; cursor: col-resize; touch-action: none; }
+.ft-sheet-grip:hover, .ft-sheet-grip.is-live { background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat; }
+@media (pointer: coarse) {
+  .ft-sheet-grip { right: -12px; width: 24px; background: linear-gradient(var(--border), var(--border)) center / 2px 60% no-repeat; }
+}
+.ft-sheet-cut {
+  position: absolute; z-index: 3; pointer-events: none;
+  background-image:
+    linear-gradient(90deg, var(--accent) 50%, transparent 50%), linear-gradient(90deg, var(--accent) 50%, transparent 50%),
+    linear-gradient(0deg, var(--accent) 50%, transparent 50%), linear-gradient(0deg, var(--accent) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: ft-sheet-ants 0.8s linear infinite;
+}
+@keyframes ft-sheet-ants { to { background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px; } }
+@media (prefers-reduced-motion: reduce) { .ft-sheet-cut { animation: none; } }
+.ft-sheet-foot { position: sticky; left: 0; display: inline-flex; align-items: center; height: 44px; padding-left: 8px; }
+.ft-sheet-more {
+  height: 28px; padding: 0 12px; border: 1px dashed var(--border); border-radius: 6px;
+  background: transparent; color: var(--text-2); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ft-sheet-more:hover { color: var(--accent); border-color: var(--accent); }
+.ft-sheet-input {
+  position: absolute; box-sizing: border-box; margin: 0; padding: 4px 6px; z-index: 4;
+  border: 2px solid var(--accent); border-radius: 0; background: var(--card-bg); color: var(--text-1);
+  font: inherit; font-size: 13px; line-height: 17px; resize: none; outline: none; overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+}
+.ft-sheet-input.is-idle { opacity: 0; pointer-events: none; box-shadow: none; caret-color: transparent; z-index: 0; }
+.ft-sheet-status {
+  display: flex; align-items: center; gap: 14px; flex-shrink: 0; min-height: 28px; padding: 4px 12px;
+  border-top: 1px solid var(--border); background: var(--card-bg); color: var(--text-2); font-size: 11px;
+  white-space: nowrap; overflow: hidden;
+}
+.ft-sheet-stats { display: inline-flex; gap: 12px; font-variant-numeric: tabular-nums; }
+.ft-sheet-stats b { color: var(--text-1); font-weight: 700; }
+.ft-sheet-hint, .ft-sheet-flash { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+.ft-sheet-hint { color: var(--text-3); }
+.ft-sheet-flash { color: var(--accent); font-weight: 600; }
+.ft-sheet-menu {
+  position: fixed; z-index: 3000; min-width: 220px; max-width: calc(100vw - 16px); padding: 4px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); color: var(--text-1);
+  box-shadow: var(--shadow-popover, 0 16px 48px rgba(0,0,0,0.2)); font-size: 13px;
+}
+.ft-sheet-mi {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: none; border-radius: 6px;
+  background: none; color: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap;
+}
+.ft-sheet-mi:hover:not(:disabled), .ft-sheet-mi:focus { background: var(--bg-input); outline: none; }
+.ft-sheet-mi:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.ft-sheet-mi:disabled { opacity: 0.45; cursor: default; }
+.ft-sheet-mi-icon { display: inline-flex; width: 14px; color: var(--text-3); }
+.ft-sheet-mi kbd { margin-left: auto; padding-left: 16px; font-family: inherit; font-size: 11px; color: var(--text-3); }
+.ft-sheet-msep { height: 1px; margin: 4px 6px; background: var(--border); }
+.ft-sheet-ac {
+  position: fixed; z-index: 3000; min-width: 240px; max-width: min(380px, calc(100vw - 16px)); overflow: hidden;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text-1);
+  box-shadow: var(--shadow-popover, 0 16px 48px rgba(0,0,0,0.2));
+}
+.ft-sheet-ac-item {
+  display: flex; align-items: baseline; gap: 2px; padding: 5px 10px; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ft-sheet-ac-item[aria-selected="true"] { background: var(--accent-soft); color: var(--text-1); }
+.ft-sheet-ac.is-hint .ft-sheet-ac-item { cursor: default; white-space: normal; }
+.ft-sheet-ac-sig { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.ft-sheet-ac-arg { color: var(--accent); }
+.ft-sheet-ac-desc { padding: 6px 10px; border-top: 1px solid var(--border); color: var(--text-2); font-size: 12px; line-height: 1.4; }
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+  .ft-sheet { --ft-sheet-find: color-mix(in srgb, var(--fin-warning) 20%, transparent); }
+}
+.ft-sheet-menu:focus { outline: none; }
+@media (max-width: 640px) {
+  .ft-sheet-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ft-sheet-bar::-webkit-scrollbar { display: none; }
+  .ft-sheet-tb { min-width: 36px; height: 36px; }
+  .ft-sheet-name { width: 64px; }
+  .ft-sheet-fxlabel { display: none; }
+  .ft-sheet-name, .ft-sheet-findin { height: 32px; font-size: 16px; }
+  .ft-sheet-fxin { min-height: 32px; font-size: 16px; line-height: 22px; }
+  .ft-sheet-name { width: 76px; padding: 0 4px; }
+  .ft-sheet-input { font-size: 16px; line-height: 20px; }
+  .ft-sheet-select { font-size: 16px; }
+}

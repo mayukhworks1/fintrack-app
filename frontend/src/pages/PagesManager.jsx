@@ -6,7 +6,7 @@ import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import StreamingDraft from '../components/StreamingDraft'
 import { toIstInput, fromIstInput, formatIst, countdown, msUntil, expiryPreset } from '../utils/ist'
 import { api, API_BASE_URL } from '../services/api'
-import { parseLine, csvToGrid, gridToCSV, cellDisplay, FORMULA_FUNCTIONS } from '../utils/sheet'
+import { parseCSV, toCSV } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { csvCell } from '../utils/csv'
@@ -21,6 +21,8 @@ import {
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
+import SheetView from '../components/sheet/SheetView'
+import SheetEditor from '../components/sheet/SheetEditor'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -132,22 +134,8 @@ function inl(s) {
 // ---------------------------------------------------------------------------
 // Content preview components
 // ---------------------------------------------------------------------------
-function CSVPreview({ text }) {
-  if (!text) return <div style={{ color:'var(--text-2)',padding:12,fontSize:13 }}>Empty.</div>
-  const lines = text.trim().split('\n').filter(Boolean)
-  const grid = csvToGrid(text)
-  const headers = parseLine(lines[0])
-  const rows = lines.slice(1,11).map(parseLine)
-  const show = (v,r,c) => (typeof v==='string'&&v.trim().startsWith('=')) ? cellDisplay(grid,r,c) : v
-  return (
-    <div style={{ overflowX:'auto', padding:12 }}>
-      <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
-        <thead><tr>{headers.map((h,i)=><th key={i} style={{ border:'1px solid var(--border)', padding:'6px 10px', background:'var(--card-bg)', textAlign:'left', fontWeight:600 }}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((row,ri)=><tr key={ri} style={{ background:ri%2?'var(--card-bg)':'var(--bg-base)' }}>{row.map((cell,ci)=><td key={ci} style={{ border:'1px solid var(--border)', padding:'5px 10px' }}>{show(cell,ri+1,ci)}</td>)}</tr>)}</tbody>
-      </table>
-      {lines.length > 11 && <div style={{ fontSize:11, color:'var(--text-2)', marginTop:6 }}>Showing 10 of {lines.length-1} rows</div>}
-    </div>
-  )
+function CSVPreview({ text, meta }) {
+  return <div style={{ padding:12 }}><SheetView text={text} meta={meta} compact /></div>
 }
 // Fills its pane rather than sitting in a 300px window. Now that a preview is
 // the real page — scripts, fonts, full-height sections and all — a fixed strip
@@ -189,10 +177,10 @@ function HTMLPreview({ content, height = '100%' }) {
     />
   )
 }
-function ContentPreview({ contentType, content }) {
+function ContentPreview({ contentType, content, meta }) {
   if (!content) return <div style={{ color:'var(--text-2)', fontSize:13, padding:'20px', textAlign:'center' }}>No content yet.</div>
   if (contentType === 'html') return <HTMLPreview content={content} />
-  if (contentType === 'csv') return <CSVPreview text={content} />
+  if (contentType === 'csv') return <CSVPreview text={content} meta={meta} />
   if (contentType === 'text') return <pre style={{ margin:0, padding:12, fontSize:13, whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{content}</pre>
   return (
     <div style={{ padding:'12px 16px', lineHeight:1.75, fontSize:14, color:'var(--text-1)', fontFamily:'-apple-system,sans-serif' }}
@@ -734,6 +722,79 @@ function ShareModal({ page, onClose, onCopy }) {
 // ---------------------------------------------------------------------------
 // Templates
 // ---------------------------------------------------------------------------
+// Spreadsheet templates are built as rows, so formulas holding commas and
+// quotes are quoted correctly, and their dates sit around today. `sheet` is
+// the formatting (metadata.sheet) the picker applies with the content.
+const isoDay = (offset) => {
+  const d = new Date(Date.now() + offset * 864e5)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+const INR = { type:'inr', decimals:0 }
+const sheetTemplate = (name, icon, rows, sheet) => ({
+  name, icon, content: toCSV(rows), sheet: sheet ? { v:1, header:true, freezeRows:1, ...sheet } : undefined,
+})
+const SHEET_TEMPLATES = [
+  sheetTemplate('Blank', '📄', [
+    ['Column A','Column B','Column C','Column D','Column E','Column F'],
+    ...Array.from({ length:20 }, () => ['','','','','','']),
+  ]),
+  sheetTemplate('Budget vs actual', '💰', [
+    ['Category','Budget','Actual','Difference','Variance %','Notes'],
+    ...[['Rent',45000,45000,''],['Salaries',350000,362000,'Two contractors this quarter'],['Software',18000,21500,''],
+      ['Marketing',60000,48000,''],['Travel',25000,31200,'Client visits'],['Utilities',12000,10850,''],['Office supplies',8000,6400,'']]
+      .map(([cat, budget, actual, note], i) => [cat, String(budget), String(actual), `=B${i+2}-C${i+2}`, `=IF(B${i+2}=0,0,D${i+2}/B${i+2})`, note]),
+    ['Total','=SUM(B2:B8)','=SUM(C2:C8)','=B9-C9','=IF(B9=0,0,D9/B9)',''],
+  ], { colWidths:{ 0:160, 5:220 }, colFormats:{ 1:INR, 2:INR, 3:INR, 4:{ type:'percent', decimals:1 } } }),
+  sheetTemplate('Invoice tracker', '🧾', [
+    ['Client','Invoice #','Date','Amount','GST 18%','Total','Status','Days outstanding'],
+    ...[['Acme Traders',-64,120000,'Paid'],['Northwind Foods',-41,86500,'Paid'],['Globex Retail',-27,240000,'Sent'],
+      ['Initech Labs',-12,54000,'Sent'],['Umbrella Health',-3,175000,'Draft']]
+      .map(([client, offset, amount, status], i) => {
+        const r = i + 2
+        return [client, `INV-${String(i+1).padStart(3,'0')}`, isoDay(offset), String(amount), `=D${r}*18%`, `=D${r}+E${r}`, status,
+          `=IF(G${r}="Paid","",DAYS(TODAY(),C${r}))`]
+      }),
+    ['Total','','','=SUM(D2:D6)','=SUM(E2:E6)','=SUM(F2:F6)','',''],
+    ['Outstanding','','','','','=SUMIF(G2:G6,"<>Paid",F2:F6)','',''],
+  ], { colWidths:{ 0:170, 1:100, 7:140 }, colFormats:{ 2:{ type:'date' }, 3:INR, 4:INR, 5:INR, 7:{ type:'number', decimals:0 } }, colAlign:{ 6:'center' } }),
+  sheetTemplate('Project P&L', '📈', [
+    ['Project','Client','Revenue','Direct cost','Overheads','Profit','Margin'],
+    ...[['Website rebuild','Acme Traders',450000,210000,45000],['Mobile app','Northwind Foods',820000,515000,82000],
+      ['Brand refresh','Globex Retail',260000,98000,26000],['Data migration','Initech Labs',380000,240000,38000]]
+      .map(([project, client, revenue, cost, overheads], i) => {
+        const r = i + 2
+        return [project, client, String(revenue), String(cost), String(overheads), `=C${r}-D${r}-E${r}`, `=IF(C${r}=0,0,F${r}/C${r})`]
+      }),
+    ['Total','','=SUM(C2:C5)','=SUM(D2:D5)','=SUM(E2:E5)','=SUM(F2:F5)','=IF(C6=0,0,F6/C6)'],
+  ], { colWidths:{ 0:160, 1:150 }, colFormats:{ 2:INR, 3:INR, 4:INR, 5:INR, 6:{ type:'percent', decimals:1 } } }),
+  sheetTemplate('Inventory', '📦', [
+    ['SKU','Item','Category','In stock','Reorder at','Unit cost','Stock value','Status'],
+    ...[['Printer paper A4','Office',120,50,240],['Toner cartridge','Office',6,10,3400],['Laptop stand','Equipment',14,5,1850],
+      ['USB-C hub','Equipment',3,8,2200],['Notebook','Stationery',240,100,85],['Whiteboard markers','Stationery',18,24,60]]
+      .map(([item, category, stock, reorder, cost], i) => {
+        const r = i + 2
+        return [`SKU-${String(i+1).padStart(3,'0')}`, item, category, String(stock), String(reorder), String(cost), `=D${r}*F${r}`,
+          `=IF(D${r}<=E${r},"Reorder","OK")`]
+      }),
+    ['Total','','','=SUM(D2:D7)','','','=SUM(G2:G7)','=COUNTIF(H2:H7,"Reorder")&" to reorder"'],
+  ], { colWidths:{ 1:170 }, colFormats:{ 5:INR, 6:INR }, colAlign:{ 7:'center' } }),
+  sheetTemplate('Task list', '✅', [
+    ['Task','Owner','Priority','Status','Start','Due','Days left'],
+    ...[['Draft proposal','Asha','High','Done',-14,-4],['Client review','Rahul','High','In progress',-3,4],
+      ['Design mockups','Meera','Medium','In progress',-1,9],['Build first release','Vikram','High','Not started',5,26],
+      ['Launch checklist','Asha','Low','Not started',20,33]]
+      .map(([task, owner, priority, status, start, due], i) => {
+        const r = i + 2
+        return [task, owner, priority, status, isoDay(start), isoDay(due), `=IF(D${r}="Done","",DAYS(F${r},TODAY()))`]
+      }),
+    ['Open tasks','','','=COUNTIF(D2:D6,"<>Done")','','',''],
+  ], { colWidths:{ 0:200 }, colFormats:{ 4:{ type:'date' }, 5:{ type:'date' }, 6:{ type:'number', decimals:0 } }, colAlign:{ 2:'center', 3:'center' } }),
+]
+
+// A new spreadsheet starts as the Blank template: a header row over twenty
+// empty rows of six columns.
+const BLANK_SHEET = SHEET_TEMPLATES[0]
+
 const TEMPLATES = {
   markdown: [
     {
@@ -775,13 +836,7 @@ const TEMPLATES = {
       content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Profile</title>\n  <style>\n    *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border-radius:20px;box-shadow:0 4px 40px rgba(0,0,0,0.1);max-width:480px;width:100%;overflow:hidden}.cover{height:120px;background:linear-gradient(135deg,#667eea,#764ba2)}.content{padding:0 28px 32px;text-align:center}.avatar{width:96px;height:96px;border-radius:50%;border:4px solid #fff;background:#e2e8f0;margin:-48px auto 16px;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}.name{font-size:24px;font-weight:800;color:#0f172a;margin-bottom:4px}.handle{color:#64748b;font-size:14px;margin-bottom:12px}.bio{color:#475569;line-height:1.6;font-size:14px;margin-bottom:24px}.links{display:flex;flex-direction:column;gap:10px}.link{display:block;padding:12px 20px;border:1px solid #e2e8f0;border-radius:12px;text-decoration:none;font-weight:600;color:#1e293b;font-size:14px;transition:background .15s}.link:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border-radius:50px;padding:6px 14px;font-size:12px;color:#64748b;margin-bottom:20px}\n  </style>\n</head>\n<body>\n  <div class="card">\n    <div class="cover"></div>\n    <div class="content">\n      <div class="avatar">😊</div>\n      <div class="name">Your Name</div>\n      <div class="handle">@username</div>\n      <div class="badge">🌍 City, Country</div>\n      <div class="bio">Designer, developer & creator. I build things for the web and occasionally write about it. Always curious, always learning.</div>\n      <div class="links">\n        <a class="link" href="#">🌐 Personal Website</a>\n        <a class="link" href="#">🐦 Twitter / X</a>\n        <a class="link" href="#">💼 LinkedIn</a>\n        <a class="link" href="#">📧 Send me an email</a>\n      </div>\n    </div>\n  </div>\n</body>\n</html>`,
     },
   ],
-  csv: [
-    { name: 'Blank', icon: '📄', content: 'Column A,Column B,Column C\n,,\n,,\n,,' },
-    { name: 'Budget Tracker', icon: '💰', content: 'Category,Item,Planned,Actual,Difference,Notes\nHousing,Rent,1500,1500,0,\nHousing,Utilities,200,180,20,\nFood,Groceries,400,350,50,\nFood,Dining Out,150,200,-50,Over budget\nTransport,Fuel,100,90,10,\nTransport,Insurance,80,80,0,\nHealth,Gym,50,50,0,\nEntertainment,Streaming,30,30,0,\nSavings,Emergency Fund,500,500,0,' },
-    { name: 'Inventory', icon: '📦', content: 'SKU,Product Name,Category,Quantity,Unit Price,Total Value,Reorder Level,Supplier\nPRD-001,Product Alpha,Electronics,100,29.99,2999,20,Supplier A\nPRD-002,Product Beta,Clothing,250,14.99,3747.5,50,Supplier B\nPRD-003,Product Gamma,Food,500,4.99,2495,100,Supplier C' },
-    { name: 'Contact List', icon: '👥', content: 'First Name,Last Name,Email,Phone,Company,Title,City,Country,Tags\nJohn,Doe,john@example.com,+1-555-0101,Acme Corp,CEO,New York,USA,client;vip\nJane,Smith,jane@example.com,+1-555-0102,Tech Inc,CTO,San Francisco,USA,partner' },
-    { name: 'Project Tasks', icon: '✅', content: 'Task ID,Task Name,Assigned To,Priority,Status,Start Date,Due Date,% Complete,Notes\nT-001,Design mockups,Alice,High,In Progress,2024-01-01,2024-01-07,60,\nT-002,Backend API,Bob,High,Not Started,2024-01-05,2024-01-15,0,\nT-003,Frontend UI,Carol,Medium,Not Started,2024-01-08,2024-01-20,0,' },
-  ],
+  csv: SHEET_TEMPLATES,
   text: [
     { name: 'Blank', icon: '📄', content: '' },
     { name: 'Changelog', icon: '📝', content: `CHANGELOG\n=========\n\nv2.0.0 — ${new Date().toLocaleDateString()}\n  ADDED: New feature description\n  CHANGED: Updated behavior description  \n  FIXED: Bug fix description\n  REMOVED: Deprecated feature\n\nv1.1.0 — Previous Date\n  ADDED: Feature\n  FIXED: Bug\n\nv1.0.0 — Initial Release\n  ADDED: Initial version` },
@@ -1031,173 +1086,15 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
 }
 
 // ---------------------------------------------------------------------------
-// Spreadsheet Editor (Excel-like grid)
-// ---------------------------------------------------------------------------
-function SpreadsheetEditor({ value, onChange }) {
-  const [grid, setGrid] = useState(() => csvToGrid(value))
-  const [selectedCell, setSelectedCell] = useState(null)
-  const [formulaBar, setFormulaBar] = useState('')
-  const [suggest, setSuggest] = useState([])   // formula autosuggest list
-  const inputRefs = useRef({})
-
-  // Autosuggest: when the value being typed starts with '=', suggest functions
-  const computeSuggest = (text) => {
-    if (typeof text !== 'string' || !text.trim().startsWith('=')) return setSuggest([])
-    const m = /([A-Za-z]+)$/.exec(text)
-    const frag = (m ? m[1] : '').toUpperCase()
-    if (!frag) return setSuggest(FORMULA_FUNCTIONS.slice(0, 6))
-    setSuggest(FORMULA_FUNCTIONS.filter(f => f.startsWith(frag)).slice(0, 6))
-  }
-  const applySuggest = (fn) => {
-    if (!selectedCell) return
-    const cur = formulaBar || '='
-    const next = cur.replace(/([A-Za-z]+)$/, '') + fn + '('
-    setFormulaBar(next); setSuggest([])
-    updateCell(selectedCell[0], selectedCell[1], next)
-    inputRefs.current['fx']?.focus()
-  }
-
-  // Keep value in sync (external resets like template load)
-  const lastExternal = useRef(value)
-  useEffect(() => {
-    if (value !== lastExternal.current && value !== gridToCSV(grid)) {
-      lastExternal.current = value
-      setGrid(csvToGrid(value))
-    }
-  }, [value])
-
-  const commit = (newGrid) => {
-    const csv = gridToCSV(newGrid)
-    lastExternal.current = csv
-    onChange(csv)
-  }
-
-  const updateCell = (r, c, val) => {
-    const g = grid.map(row => [...row])
-    g[r][c] = val; setGrid(g); commit(g)
-  }
-
-  const addRow = () => { const g=[...grid, Array(grid[0]?.length||3).fill('')]; setGrid(g); commit(g) }
-  const addCol = () => { const g=grid.map(row=>[...row,'']); setGrid(g); commit(g) }
-  const deleteRow = (ri) => { if(grid.length<=1) return; const g=grid.filter((_,i)=>i!==ri); setGrid(g); commit(g) }
-  const deleteCol = (ci) => { if(grid[0]?.length<=1) return; const g=grid.map(row=>row.filter((_,i)=>i!==ci)); setGrid(g); commit(g) }
-
-  const colLetter = (i) => { let s=''; i++; while(i>0){s=String.fromCharCode(64+((i-1)%26+1))+s;i=Math.floor((i-1)/26)} return s }
-
-  const handleKeyDown = (e, r, c) => {
-    if (e.key==='Tab') { e.preventDefault(); const nc=e.shiftKey?c-1:c+1; if(nc>=0&&nc<grid[r].length) setSelectedCell([r,nc]); else if(nc>=grid[r].length&&r<grid.length-1){setSelectedCell([r+1,0])} }
-    if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); if(r<grid.length-1) setSelectedCell([r+1,c]) }
-    if (e.key==='ArrowUp'&&r>0) { e.preventDefault(); setSelectedCell([r-1,c]) }
-    if (e.key==='ArrowDown'&&r<grid.length-1) { e.preventDefault(); setSelectedCell([r+1,c]) }
-  }
-
-  useEffect(() => {
-    if (selectedCell) {
-      const [r,c]=selectedCell; setFormulaBar(grid[r]?.[c]||'')
-      inputRefs.current[`${r}-${c}`]?.focus()
-    }
-  }, [selectedCell])
-
-  const rows=grid; const cols=rows[0]?.length||3
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'var(--bg-base)' }}>
-      {/* Formula bar */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderBottom:'2px solid var(--border)', background:'var(--card-bg)', flexShrink:0 }}>
-        <div style={{ background:'#e2e8f0', borderRadius:4, padding:'4px 10px', fontSize:12, fontFamily:'monospace', fontWeight:700, color:'var(--text-2)', minWidth:50, textAlign:'center' }}>
-          {selectedCell?`${colLetter(selectedCell[1])}${selectedCell[0]+1}`:'—'}
-        </div>
-        <div style={{ color:'var(--text-2)', fontSize:16, fontWeight:300 }}>fx</div>
-        <div style={{ flex:1, position:'relative' }}>
-          <input ref={el=>inputRefs.current['fx']=el} value={formulaBar} onChange={e=>{
-            setFormulaBar(e.target.value); computeSuggest(e.target.value)
-            if(selectedCell) updateCell(selectedCell[0],selectedCell[1],e.target.value)
-          }} onBlur={()=>setTimeout(()=>setSuggest([]),150)}
-            placeholder="Value or =SUM(A1:A5) …" style={{ width:'100%', boxSizing:'border-box', border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontSize:13, fontFamily:'monospace', background:'var(--bg-base)', color:'var(--text-1)', outline:'none' }} />
-          {suggest.length>0 && (
-            <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:2, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', minWidth:180, overflow:'hidden' }}>
-              {suggest.map(fn=>(
-                <div key={fn} onMouseDown={e=>{e.preventDefault();applySuggest(fn)}}
-                  style={{ padding:'6px 10px', fontSize:12, fontFamily:'monospace', cursor:'pointer', color:'var(--text-1)', borderBottom:'1px solid var(--border)' }}
-                  onMouseEnter={e=>e.currentTarget.style.background='var(--bg-base)'}
-                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                  <span style={{ fontWeight:700, color:'var(--accent)' }}>{fn}</span>()
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <button title="Add row" onClick={addRow} style={{ ...btnTiny, fontSize:11, padding:'3px 8px' }}>+ Row</button>
-        <button title="Add column" onClick={addCol} style={{ ...btnTiny, fontSize:11, padding:'3px 8px' }}>+ Col</button>
-      </div>
-      {/* Grid */}
-      <div style={{ flex:1, overflow:'auto' }}>
-        <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'100%', fontSize:13 }}>
-          <thead>
-            <tr>
-              <th style={{ width:40, background:'#f1f5f9', border:'1px solid #d1d5db', padding:'4px', textAlign:'center', fontSize:11, color:'#94a3b8', position:'sticky', top:0, left:0, zIndex:3 }}>#</th>
-              {Array.from({length:cols},(_,c)=>(
-                <th key={c} style={{ minWidth:110, width:130, background:'#f1f5f9', border:'1px solid #d1d5db', padding:'4px 8px', textAlign:'center', fontSize:11, fontWeight:700, color:'#475569', position:'sticky', top:0, zIndex:2, cursor:'pointer', userSelect:'none' }}
-                  title={`Column ${colLetter(c)}`}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
-                    {colLetter(c)}
-                    {cols>1&&<span onClick={e=>{e.stopPropagation();deleteCol(c)}} style={{ fontSize:10, color:'#ef4444', cursor:'pointer', opacity:0.6, lineHeight:1 }} title="Delete column">✕</span>}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row,r)=>(
-              <tr key={r}>
-                <td style={{ background:'#f8fafc', border:'1px solid #d1d5db', padding:'4px', textAlign:'center', fontSize:11, color:'#94a3b8', fontWeight:700, position:'sticky', left:0, zIndex:1, cursor:'pointer', userSelect:'none' }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:2 }}>
-                    {r+1}
-                    {rows.length>1&&<span onClick={()=>deleteRow(r)} style={{ fontSize:10, color:'#ef4444', cursor:'pointer', opacity:0.6 }} title="Delete row">✕</span>}
-                  </div>
-                </td>
-                {row.map((cell,c)=>{
-                  const isSel=selectedCell?.[0]===r&&selectedCell?.[1]===c
-                  const isHdr=r===0
-                  const isFormula = typeof cell==='string' && cell.trim().startsWith('=')
-                  // Show computed result when not focused; raw formula when editing
-                  const display = isSel ? cell : (isFormula ? cellDisplay(grid,r,c) : cell)
-                  const isErr = isFormula && typeof display==='string' && display.startsWith('#')
-                  return (
-                    <td key={c} style={{ border:`1px solid ${isSel?'#2563eb':'#d1d5db'}`, padding:0, background:isSel?'#eff6ff':isHdr?'#f8fafc':isFormula&&!isSel?'#f0fdf4':'#fff', outline:isSel?'2px solid #2563eb':' none', outlineOffset:-1 }}
-                      title={isFormula&&!isSel?cell:undefined}>
-                      <input
-                        ref={el=>inputRefs.current[`${r}-${c}`]=el}
-                        value={display}
-                        onChange={e=>{ updateCell(r,c,e.target.value); setFormulaBar(e.target.value); computeSuggest(e.target.value) }}
-                        onFocus={()=>{ setSelectedCell([r,c]); setFormulaBar(cell) }}
-                        onKeyDown={e=>handleKeyDown(e,r,c)}
-                        style={{ width:'100%', height:32, padding:'0 8px', border:'none', outline:'none', background:'transparent', fontSize:13, fontFamily:isHdr?'inherit':'monospace', fontWeight:isHdr?700:400, color:isErr?'#dc2626':(isFormula&&!isSel?'#15803d':'var(--text-1)'), boxSizing:'border-box' }}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ padding:'4px 12px', background:'var(--card-bg)', borderTop:'1px solid var(--border)', fontSize:11, color:'var(--text-2)', flexShrink:0 }}>
-        {rows.length} rows × {cols} columns · Tab/Enter to move · Type <code style={{ fontFamily:'monospace' }}>=SUM(A1:A5)</code>, <code style={{ fontFamily:'monospace' }}>=A1*B1</code> for formulas
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Word count / reading time
 // ---------------------------------------------------------------------------
 function docStats(content, contentType) {
   if (!content) return { words:0, chars:0, readTime:'< 1 min', lines:0 }
   const chars = content.length
   if (contentType === 'csv') {
-    const lines = content.split('\n').filter(Boolean).length
-    return { words:0, chars, readTime:'—', lines, label:`${lines} rows` }
+    const rows = parseCSV(content)
+    const cols = rows.reduce((n, r) => Math.max(n, r.length), 0)
+    return { words:0, chars, readTime:'—', lines:rows.length, label:`${rows.length.toLocaleString()} rows × ${cols} columns` }
   }
   const words = content.trim().split(/\s+/).filter(Boolean).length
   const lines = content.split('\n').length
@@ -1214,7 +1111,7 @@ function TemplatePicker({ contentType, onSelect }) {
     <div style={{ display:'flex', gap:8, padding:'8px 12px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', overflowX:'auto', flexShrink:0 }}>
       <span style={{ fontSize:11, color:'var(--text-2)', fontWeight:600, whiteSpace:'nowrap', alignSelf:'center' }}>Templates:</span>
       {list.map(t=>(
-        <button key={t.name} onClick={()=>onSelect(t.content)} style={{ ...btnTiny, whiteSpace:'nowrap', fontSize:11, padding:'4px 10px', flexShrink:0 }}>
+        <button key={t.name} onClick={()=>onSelect(t)} style={{ ...btnTiny, whiteSpace:'nowrap', fontSize:11, padding:'4px 10px', flexShrink:0 }}>
           {t.icon} {t.name}
         </button>
       ))}
@@ -1261,10 +1158,23 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
     }))) return
     setRestoring(ver.id)
     try {
+      // The server restores the content but not the sheet's formatting, so a
+      // spreadsheet's column formats are written back from the version too
+      // (they are what its preview showed, and they match its columns).
+      let full = previewVer?.id === ver.id ? previewVer : null
+      if (!full && ver.content_type === 'csv') full = await api.pages.getVersion(pageId, ver.id).catch(() => null)
       const r = await api.pages.restoreVersion(pageId, ver.id)
       if (r.ok && r.page) {
+        let restored = r.page
+        const versionSheet = full ? full.metadata?.sheet : r.page.metadata?.sheet
+        if (restored.content_type === 'csv' && JSON.stringify(versionSheet ?? null) !== JSON.stringify(restored.metadata?.sheet ?? null)) {
+          const metadata = { ...(restored.metadata || {}), sheet: versionSheet }
+          if (!versionSheet) delete metadata.sheet
+          const updated = await api.pages.update(pageId, { metadata }).catch(() => null)
+          if (updated?.id) restored = updated
+        }
         setToast('✓ Restored! Reloading editor…')
-        setTimeout(() => { onRestore(r.page); setToast('') }, 1500)
+        setTimeout(() => { onRestore(restored, versionSheet); setToast('') }, 1500)
         // Refresh version list
         const fresh = await api.pages.versions(pageId)
         setVersions(fresh.items || [])
@@ -1367,8 +1277,8 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
             <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{new Date(previewVer.saved_at).toLocaleString()}</span>
             <button onClick={()=>setPreviewVer(null)} style={{ fontSize:18, border:'none', background:'none', cursor:'pointer', color:'var(--text-2)', lineHeight:1 }}>×</button>
           </div>
-          <div style={{ flex:1, overflow:'auto', background:'#fff', padding:'20px 24px' }}>
-            <ContentPreview contentType={previewVer.content_type} content={previewVer.content} />
+          <div style={{ flex:1, overflow:'auto', background:previewVer.content_type === 'csv' ? 'var(--bg-base)' : '#fff', padding:'20px 24px' }}>
+            <ContentPreview contentType={previewVer.content_type} content={previewVer.content} meta={previewVer.metadata?.sheet} />
           </div>
         </div>
       )}
@@ -1926,6 +1836,7 @@ function snapOf(f) {
     title:f.title||'', content_type:f.content_type||'markdown', content:f.content||'', slug:f.slug||'',
     description:f.description||'', folder:(f.folder||'').trim(), protect_source:!!f.protect_source,
     expires_at:f.expires_at||'',
+    sheet:f.content_type === 'csv' && f.sheet ? f.sheet : null,
   })
 }
 
@@ -1942,7 +1853,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
   const [form, setForm] = useState({
     title:                page?.title || '',
     content_type:         page?.content_type || initialType || 'markdown',
-    content:              page?.content || '',
+    content:              page?.content || (!page && initialType === 'csv' ? BLANK_SHEET.content : ''),
     slug:                 page?.slug || '',
     is_password_protected:page?.is_password_protected || false,
     password:             '',
@@ -1950,6 +1861,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
     folder:               page?.metadata?.folder || '',
     protect_source:       !!page?.metadata?.protect_source,
     expires_at:           page?.expires_at || '',
+    sheet:                page?.metadata?.sheet,
   })
   // Metadata keys this editor does not manage (set by other features) ride
   // along unchanged on every save instead of being dropped.
@@ -1959,6 +1871,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
     description: f.description,
     folder: (f.folder || '').trim() || undefined,
     protect_source: f.protect_source || undefined,
+    // Sheet formatting belongs to spreadsheets; other types keep whatever
+    // metadata.sheet they already carry.
+    ...(f.content_type === 'csv' ? { sheet: f.sheet || undefined } : {}),
   })
   const [slugManual, setSlugManual] = useState(!!page?.slug)
   const [tab, setTab] = useState('edit')
@@ -1980,10 +1895,15 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
   const createdRef = useRef(false)   // guards against double-create races
   const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
-  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source }))
+  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source, sheet:page?.metadata?.sheet }))
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
   const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
+  const setSheet = useCallback((v) => setForm(f => ({ ...f, sheet: v })), [])
+  const changeType = (type) => {
+    setForm(f => ({ ...f, content_type: type, ...(type === 'csv' && !f.content.trim() ? { content: BLANK_SHEET.content } : {}) }))
+    setShowTemplates(!page?.content && !isMobile)
+  }
 
   // Debounced content for expensive child components (AttachmentsBar runs regex on every
   // render — pass a 400ms-debounced version so it only re-scans after typing pauses).
@@ -2010,6 +1930,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
       folder:               page?.metadata?.folder || '',
       protect_source:       !!page?.metadata?.protect_source,
       expires_at:           page.expires_at || '',
+      sheet:                page?.metadata?.sheet,
     }
     baseMetaRef.current = page.metadata || {}
     setForm(next)
@@ -2101,6 +2022,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         }).then(ok => {
           if (!ok) return
           set('content', parsed.content)
+          if (parsed.metadata?.sheet) set('sheet', parsed.metadata.sheet)
           if (parsed.title && !form.title) set('title', parsed.title)
         })
       }
@@ -2162,7 +2084,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
   // cannot both fit a phone viewport, so only one is on screen at a time.
   const mobileSettingsMode = isMobile && showSettings
 
-  const stats = docStats(form.content, form.content_type)
+  const stats = useMemo(() => docStats(form.content, form.content_type), [form.content, form.content_type])
   const shareUrl = form.slug ? `${window.location.origin}/p/${form.slug}` : ''
   const isSpreadsheet = form.content_type === 'csv'
   const isHtml = form.content_type === 'html'
@@ -2261,7 +2183,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-            <select value={form.content_type} onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content && !isMobile)}}
+            <select value={form.content_type} onChange={e=>changeType(e.target.value)}
               style={{ ...inputStyle, width:'auto', fontSize:12, padding:'5px 8px', fontWeight:600 }}>
               {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
@@ -2298,7 +2220,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             <div style={{ flex:'1 1 100%' }}>
               <label style={labelStyle} htmlFor="ft-doctype">Document type</label>
               <select id="ft-doctype" value={form.content_type}
-                onChange={e=>{set('content_type',e.target.value);setShowTemplates(!page?.content && !isMobile)}}
+                onChange={e=>changeType(e.target.value)}
                 style={{ ...inputStyle, width:'100%', fontWeight:600 }}>
                 {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
@@ -2402,7 +2324,10 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
 
         {/* Templates bar */}
         {showTemplates && tab !== 'history' && (
-          <TemplatePicker contentType={form.content_type} onSelect={c=>{ set('content',c); setShowTemplates(false) }} />
+          <TemplatePicker contentType={form.content_type} onSelect={t=>{
+            setForm(f => ({ ...f, content:t.content, ...(f.content_type === 'csv' ? { sheet:t.sheet } : {}) }))
+            setShowTemplates(false)
+          }} />
         )}
 
         {/* Toolbar for markdown */}
@@ -2446,7 +2371,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
             </span>
             <span>
-              {isSpreadsheet ? 'Excel-like grid — type =SUM(A1:A5) for formulas, add rows/columns'
+              {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
                 : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
                 : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
                 : 'Plain text / code'}
@@ -2461,20 +2386,25 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               pageId={currentId}
               currentContent={form.content}
               currentContentType={form.content_type}
-              onRestore={(restoredPage) => {
+              onRestore={(restoredPage, versionSheet) => {
+                const restoredCsv = (restoredPage.content_type || form.content_type) === 'csv'
                 setForm(f => ({
                   ...f,
                   title:        restoredPage.title || f.title,
                   content:      restoredPage.content ?? f.content,
                   content_type: restoredPage.content_type || f.content_type,
+                  ...(restoredCsv ? { sheet: versionSheet } : {}),
                 }))
-                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'' })
+                // The server still holds the current formatting; comparing with
+                // it makes the next auto-save write the version's.
+                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', sheet:restoredPage.metadata?.sheet })
                 setTab('edit')
                 onSaved(restoredPage)
               }}
             />
           ) : isSpreadsheet ? (
-            <SpreadsheetEditor value={form.content} onChange={setContent} />
+            <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
+              fileName={form.title || form.slug} />
           ) : tab === 'edit' ? (
             <textarea
               ref={textareaRef}
