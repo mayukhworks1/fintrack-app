@@ -10,23 +10,23 @@ const EXIT_MS = 180
 const CONFIGS = {
   success: {
     icon: CheckCircle2,
-    accent: '#22c55e',
-    border: 'rgba(34,197,94,0.35)',
+    accent: 'var(--fin-positive)',
+    border: 'color-mix(in srgb, var(--fin-positive) 35%, transparent)',
   },
   error: {
     icon: XCircle,
-    accent: '#ef4444',
-    border: 'rgba(239,68,68,0.35)',
+    accent: 'var(--fin-negative)',
+    border: 'color-mix(in srgb, var(--fin-negative) 35%, transparent)',
   },
   warning: {
     icon: AlertTriangle,
-    accent: '#f59e0b',
-    border: 'rgba(245,158,11,0.35)',
+    accent: 'var(--fin-warning)',
+    border: 'color-mix(in srgb, var(--fin-warning) 35%, transparent)',
   },
   info: {
     icon: Info,
-    accent: '#3b82f6',
-    border: 'rgba(59,130,246,0.35)',
+    accent: 'var(--accent)',
+    border: 'color-mix(in srgb, var(--accent) 35%, transparent)',
   },
 }
 

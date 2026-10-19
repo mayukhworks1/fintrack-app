@@ -163,7 +163,7 @@ export function StaysPut() {
       {/* one direction: a record crosses once, and rests at the mirror */}
       <path d="M 86 52 L 116 52" stroke={ACCENT} strokeWidth="1.2" strokeDasharray="4 4"
             className="ft-s-dash" />
-      <circle cx="86" cy="52" r="2.6" fill="#16a34a" className="ft-s-runner" />
+      <circle cx="86" cy="52" r="2.6" fill="var(--fin-positive)" className="ft-s-runner" />
       <g>
         <rect x="122" y="30" width="62" height="44" rx="8"
               fill="var(--card-bg)" stroke={LINE} />

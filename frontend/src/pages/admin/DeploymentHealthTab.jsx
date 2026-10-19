@@ -52,12 +52,12 @@ export function DeploymentHealthTab() {
       {data && (
         <>
           <div className={`rounded-xl border p-3 flex items-center gap-3`}
-            style={{ borderColor: data.overall ? 'rgba(22,163,74,0.3)' : 'rgba(220,38,38,0.3)', background: data.overall ? 'rgba(22,163,74,0.06)' : 'rgba(220,38,38,0.06)' }}>
+            style={{ borderColor: data.overall ? 'color-mix(in srgb, var(--fin-positive) 30%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 30%, transparent)', background: data.overall ? 'color-mix(in srgb, var(--fin-positive) 6%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}>
             {data.overall
-              ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
-              : <XCircle size={18} style={{ color: '#dc2626', flexShrink: 0 }} />}
+              ? <CheckCircle2 size={18} style={{ color: 'var(--fin-positive)', flexShrink: 0 }} />
+              : <XCircle size={18} style={{ color: 'var(--fin-negative)', flexShrink: 0 }} />}
             <div>
-              <p className="text-sm font-semibold" style={{ color: data.overall ? '#16a34a' : '#dc2626' }}>
+              <p className="text-sm font-semibold" style={{ color: data.overall ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
                 {data.overall ? 'All systems operational' : 'One or more systems need attention'}
               </p>
             </div>
@@ -68,13 +68,13 @@ export function DeploymentHealthTab() {
           </div>
 
           {data.env && !data.env.ok && (
-            <div className="rounded-xl border p-3" style={{ borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.05)' }}>
-              <p className="text-xs font-semibold mb-2" style={{ color: '#dc2626' }}>Missing environment variables</p>
+            <div className="rounded-xl border p-3" style={{ borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 5%, transparent)' }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: 'var(--fin-negative)' }}>Missing environment variables</p>
               <div className="space-y-1">
                 {Object.entries(data.env.checks || {}).map(([k, v]) => (
                   <div key={k} className="flex items-center gap-2 text-xs">
-                    {v ? <CheckCircle2 size={11} style={{ color: '#16a34a' }} /> : <XCircle size={11} style={{ color: '#dc2626' }} />}
-                    <code style={{ color: v ? 'var(--text-2)' : '#dc2626' }}>{k}</code>
+                    {v ? <CheckCircle2 size={11} style={{ color: 'var(--fin-positive)' }} /> : <XCircle size={11} style={{ color: 'var(--fin-negative)' }} />}
+                    <code style={{ color: v ? 'var(--text-2)' : 'var(--fin-negative)' }}>{k}</code>
                   </div>
                 ))}
               </div>

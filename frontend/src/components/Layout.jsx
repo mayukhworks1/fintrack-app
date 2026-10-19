@@ -59,10 +59,10 @@ function OfflineBanner({ collapsed }) {
       role="status"
       aria-live="polite"
       className={`mx-2 mb-2 flex items-center gap-2 px-2 py-2 rounded-lg ${collapsed ? 'justify-center' : ''}`}
-      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
+      style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 15%, transparent)' }}
     >
-      <WifiOff size={12} style={{ color: '#f87171', flexShrink: 0 }} aria-hidden="true" />
-      {!collapsed && <span className="text-xs" style={{ color: '#f87171' }}>You're offline</span>}
+      <WifiOff size={12} style={{ color: 'var(--fin-negative)', flexShrink: 0 }} aria-hidden="true" />
+      {!collapsed && <span className="text-xs" style={{ color: 'var(--fin-negative)' }}>You're offline</span>}
     </div>
   )
 }
@@ -102,7 +102,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
           style={{ textDecoration: 'none' }}
         >
           <span className="runey-brand-mark">
-            {/* Sidebar is #171717 in every theme — the reversed mark reads there. */}
+            {/* The rail is dark in every palette — the reversed mark reads there. */}
             <BrandMark size={30} variant="glyph" />
           </span>
           {!collapsed && (
@@ -258,8 +258,8 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
                 className="runey-profile-avatar object-cover"
               />
             : <span className="runey-profile-avatar" style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff', fontSize: 11, fontWeight: 700,
+                background: 'var(--avatar-gradient)',
+                color: 'var(--accent-fg)', fontSize: 11, fontWeight: 700,
               }}>{initials}</span>
           }
           {!collapsed && (
@@ -338,7 +338,7 @@ export default function Layout({ children, style }) {
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 px-3 py-1.5 rounded-lg text-sm font-semibold"
-        style={{ background: 'var(--accent)', color: '#fff' }}
+        style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
       >
         Skip to content
       </a>
@@ -362,7 +362,7 @@ export default function Layout({ children, style }) {
       {drawerOpen && (
         <div
           className="lg:hidden fixed inset-0 z-40 animate-fade-in"
-          style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }}
           onClick={() => setDrawerOpen(false)}
           aria-hidden="true"
         />
@@ -380,7 +380,7 @@ export default function Layout({ children, style }) {
           // than by anyone's intent.
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
           transitionTimingFunction: 'var(--ease-fluid)',
-          boxShadow: drawerOpen ? '8px 0 28px rgba(15,23,42,0.10)' : 'none',
+          boxShadow: drawerOpen ? 'var(--shadow-popover)' : 'none',
         }}
         aria-label="Mobile navigation"
         aria-hidden={!drawerOpen}
@@ -467,7 +467,7 @@ function MobileBottomNav() {
       style={{
         borderTop: '1px solid var(--sidebar-border)',
         paddingBottom: 'env(safe-area-inset-bottom)',
-        boxShadow: '0 -6px 24px rgba(15,23,42,0.05)',
+        boxShadow: 'var(--shadow-sm)',
       }}
     >
       {primary.map(({ to, label, icon: Icon, end }) => (

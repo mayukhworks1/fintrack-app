@@ -16,7 +16,13 @@ import { AGEING, TOTALS, open, inr, shortDate } from './demoData'
 import { useReveal } from '../hooks/useReveal'
 import RollNumber from './motion/RollNumber'
 
-const TONES = ['#86b6ef', '#3987e5', '#256abf', '#104281']
+// Same accent ramp as AgingRunway: fresh → old, light → dark.
+const TONES = [
+  'color-mix(in srgb, var(--accent) 52%, var(--card-bg))',
+  'color-mix(in srgb, var(--accent) 78%, var(--card-bg))',
+  'var(--accent)',
+  'color-mix(in srgb, var(--accent) 62%, #000)',
+]
 const PEAK = Math.max(...AGEING.map(b => b.value))
 const OLDEST = [...open].sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, 3)
 

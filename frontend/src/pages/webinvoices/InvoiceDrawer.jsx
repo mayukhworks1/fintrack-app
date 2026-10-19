@@ -277,7 +277,7 @@ export function InvoiceDrawer({
       <div className="p-5 space-y-3.5">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
-              style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
               <AlertTriangle size={13} />{error}
             </div>
           )}
@@ -382,8 +382,8 @@ export function InvoiceDrawer({
 
           {paidSelected && (
             <div className="rounded-xl p-3 text-xs flex items-start gap-2"
-              style={{ background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e' }}>
-              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warning)', color: 'var(--fin-warning)' }}>
+              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--fin-warning)' }} />
               <span>Paid invoices must include <strong>Amount Received</strong> and <strong>Cleared Date</strong>. Attach a payment reference screenshot before closing the entry.</span>
             </div>
           )}

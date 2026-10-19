@@ -44,7 +44,7 @@ export function HfLogsTab() {
       {/* Header bar */}
       <div className="rounded-xl p-3 flex flex-wrap items-center gap-2"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-        <Terminal size={14} style={{ color: '#dc2626' }} />
+        <Terminal size={14} style={{ color: 'var(--fin-negative)' }} />
         <span className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>
           HF Space Logs
         </span>
@@ -60,7 +60,7 @@ export function HfLogsTab() {
               onClick={() => setLogType(t)}
               className="px-3 py-1 rounded-md text-xs font-medium transition-colors"
               style={logType === t
-                ? { background: 'rgba(220,38,38,0.15)', color: '#dc2626' }
+                ? { background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)' }
                 : { color: 'var(--text-3)' }}>
               {t === 'run' ? '▶ Runtime' : '🔨 Build'}
             </button>
@@ -72,8 +72,8 @@ export function HfLogsTab() {
           onClick={() => setAutoRefresh(v => !v)}
           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors"
           style={{
-            background: autoRefresh ? 'rgba(34,197,94,0.10)' : 'var(--bg-input)',
-            color:      autoRefresh ? '#22c55e' : 'var(--text-3)',
+            background: autoRefresh ? 'color-mix(in srgb, var(--fin-positive) 10%, transparent)' : 'var(--bg-input)',
+            color:      autoRefresh ? 'var(--fin-positive)' : 'var(--text-3)',
           }}>
           <Activity size={11} />
           {autoRefresh ? 'Live' : 'Paused'}
@@ -99,7 +99,7 @@ export function HfLogsTab() {
       {/* Error state */}
       {error && (
         <div className="rounded-xl p-3 text-xs flex items-start gap-2"
-          style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#f87171' }}>
+          style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
           <XCircle size={13} className="flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">Failed to load logs</p>
@@ -138,7 +138,7 @@ export function HfLogsTab() {
           <div className="overflow-y-auto font-mono text-[11px] leading-relaxed"
             style={{ background: '#0f172a', maxHeight: 560, minHeight: 200 }}>
             {lines.length === 0 && !loading ? (
-              <div className="p-4 text-center text-[11px]" style={{ color: '#475569' }}>
+              <div className="p-4 text-center text-[11px]" style={{ color: '#94a3b8' }}>
                 {logType === 'run' ? 'No runtime log lines fetched yet.' : 'No build log lines fetched yet.'}
               </div>
             ) : (
@@ -149,7 +149,7 @@ export function HfLogsTab() {
                   <div key={i} className="flex gap-2 px-3 py-0.5 hover:bg-white/[0.03]">
                     {line.ts && (
                       <span className="flex-shrink-0 text-[10px] tabular-nums select-none"
-                        style={{ color: '#334155', minWidth: 140 }}>
+                        style={{ color: '#64748b', minWidth: 140 }}>
                         {line.ts}
                       </span>
                     )}

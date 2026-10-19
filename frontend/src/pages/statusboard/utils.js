@@ -47,16 +47,18 @@ export const THEME_PRESETS = {
   },
 }
 
+// Status tones map onto the palette's semantic tokens, so the chips keep AA
+// contrast and follow the palette in both modes.
 const STATUS_CONFIG = {
-  'Completed':     { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', dot: '#10b981', light: '#dcfce7' },
-  'In progress':   { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.35)', dot: '#3b82f6', light: '#dbeafe' },
-  'On Hold':       { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)', dot: '#f59e0b', light: '#fef3c7' },
-  'Input Pending': { color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.35)', dot: '#f97316', light: '#ffedd5' },
-  'Not started':   { color: '#94a3b8', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.30)', dot: '#94a3b8', light: '#f1f5f9' },
+  'Completed':     { color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', dot: 'var(--fin-positive)', light: 'var(--fin-pos-bg)' },
+  'In progress':   { color: 'var(--accent-ink)', bg: 'var(--accent-dim)', border: 'var(--accent-soft)', dot: 'var(--accent)', light: 'var(--accent-dim)' },
+  'On Hold':       { color: 'var(--fin-warning)', bg: 'var(--fin-warn-bg)', border: 'var(--fin-warn-border)', dot: 'var(--fin-warning)', light: 'var(--fin-warn-bg)' },
+  'Input Pending': { color: 'color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative))', bg: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 12%, transparent)', border: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 35%, transparent)', dot: 'color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative))', light: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 12%, transparent)' },
+  'Not started':   { color: 'var(--text-3)', bg: 'color-mix(in srgb, var(--text-3) 10%, transparent)', border: 'color-mix(in srgb, var(--text-3) 30%, transparent)', dot: 'var(--text-3)', light: 'var(--bg-2)' },
 }
 
 export function statusStyle(s) {
-  return STATUS_CONFIG[s] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)', dot: '#94a3b8', light: '#f1f5f9' }
+  return STATUS_CONFIG[s] || { color: 'var(--text-3)', bg: 'color-mix(in srgb, var(--text-3) 8%, transparent)', border: 'color-mix(in srgb, var(--text-3) 20%, transparent)', dot: 'var(--text-3)', light: 'var(--bg-2)' }
 }
 
 // ── List view columns ─────────────────────────────────────────────────────────
@@ -164,34 +166,6 @@ export const CARD_RECORD_SORT_OPTIONS = [
   { value: 'modified-asc', label: 'Oldest updated' },
   { value: 'status-asc', label: 'Status A-Z' },
 ]
-
-export const EXECUTIVE_VARS_DARK = {
-  '--bg-base': '#090b10',
-  '--bg-layer': '#0e1118',
-  '--card-bg': '#141820',
-  '--card-border': 'rgba(255,255,255,0.08)',
-  '--card-shadow': '0 24px 60px rgba(0,0,0,0.32)',
-  '--card-shadow-hover': '0 28px 70px rgba(0,0,0,0.4)',
-  '--bg-input': '#10141d',
-  '--text-1': '#f4f7fb',
-  '--text-2': '#c0c8d6',
-  '--text-3': '#7f8a9c',
-  '--border': 'rgba(255,255,255,0.08)',
-}
-
-export const EXECUTIVE_VARS_LIGHT = {
-  '--bg-base': '#f5f7fb',
-  '--bg-layer': '#fbfcff',
-  '--card-bg': '#ffffff',
-  '--card-border': 'rgba(15,23,42,0.08)',
-  '--card-shadow': '0 24px 60px rgba(15,23,42,0.08)',
-  '--card-shadow-hover': '0 28px 70px rgba(15,23,42,0.12)',
-  '--bg-input': '#f5f7fb',
-  '--text-1': '#152033',
-  '--text-2': '#536175',
-  '--text-3': '#8b97aa',
-  '--border': 'rgba(15,23,42,0.08)',
-}
 
 export function fmtDate(iso) {
   if (!iso) return ''

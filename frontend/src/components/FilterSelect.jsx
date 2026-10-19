@@ -381,7 +381,7 @@ export function FilterMulti({
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors"
                       style={{
                         color:      'var(--text-1)',
-                        background: kbd ? 'var(--bg-layer)' : checked ? 'rgba(37,99,235,0.06)' : 'transparent',
+                        background: kbd ? 'var(--bg-layer)' : checked ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent',
                         fontWeight: checked ? 600 : 400,
                       }}
                       onMouseEnter={() => setFocus(i)}

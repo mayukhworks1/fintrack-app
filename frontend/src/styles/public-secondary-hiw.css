@@ -34,7 +34,7 @@
 .ft-s-step p { font-size: 0.875rem; line-height: 1.65; color: var(--text-2); }
 .ft-s-badge {
   position: relative; z-index: 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
-  font-weight: 800; font-size: 13px; background: var(--accent-btn); color: #fff;
+  font-weight: 800; font-size: 13px; background: var(--accent-btn); color: var(--accent-fg);
   box-shadow: 0 0 0 4px var(--card-bg), 0 6px 14px -6px var(--accent);
 }
 .ft-s-steps-line { display: none; }
@@ -93,7 +93,7 @@
 .ft-s-sim-check { font-weight: 600; color: var(--text-1); }
 .ft-s-sim-routes { display: flex; flex-wrap: wrap; gap: 4px; }
 .ft-s-sim-routes span { padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-3); border: 1px solid var(--card-border); }
-.ft-s-sim-routes span[data-on] { color: #fff; background: var(--accent-btn); border-color: var(--accent); }
+.ft-s-sim-routes span[data-on] { color: var(--accent-fg); background: var(--accent-btn); border-color: var(--accent); }
 .ft-s-sim-outcome {
   align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 800;
   color: var(--ok); background: var(--card-bg); border: 1px solid currentColor;
@@ -115,7 +115,7 @@
    focusable in it cannot be scrolled from the keyboard. */
 .ft-s-sim-sql, .ft-s-inset-sql {
   margin: 0; padding: 12px 14px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere;
-  background: #0b1224; color: #dbe4ff; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--rail-bg); color: #dbe4ff; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .ft-s-sim-hist { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.55; color: var(--text-2); }
 .ft-s-sim-hist svg { flex-shrink: 0; margin-top: 3px; color: var(--accent-ink, var(--accent)); }

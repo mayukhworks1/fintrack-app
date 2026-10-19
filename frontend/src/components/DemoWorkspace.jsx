@@ -87,7 +87,8 @@ const TONE = {
   Overdue: { fg: 'var(--bad)', bg: 'var(--bad-dim)' },
 }
 
-const RAMP = ['#104281', '#256abf', '#3987e5', '#86b6ef']
+// Aging ramp in the palette's accent hue, old (dark) → fresh (light).
+const RAMP = ['color-mix(in srgb, var(--accent) 62%, #000)', 'color-mix(in srgb, var(--accent) 82%, #000)', 'var(--accent)', 'color-mix(in srgb, var(--accent) 52%, #fff)']
 
 /* ── Shared UI Elements ─────────────────────────────────────────────── */
 
@@ -227,7 +228,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
             className="px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer"
             style={{
               background: invoice.status === 'Paid' ? 'var(--ok-dim)' : 'var(--accent-btn)',
-              color: invoice.status === 'Paid' ? 'var(--ok)' : '#fff',
+              color: invoice.status === 'Paid' ? 'var(--ok)' : 'var(--accent-fg)',
               borderColor: invoice.status === 'Paid' ? 'var(--ok)' : 'var(--accent)',
             }}
           >
@@ -372,7 +373,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold cursor-pointer"
                   style={{
                     background: reminderCopied ? 'var(--ok-dim)' : 'var(--accent-btn)',
-                    color: reminderCopied ? 'var(--ok)' : '#fff',
+                    color: reminderCopied ? 'var(--ok)' : 'var(--accent-fg)',
                   }}
                 >
                   {reminderCopied ? <CheckIcon size={10} /> : <Copy size={10} />}
@@ -532,7 +533,7 @@ function Dashboard({ set }) {
                 className="px-2 py-1 rounded text-[10px] font-bold transition-all cursor-pointer"
                 style={{
                   background: dashboardView === v.id ? 'var(--accent-btn)' : 'transparent',
-                  color: dashboardView === v.id ? '#fff' : 'var(--text-3)',
+                  color: dashboardView === v.id ? 'var(--accent-fg)' : 'var(--text-3)',
                 }}
               >
                 {v.label}
@@ -543,7 +544,7 @@ function Dashboard({ set }) {
           <button
             onClick={() => set({ tab: 'receivables' })}
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-            style={{ background: 'var(--accent-btn)', color: '#fff' }}
+            style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
           >
             Inspect Ledger <ArrowRight size={12} />
           </button>
@@ -655,7 +656,7 @@ function Dashboard({ set }) {
             ].map(step => (
               <div key={step.label} className="p-2 rounded-lg border flex items-center justify-between"
                    style={{
-                     background: step.type === 'pos' ? 'rgba(16, 185, 129, 0.08)' : step.type === 'neg' ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-input)',
+                     background: step.type === 'pos' ? 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' : step.type === 'neg' ? 'color-mix(in srgb, var(--fin-negative) 8%, transparent)' : 'var(--bg-input)',
                      borderColor: step.type === 'net' ? 'var(--accent)' : 'var(--card-border)',
                    }}>
                 <div>
@@ -842,7 +843,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
                     height: 30, padding: '0 9px', fontSize: 11,
                     background: status === s ? 'var(--accent-btn)' : 'var(--card-bg)',
                     border: `1px solid ${status === s ? 'var(--accent)' : 'var(--card-border)'}`,
-                    color: status === s ? '#fff' : 'var(--text-2)',
+                    color: status === s ? 'var(--accent-fg)' : 'var(--text-2)',
                   }}>
             {s === 'all' ? 'All' : s}
           </button>
@@ -863,7 +864,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
               className="px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
               style={{
                 background: viewMode === m.id ? 'var(--accent-btn)' : 'transparent',
-                color: viewMode === m.id ? '#fff' : 'var(--text-3)',
+                color: viewMode === m.id ? 'var(--accent-fg)' : 'var(--text-3)',
               }}
             >
               {m.label}
@@ -879,7 +880,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
               className="px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
               style={{
                 background: currency === cKey ? 'var(--accent-btn)' : 'transparent',
-                color: currency === cKey ? '#fff' : 'var(--text-3)',
+                color: currency === cKey ? 'var(--accent-fg)' : 'var(--text-3)',
               }}
               title={`Switch display currency to ${CURRENCY_RATES[cKey].label}`}
             >
@@ -1111,7 +1112,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold cursor-pointer"
                 style={{
                   background: batchCopied ? 'var(--ok-dim)' : 'var(--accent-btn)',
-                  color: batchCopied ? 'var(--ok)' : '#fff',
+                  color: batchCopied ? 'var(--ok)' : 'var(--accent-fg)',
                 }}
               >
                 {batchCopied ? <CheckIcon size={11} /> : <Mail size={11} />}
@@ -1231,7 +1232,7 @@ function Projects({ state, set }) {
                 className="px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
                 style={{
                   background: costOffset === b.val ? 'var(--accent-btn)' : 'transparent',
-                  color: costOffset === b.val ? '#fff' : 'var(--text-2)',
+                  color: costOffset === b.val ? 'var(--accent-fg)' : 'var(--text-2)',
                   border: `1px solid ${costOffset === b.val ? 'var(--accent)' : 'transparent'}`,
                 }}
               >
@@ -1297,7 +1298,7 @@ function TaxLedger({ set }) {
               className="px-2 py-0.5 rounded text-[10.5px] font-bold transition-all cursor-pointer"
               style={{
                 background: taxTab === tab ? 'var(--accent-btn)' : 'var(--bg-input)',
-                color: taxTab === tab ? '#fff' : 'var(--text-3)',
+                color: taxTab === tab ? 'var(--accent-fg)' : 'var(--text-3)',
                 border: `1px solid ${taxTab === tab ? 'var(--accent)' : 'var(--card-border)'}`,
               }}
             >
@@ -1469,7 +1470,7 @@ function Analytics({ state, set }) {
                     style={{ height: 26, padding: '0 9px', fontSize: 10.5,
                              background: state.months === n ? 'var(--accent-btn)' : 'var(--card-bg)',
                              border: `1px solid ${state.months === n ? 'var(--accent)' : 'var(--card-border)'}`,
-                             color: state.months === n ? '#fff' : 'var(--text-2)' }}>
+                             color: state.months === n ? 'var(--accent-fg)' : 'var(--text-2)' }}>
               {n}M
             </button>
           ))}
@@ -1490,7 +1491,7 @@ function Analytics({ state, set }) {
                 className="px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer"
                 style={{
                   background: chartMode === m.id ? 'var(--accent-btn)' : 'transparent',
-                  color: chartMode === m.id ? '#fff' : 'var(--text-3)',
+                  color: chartMode === m.id ? 'var(--accent-fg)' : 'var(--text-3)',
                 }}
               >
                 {m.label}
@@ -1842,7 +1843,7 @@ function Analyst({ state, set }) {
               className="px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer"
               style={{
                 background: mode === m ? 'var(--accent-btn)' : 'var(--bg-input)',
-                color: mode === m ? '#fff' : 'var(--text-3)',
+                color: mode === m ? 'var(--accent-fg)' : 'var(--text-3)',
                 border: `1px solid ${mode === m ? 'var(--accent)' : 'var(--card-border)'}`,
               }}
             >
@@ -1862,7 +1863,7 @@ function Analyst({ state, set }) {
                     minHeight: 28, padding: '4px 8px', fontSize: 11,
                     background: state.question === i && !customAnswer ? 'var(--accent-btn)' : 'var(--card-bg)',
                     border: `1px solid ${state.question === i && !customAnswer ? 'var(--accent)' : 'var(--card-border)'}`,
-                    color: state.question === i && !customAnswer ? '#fff' : 'var(--text-2)',
+                    color: state.question === i && !customAnswer ? 'var(--accent-fg)' : 'var(--text-2)',
                   }}>
             {q.q}
           </button>
@@ -1882,7 +1883,7 @@ function Analyst({ state, set }) {
         <button
           type="submit"
           className="px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-          style={{ background: 'var(--accent-btn)', color: '#fff' }}
+          style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
         >
           <Send size={11} /> Ask
         </button>
@@ -2015,7 +2016,7 @@ function Reports() {
                 className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer"
                 style={{
                   background: activeMode === m.id ? 'var(--accent-btn)' : 'transparent',
-                  color: activeMode === m.id ? '#fff' : 'var(--text-3)',
+                  color: activeMode === m.id ? 'var(--accent-fg)' : 'var(--text-3)',
                 }}
               >
                 <Icon size={11} /> {m.label}
@@ -2096,7 +2097,7 @@ function Reports() {
                     className="px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer"
                     style={{
                       background: aiAudience === aud ? 'var(--accent-btn)' : 'var(--bg-input)',
-                      color: aiAudience === aud ? '#fff' : 'var(--text-3)',
+                      color: aiAudience === aud ? 'var(--accent-fg)' : 'var(--text-3)',
                       border: `1px solid ${aiAudience === aud ? 'var(--accent)' : 'var(--card-border)'}`,
                     }}
                   >
@@ -2109,7 +2110,7 @@ function Reports() {
                 type="submit"
                 disabled={generating === 'ai_custom'}
                 className="px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ml-auto"
-                style={{ background: 'var(--accent-btn)', color: '#fff' }}
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
               >
                 {generating === 'ai_custom' ? (
                   <>
@@ -2184,7 +2185,7 @@ function Reports() {
                 className="px-2 py-0.5 rounded text-[9.5px] font-bold uppercase transition-all cursor-pointer"
                 style={{
                   background: reportTab === t ? 'var(--accent-btn)' : 'var(--card-bg)',
-                  color: reportTab === t ? '#fff' : 'var(--text-3)',
+                  color: reportTab === t ? 'var(--accent-fg)' : 'var(--text-3)',
                 }}
               >
                 {t}
@@ -2331,7 +2332,7 @@ function Delivery({ state, set }) {
                   fontSize: 10.5,
                   background: on ? 'var(--accent-btn)' : 'var(--card-bg)',
                   border: `1px solid ${on ? 'var(--accent)' : 'var(--card-border)'}`,
-                  color: on ? '#fff' : 'var(--text-2)',
+                  color: on ? 'var(--accent-fg)' : 'var(--text-2)',
                 }}
               >
                 <Icon size={11} /> {v.label}
@@ -2399,7 +2400,7 @@ function Delivery({ state, set }) {
                   setTimeout(() => setShareCopied(false), 2000)
                 }}
                 className="px-3 py-1 rounded text-xs font-bold flex items-center gap-1 cursor-pointer"
-                style={{ background: 'var(--accent-btn)', color: '#fff' }}
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
               >
                 {shareCopied ? <Check size={12} /> : <Copy size={12} />}
                 {shareCopied ? 'Copied' : 'Copy Link'}
@@ -2471,7 +2472,7 @@ function Delivery({ state, set }) {
             <button
               type="submit"
               className="px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
             >
               Save View Tab
             </button>
@@ -2482,8 +2483,8 @@ function Delivery({ state, set }) {
       {recentAction && (
         <div className="px-2.5 py-1.5 rounded-lg text-[10.5px] flex items-center justify-between border"
              style={{
-               background: recentAction.type === 'billing_trigger' ? 'rgba(16, 185, 129, 0.12)' : 'var(--accent-dim)',
-               borderColor: recentAction.type === 'billing_trigger' ? 'rgba(16, 185, 129, 0.3)' : 'var(--accent-soft)',
+               background: recentAction.type === 'billing_trigger' ? 'color-mix(in srgb, var(--fin-positive) 12%, transparent)' : 'var(--accent-dim)',
+               borderColor: recentAction.type === 'billing_trigger' ? 'color-mix(in srgb, var(--fin-positive) 30%, transparent)' : 'var(--accent-soft)',
                color: recentAction.type === 'billing_trigger' ? 'var(--ok)' : 'var(--accent-ink, var(--accent))',
                animation: 'ft-slide-up 200ms ease-out',
              }}>
@@ -2520,8 +2521,8 @@ function Delivery({ state, set }) {
                               className="ft-card text-left rounded-lg p-2 transition-all relative overflow-hidden cursor-pointer"
                               style={{
                                 background: 'var(--card-bg)',
-                                border: `1px solid ${card === d.id ? 'var(--accent)' : isDelivered ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)'}`,
-                                boxShadow: isDelivered ? '0 0 10px rgba(16, 185, 129, 0.08)' : 'none',
+                                border: `1px solid ${card === d.id ? 'var(--accent)' : isDelivered ? 'color-mix(in srgb, var(--fin-positive) 40%, transparent)' : 'var(--card-border)'}`,
+                                boxShadow: isDelivered ? '0 0 10px color-mix(in srgb, var(--fin-positive) 8%, transparent)' : 'none',
                               }}>
                         <span className="block font-bold truncate"
                               style={{ fontSize: 11, color: 'var(--text-1)' }}>{d.project}</span>
@@ -2789,7 +2790,7 @@ function Pages() {
           <button
             onClick={() => setShowEditor(true)}
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer"
-            style={{ background: 'var(--accent-btn)', color: '#fff' }}
+            style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
           >
             <Plus size={12} /> New Page
           </button>
@@ -2805,7 +2806,7 @@ function Pages() {
             className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer"
             style={{
               background: formatFilter === f ? 'var(--accent-btn)' : 'var(--bg-input)',
-              color: formatFilter === f ? '#fff' : 'var(--text-3)',
+              color: formatFilter === f ? 'var(--accent-fg)' : 'var(--text-3)',
               border: `1px solid ${formatFilter === f ? 'var(--accent)' : 'var(--card-border)'}`,
             }}
           >
@@ -2997,8 +2998,8 @@ function Pages() {
                   onClick={() => setMilestoneApproved(!milestoneApproved)}
                   className="px-3 py-1.5 rounded text-xs font-bold transition-all cursor-pointer"
                   style={{
-                    background: milestoneApproved ? '#10b981' : '#2563eb',
-                    color: '#fff',
+                    background: milestoneApproved ? 'var(--fin-positive)' : 'var(--accent)',
+                    color: 'var(--accent-fg)',
                   }}
                 >
                   {milestoneApproved ? '✓ Milestone Approved' : 'Sign-Off Milestone'}
@@ -3070,7 +3071,7 @@ function Pages() {
               type="submit"
               disabled={generatingPage || !newPageTitle.trim()}
               className="w-full py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
             >
               {generatingPage ? (
                 <>
@@ -3205,7 +3206,7 @@ function Studio() {
             <button
               onClick={() => setShowUploadModal(true)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
             >
               <Upload size={11} /> Upload Document
             </button>
@@ -3248,7 +3249,7 @@ function Studio() {
               type="submit"
               disabled={uploading}
               className="w-full py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
             >
               {uploading ? (
                 <>
@@ -3367,7 +3368,7 @@ function Studio() {
                 type="submit"
                 disabled={ragSearching}
                 className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                style={{ background: 'var(--accent-btn)', color: '#fff' }}
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
               >
                 {ragSearching ? <RefreshCw size={11} className="animate-spin" /> : <Send size={11} />}
                 Ask
@@ -3916,7 +3917,7 @@ export default function DemoWorkspace() {
       <div ref={frameRef} className="ft-tour relative" tabIndex={-1} onKeyDown={onKeys}>
         {/* Window Chrome Header */}
         <div className="ft-tour-chrome">
-          {['#ef4444', '#fbbf24', '#22c55e'].map(c => (
+          {['var(--fin-negative)', 'var(--fin-warning)', 'var(--fin-positive)'].map(c => (
             <span key={c} className="ft-tour-dot" style={{ background: c }} />
           ))}
           {/* Hidden under 380px, where the row cannot hold it and the badge

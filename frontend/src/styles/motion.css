@@ -43,17 +43,8 @@
                             0.941, 0.961, 0.975, 0.984, 0.989, 0.993, 0.996, 1);
   }
 }
-/* Text accent. In the light theme it is the accent itself. In the dark theme
-   the public shell lifts the tokens that carry small text: --text-3 and the
-   accent as ink on tinted fills read under 4.5:1 there, and white on
-   --accent-btn read at 4.08:1. The app's own screens keep their palette. */
-.main-app-theme { --accent-ink: var(--accent); }
-html.dark .main-app-theme.ft-m-shell {
-  --text-3: #9a968c;
-  --accent-btn: #3a60ee;
-  --accent-btn-hover: #2f52d6;
-  --accent-ink: #7da0ff;
-}
+/* Text accent (--accent-ink) and the button tokens come from the palette
+   sets in index.css, which hold each to 4.5:1 in both modes. */
 
 @media (prefers-reduced-motion: reduce) {
   :root { --m-t-micro: 0ms; --m-t-small: 0ms; --m-t-medium: 0ms; --m-t-large: 0ms;
@@ -388,7 +379,7 @@ html.dark .main-app-theme.ft-m-shell {
   transition: background-color var(--m-t-small) ease, border-color var(--m-t-small) ease, color var(--m-t-small) ease;
 }
 .ft-m-rail-step[data-on] .ft-m-rail-dot { border-color: var(--accent); color: var(--accent-ink, var(--accent)); }
-.ft-m-rail-step[data-current] .ft-m-rail-dot { background: var(--accent-btn); color: #fff; }
+.ft-m-rail-step[data-current] .ft-m-rail-dot { background: var(--accent-btn); color: var(--accent-fg); }
 .ft-m-rail-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
 .ft-m-rail-step[data-current] .ft-m-rail-label { color: var(--text-1); }
 
@@ -406,7 +397,7 @@ html.dark .main-app-theme.ft-m-shell {
 }
 .ft-m-new:hover, .ft-m-new:focus-visible { border-color: var(--accent-soft); background: var(--accent-dim); }
 .ft-m-new-badge {
-  flex-shrink: 0; padding: 2px 7px; border-radius: 999px; background: var(--accent-btn); color: #fff;
+  flex-shrink: 0; padding: 2px 7px; border-radius: 999px; background: var(--accent-btn); color: var(--accent-fg);
   font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
 }
 .ft-m-foot { display: grid; gap: 28px 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -383,28 +383,28 @@ export function AuthUsersTab() {
         {row.status === 'active' && (roleByUser[row.id] || row.roles?.[0] || 'user') !== (row.roles?.[0] || 'user') && (
           <button onClick={() => act(row, 'role')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-            style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
+            style={{ color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
             <Save size={11} /> {busy('role') ? 'Saving…' : 'Save role'}
           </button>
         )}
         {row.status !== 'active' && (
           <button onClick={() => act(row, row.status === 'pending_approval' ? 'approve' : 'reactivate')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
-            style={{ color: '#16a34a', borderColor: 'rgba(22,163,74,0.28)', background: 'rgba(22,163,74,0.08)' }}>
+            style={{ color: 'var(--fin-positive)', borderColor: 'color-mix(in srgb, var(--fin-positive) 28%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' }}>
             {busy('approve') || busy('reactivate') ? 'Working…' : row.status === 'pending_approval' ? 'Approve' : 'Reactivate'}
           </button>
         )}
         {row.status === 'pending_approval' && (
           <button onClick={() => act(row, 'reject')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
-            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+            style={{ color: 'var(--fin-negative)', borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}>
             {busy('reject') ? 'Working…' : 'Reject'}
           </button>
         )}
         {row.status === 'active' && (
           <button onClick={() => act(row, 'disable')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
-            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+            style={{ color: 'var(--fin-negative)', borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}>
             {busy('disable') ? 'Working…' : 'Disable'}
           </button>
         )}
@@ -412,14 +412,14 @@ export function AuthUsersTab() {
         {(row.status === 'active' || row.status === 'pending_approval') && (
           <button onClick={() => resendInvite(row)} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-            style={{ color: '#2563eb', borderColor: 'rgba(37,99,235,0.28)', background: 'rgba(37,99,235,0.08)' }}>
+            style={{ color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
             <SendHorizontal size={11} /> {busy('invite') ? 'Sending…' : 'Resend invite'}
           </button>
         )}
         {row.status === 'active' && (
           <button onClick={() => forcePasswordReset(row)} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-            style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
+            style={{ color: 'var(--fin-warning)', borderColor: 'color-mix(in srgb, var(--fin-warning) 28%, transparent)', background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)' }}>
             <KeyRound size={11} /> {busy('forcereset') ? 'Working…' : 'Force reset'}
           </button>
         )}
@@ -430,20 +430,20 @@ export function AuthUsersTab() {
         </button>
         <button onClick={() => deleteUser(row)} disabled={rowBusy}
           className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-          style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.06)' }}>
+          style={{ color: 'var(--fin-negative)', borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}>
           <Trash2 size={11} /> {busy('delete') ? 'Deleting…' : 'Delete'}
         </button>
         {row.active_session_count > 0 && (
           <button onClick={() => act(row, 'revoke')} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border"
-            style={{ color: '#d97706', borderColor: 'rgba(217,119,6,0.28)', background: 'rgba(217,119,6,0.08)' }}>
+            style={{ color: 'var(--fin-warning)', borderColor: 'color-mix(in srgb, var(--fin-warning) 28%, transparent)', background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)' }}>
             {busy('revoke') ? 'Revoking…' : 'Revoke sessions'}
           </button>
         )}
         {isSuperAdmin && row.status === 'active' && (
           <button onClick={() => impersonate(row)} disabled={rowBusy}
             className="text-[11px] px-2 py-1 rounded-lg border inline-flex items-center gap-1"
-            style={{ color: '#7c3aed', borderColor: 'rgba(124,58,237,0.28)', background: 'rgba(124,58,237,0.08)' }}>
+            style={{ color: 'var(--chart-3)', borderColor: 'color-mix(in srgb, var(--chart-3) 28%, transparent)', background: 'color-mix(in srgb, var(--chart-3) 8%, transparent)' }}>
             <Eye size={11} /> {busy('impersonate') ? 'Starting…' : 'Impersonate'}
           </button>
         )}
@@ -563,7 +563,7 @@ export function AuthUsersTab() {
 
       {targetUserId && (
         <div className="rounded-xl border p-3 text-xs flex flex-wrap items-center justify-between gap-2"
-          style={{ borderColor: 'rgba(37,99,235,0.24)', background: 'rgba(37,99,235,0.07)' }}>
+          style={{ borderColor: 'color-mix(in srgb, var(--accent) 24%, transparent)', background: 'color-mix(in srgb, var(--accent) 7%, transparent)' }}>
           <span style={{ color: 'var(--text-2)' }}>
             Reviewing user from email action link. Clear this focus to return to all users.
           </span>
@@ -620,9 +620,9 @@ export function AuthUsersTab() {
                     key={row.id}
                     className="rounded-2xl border p-4 transition-all"
                     style={{
-                      borderColor: row.id === targetUserId ? 'rgba(37,99,235,0.55)' : 'var(--border)',
+                      borderColor: row.id === targetUserId ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : 'var(--border)',
                       background: 'linear-gradient(135deg, var(--card-bg), var(--bg-soft))',
-                      boxShadow: row.id === targetUserId ? '0 18px 50px rgba(37,99,235,0.18)' : 'var(--shadow-soft)',
+                      boxShadow: row.id === targetUserId ? '0 18px 50px color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--shadow-soft)',
                     }}
                   >
                     <div className="grid grid-cols-[minmax(260px,1.2fr)_minmax(220px,0.9fr)_minmax(360px,1.1fr)] gap-4 items-start">
@@ -772,7 +772,7 @@ function UserTimelineDrawer({ userId, onClose }) {
               <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.sessions?.length}</b> sessions</span>
               <span style={{ color: 'var(--text-3)' }}><b style={{ color: 'var(--text-1)' }}>{data.audit_request_count?.toLocaleString()}</b> API requests</span>
               {data.user?.teable_email && (
-                <span style={{ color: '#7c3aed' }}>Teable: {data.user.teable_email}</span>
+                <span style={{ color: 'var(--chart-3)' }}>Teable: {data.user.teable_email}</span>
               )}
             </div>
             <div className="flex gap-1 flex-shrink-0">
@@ -796,12 +796,12 @@ function UserTimelineDrawer({ userId, onClose }) {
             <div key={ev.id} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-                  style={{ background: EVENT_COLORS[ev.event_type] === 'green' ? '#16a34a'
-                    : EVENT_COLORS[ev.event_type] === 'red' ? '#dc2626'
-                    : EVENT_COLORS[ev.event_type] === 'amber' ? '#d97706'
-                    : EVENT_COLORS[ev.event_type] === 'blue' ? '#2563eb'
-                    : EVENT_COLORS[ev.event_type] === 'purple' ? '#7c3aed'
-                    : '#6366f1' }} />
+                  style={{ background: EVENT_COLORS[ev.event_type] === 'green' ? 'var(--fin-positive)'
+                    : EVENT_COLORS[ev.event_type] === 'red' ? 'var(--fin-negative)'
+                    : EVENT_COLORS[ev.event_type] === 'amber' ? 'var(--fin-warning)'
+                    : EVENT_COLORS[ev.event_type] === 'blue' ? 'var(--accent)'
+                    : EVENT_COLORS[ev.event_type] === 'purple' ? 'var(--chart-3)'
+                    : 'var(--accent)' }} />
                 <div className="flex-1 w-px my-1" style={{ background: 'var(--border)' }} />
               </div>
               <div className="pb-2 min-w-0 flex-1">

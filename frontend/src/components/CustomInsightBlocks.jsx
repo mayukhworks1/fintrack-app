@@ -2,8 +2,8 @@ import { BarChart3, PieChart as PieChartIcon, Table2, TrendingUp } from 'lucide-
 import {
   Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import useChartColors from '../hooks/useChartColors'
 
-const DONUT_COLORS = ['#4b67ff', '#16915f', '#ca7f14', '#d85f58', '#7c3aed', '#0891b2', '#6b7280']
 
 function formatMetricValue(value, format = 'auto') {
   if (value == null || value === '') return '—'
@@ -71,6 +71,8 @@ function BlockShell({ title, sourceLabel, icon, children, className = '' }) {
 }
 
 export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], sourceRowsByKey = {} }) {
+  const chart = useChartColors()
+  const DONUT_COLORS = [...chart.series, chart.muted]
   if (!blocks.length) return null
 
   return (

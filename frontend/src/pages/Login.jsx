@@ -39,7 +39,7 @@ function GoogleMark() {
 function ZohoMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <rect x="1" y="1" width="8" height="8" rx="2" fill="#E42527" />
+      <rect x="1" y="1" width="8" height="8" rx="2" fill="var(--fin-negative)" />
       <rect x="11" y="1" width="8" height="8" rx="2" fill="#089949" />
       <rect x="1" y="11" width="8" height="8" rx="2" fill="#226DB4" />
       <rect x="11" y="11" width="8" height="8" rx="2" fill="#F9B21D" />
@@ -61,9 +61,9 @@ export function scorePassword(p) {
 const STRENGTH = [
   ['', ''],
   ['Weak', 'var(--fin-negative)'],
-  ['Fair', '#D18A1A'],
+  ['Fair', 'var(--fin-warning)'],
   ['Good', 'var(--accent)'],
-  ['Strong', '#1B9A66'],
+  ['Strong', 'var(--fin-positive)'],
 ]
 
 const OAUTH_ERROR_MESSAGES = {
@@ -210,9 +210,9 @@ export default function Login() {
           >
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.25)' }}
+              style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}
             >
-              <Loader2 size={26} className="animate-spin" style={{ color: '#2563eb' }} />
+              <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent)' }} />
             </div>
             <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
               Signing you in
@@ -344,9 +344,9 @@ export default function Login() {
           >
             <div
               className="ft-pop w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}
+              style={{ background: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)' }}
             >
-              <Clock size={26} style={{ color: '#f59e0b' }} />
+              <Clock size={26} style={{ color: 'var(--fin-warning)' }} />
             </div>
             <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
               Account pending approval
@@ -490,8 +490,8 @@ export default function Login() {
             {/* Show email read-only on invite so user knows whose account this is */}
             {resetToken && isInvite && email && (
               <div className="rounded-xl px-3 py-2.5 text-sm flex items-center gap-2"
-                style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: 'var(--text-2)' }}>
-                <Mail size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
+                style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--text-2)' }}>
+                <Mail size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                 {email}
               </div>
             )}
@@ -579,8 +579,8 @@ export default function Login() {
                   placeholder="Enter your password"
                   className="input pl-9 pr-10 py-2.5 text-sm rounded-xl"
                   style={{
-                    borderColor: error ? 'rgba(239,68,68,0.45)' : undefined,
-                    boxShadow: error ? '0 0 0 3px rgba(239,68,68,0.1)' : undefined,
+                    borderColor: error ? 'color-mix(in srgb, var(--fin-negative) 45%, transparent)' : undefined,
+                    boxShadow: error ? '0 0 0 3px color-mix(in srgb, var(--fin-negative) 10%, transparent)' : undefined,
                   }}
                   aria-label="Password"
                   aria-invalid={!!error}
@@ -609,7 +609,7 @@ export default function Login() {
                 </button>
               </div>
               {capsOn && !show && (
-                <p className="ft-caps flex items-center gap-1.5 text-[11px] mt-1.5" style={{ color: '#D18A1A' }}>
+                <p className="ft-caps flex items-center gap-1.5 text-[11px] mt-1.5" style={{ color: 'var(--fin-warning)' }}>
                   <AlertCircle size={11} aria-hidden="true" /> Caps Lock is on
                 </p>
               )}
@@ -699,9 +699,9 @@ export default function Login() {
               <div
                 className="flex items-center gap-2 text-xs px-3 py-2.5 rounded-xl"
                 style={{
-                  background: 'rgba(22,163,74,0.10)',
-                  border: '1px solid rgba(22,163,74,0.22)',
-                  color: '#16a34a',
+                  background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--fin-positive) 22%, transparent)',
+                  color: 'var(--fin-positive)',
                 }}
                 role="status"
                 aria-live="polite"
@@ -720,12 +720,12 @@ export default function Login() {
               className="ft-submit w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
               style={{
                 background: 'var(--accent-btn)',
-                color: 'white',
+                color: 'var(--accent-fg)',
                 opacity: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword) ? 0.55 : 1,
                 cursor: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword) ? 'not-allowed' : 'pointer',
                 boxShadow: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword)
                   ? 'none'
-                  : '0 2px 4px rgba(37,99,235,0.2), 0 6px 16px rgba(37,99,235,0.18)',
+                  : '0 2px 4px color-mix(in srgb, var(--accent) 20%, transparent), 0 6px 16px color-mix(in srgb, var(--accent) 18%, transparent)',
                 letterSpacing: '-0.01em',
               }}
               onMouseEnter={e => {

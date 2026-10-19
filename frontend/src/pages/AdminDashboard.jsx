@@ -142,7 +142,7 @@ export default function AdminDashboard({ embedded = false }) {
         <button key={id} onClick={() => setTab(id)}
           className="app-press flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
           style={activeTab === id
-            ? { background: 'rgba(220,38,38,0.10)', color: '#dc2626' }
+            ? { background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)' }
             : { color: 'var(--text-3)', background: 'transparent' }}
           onMouseEnter={e => { if (activeTab !== id) e.currentTarget.style.background = 'var(--bg-input)' }}
           onMouseLeave={e => { if (activeTab !== id) e.currentTarget.style.background = 'transparent' }}>
@@ -190,8 +190,8 @@ export default function AdminDashboard({ embedded = false }) {
       <div className="p-2 sm:p-4 space-y-4 max-w-[1400px] mx-auto w-full">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(220,38,38,0.10)' }}>
-            <Activity size={15} style={{ color: '#dc2626' }} />
+            style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)' }}>
+            <Activity size={15} style={{ color: 'var(--fin-negative)' }} />
           </div>
           <div>
             <h1 className="font-bold text-base leading-tight" style={{ color: 'var(--text-1)' }}>
@@ -215,8 +215,8 @@ export default function AdminDashboard({ embedded = false }) {
         style={{ background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(220,38,38,0.12)' }}>
-            <Activity size={14} style={{ color: '#dc2626' }} />
+            style={{ background: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)' }}>
+            <Activity size={14} style={{ color: 'var(--fin-negative)' }} />
           </div>
           <div>
             <p className="font-bold text-sm leading-tight" style={{ color: 'var(--text-1)' }}>Admin Panel</p>
@@ -226,7 +226,7 @@ export default function AdminDashboard({ embedded = false }) {
         <button onClick={logout}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors"
           style={{ color: 'var(--text-3)', background: 'transparent' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.06)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 6%, transparent)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
           <LogOut size={12} /> Sign out
         </button>

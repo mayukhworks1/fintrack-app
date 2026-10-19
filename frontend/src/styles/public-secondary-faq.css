@@ -45,7 +45,7 @@
 .ft-s-empty { padding: 40px 24px; border-radius: 16px; text-align: center; background: var(--card-bg); border: 1px solid var(--card-border); }
 .ft-s-empty p { font-size: 14px; color: var(--text-2); }
 .ft-s-empty b { font-size: 16px; color: var(--text-1); }
-.ft-s-empty button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 18px; padding: 0 20px; border: 0; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; background: var(--accent-btn); color: #fff; }
+.ft-s-empty button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 18px; padding: 0 20px; border: 0; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; background: var(--accent-btn); color: var(--accent-fg); }
 
 /* Answers ease open where the browser can animate to an automatic
    height; elsewhere they open at once. Under reduced motion the token

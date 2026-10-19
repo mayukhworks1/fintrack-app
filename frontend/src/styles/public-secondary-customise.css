@@ -24,14 +24,14 @@
 .ft-s-people button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ft-s-people .ft-m-ink-pill { background: var(--accent-dim); border-radius: 12px; }
 .ft-s-avatar { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px; font-weight: 800; font-size: 13px; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-2); transition: background-color var(--m-t-small) ease, color var(--m-t-small) ease; }
-[aria-pressed="true"] > .ft-s-avatar { background: var(--accent-btn); border-color: var(--accent); color: #fff; }
+[aria-pressed="true"] > .ft-s-avatar { background: var(--accent-btn); border-color: var(--accent); color: var(--accent-fg); }
 .ft-s-person { min-width: 0; font-size: 13.5px; color: var(--text-1); }
 .ft-s-role { margin-left: 4px; font-size: 11.5px; font-weight: 700; color: var(--accent-ink, var(--accent)); }
 .ft-s-person-note { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--text-2); }
-.ft-s-perm-sql { margin: 0; padding: 12px 14px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; background: #0b1224; color: #dbe4ff; font: 11.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ft-s-perm-sql { margin: 0; padding: 12px 14px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--rail-bg); color: #dbe4ff; font: 11.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ft-s-perm-sql span { display: block; white-space: pre-wrap; }
 .ft-s-hl { position: relative; z-index: 0; }
-.ft-s-hl::before { content: ''; position: absolute; z-index: -1; inset: 0 -14px; background: rgba(92, 132, 255, 0.28); opacity: 0; }
+.ft-s-hl::before { content: ''; position: absolute; z-index: -1; inset: 0 -14px; background: color-mix(in srgb, var(--accent-bright) 28%, transparent); opacity: 0; }
 .ft-s-perm-foot { margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .ft-s-perm-reset { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; color: var(--text-2); background: var(--bg-input); border: 1px solid var(--card-border); cursor: pointer; }
 .ft-s-mods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 22px; padding: 0; list-style: none; }

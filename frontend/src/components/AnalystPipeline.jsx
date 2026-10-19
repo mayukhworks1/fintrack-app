@@ -101,7 +101,7 @@ const STAGES = [
               <span className="ft-s-pipe-bar" style={{
                 display: 'block', height: '100%', borderRadius: 3,
                 width: `${Math.max((r.value / RESULT.peak) * 100, 4)}%`,
-                background: ['#104281', '#256abf', '#3987e5'][i], '--i': i,
+                background: ['color-mix(in srgb, var(--accent) 62%, #000)', 'color-mix(in srgb, var(--accent) 82%, #000)', 'var(--accent)'][i], '--i': i,
               }} />
             </span>
             <span className="tabular-nums font-bold" style={{ fontSize: 10, color: 'var(--text-1)' }}>

@@ -25,10 +25,21 @@ import { useMemo, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { useTilt } from '../hooks/useTilt'
 
-// Ordinal ramp, light→dark with age. Validated against both surfaces:
-// monotone lightness, adjacent ΔL ≥ 0.06, single hue, light end ≥ 2:1.
-const RAMP_LIGHT = ['#86b6ef', '#3987e5', '#256abf', '#104281']
-const RAMP_DARK  = ['#184f95', '#256abf', '#3987e5', '#86b6ef']
+// Ordinal ramp, light→dark with age, in the palette's accent hue: the accent
+// mixed toward the card at the fresh end and toward black (white in dark mode)
+// at the old end, so lightness stays monotone in every palette.
+const RAMP_LIGHT = [
+  'color-mix(in srgb, var(--accent) 52%, var(--card-bg))',
+  'color-mix(in srgb, var(--accent) 78%, var(--card-bg))',
+  'var(--accent)',
+  'color-mix(in srgb, var(--accent) 62%, #000)',
+]
+const RAMP_DARK = [
+  'color-mix(in srgb, var(--accent) 42%, var(--card-bg))',
+  'color-mix(in srgb, var(--accent) 68%, var(--card-bg))',
+  'var(--accent)',
+  'color-mix(in srgb, var(--accent) 55%, #fff)',
+]
 
 function money(n) {
   const v = Number(n) || 0

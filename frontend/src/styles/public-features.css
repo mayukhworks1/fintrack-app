@@ -42,9 +42,9 @@
   --t: var(--text-2); color: var(--t-ink, var(--t)); background: color-mix(in srgb, var(--t) 10%, transparent);
 }
 /* Text on its own tint: the light theme needs a darker ink than the tint's hue. */
-.ft-f-tag[data-tone="ok"] { --t: var(--ok); --t-ink: #166534; }
-.ft-f-tag[data-tone="warn"] { --t: var(--warn); --t-ink: #92400e; }
-.ft-f-tag[data-tone="bad"] { --t: var(--bad); --t-ink: #991b1b; }
+.ft-f-tag[data-tone="ok"] { --t: var(--ok); --t-ink: var(--fin-positive); }
+.ft-f-tag[data-tone="warn"] { --t: var(--warn); --t-ink: var(--fin-warning); }
+.ft-f-tag[data-tone="bad"] { --t: var(--bad); --t-ink: var(--fin-negative); }
 html.dark .ft-f-tag { --t-ink: var(--t); }
 .ft-f-key { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin: 0 3px 0 6px; vertical-align: -1px; background: var(--accent); }
 .ft-f-key:first-child { margin-left: 0; }
@@ -98,7 +98,7 @@ html.dark .ft-f-tag { --t-ink: var(--t); }
 .ft-f-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ft-f-tabs > .ft-m-ink-pill { background: var(--accent-dim); border-radius: 10px; }
 .ft-f-tabs > .ft-m-ink-bar:not(.ft-m-ink-pill) { z-index: 2; }
-.ft-f-new { margin-left: auto; padding: 1px 6px; border-radius: 99px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: var(--accent-btn); }
+.ft-f-new { margin-left: auto; padding: 1px 6px; border-radius: 99px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-fg); background: var(--accent-btn); }
 @media (max-width: 1023px) {
   .ft-f-count { display: block; position: absolute; right: 2px; top: -24px; margin: 0; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
   .ft-f-count span { color: var(--text-1); font-weight: 800; }
@@ -221,7 +221,7 @@ html.dark .ft-f-tag { --t-ink: var(--t); }
 .ft-f-answer > p:first-child { margin: 0; min-height: 60px; font-size: 13.5px; line-height: 1.55; color: var(--text-1); }
 .ft-f-cite {
   display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 3px; padding: 0 3px; border-radius: 5px;
-  font-size: 10px; font-weight: 800; line-height: 1; color: #fff; background: var(--accent-btn); vertical-align: 2px;
+  font-size: 10px; font-weight: 800; line-height: 1; color: var(--accent-fg); background: var(--accent-btn); vertical-align: 2px;
 }
 .ft-f-page { padding: 16px 18px; border-radius: 12px; font-family: Georgia, serif; font-size: 12.5px; line-height: 1.6; }
 .ft-f-passage { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--accent-dim); border: 1px solid var(--accent-soft); color: var(--text-1); animation: ft-pop-in var(--m-t-small) var(--m-ease-ui) both; }

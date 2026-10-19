@@ -273,7 +273,7 @@ function PublicShell({ children }) {
                     className="ft-btn hidden md:flex items-center gap-1.5 rounded-lg font-semibold text-sm"
                     style={{
                       minHeight: 40, padding: '0 16px', background: 'var(--accent-btn)',
-                      color: '#fff', textDecoration: 'none',
+                      color: 'var(--accent-fg)', textDecoration: 'none',
                     }}>
                 Sign in <ArrowRight size={15} aria-hidden="true" />
               </Link>
@@ -355,7 +355,7 @@ function PublicShell({ children }) {
                 <Link to="/login"
                       className="ft-m-press flex items-center justify-center gap-2 rounded-lg font-bold text-sm mt-4"
                       style={{
-                        minHeight: 48, background: 'var(--accent-btn)', color: '#fff',
+                        minHeight: 48, background: 'var(--accent-btn)', color: 'var(--accent-fg)',
                         textDecoration: 'none',
                       }}>
                   Sign in <ArrowRight size={15} aria-hidden="true" />
@@ -395,7 +395,7 @@ function PublicShell({ children }) {
                     className="ft-btn inline-flex items-center gap-1.5 rounded-lg font-semibold text-sm mt-4"
                     style={{
                       minHeight: 44, padding: '0 16px', background: 'var(--accent-btn)',
-                      color: '#fff', textDecoration: 'none',
+                      color: 'var(--accent-fg)', textDecoration: 'none',
                     }}>
                 Sign in <ArrowRight size={15} aria-hidden="true" />
               </Link>

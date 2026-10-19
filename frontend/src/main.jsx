@@ -1,3 +1,7 @@
+// First: put the saved palette and mode on <html> before anything renders.
+// The CSP rules out an inline script in index.html, so the module entry is
+// the earliest moment available.
+import './theme/bootstrap'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'

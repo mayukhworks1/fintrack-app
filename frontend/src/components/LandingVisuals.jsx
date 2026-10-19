@@ -258,7 +258,7 @@ export function AnalystDemo() {
               <span className="flex-1 overflow-hidden" style={{ height: 7, borderRadius: 4, background: 'var(--bg-input)' }}>
                 <span style={{
                   display: 'block', height: '100%', width: '100%', borderRadius: 4,
-                  background: ['#104281', '#256abf', '#3987e5', '#86b6ef'][i],
+                  background: ['color-mix(in srgb, var(--accent) 62%, #000)', 'color-mix(in srgb, var(--accent) 82%, #000)', 'var(--accent)', 'color-mix(in srgb, var(--accent) 52%, #fff)'][i],
                   transformOrigin: '0 50%',
                   transform: `scaleX(${stage >= 2 ? r.v / 100 : 0})`,
                   transition: `transform 760ms cubic-bezier(0.22,1,0.36,1) ${180 + i * 90}ms`,

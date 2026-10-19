@@ -19,6 +19,7 @@ import { useToast } from '../context/ToastContext'
 import { formatInr } from '../utils/format'
 import clsx from 'clsx'
 import { useDialog } from '../hooks/useDialog'
+import { tint } from '../utils/color'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,19 +47,19 @@ const RESOURCE_TYPES = ['Employee', 'Freelancer', 'Contractor', 'Tool/Software',
 const TAG_OPTIONS    = ['ERP', 'CRM', 'Dashboard', 'Mobile', 'API', 'Automation', 'Internal']
 
 const STATUS_COLORS = {
-  'In Progress': { bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)',   text: '#4ade80' },
-  Planning:      { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.3)',  text: '#60a5fa' },
-  'On Hold':     { bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)',  text: '#fb923c' },
-  Blocked:       { bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)', text: '#f87171' },
-  Completed:     { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)', text: '#94a3b8' },
-  Cancelled:     { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', text: '#64748b' },
+  'In Progress': { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)',   border: 'color-mix(in srgb, var(--fin-positive) 30%, transparent)',   text: 'var(--fin-positive)' },
+  Planning:      { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  border: 'color-mix(in srgb, var(--accent) 30%, transparent)',  text: 'var(--accent)' },
+  'On Hold':     { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',  border: 'color-mix(in srgb, var(--fin-warning) 30%, transparent)',  text: 'var(--fin-warning)' },
+  Blocked:       { bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)', border: 'color-mix(in srgb, var(--fin-negative) 30%, transparent)', text: 'var(--fin-negative)' },
+  Completed:     { bg: 'color-mix(in srgb, var(--text-3) 12%, transparent)', border: 'color-mix(in srgb, var(--text-3) 30%, transparent)', text: 'var(--text-3)' },
+  Cancelled:     { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', text: 'var(--text-3)' },
 }
 
 const PRIORITY_COLORS = {
-  Critical: { bg: 'rgba(248,113,113,0.12)', text: '#f87171' },
-  High:     { bg: 'rgba(251,146,60,0.12)',  text: '#fb923c' },
-  Medium:   { bg: 'rgba(250,204,21,0.12)',  text: '#fbbf24' },
-  Low:      { bg: 'rgba(148,163,184,0.12)', text: '#94a3b8' },
+  Critical: { bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)', text: 'var(--fin-negative)' },
+  High:     { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',  text: 'var(--fin-warning)' },
+  Medium:   { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',  text: 'var(--fin-warning)' },
+  Low:      { bg: 'color-mix(in srgb, var(--text-3) 12%, transparent)', text: 'var(--text-3)' },
 }
 
 // ── Shared micro-components ───────────────────────────────────────────────────
@@ -85,7 +86,7 @@ function PriorityBadge({ priority }) {
 
 function ProgressBar({ value }) {
   const pct = Math.min(100, Math.max(0, Number(value) || 0))
-  const color = pct >= 100 ? '#4ade80' : pct >= 60 ? '#60a5fa' : pct >= 30 ? '#fb923c' : '#94a3b8'
+  const color = pct >= 100 ? 'var(--fin-positive)' : pct >= 60 ? 'var(--accent)' : pct >= 30 ? 'var(--fin-warning)' : 'var(--text-3)'
   return (
     <div>
       <div className="flex justify-between mb-1">
@@ -101,7 +102,7 @@ function ProgressBar({ value }) {
 
 function KpiCard({ label, value, sub, accent }) {
   return (
-    <div className="card text-center" style={accent ? { border: `1px solid ${accent}33`, background: `${accent}08` } : {}}>
+    <div className="card text-center" style={accent ? { border: `1px solid ${tint(accent, 0.2)}`, background: `${tint(accent, 0.03)}` } : {}}>
       <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
       <p className="text-lg font-bold tabular-nums" style={{ color: accent || 'var(--text-1)' }}>{value}</p>
       {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
@@ -128,7 +129,7 @@ function FormRow({ label, required, hint, children }) {
     <div>
       <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5"
         style={{ color: 'var(--text-3)' }}>
-        {label}{required && <span className="ml-0.5" style={{ color: '#f87171' }}>*</span>}
+        {label}{required && <span className="ml-0.5" style={{ color: 'var(--fin-negative)' }}>*</span>}
       </label>
       {children}
       {hint && <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>{hint}</p>}
@@ -253,7 +254,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
   const profit = charge - budget
   const marginPct = charge > 0 ? (profit / charge * 100) : 0
   const pct = Math.min(100, Math.max(0, Number(d.progress_pct) || 0))
-  const pctColor = pct >= 100 ? '#4ade80' : pct >= 60 ? '#60a5fa' : pct >= 30 ? '#fb923c' : '#94a3b8'
+  const pctColor = pct >= 100 ? 'var(--fin-positive)' : pct >= 60 ? 'var(--accent)' : pct >= 30 ? 'var(--fin-warning)' : 'var(--text-3)'
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -280,7 +281,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full shadow-2xl"
         style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
@@ -290,7 +291,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.25)' }}>
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
               <Briefcase size={14} className="text-white" />
             </div>
             <div className="min-w-0">
@@ -428,9 +429,9 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
               {(charge > 0 || budget > 0) && (
                 <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
                   style={{
-                    background: profit >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)',
-                    border: `1px solid ${profit >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(248,113,113,0.2)'}`,
-                    color: profit >= 0 ? '#4ade80' : '#f87171',
+                    background: profit >= 0 ? 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',
+                    border: `1px solid ${profit >= 0 ? 'color-mix(in srgb, var(--fin-positive) 20%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 20%, transparent)'}`,
+                    color: profit >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)',
                   }}>
                   {profit >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                   <span>
@@ -471,9 +472,9 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
               onBlur={() => setConfirmDel(false)}
               className="px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
               style={{
-                background: confirmDel ? 'rgba(239,68,68,0.12)' : 'transparent',
-                border: '1px solid rgba(239,68,68,0.3)',
-                color: '#f87171',
+                background: confirmDel ? 'color-mix(in srgb, var(--fin-negative) 12%, transparent)' : 'transparent',
+                border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)',
+                color: 'var(--fin-negative)',
               }}>
               <Trash2 size={13} className="inline mr-1" />
               {confirmDel ? 'Confirm?' : 'Delete'}
@@ -487,7 +488,7 @@ function ProjectDrawer({ open, onClose, initial = {}, onSubmit, onDelete, saving
             </button>
             <button type="submit" form="project-form" disabled={saving}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)', boxShadow: '0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
               {saving && <Loader2 size={13} className="animate-spin" />}
               {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Project'}
             </button>
@@ -560,7 +561,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }}
         onClick={onClose} />
       <div {...dialog.panelProps} className="relative ml-auto flex flex-col h-full shadow-2xl"
         style={{ width: 'min(calc(100vw - 1rem), 480px)', background: 'var(--card-bg)', borderLeft: '1px solid var(--border)' }}>
@@ -570,7 +571,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--sidebar-bg)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.25)' }}>
+              style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
               <Users size={14} className="text-white" />
             </div>
             <div className="min-w-0">
@@ -634,7 +635,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
               </FormRow>
               {totalCost > 0 && (
                 <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
-                  style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.2)', color: '#fb923c' }}>
+                  style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 20%, transparent)', color: 'var(--fin-warning)' }}>
                   <IndianRupee size={13} />
                   <span>Total cost: <strong>{formatInr(totalCost)}</strong>
                     {costPerHour && <span className="ml-2 opacity-70">· ₹{Math.round(costPerHour)}/hr</span>}
@@ -658,9 +659,9 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
               </div>
               {hoursOver !== null && (
                 <div className="px-3 py-2 rounded-xl text-xs flex items-center gap-2" style={{
-                  background: hoursOver > 0 ? 'rgba(248,113,113,0.08)' : 'rgba(34,197,94,0.08)',
-                  border: `1px solid ${hoursOver > 0 ? 'rgba(248,113,113,0.2)' : 'rgba(34,197,94,0.2)'}`,
-                  color: hoursOver > 0 ? '#f87171' : '#4ade80',
+                  background: hoursOver > 0 ? 'color-mix(in srgb, var(--fin-negative) 8%, transparent)' : 'color-mix(in srgb, var(--fin-positive) 8%, transparent)',
+                  border: `1px solid ${hoursOver > 0 ? 'color-mix(in srgb, var(--fin-negative) 20%, transparent)' : 'color-mix(in srgb, var(--fin-positive) 20%, transparent)'}`,
+                  color: hoursOver > 0 ? 'var(--fin-negative)' : 'var(--fin-positive)',
                 }}>
                   {hoursOver > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                   <span>
@@ -686,9 +687,9 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
               {(totalRevenue > 0 || totalCost > 0) && (totalRevenue > 0) && (
                 <div className="px-3 py-2.5 rounded-xl text-sm flex items-center gap-2"
                   style={{
-                    background: grossMargin >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)',
-                    border: `1px solid ${grossMargin >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(248,113,113,0.2)'}`,
-                    color: grossMargin >= 0 ? '#4ade80' : '#f87171',
+                    background: grossMargin >= 0 ? 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',
+                    border: `1px solid ${grossMargin >= 0 ? 'color-mix(in srgb, var(--fin-positive) 20%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 20%, transparent)'}`,
+                    color: grossMargin >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)',
                   }}>
                   {grossMargin >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
                   <span>Revenue: <strong>{formatInr(totalRevenue)}</strong>
@@ -729,9 +730,9 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
               onBlur={() => setConfirmDel(false)}
               className="px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
               style={{
-                background: confirmDel ? 'rgba(239,68,68,0.12)' : 'transparent',
-                border: '1px solid rgba(239,68,68,0.3)',
-                color: '#f87171',
+                background: confirmDel ? 'color-mix(in srgb, var(--fin-negative) 12%, transparent)' : 'transparent',
+                border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)',
+                color: 'var(--fin-negative)',
               }}>
               <Trash2 size={13} className="inline mr-1" />
               {confirmDel ? 'Confirm?' : deleteLabel}
@@ -745,7 +746,7 @@ function ResourceDrawer({ open, onClose, initial = {}, onSubmit, onDelete, savin
             </button>
             <button type="submit" form="resource-form" disabled={saving}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)', boxShadow: '0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
               {saving && <Loader2 size={13} className="animate-spin" />}
               {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Resource'}
             </button>
@@ -772,7 +773,7 @@ function ResourceRow({ resource, onEdit, onDelete }) {
       <div className="flex items-center gap-3">
         {/* Avatar */}
         <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
-          style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
+          style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)' }}>
           {(f['Resource Name'] || '?')[0].toUpperCase()}
         </div>
         {/* Info */}
@@ -791,7 +792,7 @@ function ResourceRow({ resource, onEdit, onDelete }) {
             {totalCost ? formatInr(totalCost) : '—'}
           </p>
           {revenue > 0 ? (
-            <p className="text-xs" style={{ color: '#4ade80' }}>
+            <p className="text-xs" style={{ color: 'var(--fin-positive)' }}>
               Rev: {formatInr(revenue)}
               {margin > 0 && <span className="ml-1 opacity-70">({margin.toFixed(1)}%)</span>}
             </p>
@@ -807,7 +808,7 @@ function ResourceRow({ resource, onEdit, onDelete }) {
             <>
               <button onClick={() => onDelete(resource.id)}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)' }}>
                 <Check size={11} /> Yes
               </button>
               <button onClick={() => setConfirmDelete(false)}
@@ -825,7 +826,7 @@ function ResourceRow({ resource, onEdit, onDelete }) {
               </button>
               <button onClick={() => setConfirmDelete(true)}
                 className="w-7 h-7 rounded-lg flex items-center justify-center"
-                style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                style={{ color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)' }}>
                 <Trash2 size={12} />
               </button>
             </>
@@ -870,7 +871,7 @@ function ProjectCard({ record, onClick }) {
         <div className="text-right">
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>Profit</p>
           <p className="text-sm font-semibold tabular-nums"
-            style={{ color: profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : 'var(--text-2)' }}>
+            style={{ color: profit > 0 ? 'var(--fin-positive)' : profit < 0 ? 'var(--fin-negative)' : 'var(--text-2)' }}>
             {profit ? formatInr(profit) : '—'}
             {margin ? <span className="text-xs ml-1 opacity-70">({margin.toFixed(1)}%)</span> : null}
           </p>
@@ -947,7 +948,7 @@ function ProjectDetailView({
             <div className="flex gap-1">
               <button onClick={onDeleteProject}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)', color: 'var(--fin-negative)' }}>
                 <Check size={13} /> Confirm
               </button>
               <button onClick={() => setConfirmDelete(false)}
@@ -959,7 +960,7 @@ function ProjectDetailView({
           ) : (
             <button onClick={() => setConfirmDelete(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+              style={{ color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)' }}>
               <Trash2 size={13} /> Delete
             </button>
           )}
@@ -971,10 +972,10 @@ function ProjectDetailView({
         <KpiCard label="Client Charge" value={charge ? formatInr(charge) : '—'} />
         <KpiCard label="Total Cost"    value={inputCost ? formatInr(inputCost) : '—'} />
         <KpiCard label="Actual Profit" value={profit ? formatInr(profit) : '—'}
-          accent={profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : undefined} />
+          accent={profit > 0 ? 'var(--fin-positive)' : profit < 0 ? 'var(--fin-negative)' : undefined} />
         <KpiCard label="Margin %"
           value={margin ? `${margin.toFixed(1)}%` : '—'}
-          accent={margin > 0 ? '#4ade80' : margin < 0 ? '#f87171' : undefined} />
+          accent={margin > 0 ? 'var(--fin-positive)' : margin < 0 ? 'var(--fin-negative)' : undefined} />
       </div>
 
       {/* Progress bar */}
@@ -992,18 +993,18 @@ function ProjectDetailView({
           {totalPlannedHrs > 0 && (
             <KpiCard label="Planned Hours" value={`${totalPlannedHrs}h`}
               sub={totalManHours > 0 ? `${hoursVariance >= 0 ? '+' : ''}${hoursVariance}h variance` : undefined}
-              accent={hoursVariance > 0 ? '#f87171' : hoursVariance < 0 ? '#4ade80' : undefined} />
+              accent={hoursVariance > 0 ? 'var(--fin-negative)' : hoursVariance < 0 ? 'var(--fin-positive)' : undefined} />
           )}
           {totalRevenue > 0 && (
             <KpiCard label="Revenue Generated" value={formatInr(totalRevenue)}
-              accent="#4ade80"
+              accent="var(--fin-positive)"
               sub={effBillPerHr > 0 ? `₹${Math.round(effBillPerHr)}/hr billed` : undefined} />
           )}
           {f['Schedule Variance (Days)'] != null && schedVar !== 0 && (
             <KpiCard label="Schedule Var."
               value={`${schedVar > 0 ? '+' : ''}${schedVar}d`}
               sub={schedVar > 0 ? 'Behind schedule' : 'Ahead of schedule'}
-              accent={schedVar > 0 ? '#f87171' : '#4ade80'} />
+              accent={schedVar > 0 ? 'var(--fin-negative)' : 'var(--fin-positive)'} />
           )}
         </div>
       )}
@@ -1043,7 +1044,7 @@ function ProjectDetailView({
         {f['Risks & Blockers'] && (
           <div className="mt-3">
             <dt className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Risks & Blockers</dt>
-            <dd className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#fb923c' }}>{f['Risks & Blockers']}</dd>
+            <dd className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--fin-warning)' }}>{f['Risks & Blockers']}</dd>
           </div>
         )}
       </div>
@@ -1066,7 +1067,7 @@ function ProjectDetailView({
             </button>
             <button onClick={onAddResource}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold"
-              style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>
               <Plus size={13} /> New
             </button>
           </div>
@@ -1114,12 +1115,12 @@ function ProjectDetailView({
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Collected</p>
-                  <p className="text-sm font-bold tabular-nums" style={{ color: '#4ade80' }}>{formatInr(totalRcvd)}</p>
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{formatInr(totalRcvd)}</p>
                 </div>
                 {outstanding > 0 && (
                   <div>
                     <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Open</p>
-                    <p className="text-sm font-bold tabular-nums" style={{ color: '#fb923c' }}>{formatInr(outstanding)}</p>
+                    <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{formatInr(outstanding)}</p>
                   </div>
                 )}
               </div>
@@ -1146,7 +1147,7 @@ function ProjectDetailView({
               const rcvd   = Number(fi['Amount Received'] || 0)
               const open   = raised - rcvd
               const status = fi['Payment Status'] || fi['Status'] || '—'
-              const statusColor = status === 'Paid' ? '#4ade80' : status === 'Pending' ? '#fb923c' : '#94a3b8'
+              const statusColor = status === 'Paid' ? 'var(--fin-positive)' : status === 'Pending' ? 'var(--fin-warning)' : 'var(--text-3)'
               const StatusIcon  = status === 'Paid' ? CheckCircle2 : status === 'Cancelled' ? XCircle : AlertOctagon
               return (
                 <div key={inv.id}
@@ -1165,7 +1166,7 @@ function ProjectDetailView({
                   <div className="text-right flex-shrink-0">
                     <p className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{formatInr(raised)}</p>
                     {open > 0 && (
-                      <p className="text-[10px] tabular-nums" style={{ color: '#fb923c' }}>₹{(open/1000).toFixed(0)}k open</p>
+                      <p className="text-[10px] tabular-nums" style={{ color: 'var(--fin-warning)' }}>₹{(open/1000).toFixed(0)}k open</p>
                     )}
                   </div>
                 </div>
@@ -1227,7 +1228,7 @@ function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allRe
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div {...dialog.panelProps} className="relative flex flex-col rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh]"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         {/* Header */}
@@ -1272,7 +1273,7 @@ function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allRe
                   }}>
                   {/* Avatar */}
                   <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                    style={{ background: assigned ? 'rgba(79,70,229,0.2)' : 'rgba(59,130,246,0.12)', color: assigned ? 'var(--accent)' : '#60a5fa' }}>
+                    style={{ background: assigned ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)', color: assigned ? 'var(--accent)' : 'var(--accent)' }}>
                     {(f['Resource Name'] || '?')[0].toUpperCase()}
                   </div>
                   {/* Info */}
@@ -1296,7 +1297,7 @@ function ResourceAssignPanel({ open, onClose, projectId, assignedIds = [], allRe
         <div className="px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', background: 'var(--sidebar-bg)', borderRadius: '0 0 1rem 1rem' }}>
           <button onClick={onClose}
             className="w-full py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+            style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>
             Done
           </button>
         </div>
@@ -1535,10 +1536,10 @@ export function ProjectsWorkspace() {
                 <KpiCard label="Total Projects"  value={summary.total_projects}     sub={`${summary.active_projects} active`} />
                 <KpiCard label="Total Charge"    value={formatInr(summary.total_client_charge)} />
                 <KpiCard label="Total Profit"    value={formatInr(summary.total_actual_profit)}
-                  accent={summary.total_actual_profit > 0 ? '#4ade80' : summary.total_actual_profit < 0 ? '#f87171' : undefined} />
+                  accent={summary.total_actual_profit > 0 ? 'var(--fin-positive)' : summary.total_actual_profit < 0 ? 'var(--fin-negative)' : undefined} />
                 <KpiCard label="Avg. Margin"
                   value={summary.overall_margin_pct ? `${summary.overall_margin_pct.toFixed(1)}%` : '—'}
-                  accent={summary.overall_margin_pct > 0 ? '#4ade80' : undefined} />
+                  accent={summary.overall_margin_pct > 0 ? 'var(--fin-positive)' : undefined} />
               </div>
               {(summary.total_man_hours > 0 || summary.total_revenue_generated > 0) && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1548,13 +1549,13 @@ export function ProjectsWorkspace() {
                   )}
                   {summary.total_revenue_generated > 0 && (
                     <KpiCard label="Total Revenue" value={formatInr(summary.total_revenue_generated)}
-                      accent="#4ade80"
+                      accent="var(--fin-positive)"
                       sub={summary.total_man_hours > 0 ? `₹${Math.round(summary.total_revenue_generated / summary.total_man_hours)}/hr billed` : undefined} />
                   )}
                   {summary.total_man_hours > 0 && summary.total_planned_hours > 0 && (
                     <KpiCard label="Hours Variance"
                       value={`${summary.hours_variance >= 0 ? '+' : ''}${summary.hours_variance}h`}
-                      accent={summary.hours_variance >= 0 ? '#4ade80' : '#f87171'}
+                      accent={summary.hours_variance >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)'}
                       sub={`${summary.total_planned_hours}h planned`} />
                   )}
                 </div>
@@ -1600,7 +1601,7 @@ export function ProjectsWorkspace() {
               </button>
               <button onClick={() => setDrawer('new-project')}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--accent-btn)', color: '#fff', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)', boxShadow: '0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
                 <Plus size={15} /> <span className="hidden sm:inline">New Project</span><span className="sm:hidden">New</span>
               </button>
             </div>
@@ -1618,7 +1619,7 @@ export function ProjectsWorkspace() {
           {/* Error */}
           {error && (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
               <AlertTriangle size={15} /> {error}
               <button onClick={loadProjects} className="underline ml-1">retry</button>
             </div>
@@ -1655,7 +1656,7 @@ export function ProjectsWorkspace() {
                 )}
                 <button onClick={() => setDrawer('new-project')}
                   className="px-4 py-2 rounded-xl text-sm font-semibold"
-                  style={{ background: 'var(--accent-btn)', color: '#fff' }}>
+                  style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>
                   + New Project
                 </button>
               </div>

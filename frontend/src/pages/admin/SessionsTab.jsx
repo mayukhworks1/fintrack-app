@@ -86,9 +86,9 @@ export function SessionsTab() {
           <button onClick={() => setAO(v => !v)}
             className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors select-none"
             style={{
-              background: activeOnly ? 'rgba(22,163,74,0.08)' : 'var(--bg-input)',
-              borderColor: activeOnly ? 'rgba(22,163,74,0.3)' : 'var(--border)',
-              color: activeOnly ? '#16a34a' : 'var(--text-2)',
+              background: activeOnly ? 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' : 'var(--bg-input)',
+              borderColor: activeOnly ? 'color-mix(in srgb, var(--fin-positive) 30%, transparent)' : 'var(--border)',
+              color: activeOnly ? 'var(--fin-positive)' : 'var(--text-2)',
             }}>
             {activeOnly
               ? <><CheckCircle2 size={12} /> Active only</>
@@ -102,9 +102,9 @@ export function SessionsTab() {
           <button onClick={purgeInactiveSessions} disabled={purging}
             className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1"
             style={{
-              borderColor: 'rgba(220,38,38,0.25)',
-              color: '#dc2626',
-              background: 'rgba(220,38,38,0.06)',
+              borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)',
+              color: 'var(--fin-negative)',
+              background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)',
               opacity: purging ? 0.65 : 1,
             }}>
             {purging ? <RefreshCw size={11} className="animate-spin" /> : <Trash2 size={11} />}
@@ -122,7 +122,7 @@ export function SessionsTab() {
       {data && (
         <div className="text-xs flex flex-wrap items-center gap-2" style={{ color: 'var(--text-3)' }}>
           <span>{data.total.toLocaleString()} session{data.total !== 1 ? 's' : ''}</span>
-          {purgeMsg && <span style={{ color: purgeMsg.includes('Failed') ? '#dc2626' : '#16a34a' }}>{purgeMsg}</span>}
+          {purgeMsg && <span style={{ color: purgeMsg.includes('Failed') ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{purgeMsg}</span>}
         </div>
       )}
 

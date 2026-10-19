@@ -101,12 +101,12 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
                     padding: '5px 12px',
                     borderRadius: 99,
                     border: isSelected
-                      ? '1.5px solid var(--accent, #3b82f6)'
+                      ? '1.5px solid var(--accent)'
                       : '1px solid var(--border)',
                     background: isSelected
-                      ? 'color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent)'
+                      ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
                       : 'var(--bg-base, #f8fafc)',
-                    color: isSelected ? 'var(--accent, #3b82f6)' : 'var(--text-2)',
+                    color: isSelected ? 'var(--accent)' : 'var(--text-2)',
                     cursor: disabled ? 'default' : 'pointer',
                     fontWeight: isSelected ? 600 : 400,
                     transition: 'all .15s ease',
@@ -176,8 +176,8 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
             padding: '6px 16px',
             borderRadius: 'var(--radius, 8px)',
             border: 'none',
-            background: 'var(--accent, #3b82f6)',
-            color: '#fff',
+            background: 'var(--accent)',
+            color: 'var(--accent-fg)',
             cursor: disabled ? 'default' : 'pointer',
             opacity: disabled ? 0.6 : 1,
           }}

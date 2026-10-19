@@ -90,13 +90,13 @@ function Showcase() {
         </div>
         <h2 className="ft-display" style={{ color: '#fff', fontSize: 'clamp(1.7rem, 2.6vw, 2.3rem)', lineHeight: 1.12, margin: 0 }}>
           Your projects, invoices and tax,<br />
-          <em style={{ color: '#9db8ff' }}>where you left them.</em>
+          <em style={{ color: 'color-mix(in srgb, var(--accent-bright) 55%, #fff)' }}>where you left them.</em>
         </h2>
         <ul className="mt-6 flex flex-col gap-3" style={{ listStyle: 'none', padding: 0 }}>
           {POINTS.map(({ icon: Icon, text }, k) => (
             <li key={text} className="ft-showcase-point flex items-start gap-3" style={{ animationDelay: `${200 + k * 110}ms` }}>
               <span className="flex items-center justify-center flex-shrink-0"
-                    style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(157,184,255,0.14)', color: '#b9ccff' }}>
+                    style={{ width: 28, height: 28, borderRadius: 8, background: 'color-mix(in srgb, var(--accent-bright) 18%, transparent)', color: 'color-mix(in srgb, var(--accent-bright) 40%, #fff)' }}>
                 <Icon size={15} aria-hidden="true" />
               </span>
               <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 14.5, lineHeight: 1.5, paddingTop: 3 }}>{text}</span>

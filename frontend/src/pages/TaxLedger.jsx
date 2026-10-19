@@ -127,9 +127,9 @@ function inPeriod(raisedDate, from, to) {
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
-const VAR_GOOD = { color: '#10b981' }
-const VAR_WARN = { color: '#f59e0b' }
-const VAR_BAD  = { color: '#ef4444' }
+const VAR_GOOD = { color: 'var(--fin-positive)' }
+const VAR_WARN = { color: 'var(--fin-warning)' }
+const VAR_BAD  = { color: 'var(--fin-negative)' }
 function taxStatus(gstPct) {
   if (gstPct === 0) return { label: 'No GST', style: VAR_WARN, icon: Info }
   if (PCT_OK(gstPct, 18)) return { label: '18% ✓', style: VAR_GOOD, icon: CheckCircle2 }
@@ -158,10 +158,10 @@ function StatCard({ label, value, sub, accent = false, warn = false }) {
   return (
     <div className="rounded-xl p-4 flex flex-col gap-1" style={{
       background: 'var(--card-bg)',
-      border: `1px solid ${warn ? 'rgba(245,158,11,0.3)' : accent ? 'rgba(37,99,235,0.2)' : 'var(--border)'}`,
+      border: `1px solid ${warn ? 'color-mix(in srgb, var(--fin-warning) 30%, transparent)' : accent ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'var(--border)'}`,
     }}>
       <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p className="text-2xl font-bold tabular-nums" style={{ color: warn ? '#f59e0b' : accent ? 'var(--accent)' : 'var(--text-1)' }}>{value}</p>
+      <p className="text-2xl font-bold tabular-nums" style={{ color: warn ? 'var(--fin-warning)' : accent ? 'var(--accent)' : 'var(--text-1)' }}>{value}</p>
       {sub && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{sub}</p>}
     </div>
   )
@@ -503,7 +503,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(37,99,235,0.1)', border: '1px solid rgba(37,99,235,0.2)' }}>
+              style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)' }}>
               <ReceiptText size={18} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
@@ -612,7 +612,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
             </span>
           </div>
           <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totals.effectiveGstPct / 18 * 100)}%`, background: PCT_OK(totals.effectiveGstPct, 18) ? '#10b981' : '#f59e0b' }} />
+            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totals.effectiveGstPct / 18 * 100)}%`, background: PCT_OK(totals.effectiveGstPct, 18) ? 'var(--fin-positive)' : 'var(--fin-warning)' }} />
           </div>
           <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>Expected 18% · Standard GST rate</p>
         </div>
@@ -624,7 +624,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
             </span>
           </div>
           <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totals.effectiveTdsPct / 10 * 100)}%`, background: '#f59e0b' }} />
+            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totals.effectiveTdsPct / 10 * 100)}%`, background: 'var(--fin-warning)' }} />
           </div>
           <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>Expected TDS is computed on taxable value / Amount Raised when GST is separately shown.</p>
         </div>
@@ -651,7 +651,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
       {activeTab === 'summary' && (
         <div className="space-y-4">
           {/* Filing reference */}
-          <div className="rounded-xl p-4" style={{ background: 'rgba(37,99,235,0.05)', border: '1px solid rgba(37,99,235,0.15)' }}>
+          <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--accent) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
             <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>GST Filing Reference — {period.label}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
@@ -670,8 +670,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
 
           {/* TDS reference */}
           {totals.tdsAmt > 0 && (
-            <div className="rounded-xl p-4" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)' }}>
-              <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: '#d97706' }}>TDS Reference — {period.label}</p>
+            <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--fin-warning) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 20%, transparent)' }}>
+              <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--fin-warning)' }}>TDS Reference — {period.label}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
                   { l: 'Gross Amount Billed',  v: FMT_INR(totals.gross)           },
@@ -681,7 +681,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
                 ].map(({ l, v, bold }) => (
                   <div key={l}>
                     <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-3)' }}>{l}</p>
-                    <p className={`text-sm tabular-nums ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color: bold ? '#d97706' : 'var(--text-1)' }}>{v}</p>
+                    <p className={`text-sm tabular-nums ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color: bold ? 'var(--fin-warning)' : 'var(--text-1)' }}>{v}</p>
                   </div>
                 ))}
               </div>
@@ -705,8 +705,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
                     <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-1)' }}>{row.client}</td>
                     <td className="px-4 py-2.5 tabular-nums text-center" style={{ color: 'var(--text-3)' }}>{row.count}</td>
                     <td className="px-4 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(row.taxable)}</td>
-                    <td className="px-4 py-2.5 tabular-nums font-semibold" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt)}</td>
-                    <td className="px-4 py-2.5 tabular-nums" style={{ color: row.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
+                    <td className="px-4 py-2.5 tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt)}</td>
+                    <td className="px-4 py-2.5 tabular-nums" style={{ color: row.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
                     <td className="px-4 py-2.5 tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.gross)}</td>
                     <td className="px-4 py-2.5 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
                       {totals.gstAmt > 0 ? `${Math.round(row.gstAmt / totals.gstAmt * 100)}%` : '—'}
@@ -719,8 +719,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
                   <td className="px-4 py-2.5 font-bold text-xs uppercase" style={{ color: 'var(--text-2)' }}>Total</td>
                   <td className="px-4 py-2.5 tabular-nums text-center font-bold" style={{ color: 'var(--text-1)' }}>{totals.count}</td>
                   <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.taxable)}</td>
-                  <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</td>
-                  <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: '#f59e0b' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
+                  <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt)}</td>
+                  <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-warning)' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
                   <td className="px-4 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.gross)}</td>
                   <td className="px-4 py-2.5 text-right font-bold" style={{ color: 'var(--text-1)' }}>100%</td>
                 </tr>
@@ -756,12 +756,12 @@ export default function TaxLedger({ source = 'main' } = {}) {
                       <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: 'var(--text-1)' }}>{row.label}</td>
                       <td className="px-3 py-2.5 tabular-nums text-center" style={{ color: 'var(--text-3)' }}>{row.count}</td>
                       <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(row.taxable)}</td>
-                      <td className="px-3 py-2.5 tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt / 2)}</td>
-                      <td className="px-3 py-2.5 tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt / 2)}</td>
-                      <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt)}</td>
-                      <td className="px-3 py-2.5 tabular-nums" style={{ color: row.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
+                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt / 2)}</td>
+                      <td className="px-3 py-2.5 tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt / 2)}</td>
+                      <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt)}</td>
+                      <td className="px-3 py-2.5 tabular-nums" style={{ color: row.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
                       <td className="px-3 py-2.5 tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.gross)}</td>
-                      <td className="px-3 py-2.5 tabular-nums" style={{ color: row.outstanding > 0 ? '#f59e0b' : 'var(--text-2)' }}>{FMT_INR(row.received)}</td>
+                      <td className="px-3 py-2.5 tabular-nums" style={{ color: row.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>{FMT_INR(row.received)}</td>
                       <td className="px-3 py-2.5 text-right" style={{ color: 'var(--text-3)' }}>
                         {expandedMonths.has(row.key) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </td>
@@ -775,14 +775,14 @@ export default function TaxLedger({ source = 'main' } = {}) {
                           <td className="pl-6 pr-3 py-2 text-xs" style={{ color: 'var(--text-3)' }}>{String(f['Raised Date'] || '').slice(0, 10)}</td>
                           <td className="px-3 py-2 text-xs" colSpan={1} style={{ color: 'var(--text-2)' }}>{f['Invoice Number'] || '—'}</td>
                           <td className="px-3 py-2 text-xs tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(p.base)}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt / 2)}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt / 2)}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt / 2)}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt / 2)}</td>
                           <td className="px-3 py-2 text-xs tabular-nums font-semibold flex items-center gap-1" style={{ ...ts.style }}>
                             {FMT_INR(p.gstAmt)} <span className="text-[10px]">{ts.label}</span>
                           </td>
-                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: p.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: p.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
                           <td className="px-3 py-2 text-xs tabular-nums font-semibold" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.gross)}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: p.outstanding > 0 ? '#f59e0b' : 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums" style={{ color: p.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
                           <td className="px-3 py-2 text-xs text-right" style={{ color: 'var(--text-3)' }}>{p.status}</td>
                         </tr>
                       )
@@ -795,10 +795,10 @@ export default function TaxLedger({ source = 'main' } = {}) {
                   <td className="px-3 py-2.5 font-bold text-xs uppercase" style={{ color: 'var(--text-2)' }}>Total</td>
                   <td className="px-3 py-2.5 text-center font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{totals.count}</td>
                   <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.taxable)}</td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt / 2)}</td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt / 2)}</td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: '#f59e0b' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt)}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--fin-warning)' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
                   <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.gross)}</td>
                   <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.received)}</td>
                   <td />
@@ -828,7 +828,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
                     onMouseLeave={e => e.currentTarget.style.background = 'var(--card-bg)'}
                   >
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                      style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)' }}>
+                      style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>
                       {row.client.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -837,11 +837,11 @@ export default function TaxLedger({ source = 'main' } = {}) {
                     </div>
                     {/* Tax health badges */}
                     <div className="hidden sm:flex items-center gap-2 text-xs">
-                      <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: gstOk ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: gstOk ? '#10b981' : '#d97706' }}>
+                      <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: gstOk ? 'color-mix(in srgb, var(--fin-positive) 10%, transparent)' : 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', color: gstOk ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
                         GST {FMT_PCT(row.gstPct)}
                       </span>
                       {row.tdsAmt > 0 && (
-                        <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706' }}>
+                        <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', color: 'var(--fin-warning)' }}>
                           TDS {FMT_PCT(row.tdsPct)}
                         </span>
                       )}
@@ -849,8 +849,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
                     {/* Amounts */}
                     <div className="hidden md:grid grid-cols-4 gap-6 text-right text-xs min-w-[360px]">
                       <div><p style={{ color: 'var(--text-3)' }}>Taxable</p><p className="font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.taxable)}</p></div>
-                      <div><p style={{ color: 'var(--text-3)' }}>GST</p><p className="font-bold tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt)}</p></div>
-                      <div><p style={{ color: 'var(--text-3)' }}>TDS</p><p className="font-semibold tabular-nums" style={{ color: row.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</p></div>
+                      <div><p style={{ color: 'var(--text-3)' }}>GST</p><p className="font-bold tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt)}</p></div>
+                      <div><p style={{ color: 'var(--text-3)' }}>TDS</p><p className="font-semibold tabular-nums" style={{ color: row.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</p></div>
                       <div><p style={{ color: 'var(--text-3)' }}>Gross</p><p className="font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.gross)}</p></div>
                     </div>
                     <div className="ml-2 flex-shrink-0" style={{ color: 'var(--text-3)' }}>
@@ -880,15 +880,15 @@ export default function TaxLedger({ source = 'main' } = {}) {
                                 <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{String(f['Raised Date'] || '').slice(0, 10)}</td>
                                 <td className="px-3 py-2 max-w-[140px] truncate" style={{ color: 'var(--text-2)' }}>{f['Project'] || '—'}</td>
                                 <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(p.base)}</td>
-                                <td className="px-3 py-2 tabular-nums font-semibold" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt)}</td>
+                                <td className="px-3 py-2 tabular-nums font-semibold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt)}</td>
                                 <td className="px-3 py-2 font-semibold" style={ts.style}>{ts.label}</td>
-                                <td className="px-3 py-2 tabular-nums" style={{ color: p.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
+                                <td className="px-3 py-2 tabular-nums" style={{ color: p.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
                                 <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.gross)}</td>
-                                <td className="px-3 py-2 tabular-nums" style={{ color: p.outstanding > 0 ? '#f59e0b' : 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
+                                <td className="px-3 py-2 tabular-nums" style={{ color: p.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
                                 <td className="px-3 py-2">
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{
-                                    background: p.isPaid ? 'rgba(16,185,129,0.1)' : p.isCancelled ? 'rgba(148,163,184,0.1)' : 'rgba(245,158,11,0.1)',
-                                    color: p.isPaid ? '#10b981' : p.isCancelled ? '#94a3b8' : '#d97706',
+                                    background: p.isPaid ? 'color-mix(in srgb, var(--fin-positive) 10%, transparent)' : p.isCancelled ? 'color-mix(in srgb, var(--text-3) 10%, transparent)' : 'color-mix(in srgb, var(--fin-warning) 10%, transparent)',
+                                    color: p.isPaid ? 'var(--fin-positive)' : p.isCancelled ? 'var(--text-3)' : 'var(--fin-warning)',
                                   }}>{p.status || 'Unknown'}</span>
                                 </td>
                               </tr>
@@ -899,9 +899,9 @@ export default function TaxLedger({ source = 'main' } = {}) {
                           <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-input)' }}>
                             <td className="px-3 py-2 font-bold text-[10px] uppercase" style={{ color: 'var(--text-2)' }} colSpan={3}>Subtotal</td>
                             <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.taxable)}</td>
-                            <td className="px-3 py-2 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(row.gstAmt)}</td>
-                            <td className="px-3 py-2 font-bold" style={{ color: gstOk ? '#10b981' : '#d97706' }}>{FMT_PCT(row.gstPct)}</td>
-                            <td className="px-3 py-2 tabular-nums font-bold" style={{ color: '#f59e0b' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
+                            <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(row.gstAmt)}</td>
+                            <td className="px-3 py-2 font-bold" style={{ color: gstOk ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>{FMT_PCT(row.gstPct)}</td>
+                            <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--fin-warning)' }}>{row.tdsAmt > 0 ? FMT_INR(row.tdsAmt) : '—'}</td>
                             <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.gross)}</td>
                             <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(row.received)}</td>
                             <td />
@@ -936,7 +936,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
               <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>GST collected</p>
-              <p className="text-3xl font-black tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt)}</p>
               <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
                 <div className="flex justify-between"><span>Taxable turnover</span><strong>{FMT_INR(totals.taxable)}</strong></div>
                 <div className="flex justify-between"><span>CGST 9%</span><strong>{FMT_INR(totals.gstAmt / 2)}</strong></div>
@@ -946,8 +946,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
             </div>
 
             <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#d97706' }}>TDS collected / deducted</p>
-              <p className="text-3xl font-black tabular-nums" style={{ color: '#d97706' }}>{FMT_INR(totals.tdsAmt)}</p>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--fin-warning)' }}>TDS collected / deducted</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: 'var(--fin-warning)' }}>{FMT_INR(totals.tdsAmt)}</p>
               <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
                 <div className="flex justify-between"><span>Gross billed</span><strong>{FMT_INR(totals.gross)}</strong></div>
                 <div className="flex justify-between"><span>Net received</span><strong>{FMT_INR(totals.received)}</strong></div>
@@ -956,9 +956,9 @@ export default function TaxLedger({ source = 'main' } = {}) {
               </div>
             </div>
 
-            <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)' }}>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#d97706' }}>Open invoices control</p>
-              <p className="text-3xl font-black tabular-nums" style={{ color: '#d97706' }}>{FMT_INR(openSummary.outstanding)}</p>
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'color-mix(in srgb, var(--fin-warning) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 18%, transparent)' }}>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--fin-warning)' }}>Open invoices control</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: 'var(--fin-warning)' }}>{FMT_INR(openSummary.outstanding)}</p>
               <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
                 <div className="flex justify-between"><span>Open invoice count</span><strong>{openSummary.count}</strong></div>
                 <div className="flex justify-between"><span>Open taxable base</span><strong>{FMT_INR(openSummary.taxable)}</strong></div>
@@ -978,7 +978,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
                 'Use All Invoices scope to audit pending records, but use Tax Register scope for filing totals.',
               ].map(item => (
                 <div key={item} className="flex gap-2 rounded-lg p-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                  <CheckCircle2 size={14} style={{ color: '#10b981', marginTop: 2 }} />
+                  <CheckCircle2 size={14} style={{ color: 'var(--fin-positive)', marginTop: 2 }} />
                   <span>{item}</span>
                 </div>
               ))}
@@ -1031,19 +1031,19 @@ export default function TaxLedger({ source = 'main' } = {}) {
                       <td className="px-3 py-2 max-w-[100px] truncate" style={{ color: 'var(--text-2)' }}>{f['Client Name'] || f['Client'] || '—'}</td>
                       <td className="px-3 py-2 max-w-[140px] truncate" style={{ color: 'var(--text-2)' }}>{f['Project'] || '—'}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.base)}</td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt / 2)}</td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt / 2)}</td>
-                      <td className="px-3 py-2 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(p.gstAmt)}</td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt / 2)}</td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt / 2)}</td>
+                      <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(p.gstAmt)}</td>
                       <td className="px-3 py-2 font-bold" style={ts.style}>{ts.label}</td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: p.tdsAmt > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
-                      <td className="px-3 py-2 font-semibold" style={{ color: p.tdsAmt > 0 ? '#d97706' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_PCT(p.tdsPct) : '—'}</td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: p.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_INR(p.tdsAmt) : '—'}</td>
+                      <td className="px-3 py-2 font-semibold" style={{ color: p.tdsAmt > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{p.tdsAmt > 0 ? FMT_PCT(p.tdsPct) : '—'}</td>
                       <td className="px-3 py-2 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(p.gross)}</td>
                       <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>{FMT_INR(p.received)}</td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: p.outstanding > 0 ? '#f59e0b' : 'var(--text-3)' }}>{p.outstanding > 0 ? FMT_INR(p.outstanding) : '—'}</td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: p.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{p.outstanding > 0 ? FMT_INR(p.outstanding) : '—'}</td>
                       <td className="px-3 py-2">
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{
-                          background: p.isPaid ? 'rgba(16,185,129,0.1)' : p.isCancelled ? 'rgba(148,163,184,0.1)' : 'rgba(245,158,11,0.1)',
-                          color: p.isPaid ? '#10b981' : p.isCancelled ? '#94a3b8' : '#d97706',
+                          background: p.isPaid ? 'color-mix(in srgb, var(--fin-positive) 10%, transparent)' : p.isCancelled ? 'color-mix(in srgb, var(--text-3) 10%, transparent)' : 'color-mix(in srgb, var(--fin-warning) 10%, transparent)',
+                          color: p.isPaid ? 'var(--fin-positive)' : p.isCancelled ? 'var(--text-3)' : 'var(--fin-warning)',
                         }}>{p.status || '—'}</span>
                       </td>
                     </tr>
@@ -1054,15 +1054,15 @@ export default function TaxLedger({ source = 'main' } = {}) {
                 <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-input)' }}>
                   <td className="px-3 py-2.5 font-bold text-[10px] uppercase" colSpan={4} style={{ color: 'var(--text-2)' }}>Total ({filteredInvoices.length})</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.taxable)}</td>
-                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt / 2)}</td>
-                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt / 2)}</td>
-                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#10b981' }}>{FMT_INR(totals.gstAmt)}</td>
-                  <td className="px-3 py-2.5 font-bold" style={{ color: PCT_OK(totals.effectiveGstPct, 18) ? '#10b981' : '#d97706' }}>{FMT_PCT(totals.effectiveGstPct)}</td>
-                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: '#f59e0b' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
-                  <td className="px-3 py-2.5 font-bold" style={{ color: '#d97706' }}>{totals.tdsAmt > 0 ? FMT_PCT(totals.effectiveTdsPct) : '—'}</td>
+                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
+                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
+                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt)}</td>
+                  <td className="px-3 py-2.5 font-bold" style={{ color: PCT_OK(totals.effectiveGstPct, 18) ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>{FMT_PCT(totals.effectiveGstPct)}</td>
+                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-warning)' }}>{totals.tdsAmt > 0 ? FMT_INR(totals.tdsAmt) : '—'}</td>
+                  <td className="px-3 py-2.5 font-bold" style={{ color: 'var(--fin-warning)' }}>{totals.tdsAmt > 0 ? FMT_PCT(totals.effectiveTdsPct) : '—'}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.gross)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.received)}</td>
-                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: totals.outstanding > 0 ? '#f59e0b' : 'var(--text-2)' }}>{totals.outstanding > 0 ? FMT_INR(totals.outstanding) : '—'}</td>
+                  <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: totals.outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>{totals.outstanding > 0 ? FMT_INR(totals.outstanding) : '—'}</td>
                   <td />
                 </tr>
               </tfoot>

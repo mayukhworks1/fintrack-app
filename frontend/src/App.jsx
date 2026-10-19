@@ -105,7 +105,7 @@ function ImpersonationBanner() {
     <div style={{
       position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 99999,
       height: BANNER_H,
-      background: 'rgba(180, 83, 9, 0.82)', color: '#fff',
+      background: 'rgba(146,64,14,0.92)', color: '#fff',
       backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 16px', fontSize: 13, fontWeight: 600,

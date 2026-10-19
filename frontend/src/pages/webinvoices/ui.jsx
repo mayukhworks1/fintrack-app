@@ -117,9 +117,9 @@ export function DashboardMetric({ label, value, amount, format, sub, icon: Icon,
             style={{
               width: compact ? 40 : 48,
               height: compact ? 40 : 48,
-              background: 'rgba(255,255,255,0.78)',
+              background: 'color-mix(in srgb, var(--card-bg) 78%, transparent)',
               color: accent || 'var(--accent)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+              boxShadow: 'var(--shadow-sm)',
             }}>
             <Icon size={compact ? 18 : 21} />
           </div>
@@ -147,7 +147,7 @@ export function DashboardSignal({ eyebrow, title, body, icon: Icon, tone = 'var(
         {Icon && (
           <div
             className="flex items-center justify-center flex-shrink-0 rounded-2xl"
-            style={{ width: 42, height: 42, background: 'rgba(255,255,255,0.76)', color: accent }}>
+            style={{ width: 42, height: 42, background: 'color-mix(in srgb, var(--card-bg) 76%, transparent)', color: accent }}>
             <Icon size={18} />
           </div>
         )}
@@ -239,7 +239,7 @@ export function PicklistSelect({
             <X size={11} />
           </button>
         </form>
-        {addErr && <p className="text-[10px]" style={{ color: '#f87171' }}>{addErr}</p>}
+        {addErr && <p className="text-[10px]" style={{ color: 'var(--fin-negative)' }}>{addErr}</p>}
       </div>
     )
   }

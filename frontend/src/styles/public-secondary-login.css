@@ -28,7 +28,7 @@
 .ft-s-slide { overflow: hidden; }
 .ft-s-slide img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
 .ft-s-ring, .ft-s-dimmer { position: absolute; z-index: 1; border-radius: 10px; pointer-events: none; }
-.ft-s-ring { border: 2px solid #4f7bff; box-shadow: 0 0 0 4px rgba(79, 123, 255, 0.28); }
+.ft-s-ring { border: 2px solid var(--accent-bright); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-bright) 28%, transparent); }
 .ft-s-dimmer { box-shadow: 0 0 0 999px rgba(11, 18, 36, 0.2); }
 .ft-s-show-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; min-height: 40px; }
 .ft-s-show-cap { margin: 0; min-width: 0; font-size: 12.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.72); }
@@ -40,7 +40,7 @@
   background: transparent; color: rgba(255, 255, 255, 0.78); transition: background-color var(--m-t-micro) ease, color var(--m-t-micro) ease;
 }
 .ft-s-show-ctl > button:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-.ft-s-show-ctl > button:focus-visible, .ft-s-dot:focus-visible { outline: 2px solid #9db8ff; outline-offset: 1px; }
+.ft-s-show-ctl > button:focus-visible, .ft-s-dot:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent-bright) 55%, #fff); outline-offset: 1px; }
 .ft-s-dots { display: flex; align-items: center; }
 .ft-s-dot { display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 2px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
 

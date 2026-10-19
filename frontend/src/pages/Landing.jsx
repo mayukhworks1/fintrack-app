@@ -146,7 +146,7 @@ export default function Landing() {
               <a href="#try" ref={heroCta} onClick={startTour}
                  className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold cursor-pointer"
                  style={{ minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
-                          color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
+                          color: 'var(--accent-fg)', textDecoration: 'none', fontSize: '0.975rem',
                           boxShadow: '0 4px 14px var(--accent-glow)' }}>
                 Launch Interactive Sandbox <ArrowRight size={17} aria-hidden="true" />
               </a>

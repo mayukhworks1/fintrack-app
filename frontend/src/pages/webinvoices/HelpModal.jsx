@@ -11,7 +11,7 @@ export function HelpModal({ open, onClose }) {
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div {...dialog.panelProps} className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
 
@@ -177,7 +177,7 @@ export function HelpModal({ open, onClose }) {
           </div>
           <a href={`mailto:${HELP_CONTACT}`}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
-            style={{ background: 'var(--accent-btn)', color: '#fff', textDecoration: 'none', boxShadow: '0 4px 12px rgba(37,99,235,0.25)' }}>
+            style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)', textDecoration: 'none', boxShadow: '0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent)' }}>
             <Mail size={14} /> Contact us
           </a>
         </div>

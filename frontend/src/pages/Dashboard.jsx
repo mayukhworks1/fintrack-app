@@ -16,8 +16,6 @@ import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct } from '../utils/format'
-import { EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT } from '../utils/executiveVars'
-import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
 
 /* Count projects whose health does NOT contain 🔴 */
@@ -37,13 +35,15 @@ function SkeletonCard() {
 /* ── KPI card — horizontal layout, colored icon tile on left ──
    Matches reference: $32,350.00 / Total Revenue style with a tinted square tile.
    Each card auto-picks an icon tile color from a palette so the row pops. */
+// Tile tints come from the palette's KPI tokens, which index.css holds to
+// AA contrast in every palette and mode.
 const TILE_PALETTE = [
-  { bg: '#fef3c7', fg: '#d97706' },   // amber
-  { bg: '#dbeafe', fg: '#2563eb' },   // blue
-  { bg: '#dcfce7', fg: '#16a34a' },   // green
-  { bg: '#fce7f3', fg: '#db2777' },   // pink
-  { bg: '#ede9fe', fg: '#7c3aed' },   // violet
-  { bg: '#cffafe', fg: '#0891b2' },   // cyan
+  { bg: 'var(--kpi-4-bg)', fg: 'var(--kpi-4-fg)' },
+  { bg: 'var(--kpi-1-bg)', fg: 'var(--kpi-1-fg)' },
+  { bg: 'var(--fin-pos-bg)', fg: 'var(--fin-positive)' },
+  { bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
+  { bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
+  { bg: 'var(--kpi-2-bg)', fg: 'var(--kpi-2-fg)' },
 ]
 
 function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
@@ -186,7 +186,6 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
   const { isEditor } = useAuth()
-  const { dark } = useTheme()
   const [activeWidgetIds, setActiveWidgetIds] = useState(DASHBOARD_DEFAULT_WIDGET_IDS)
   const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
   const [customSourceRows, setCustomSourceRows] = useState({})
@@ -341,21 +340,14 @@ export default function Dashboard() {
     ]
   }, [recent, s, statusEntries])
 
-  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
-
   return (
     <div
       className="p-4 sm:p-5 space-y-5 animate-fade-in rounded-[28px]"
-      style={{
-        ...executiveVars,
-        background: dark
-          ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 22%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)'
-          : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 20%), radial-gradient(circle at top right, rgba(22,145,95,0.06), transparent 18%), linear-gradient(180deg, #f8faff 0%, #f4f7fb 100%)',
-      }}
+      style={{ background: 'var(--hero-wash)' }}
     >
 
       {/* Header */}
-      <div className="rounded-[28px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+      <div className="rounded-[28px] p-4 sm:p-5" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold tabular-nums tracking-[0.22em] uppercase"
@@ -391,7 +383,7 @@ export default function Dashboard() {
               disabled={loading}
               aria-label="Refresh"
               className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-2)', border: '1px solid rgba(255,255,255,0.08)' }}
+              style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}
             >
               <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
               Refresh
@@ -400,7 +392,7 @@ export default function Dashboard() {
               <button
                 onClick={() => navigate('/projects/new')}
                 className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold"
-                style={{ background: 'linear-gradient(135deg, #4d74ff 0%, #6f8fff 100%)', color: '#fff', boxShadow: '0 12px 28px rgba(77,116,255,0.28)' }}
+                style={{ background: 'var(--accent-gradient)', color: 'var(--accent-fg)', boxShadow: 'var(--btn-shadow)' }}
               >
                 <Plus size={14} aria-hidden="true" />
                 New Project
@@ -411,7 +403,7 @@ export default function Dashboard() {
 
         <div className={clsx('mt-4 grid gap-4', visibleWidgets.has('portfolio_balance') && visibleWidgets.has('command_center') ? 'grid-cols-1 xl:grid-cols-[1.9fr_0.95fr]' : 'grid-cols-1')}>
           {visibleWidgets.has('portfolio_balance') && (
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
             <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
@@ -422,7 +414,7 @@ export default function Dashboard() {
                   Net profit from <LiveValue value={s?.total_billed} format={inr} style={{ color: 'var(--text-2)' }} /> billed across {s?.total_projects ?? 0} active portfolio entries.
                 </p>
               </div>
-              <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
+              <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
                 <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
                 <p className="text-[1.9rem] font-semibold mt-1 tabular-nums leading-none" style={{ color: 'var(--fin-positive)' }}>
                   {healthOk}/{s?.total_projects ?? 0}
@@ -438,7 +430,7 @@ export default function Dashboard() {
                 { label: 'Cost load', value: costRatio, format: v => formatPct(v, 1), tone: 'var(--fin-warning)' },
                 { label: 'At risk', value: atRisk.length, format: v => String(Math.round(v)), tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <div key={item.label} className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
                   <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-lg sm:text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>
                     <LiveValue value={item.value} format={item.format} />
@@ -450,7 +442,7 @@ export default function Dashboard() {
           )}
 
           {visibleWidgets.has('command_center') && (
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Command center</p>
@@ -468,7 +460,7 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-5 space-y-3">
-              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
                 <p className="text-base font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {leadRecord ? `${leadRecord.fields?.['Client'] || 'Unknown'} / ${leadRecord.fields?.['Project Name'] || 'Project'}` : 'No project performance signal yet'}
@@ -481,7 +473,7 @@ export default function Dashboard() {
                     : 'As project financials settle in, this space will surface the strongest performer.'}
                 </p>
               </div>
-              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
+              <div className="rounded-2xl p-4" style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
                 <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
                 <p className="text-base font-semibold mt-2" style={{ color: blockedRecent ? 'var(--fin-negative)' : 'var(--text-1)' }}>
                   {blockedRecent
@@ -603,7 +595,7 @@ export default function Dashboard() {
         const overdueCount = retainerSummary.overdue_count || 0
         const healthy      = retainerSummary.healthy || 0
         return (
-          <div className="rounded-[20px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
+          <div className="rounded-[20px] p-4 sm:p-5" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Retainer health</p>
@@ -629,7 +621,7 @@ export default function Dashboard() {
                   const outstanding = Number(f['Outstanding Amount'] || 0)
                   return (
                     <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
-                      style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.06)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
+                      style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{f['Client Name'] || f['Client'] || '—'}</p>
                         <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{f['Project'] || f['Invoice Number'] || ''}{f['Raised Date'] ? ` · ${f['Raised Date'].slice(0, 7)}` : ''}</p>
@@ -672,9 +664,9 @@ export default function Dashboard() {
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
                     Cumulative billing · bar height = amount ·
                     <span className="inline-flex items-center gap-1 ml-1">
-                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid
-                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#fb7185' }} />overdue
-                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#94a3b8' }} />pending
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-positive)' }} />paid
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: 'var(--fin-negative)' }} />overdue
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: 'var(--text-3)' }} />pending
                     </span>
                   </p>
                 </div>
@@ -732,19 +724,18 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(agingBuckets.buckets || []).map((b, i) => {
-                const colors = ['#22c55e','#eab308','#f97316','#ef4444']
-                const lightColors = ['#dcfce7','#fef9c3','#ffedd5','#fee2e2']
-                const color = colors[i] || '#6b7280'
-                const light = lightColors[i] || '#f3f4f6'
+                const colors = ['var(--fin-positive)', 'var(--fin-warning)', 'color-mix(in srgb, var(--fin-warning) 50%, var(--fin-negative))', 'var(--fin-negative)']
+                const color = colors[i] || 'var(--text-3)'
+                const light = `color-mix(in srgb, ${color} 9%, var(--card-bg))`
                 const pct = agingBuckets.total_outstanding > 0 ? (b.amount / agingBuckets.total_outstanding * 100) : 0
                 return (
-                  <div key={b.label} className="rounded-xl p-3" style={{ background: light, border: `1px solid ${color}30` }}>
+                  <div key={b.label} className="rounded-xl p-3" style={{ background: light, border: `1px solid color-mix(in srgb, ${color} 19%, transparent)` }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color }}>{b.label}</p>
                     <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
                       ₹{Number(b.amount).toLocaleString('en-IN')}
                     </p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{b.count} invoice{b.count !== 1 ? 's' : ''}</p>
-                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: `${color}25` }}>
+                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
                       <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 9999 }} />
                     </div>
                   </div>
@@ -817,7 +808,7 @@ export default function Dashboard() {
             {loading && !data ? <SkeletonCard /> :
               s?.best_project?.name
                 ? <div className="rounded-xl p-3"
-                    style={{ background: 'var(--accent-dim)', border: '1px solid rgba(37,99,235,0.20)' }}>
+                    style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
                     <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>
                       {s.best_project.name}
                     </p>
@@ -836,7 +827,7 @@ export default function Dashboard() {
             {loading && !data ? <SkeletonCard /> :
               s?.worst_project?.name
                 ? <div className="rounded-xl p-3"
-                    style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)' }}>
+                    style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
                     <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>
                       {s.worst_project.name}
                     </p>
@@ -860,7 +851,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3">
             {statusEntries.map(([status, count]) => {
               const accent = status.includes('Active')    ? 'var(--fin-positive)'
-                           : status.includes('Completed') ? '#60a5fa'
+                           : status.includes('Completed') ? 'var(--accent)'
                            : status.includes('Hold')      ? 'var(--fin-warning)'
                            : 'var(--fin-negative)'
               return (
