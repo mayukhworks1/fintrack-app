@@ -1,0 +1,28 @@
+/* ══════════════════════════════════════════════════════════════════
+   SECONDARY PUBLIC PAGES: shared keyframes
+   ------------------------------------------------------------------
+   How it works, Made yours, Questions and the legal pages each import
+   this plus their own file (public-secondary-<page>.css), so a route
+   downloads only the rules it draws. All are lazy: none of it is in
+   the entry stylesheet. Sign-in's rules are in
+   public-secondary-login.css. Classes and keyframes are prefixed ft-s-.
+   Every hidden start state sits inside
+   @media (prefers-reduced-motion: no-preference); only transform,
+   opacity, clip-path, stroke-dashoffset and filter move.
+══════════════════════════════════════════════════════════════════ */
+@keyframes ft-s-hop { from { transform: translateX(0); opacity: 1 } 80% { opacity: 1 } to { transform: translateX(var(--run, 28px)); opacity: 0 } }
+@keyframes ft-s-hopy { from { transform: translateY(0); opacity: 1 } 80% { opacity: 1 } to { transform: translateY(var(--run, 18px)); opacity: 0 } }
+@keyframes ft-s-ring { 0% { opacity: 0 } 30%, 70% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes ft-s-ring-stay { 0% { opacity: 0 } 40%, 100% { opacity: 1 } }
+@keyframes ft-s-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@keyframes ft-s-grow { from { transform: scaleX(0) } to { transform: none } }
+@keyframes ft-s-growy { from { transform: scaleY(0) } to { transform: none } }
+@keyframes ft-s-run { from { transform: none } to { transform: translateX(30px) } }
+
+.ft-s-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink, var(--accent)); }
+
+/* The scene diagrams (SceneDiagrams.jsx) on two pages: a dashed feed runs
+   one cycle, and StaysPut's record crosses once and rests at the mirror. */
+.ft-s-dash { animation: ft-dash-run 1.2s linear 1 both; }
+.ft-s-runner { animation: ft-s-run 1.2s var(--m-ease-inout) 200ms both; }
+@media (prefers-reduced-motion: reduce) { .ft-s-dash, .ft-s-runner { animation: none; } }

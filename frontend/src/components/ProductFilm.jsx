@@ -1,259 +1,218 @@
-import { useRef, useState, useEffect } from 'react'
+/**
+ * The film, and a walkthrough of the same ground for people who would rather
+ * read than watch.
+ *
+ * The film is a recording of the sample workspace. Nothing about it loads
+ * until someone presses play: the frame shows a poster (a real frame at 0:13),
+ * preload is "none", and the source is picked at that first press — the 720p
+ * cut under 1024px or with Save-Data, the 1080p one otherwise. Its length is
+ * read from one place, the chapter table's last mark, until the file's own
+ * metadata replaces it.
+ *
+ * The walkthrough is built from demoData, the same rows the sandbox reads, so
+ * every figure in it can be found again in the sandbox above. It moves on by
+ * itself only through useAutoplay: in view, tab showing, not paused, and never
+ * by itself under reduced motion.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Play, Pause, Volume2, VolumeX, Maximize2,
-  Sparkles, ArrowRight, ArrowUpRight, Film,
-  Code2, ChevronRight, ChevronLeft
+  Play, Pause, Volume2, VolumeX, Maximize2, Film, BookOpen,
+  ArrowUpRight, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { TOTALS } from './demoData'
+import {
+  INVOICES, DELIVERY, LANES, TOTALS, TAX_SUMMARY, AGEING, QUESTIONS,
+  open, ask, inr, inrShort,
+} from './demoData'
+import { VIDEOS } from './motion/media'
+import { useAutoplay } from '../hooks/useAutoplay'
 
-/* Chapter marks are the film's own scene boundaries, and they have to be
-   re-derived every time the cut changes — a chapter list that does not match
-   the footage is worse than none, because it is a caption that lies. The
-   previous set still described a 32.5s cut and named a Tax Ledger and a
-   Delivery scene the film never contained. These are measured against the
-   30.3s cut: each boundary is a point where the recording actually changes
-   module, verified by reading the app's own window title at the first and
-   last frame of every segment. */
-const CHAPTERS = [
+const FILM = VIDEOS.film
+const INV = INVOICES.find(i => i.id === 'INV-2296')
+const TOP = ask({ measure: 'outstanding', groupBy: 'client' }).rows[0]
+const BAND_61_90 = AGEING.find(b => b.id === '61-90')
+
+/* Chapter marks are the film's own scene boundaries, measured against the
+   cut: each is a point where the recording changes module. Figures are
+   computed from demoData, the ledger the recording was made from. */
+export const CHAPTERS = [
   {
-    id: 1,
-    title: 'The figure, corrected',
-    start: 0,
-    end: 11.7,
-    tag: '0:00 - 0:11',
-    badge: 'Capital Leakage',
-    tab: 'receivables',
-    tabLabel: 'Invoices',
-    metric: `₹${(TOTALS.tds / 100000).toFixed(2)}L withheld`,
-    problem: 'Accounting tools count gross invoices while tax deducted at source never arrives, so the collections list overstates what can actually be collected.',
-    solution: 'FinTrack reports TDS as its own figure and keeps it out of outstanding, so the number being chased is the number owed.',
+    id: 1, title: 'The figure, corrected', start: 0, end: 11.7,
+    badge: 'TDS kept apart', tab: 'receivables', tabLabel: 'Invoices',
+    metric: `${inrShort(TOTALS.tds)} withheld`,
+    problem: 'Accounting tools count gross invoices while tax deducted at source never arrives, so the collections list overstates what can be collected.',
+    solution: 'TDS is reported as its own figure and kept out of outstanding, so the number being chased is the number owed.',
   },
   {
-    id: 2,
-    title: 'Filter to overdue',
-    start: 11.7,
-    end: 14.7,
-    tag: '0:11 - 0:14',
-    badge: 'Totals That Follow',
-    tab: 'receivables',
-    tabLabel: 'Invoices',
-    metric: '₹23.7L overdue',
+    id: 2, title: 'Filter to overdue', start: 11.7, end: 14.7,
+    badge: 'Totals follow the rows', tab: 'receivables', tabLabel: 'Invoices',
+    metric: `${inrShort(TOTALS.overdue)} overdue`,
     problem: 'Filtering a list usually leaves the headline figures behind, so the number on screen stops describing the rows under it.',
     solution: 'Every total is derived from the visible rows, so a filter moves the figures with it.',
   },
   {
-    id: 3,
-    title: 'One invoice, opened',
-    start: 14.7,
-    end: 17.3,
-    tag: '0:14 - 0:17',
-    badge: 'Every Deduction Named',
-    tab: 'receivables',
-    tabLabel: 'Invoices',
-    metric: '₹6,58,800 lands',
+    id: 3, title: 'One invoice, opened', start: 14.7, end: 17.3,
+    badge: 'Every deduction named', tab: 'receivables', tabLabel: 'Invoices',
+    metric: `${inr(INV.amount + INV.gst - INV.tds)} lands`,
     problem: 'An invoice total tells you what was billed, not what arrives: GST belongs to the state and TDS is withheld before the client pays.',
-    solution: 'Each deduction is named on the invoice itself, ending on the figure that actually reaches the bank.',
+    solution: 'Each deduction is named on the invoice itself, ending on the figure that reaches the bank.',
   },
   {
-    id: 4,
-    title: 'Ageing bands',
-    start: 17.3,
-    end: 19.9,
-    tag: '0:17 - 0:19',
-    badge: 'Days Past Due',
-    tab: 'receivables',
-    tabLabel: 'Ageing',
-    metric: '₹8,05,000 at 61–90 days',
+    id: 4, title: 'Ageing bands', start: 17.3, end: 19.9,
+    badge: 'Days past due', tab: 'ageing', tabLabel: 'Ageing',
+    metric: `${inr(BAND_61_90.value)} at 61–90 days`,
     problem: 'An ageing chart that is only a chart tells you a band is bad without telling you which invoices are in it.',
     solution: 'Picking a band filters the table underneath, and every total follows it down.',
   },
   {
-    id: 5,
-    title: 'Status Board',
-    start: 19.9,
-    end: 23.1,
-    tag: '0:19 - 0:23',
-    badge: 'Delivery On The Same Row',
-    tab: 'delivery',
-    tabLabel: 'Status Board',
-    metric: '₹3,75,000 delivered',
+    id: 5, title: 'Status Board', start: 19.9, end: 23.1,
+    badge: 'Delivery on the same row', tab: 'delivery', tabLabel: 'Status Board',
+    metric: `${DELIVERY.length} projects on the board`,
     problem: 'Delivery status lives in one tool and the money in another, so nobody can say what the work in progress is worth.',
     solution: 'The board regroups by client in a click and carries the money with the cards.',
   },
   {
-    id: 6,
-    title: 'An answer you can check',
-    start: 23.1,
-    end: 28.5,
-    tag: '0:23 - 0:28',
-    badge: 'Shows Its Working',
-    tab: 'analyst',
-    tabLabel: 'AI Assistant',
-    metric: '₹12,36,000 top client',
-    problem: 'An assistant that answers in prose is impossible to audit — you cannot tell a reading of the data from an invention.',
+    id: 6, title: 'An answer you can check', start: 23.1, end: FILM.seconds,
+    badge: 'Shows its working', tab: 'analyst', tabLabel: 'AI Assistant',
+    metric: `${inr(TOP.value)} top client`,
+    problem: 'An assistant that answers in prose cannot be audited: you cannot tell a reading of the data from an invention.',
     solution: 'The compiled query is shown beside the answer, so the figure can be checked rather than trusted.',
   },
 ]
 
-const SANDBOX_REEL_STEPS = [
+/** m:ss, rounded up at the end so a 28.5s cut reads 0:29. */
+export const clock = (t, up = false) => {
+  const s = Math.max(0, up ? Math.ceil(t) : Math.floor(t))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+const smallScreen = () =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 1023px)')?.matches
+const saveData = () => typeof navigator !== 'undefined' && !!navigator.connection?.saveData
+
+/* ── The walkthrough, from the sample ledger ──────────────────────────── */
+const sum = (rows, pick) => rows.reduce((t, r) => t + pick(r), 0)
+const byLane = LANES
+  .map(lane => ({ lane, cards: DELIVERY.filter(d => d.lane === lane) }))
+  .filter(l => l.cards.length)
+const ANSWER = ask({ measure: QUESTIONS[0].measure, groupBy: QUESTIONS[0].groupBy })
+
+export const WALKTHROUGH = [
   {
-    id: 'receivables',
-    tab: 'receivables',
-    tabLabel: 'Invoices Ledger',
-    title: 'Unified Invoices & TDS Withholding',
-    subtitle: 'Zero spreadsheet reconciliation between gross billing and true cash.',
-    badge: 'Core Ledger',
-    metric: `₹${(TOTALS.outstanding / 100000).toFixed(2)}L Outstanding`,
-    subMetric: `₹${(TOTALS.tds / 100000).toFixed(2)}L TDS Isolated`,
-    explainer: 'Every invoice row calculates taxable value, 18% GST, and 10% Section 194J TDS at inception. Overdue aging bands (0-30, 31-60, 61-90, 90+ days) update automatically from PostgreSQL predicates.',
+    id: 'receivables', tab: 'receivables', tabLabel: 'Invoices',
+    title: 'Invoices, with the tax taken out',
+    metric: `${inrShort(TOTALS.outstanding)} outstanding`,
+    subMetric: `${inrShort(sum(open, i => i.tds))} TDS on open invoices`,
+    explainer: 'Each row carries its pre-tax amount, GST at 18% and TDS at 10%. Outstanding counts the pre-tax figure, so tax withheld is never chased as money owed.',
     preview: {
       type: 'table',
-      rows: [
-        { id: 'INV-2296', client: 'Meridian Labs', amount: '₹14,50,000', tds: '₹1,45,000', status: 'Overdue', age: '74 days' },
-        { id: 'INV-2295', client: 'Nova Systems', amount: '₹7,80,000', tds: '₹78,000', status: 'Sent', age: '21 days' },
-        { id: 'INV-2294', client: 'Apex Corp', amount: '₹10,69,500', tds: '₹1,06,950', status: 'Overdue', age: '48 days' },
-      ]
-    }
+      rows: [...open].sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, 3).map(i => ({
+        id: i.id, client: i.client, amount: inr(i.amount), tds: inr(i.tds), status: i.status,
+        age: i.daysOverdue ? `${i.daysOverdue} days over` : 'within terms',
+      })),
+    },
   },
   {
-    id: 'delivery',
-    tab: 'delivery',
-    tabLabel: 'Delivery Kanban',
-    title: 'Live Project Delivery & Margin Tracking',
-    subtitle: 'Kanban milestones tied directly to revenue recognition and burn rate.',
-    badge: 'Operations Mirror',
-    metric: '12 Active Milestones',
-    subMetric: '38% Avg Margin',
-    explainer: 'When engineers ship a deliverable, the single-ledger architecture updates the client billing readiness immediately. Real-time project margins prevent cost blowouts before monthly invoices are issued.',
+    id: 'delivery', tab: 'delivery', tabLabel: 'Status Board',
+    title: 'Where each project stands, and what it is owed',
+    metric: `${DELIVERY.length} projects`,
+    subMetric: `${inrShort(sum(DELIVERY, d => d.outstanding))} owed across the board`,
+    explainer: 'The board reads the same records as the invoices, so a card can say what its project is owed without anyone joining two systems.',
     preview: {
       type: 'kanban',
-      lanes: [
-        { name: 'In Progress', count: 4, item: 'API Gateway · Meridian Labs', status: 'On Track' },
-        { name: 'Review', count: 3, item: 'Design System · Nova Systems', status: 'Pending Approval' },
-        { name: 'Shipped', count: 5, item: 'Payment Flow · Apex Corp', status: 'Ready to Bill' },
-      ]
-    }
+      lanes: byLane.slice(0, 3).map(l => ({
+        name: l.lane, count: l.cards.length,
+        item: `${l.cards[0].project} · ${l.cards[0].client}`,
+        note: l.cards[0].outstanding ? `${inr(l.cards[0].outstanding)} owed` : l.cards[0].short,
+      })),
+    },
   },
   {
-    id: 'studio',
-    tab: 'studio',
-    tabLabel: 'Studio RAG',
-    title: 'Studio RAG & Semantic Contract Intelligence',
-    subtitle: 'Ask questions across MSAs and SOWs with verified paragraph citations.',
-    badge: 'pgvector Cosine Search',
-    metric: '0.94 Similarity Score',
-    subMetric: 'Verified Citation',
-    explainer: 'Contracts are chunked and indexed into pgvector embeddings. Querying payment clauses or late penalty provisions returns the exact contractual paragraph with mathematical confidence.',
-    preview: {
-      type: 'rag',
-      query: 'What are the net payment terms and penalties for Meridian Labs?',
-      citation: 'Meridian Master Services Agreement — Section 4.2',
-      text: 'Invoices shall be payable within thirty (30) calendar days of receipt. In the event of overdue balance beyond forty-five (45) days, a late fee of 1.5% per month shall accrue on the outstanding principal.',
-    }
-  },
-  {
-    id: 'tax',
-    tab: 'tax',
-    tabLabel: 'Tax Escrow',
-    title: 'Statutory GST & Form 26AS Tax Escrow',
-    subtitle: 'Automated segregation of 18% GST and 10% TDS from spendable cash.',
-    badge: 'Compliance Escrow',
-    metric: `₹${(TOTALS.gst / 100000).toFixed(2)}L GST Segregated`,
-    subMetric: '100% 26AS Match',
-    explainer: 'FinTrack separates collected GST (CGST/SGST 9%) and TDS credits from spendable working capital, continuously reconciling client deductions against the TRACES Form 26AS portal.',
+    id: 'tax', tab: 'tax', tabLabel: 'Tax Ledger',
+    title: 'GST and TDS, kept apart from what is owed',
+    metric: `${inrShort(TAX_SUMMARY.gstCollected)} GST`,
+    subMetric: `${inrShort(TAX_SUMMARY.tdsCollected)} TDS`,
+    explainer: 'GST is collected for the state and TDS is withheld by the client, so neither is counted as money a client still owes.',
     preview: {
       type: 'tax',
       items: [
-        { label: 'Total Taxable Turnover', value: '₹15,19,400' },
-        { label: 'GST Collected (18%)', value: '₹2,73,492', ringFenced: true },
-        { label: 'TDS Withheld (10%)', value: '₹1,51,940', ringFenced: true },
-        { label: 'Net Spendable Cashflow', value: '₹10,93,968', spendable: true },
-      ]
-    }
+        { label: 'Taxable value', value: inr(TAX_SUMMARY.taxableValue) },
+        { label: 'GST (18%)', value: inr(TAX_SUMMARY.gstCollected), note: 'Held for the state' },
+        { label: 'TDS (10%)', value: inr(TAX_SUMMARY.tdsCollected), note: 'Withheld at source' },
+        { label: 'Reaches the bank', value: inr(TAX_SUMMARY.netReceivable), note: 'Invoiced less TDS', strong: true },
+      ],
+    },
   },
   {
-    id: 'analyst',
-    tab: 'analyst',
-    tabLabel: 'AI Analyst',
-    title: 'Deterministic AI Analyst with Parameterized SQL',
-    subtitle: 'Auditable mathematical proof behind every answer — zero hallucination.',
-    badge: 'Deterministic AST',
-    metric: '100% Parameterized SQL',
-    subMetric: 'Zero Hallucination',
-    explainer: 'Instead of having an LLM invent financial numbers, FinTrack uses the LLM solely to generate an Abstract Syntax Tree (AST), which is transpiled into auditable, parameterized SQL and executed against PostgreSQL.',
+    id: 'analyst', tab: 'analyst', tabLabel: 'AI Assistant',
+    title: 'An answer with its query beside it',
+    metric: 'Measure + grouping',
+    subMetric: 'SQL written by code',
+    explainer: 'The model picks a measure and a grouping from a fixed set; the application writes the SQL, runs it, and shows it next to the figure.',
     preview: {
       type: 'analyst',
-      question: 'Which clients have overdue balances exceeding ₹5 Lakhs?',
-      sql: 'SELECT client, SUM(amount) AS overdue_total FROM invoices WHERE status = \'Overdue\' GROUP BY client HAVING SUM(amount) > 500000 ORDER BY overdue_total DESC;',
-      result: 'Meridian Labs: ₹14,50,000 · Apex Corp: ₹10,69,500',
-    }
+      question: QUESTIONS[0].q,
+      sql: ANSWER.sql,
+      result: ANSWER.rows.slice(0, 2).map(r => `${r.key}: ${ANSWER.format(r.value)}`).join(' · '),
+    },
   },
 ]
 
-export default function ProductFilm() {
-  const [viewMode, setViewMode] = useState('film') // 'film' | 'sandbox-reel'
-  const [playing, setPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  /* Seeded from the chapter table's last mark rather than a typed 24, so the
-     label is right before metadata lands and cannot go stale on a re-cut. */
-  const [duration, setDuration] = useState(CHAPTERS[CHAPTERS.length - 1].end)
-  const [muted, setMuted] = useState(false)
-  const [speed, setSpeed] = useState(1)
-  const [hovered, setHovered] = useState(false)
-  
-  // Interactive Reel state
-  const [reelIndex, setReelIndex] = useState(0)
-  const [reelPlaying, setReelPlaying] = useState(true)
-  const [reelProgress, setReelProgress] = useState(0)
-  
+const WALK_MS = 6000
+
+function scrollToSandbox(tabId) {
+  const el = document.getElementById('try')
+  if (!el) return
+  const reduced = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
+  window.dispatchEvent(tabId
+    ? new CustomEvent('ft-switch-tab', { detail: tabId })
+    : new CustomEvent('ft-start-tour'))
+}
+
+/* ── The film ─────────────────────────────────────────────────────────── */
+function FilmPlayer() {
   const videoRef = useRef(null)
+  const frameRef = useRef(null)
+  const pendingSeek = useRef(null)
+  const [src, setSrc] = useState(null)          // chosen at the first press
+  const [started, setStarted] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [time, setTime] = useState(0)
+  const [duration, setDuration] = useState(CHAPTERS.at(-1).end)
+  const [muted, setMuted] = useState(false)
 
-  /* The chapter table ends where the film ends, so its last mark is the
-     honest source for the label until metadata has loaded. */
-  const filmLength = `${Math.round(duration || CHAPTERS[CHAPTERS.length - 1].end)}-second`
-  const activeChapterIndex = CHAPTERS.findIndex(c => currentTime >= c.start && currentTime < c.end)
-  const currentChapter = activeChapterIndex !== -1 ? CHAPTERS[activeChapterIndex] : CHAPTERS[0]
+  const length = clock(duration, true)
+  const chapterAt = (t) => CHAPTERS.findIndex(c => t >= c.start && t < c.end)
+  const current = CHAPTERS[Math.max(0, chapterAt(time))]
 
-  // Auto-play timer for interactive sandbox reel
+  // Sources arrive with the first press; load them, then play.
   useEffect(() => {
-    if (viewMode !== 'sandbox-reel' || !reelPlaying) return
-    const interval = setInterval(() => {
-      setReelProgress(prev => {
-        if (prev >= 100) {
-          setReelIndex(idx => (idx + 1) % SANDBOX_REEL_STEPS.length)
-          return 0
-        }
-        return prev + 2 // advances every 5 seconds (50 ticks * 100ms)
-      })
-    }, 100)
-    return () => clearInterval(interval)
-  }, [viewMode, reelPlaying, reelIndex])
+    const v = videoRef.current
+    if (!src || !v) return
+    v.load?.()
+    const p = v.play?.()
+    if (p && typeof p.catch === 'function') p.catch(() => setPlaying(false))
+  }, [src])
 
-  const togglePlay = () => {
+  const start = useCallback((at = null) => {
     const v = videoRef.current
     if (!v) return
-    if (v.paused) {
-      v.play?.()
-      setPlaying(true)
-    } else {
-      v.pause?.()
-      setPlaying(false)
+    setStarted(true)
+    if (!src) {
+      pendingSeek.current = at
+      setSrc(FILM.mp4Small && (smallScreen() || saveData()) ? FILM.mp4Small : FILM.mp4)
+      return
     }
-  }
+    if (at != null) v.currentTime = at
+    const p = v.play?.()
+    if (p && typeof p.catch === 'function') p.catch(() => setPlaying(false))
+  }, [src])
 
-  const seekToChapter = (chap) => {
+  const toggle = () => {
     const v = videoRef.current
     if (!v) return
-    v.currentTime = chap.start
-    v.play?.()
-    setPlaying(true)
-  }
-
-  const handleTimeUpdate = () => {
-    const v = videoRef.current
-    if (!v) return
-    setCurrentTime(v.currentTime)
-    if (v.duration) setDuration(v.duration)
+    if (!src || v.paused) start()
+    else v.pause?.()
   }
 
   const toggleMute = () => {
@@ -263,614 +222,289 @@ export default function ProductFilm() {
     setMuted(v.muted)
   }
 
-  const cycleSpeed = () => {
+  const fullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.()
+    else frameRef.current?.requestFullscreen?.()
+  }
+
+  const seekBar = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const t = ((e.clientX - rect.left) / rect.width) * duration
+    start(Math.max(0, Math.min(duration - 0.1, t)))
+  }
+
+  const onSeekKey = (e) => {
     const v = videoRef.current
-    if (!v) return
-    const nextSpeed = speed === 1 ? 1.25 : speed === 1.25 ? 1.5 : 1
-    v.playbackRate = nextSpeed
-    setSpeed(nextSpeed)
+    if (!v || !src) return
+    if (e.key === 'ArrowRight') { e.preventDefault(); v.currentTime = Math.min(duration, v.currentTime + 5) }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 5) }
   }
-
-  const toggleFullscreen = () => {
-    const v = videoRef.current
-    if (!v) return
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.()
-    } else {
-      v.requestFullscreen?.()
-    }
-  }
-
-  const scrollToSandbox = (tabId) => {
-    const el = document.getElementById('try') || document.querySelector('.ft-tour')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' })
-      if (tabId) {
-        window.dispatchEvent(new CustomEvent('ft-switch-tab', { detail: tabId }))
-      } else {
-        window.dispatchEvent(new CustomEvent('ft-start-tour'))
-      }
-    }
-  }
-
-  const activeReelStep = SANDBOX_REEL_STEPS[reelIndex]
 
   return (
-    <div className="flex flex-col space-y-4">
-      {/* ── Mode Switcher & Header ────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-[var(--card-border)]">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-[var(--accent)]">
-              Sandbox Architecture & Motion Reel
-            </span>
-          </div>
-          <h2 className="text-base sm:text-lg font-bold text-[var(--text-1)] m-0">
-            See How the Single-Ledger Sandbox Works
-          </h2>
-        </div>
+    <div className="ft-h-film">
+      <figure ref={frameRef} className="ft-h-film-frame" data-started={started ? '' : undefined}
+              data-playing={playing ? '' : undefined}>
+        <video
+          ref={videoRef}
+          className="ft-h-film-video"
+          width={FILM.w}
+          height={FILM.h}
+          poster={FILM.poster}
+          preload="none"
+          playsInline
+          aria-label={`The FinTrack film, ${length}, recorded in the sample workspace: what is outstanding, the TDS already deducted from it, the status board, and an assistant that shows its query.`}
+          onClick={toggle}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget
+            if (Number.isFinite(v.duration) && v.duration > 0) setDuration(v.duration)
+            if (pendingSeek.current != null) { v.currentTime = pendingSeek.current; pendingSeek.current = null }
+          }}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+        >
+          {src && <source src={src} type="video/mp4" />}
+        </video>
 
-        {/* Dual Mode Switcher */}
-        <div className="inline-flex p-1 rounded-xl border self-start sm:self-auto backdrop-blur-md"
-             style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-          <button
-            onClick={() => {
-              setViewMode('film')
-              const v = videoRef.current
-              if (v && playing) v.play?.()
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              viewMode === 'film'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-[var(--text-2)] hover:text-[var(--text-1)]'
-            }`}
-          >
-            <Film size={13} />
-            <span>Launch Film (24s)</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setViewMode('sandbox-reel')
-              if (videoRef.current) videoRef.current.pause?.()
-              setPlaying(false)
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              viewMode === 'sandbox-reel'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-[var(--text-2)] hover:text-[var(--text-1)]'
-            }`}
-          >
-            <Sparkles size={13} />
-            <span>Interactive Sandbox Walkthrough</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── MODE 1: the film reel. Length is read off the media, never typed. */}
-      {viewMode === 'film' && (
-        <div className="flex flex-col space-y-3">
-          {/* Main Cinematic Video Stage */}
-          <figure
-            className="relative rounded-2xl overflow-hidden m-0 transition-all duration-300 group"
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-              background: '#090d16',
-              border: '1px solid var(--card-border)',
-              boxShadow: playing ? '0 16px 48px rgba(37,99,235,0.25)' : 'var(--card-shadow)',
-            }}
-          >
-            {/* Top Chrome Header Bar */}
-            <div className="flex items-center justify-between px-3.5 py-2 border-b text-[10.5px] font-mono z-20 relative"
-                 style={{ background: 'rgba(15,23,42,0.95)', borderColor: 'rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-              <div className="flex items-center gap-2">
-                {['#ef4444', '#fbbf24', '#22c55e'].map(c => (
-                  <span key={c} className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: c }} />
-                ))}
-                <span className="text-slate-300 font-semibold ml-1">fintrack — single_ledger_stream.mp4</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-emerald-300 font-semibold">PostgreSQL Synchronized</span>
-              </div>
-            </div>
-
-            {/* Native Video Element */}
-            <video
-              ref={videoRef}
-              preload="metadata"
-              playsInline
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={() => setPlaying(false)}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              aria-label={`A ${filmLength} launch film of FinTrack: what is outstanding, the TDS already deducted from it, the status board, and an assistant that shows its query.`}
-              className="block w-full cursor-pointer"
-              style={{ aspectRatio: '16 / 9', objectFit: 'cover' }}
-              onClick={togglePlay}
-            >
-              {/* mp4 first, and that is a measurement rather than a habit: for
-                  this cut H.264 came out at 1.85MB against VP9's 2.07MB, the
-                  reverse of the ambient loops. The browser takes the first it
-                  can decode, so the smaller file has to be the one listed
-                  first — which is not always the same format. */}
-              {/* One source, measured. At the quality this cut is now shipped
-                  at, H.264 beat VP9 on both axes — 9.3MB at SSIM 0.9977
-                  against 10.0MB at 0.9966 — so a webm would have been a larger
-                  file AND a worse picture, carried for no browser that needs
-                  it. The earlier cut shipped both because VP9 won there; the
-                  answer changes per encode, which is why it gets measured. */}
-              <source src="/media/fintrack-film.mp4" type="video/mp4" />
-            </video>
-
-            {/* Dynamic Telemetry HUD Banner (Active During Playback) */}
-            {playing && (
-              <div className="absolute top-12 left-4 right-4 z-20 flex items-center justify-between pointer-events-none transition-all duration-300">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg backdrop-blur-md border shadow-lg"
-                     style={{ background: 'rgba(15,23,42,0.9)', borderColor: 'rgba(56,189,248,0.4)' }}>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[11px] font-bold text-white tracking-wide uppercase">
-                    Act {currentChapter.id}: {currentChapter.title}
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                    {currentChapter.badge}
-                  </span>
-                </div>
-
-                <div className="px-3 py-1 rounded-lg backdrop-blur-md border text-[11px] font-mono font-bold text-white"
-                     style={{ background: 'rgba(15,23,42,0.9)', borderColor: 'rgba(255,255,255,0.2)' }}>
-                  {currentChapter.metric}
-                </div>
-              </div>
-            )}
-
-            {/* Illuminated Pre-Play Stage (Replaces Dead Black Box) */}
-            {!playing && (
-              <div
-                className="absolute inset-0 top-8 flex flex-col items-center justify-center p-6 text-center z-10 transition-all duration-300"
-                style={{
-                  background: 'radial-gradient(ellipse at center, rgba(15,23,42,0.92) 0%, rgba(9,10,15,0.98) 100%)',
-                }}
-              >
-                {/* Visual Ambient Stage Mockup Header */}
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase mb-3 shadow-sm"
-                     style={{ background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(56,189,248,0.4)', color: '#38bdf8' }}>
-                  <Film size={12} />
-                  {filmLength} Single-Ledger Sandbox Film
-                </div>
-
-                <h3 className="text-lg sm:text-2xl font-extrabold text-white mb-2 tracking-tight max-w-lg">
-                  Watch FinTrack Unify Operations & Capital
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
-                  How one PostgreSQL row synchronizes Invoices, the Status Board, Statutory Tax Escrow, and Studio Vector RAG without spreadsheet reconciliation.
-                </p>
-
-                {/* Primary Kinetic Play Action */}
-                <button
-                  onClick={togglePlay}
-                  className="flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-sm text-white transition-all duration-200 transform hover:scale-105 cursor-pointer shadow-2xl mb-6"
-                  style={{
-                    background: 'linear-gradient(135deg, #2563eb 0%, #0284c7 100%)',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    boxShadow: '0 0 35px rgba(37,99,235,0.6)',
-                  }}
-                >
-                  <Play size={18} fill="#fff" />
-                  <span>Play the {filmLength} film</span>
-                </button>
-
-                {/* Direct Act Preview Badges */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-xl">
-                  {CHAPTERS.map(chap => (
-                    <button
-                      key={chap.id}
-                      onClick={() => seekToChapter(chap)}
-                      className="p-2 rounded-lg border text-left transition-all cursor-pointer hover:border-blue-400/60"
-                      style={{ background: 'rgba(30,41,59,0.7)', borderColor: 'rgba(255,255,255,0.1)' }}
-                    >
-                      <span className="text-[9.5px] font-mono block text-blue-400 font-bold">{chap.tag}</span>
-                      <span className="text-[11px] font-semibold text-slate-200 block truncate">{chap.title}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Integrated Player Control Bar */}
-            <div
-              className={`absolute bottom-0 left-0 right-0 p-3 pt-6 z-20 transition-opacity duration-300 flex flex-col gap-2 ${
-                playing && !hovered ? 'opacity-0 pointer-events-none' : 'opacity-100'
-              }`}
-              style={{
-                background: 'linear-gradient(to top, rgba(9,10,15,0.95) 0%, rgba(9,10,15,0.7) 70%, transparent 100%)',
-              }}
-            >
-              {/* Chapter Scrubber Progress Bar */}
-              <div
-                className="relative h-1.5 w-full bg-slate-700/60 rounded-full overflow-hidden cursor-pointer"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  const pct = (e.clientX - rect.left) / rect.width
-                  if (videoRef.current) {
-                    videoRef.current.currentTime = pct * duration
-                  }
-                }}
-              >
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-sky-400 transition-all duration-100"
-                  style={{ width: `${(currentTime / duration) * 100}%` }}
-                />
-                {[6, 12, 18].map(sec => (
-                  <div
-                    key={sec}
-                    className="absolute top-0 bottom-0 w-0.5 bg-white/40"
-                    style={{ left: `${(sec / 24) * 100}%` }}
-                  />
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between text-white text-xs">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={togglePlay}
-                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                    title={playing ? 'Pause' : 'Play'}
-                  >
-                    {playing ? <Pause size={15} /> : <Play size={15} fill="#fff" />}
-                  </button>
-
-                  <button
-                    onClick={toggleMute}
-                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                    title={muted ? 'Unmute' : 'Mute'}
-                  >
-                    {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-                  </button>
-
-                  <span className="font-mono text-[11px] text-slate-300">
-                    0:{Math.floor(currentTime).toString().padStart(2, '0')} / 0:24
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={cycleSpeed}
-                    className="px-2 py-0.5 rounded text-[10.5px] font-mono font-bold bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
-                    title="Playback Speed"
-                  >
-                    {speed}x
-                  </button>
-
-                  <button
-                    onClick={toggleFullscreen}
-                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                    title="Fullscreen"
-                  >
-                    <Maximize2 size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </figure>
-
-          {/* Chapter Scrubber Navigation Pills */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {CHAPTERS.map(chap => {
-              const isCurrent = currentChapter.id === chap.id
-              return (
-                <button
-                  key={chap.id}
-                  onClick={() => seekToChapter(chap)}
-                  className="p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between"
-                  style={{
-                    background: isCurrent ? 'var(--accent-dim)' : 'var(--card-bg)',
-                    borderColor: isCurrent ? 'var(--accent)' : 'var(--card-border)',
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-mono font-bold text-[var(--accent)]">
-                      {chap.tag} · Act 0{chap.id}
-                    </span>
-                    {isCurrent && playing && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-ping" />
-                    )}
-                  </div>
-                  <span className="text-xs font-bold block text-[var(--text-1)] truncate">
-                    {chap.title}
-                  </span>
-                  <span className="text-[10px] text-[var(--text-3)] block truncate mt-0.5">
-                    {chap.badge}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Deep Sandbox Explanation Card for Active Chapter */}
-          <div className="p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs"
-               style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-            <div className="space-y-1.5 max-w-2xl">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider"
-                      style={{ background: 'var(--accent)' }}>
-                  Act {currentChapter.id} Focus: {currentChapter.tabLabel}
-                </span>
-                <span className="text-[11px] font-mono text-[var(--text-3)]">
-                  Metric: <strong className="text-[var(--text-1)]">{currentChapter.metric}</strong>
-                </span>
-              </div>
-              <p className="text-[11.5px] leading-relaxed text-[var(--text-2)] m-0">
-                <strong className="text-[var(--text-1)]">Problem:</strong> {currentChapter.problem}
-              </p>
-              <p className="text-[11.5px] leading-relaxed text-[var(--text-2)] m-0">
-                <strong className="text-[var(--accent)]">Single-Ledger Solution:</strong> {currentChapter.solution}
-              </p>
-            </div>
-
-            <button
-              onClick={() => scrollToSandbox(currentChapter.tab)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer text-white shadow-sm"
-              style={{ background: 'var(--accent-btn)' }}
-            >
-              <span>Test in Live Sandbox</span>
-              <ArrowUpRight size={14} />
+        {!started && (
+          <div className="ft-h-film-cover">
+            {/* Title and play only: the length is in the button, and the
+                poster is cut above the film's own captions. */}
+            <p className="ft-h-film-title">Delivery and money, one record at a time</p>
+            <button type="button" className="ft-h-film-play" onClick={() => start()}>
+              <span className="ft-h-film-play-ring" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
+              <span>Play the film ({length})</span>
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── MODE 2: Interactive Sandbox Walkthrough Reel ─────────────────── */}
-      {viewMode === 'sandbox-reel' && (
-        <div className="flex flex-col space-y-3">
-          {/* Main Interactive Stage */}
-          <div
-            className="rounded-2xl border overflow-hidden transition-all duration-300"
-            style={{
-              background: 'var(--card-bg)',
-              borderColor: 'var(--card-border)',
-              boxShadow: 'var(--card-shadow)',
-            }}
-          >
-            {/* Top Stage Bar */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b"
-                 style={{ background: 'var(--bg-card-subtle)', borderColor: 'var(--card-border)' }}>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[9.5px] font-extrabold uppercase tracking-wider text-white"
-                      style={{ background: 'var(--accent)' }}>
-                  Module {reelIndex + 1} of {SANDBOX_REEL_STEPS.length}
-                </span>
-                <span className="text-xs font-bold text-[var(--text-1)]">
-                  {activeReelStep.title}
-                </span>
-              </div>
-
-              {/* Progress & Auto-Play Controls */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setReelPlaying(p => !p)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer"
-                  style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-1)' }}
-                  title={reelPlaying ? 'Pause Walkthrough' : 'Auto-Advance Walkthrough'}
-                >
-                  {reelPlaying ? <Pause size={12} /> : <Play size={12} />}
-                  <span className="text-[11px]">{reelPlaying ? 'Pause' : 'Play'}</span>
-                </button>
-
-                <div className="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-all duration-100"
-                    style={{ width: `${reelProgress}%` }}
-                  />
-                </div>
-              </div>
+        {started && (
+          <div className="ft-h-film-bar">
+            <div className="ft-h-film-scrub" role="slider" tabIndex={0}
+                 aria-label="Position in the film"
+                 aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(time)}
+                 aria-valuetext={`${clock(time)} of ${length}`}
+                 onClick={seekBar} onKeyDown={onSeekKey}>
+              <span className="ft-h-film-scrub-fill" style={{ transform: `scaleX(${Math.min(1, time / duration)})` }} />
+              {CHAPTERS.slice(1).map(c => (
+                <span key={c.id} className="ft-h-film-tick" style={{ left: `${(c.start / duration) * 100}%` }} />
+              ))}
             </div>
-
-            {/* Interactive Module Representation Stage */}
-            <div className="p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-[11px] font-mono text-[var(--accent)] font-bold">
-                    {activeReelStep.badge} · {activeReelStep.tabLabel}
-                  </span>
-                  <h4 className="text-base font-extrabold text-[var(--text-1)] m-0">
-                    {activeReelStep.subtitle}
-                  </h4>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-lg font-mono text-xs font-bold border"
-                        style={{ background: 'var(--accent-dim)', borderColor: 'var(--accent-soft)', color: 'var(--accent)' }}>
-                    {activeReelStep.metric}
-                  </span>
-                  <span className="px-3 py-1 rounded-lg font-mono text-xs font-semibold border"
-                        style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}>
-                    {activeReelStep.subMetric}
-                  </span>
-                </div>
-              </div>
-
-              {/* Live Preview Card */}
-              <div className="p-4 rounded-xl border font-mono text-xs overflow-x-auto"
-                   style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-                {activeReelStep.preview.type === 'table' && (
-                  <div className="w-full min-w-[500px]">
-                    <div className="grid grid-cols-5 text-[10px] uppercase font-bold text-[var(--text-3)] pb-2 border-b border-[var(--card-border)] mb-2">
-                      <span>Invoice ID</span>
-                      <span>Client</span>
-                      <span>Gross Amount</span>
-                      <span>10% TDS Isolated</span>
-                      <span>Status</span>
-                    </div>
-                    {activeReelStep.preview.rows.map(r => (
-                      <div key={r.id} className="grid grid-cols-5 py-1.5 border-b border-[var(--card-border)]/50 items-center">
-                        <span className="font-bold text-[var(--text-1)]">{r.id}</span>
-                        <span className="text-[var(--text-2)]">{r.client}</span>
-                        <span className="font-bold text-[var(--text-1)]">{r.amount}</span>
-                        <span className="text-amber-500">{r.tds}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold w-fit ${
-                          r.status === 'Overdue' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'
-                        }`}>
-                          {r.status} ({r.age})
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeReelStep.preview.type === 'kanban' && (
-                  <div className="grid grid-cols-3 gap-3 min-w-[500px]">
-                    {activeReelStep.preview.lanes.map(l => (
-                      <div key={l.name} className="p-3 rounded-lg border bg-[var(--card-bg)] border-[var(--card-border)]">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-xs text-[var(--text-1)]">{l.name}</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-500/10 text-[var(--text-3)]">{l.count}</span>
-                        </div>
-                        <div className="p-2 rounded border border-blue-500/20 bg-blue-500/5 text-[11px]">
-                          <p className="font-semibold text-[var(--text-1)] m-0">{l.item}</p>
-                          <span className="text-[9.5px] text-emerald-400 mt-1 block">⚡ {l.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeReelStep.preview.type === 'rag' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-blue-400 font-semibold">
-                      <Sparkles size={13} />
-                      <span>Natural Query: "{activeReelStep.preview.query}"</span>
-                    </div>
-                    <div className="p-3 rounded-lg border border-blue-500/30 bg-blue-500/5 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                        {activeReelStep.preview.citation} · 94% Semantic Match
-                      </span>
-                      <p className="text-[11.5px] leading-relaxed text-[var(--text-1)] m-0 font-sans">
-                        "{activeReelStep.preview.text}"
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {activeReelStep.preview.type === 'tax' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {activeReelStep.preview.items.map(it => (
-                      <div key={it.label} className="p-2.5 rounded-lg border bg-[var(--card-bg)] border-[var(--card-border)]">
-                        <span className="text-[10px] text-[var(--text-3)] block mb-1">{it.label}</span>
-                        <span className={`text-xs font-bold block ${
-                          it.ringFenced ? 'text-amber-500' : it.spendable ? 'text-emerald-500' : 'text-[var(--text-1)]'
-                        }`}>
-                          {it.value}
-                        </span>
-                        {it.ringFenced && <span className="text-[9px] text-amber-500/80 font-sans">Ring-Fenced in Escrow</span>}
-                        {it.spendable && <span className="text-[9px] text-emerald-500/80 font-sans">Verified True Capital</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeReelStep.preview.type === 'analyst' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-[var(--accent)] font-semibold">
-                      <Code2 size={13} />
-                      <span>User Question: "{activeReelStep.preview.question}"</span>
-                    </div>
-                    <pre className="p-2.5 rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[10.5px] text-sky-300 whitespace-pre-wrap overflow-x-auto m-0">
-                      {activeReelStep.preview.sql}
-                    </pre>
-                    <p className="text-[11px] text-emerald-400 m-0">
-                      <strong>Result:</strong> {activeReelStep.preview.result}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Explainer & Sandbox Navigation Button */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-                <p className="text-xs text-[var(--text-2)] max-w-xl m-0 leading-relaxed">
-                  {activeReelStep.explainer}
-                </p>
-
-                <button
-                  onClick={() => scrollToSandbox(activeReelStep.tab)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer text-white shadow-sm"
-                  style={{ background: 'var(--accent-btn)' }}
-                >
-                  <span>Launch {activeReelStep.tabLabel}</span>
-                  <ArrowUpRight size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom Step Pills */}
-            <div className="flex items-center justify-between px-4 py-2 border-t"
-                 style={{ background: 'var(--bg-card-subtle)', borderColor: 'var(--card-border)' }}>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => {
-                    const prev = (reelIndex - 1 + SANDBOX_REEL_STEPS.length) % SANDBOX_REEL_STEPS.length
-                    setReelIndex(prev)
-                    setReelProgress(0)
-                  }}
-                  className="p-1 rounded border text-[var(--text-2)] hover:text-[var(--text-1)] cursor-pointer"
-                  title="Previous Module"
-                >
-                  <ChevronLeft size={13} />
-                </button>
-
-                {SANDBOX_REEL_STEPS.map((st, idx) => (
-                  <button
-                    key={st.id}
-                    onClick={() => {
-                      setReelIndex(idx)
-                      setReelProgress(0)
-                    }}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-bold border transition-all cursor-pointer ${
-                      idx === reelIndex
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-[var(--card-border)] text-[var(--text-3)] hover:text-[var(--text-1)]'
-                    }`}
-                  >
-                    {idx + 1}. {st.tabLabel}
-                  </button>
-                ))}
-
-                <button
-                  onClick={() => {
-                    const next = (reelIndex + 1) % SANDBOX_REEL_STEPS.length
-                    setReelIndex(next)
-                    setReelProgress(0)
-                  }}
-                  className="p-1 rounded border text-[var(--text-2)] hover:text-[var(--text-1)] cursor-pointer"
-                  title="Next Module"
-                >
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-
-              <span className="text-[10px] font-mono text-[var(--text-3)] hidden sm:inline">
-                Synchronized with demoData.js
-              </span>
+            <div className="ft-h-film-controls">
+              <button type="button" onClick={toggle} aria-label={playing ? 'Pause the film' : 'Play the film'}>
+                {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} fill="currentColor" aria-hidden="true" />}
+              </button>
+              <button type="button" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
+                {muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+              </button>
+              <span className="ft-h-film-time">{clock(time)} / {length}</span>
+              <span className="ft-h-film-now">{current.title}</span>
+              <button type="button" onClick={fullscreen} aria-label="Full screen" className="ml-auto">
+                <Maximize2 size={15} aria-hidden="true" />
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </figure>
+      <p className="text-[12.5px] leading-normal text-[var(--text-3)]">The film, {length} · captured from the sample workspace.</p>
 
-      {/* ── Bottom Reconciled Truth Caption ─────────────────────────────── */}
-      <div className="px-4 py-2.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
-           style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}>
-        <p className="m-0 leading-relaxed text-[11.5px]">
-          Cut directly from FinTrack. Every figure is dynamically computed from our synchronized sample PostgreSQL ledger — zero mockups, zero hallucinated data.
-        </p>
-        <button
-          onClick={() => scrollToSandbox()}
-          className="flex items-center gap-1 font-bold text-[var(--accent)] hover:underline shrink-0 cursor-pointer"
-        >
-          Explore in Live Sandbox <ArrowRight size={13} />
+      {/* Chapters: the way into the film on a phone, where the frame only
+          carries the title and the play button. */}
+      <ol className="grid grid-cols-2 sm:grid-cols-3 gap-2 m-0 p-0 list-none">
+        {CHAPTERS.map(c => {
+          const on = started && current.id === c.id
+          return (
+            <li key={c.id}>
+              <button type="button" aria-current={on ? 'step' : undefined}
+                      className={`flex flex-col gap-0.5 w-full min-h-[64px] px-3 py-2.5 rounded-xl text-left border cursor-pointer transition-colors hover:border-[var(--accent-soft)] ${
+                        on ? 'bg-[var(--accent-dim)] border-[var(--accent)]' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}
+                      onClick={() => start(c.start)}>
+                <span className="font-mono text-[10.5px] font-bold text-[var(--accent-ink)]">{clock(c.start)}</span>
+                <span className="text-[12.5px] font-bold text-[var(--text-1)]">{c.title}</span>
+                <span className="text-[11px] text-[var(--text-3)]">{c.badge}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+
+      <div className="ft-h-film-note">
+        <div className="min-w-0">
+          <p className="ft-h-film-note-k">
+            {current.tabLabel} · <span className="tabular-nums">{current.metric}</span>
+          </p>
+          <p><strong>The problem.</strong> {current.problem}</p>
+          <p><strong>Here.</strong> {current.solution}</p>
+        </div>
+        <button type="button" className="ft-h-film-try" onClick={() => scrollToSandbox(current.tab)}>
+          Try it in the sandbox <ArrowUpRight size={14} aria-hidden="true" />
         </button>
       </div>
+    </div>
+  )
+}
+
+/* ── The walkthrough ──────────────────────────────────────────────────── */
+function Walkthrough() {
+  const auto = useAutoplay({ threshold: 0.25 })
+  const [index, setIndex] = useState(0)
+  const [runKey, setRunKey] = useState(0)
+  const clockRef = useRef({ start: 0, elapsed: 0 })
+  const step = WALKTHROUGH[index]
+
+  const goTo = useCallback((i) => {
+    clockRef.current = { start: 0, elapsed: 0 }
+    setIndex((i + WALKTHROUGH.length) % WALKTHROUGH.length)
+    setRunKey(k => k + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!auto.running) return
+    const c = clockRef.current
+    c.start = performance.now()
+    const t = setTimeout(() => goTo(index + 1), Math.max(0, WALK_MS - c.elapsed))
+    return () => {
+      clearTimeout(t)
+      c.elapsed = Math.min(WALK_MS, c.elapsed + (performance.now() - c.start))
+    }
+  }, [auto.running, index, runKey, goTo])
+
+  const p = step.preview
+  const box = 'rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]'
+  const btn = 'grid place-items-center w-11 h-11 shrink-0 rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-2)] cursor-pointer hover:border-[var(--accent)] hover:text-[var(--accent-ink)]'
+  return (
+    <div ref={auto.ref} className="relative rounded-2xl overflow-hidden border border-[var(--card-border)] bg-[var(--card-bg)]">
+      <div className="relative flex items-center gap-2.5 px-3 py-2.5 border-b border-[var(--card-border)] bg-[var(--bg-input)]">
+        <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider text-white bg-[var(--accent-btn)]">
+          {index + 1} of {WALKTHROUGH.length}
+        </span>
+        <span className="flex-1 min-w-0 truncate text-[13px] font-extrabold text-[var(--text-1)]">{step.title}</span>
+        <button type="button" className={btn} onClick={auto.toggle}
+                aria-label={auto.running ? 'Pause the walkthrough' : 'Play the walkthrough'}>
+          {auto.running ? <Pause size={13} aria-hidden="true" /> : <Play size={13} aria-hidden="true" />}
+        </button>
+        <span className="ft-h-tourbar-track" aria-hidden="true">
+          <span key={`${index}-${runKey}`} className="ft-h-tour-fill"
+                style={{ animationDuration: `${WALK_MS}ms`, animationPlayState: auto.running ? 'running' : 'paused' }} />
+        </span>
+      </div>
+
+      <div key={step.id} className="ft-h-walk-body flex flex-col gap-3 p-3.5">
+        <div className="flex flex-wrap gap-2 text-xs font-bold tabular-nums">
+          <span className="px-2.5 py-1 rounded-lg border border-[var(--accent-soft)] bg-[var(--accent-dim)] text-[var(--accent-ink)]">{step.metric}</span>
+          <span className="px-2.5 py-1 rounded-lg border border-[var(--card-border)] bg-[var(--bg-input)] text-[var(--text-2)]">{step.subMetric}</span>
+        </div>
+
+        <div className="p-3 rounded-xl border border-[var(--card-border)] bg-[var(--bg-input)] overflow-x-auto text-xs text-[var(--text-2)]"
+             style={{ minHeight: 150 }}>
+          {p.type === 'table' && (
+            <table className="ft-h-walk-table w-full">
+              <thead><tr><th>Invoice</th><th>Client</th><th>Pre-tax</th><th>TDS</th><th>Status</th></tr></thead>
+              <tbody>
+                {p.rows.map(r => (
+                  <tr key={r.id}>
+                    <td className="font-bold">{r.id}</td><td>{r.client}</td>
+                    <td className="tabular-nums">{r.amount}</td><td className="tabular-nums">{r.tds}</td>
+                    <td>
+                      <span className="inline-block px-1.5 py-0.5 rounded-md text-[10.5px] font-bold"
+                            style={r.status === 'Overdue'
+                              ? { background: 'color-mix(in srgb, var(--bad) 12%, transparent)', color: 'var(--bad)' }
+                              : { background: 'var(--accent-dim)', color: 'var(--accent-ink, var(--accent))' }}>
+                        {r.status}, {r.age}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {p.type === 'kanban' && (
+            <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(3, minmax(150px, 1fr))' }}>
+              {p.lanes.map(l => (
+                <div key={l.name}>
+                  <p className="flex justify-between mb-1.5 text-[var(--text-1)]"><strong>{l.name}</strong> <span>{l.count}</span></p>
+                  <div className={`${box} px-2.5 py-2 text-[var(--text-1)]`}>
+                    <span className="block font-semibold">{l.item}</span>
+                    <span className="block tabular-nums mt-0.5 text-[11.5px] text-[var(--text-3)]">{l.note}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {p.type === 'tax' && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {p.items.map(it => (
+                <div key={it.label} className={`${box} px-2.5 py-2 text-[11px] text-[var(--text-3)]`}>
+                  <span className="block">{it.label}</span>
+                  <strong className="block tabular-nums my-0.5 text-sm" style={{ color: it.strong ? 'var(--ok)' : 'var(--text-1)' }}>{it.value}</strong>
+                  {it.note && <span className="block">{it.note}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {p.type === 'analyst' && (
+            <div>
+              <p className="font-semibold text-[var(--text-1)]">“{p.question}”</p>
+              <pre className={`${box} my-2 p-2.5 text-[11px] leading-relaxed font-mono whitespace-pre overflow-x-auto text-[var(--text-2)]`}>{p.sql}</pre>
+              <p className="tabular-nums text-[var(--text-1)]">{p.result}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="ft-h-film-note">
+          <p>{step.explainer}</p>
+          <button type="button" className="ft-h-film-try" onClick={() => scrollToSandbox(step.tab)}>
+            Open {step.tabLabel} <ArrowUpRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 px-3 pt-2 pb-3 overflow-x-auto">
+        <button type="button" className={btn} onClick={() => goTo(index - 1)} aria-label="Previous">
+          <ChevronLeft size={15} aria-hidden="true" />
+        </button>
+        {WALKTHROUGH.map((st, i) => (
+          <button key={st.id} type="button" aria-pressed={i === index} onClick={() => goTo(i)}
+                  className={`shrink-0 min-h-[32px] px-2.5 rounded-lg border text-[11.5px] font-bold cursor-pointer ${
+                    i === index ? 'bg-[var(--accent-btn)] border-[var(--accent)] text-white'
+                                : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-2)]'}`}>
+            {st.tabLabel}
+          </button>
+        ))}
+        <button type="button" className={btn} onClick={() => goTo(index + 1)} aria-label="Next">
+          <ChevronRight size={15} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function ProductFilm() {
+  const [mode, setMode] = useState('film')
+  const length = clock(CHAPTERS.at(-1).end, true)
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="inline-flex self-start gap-1 p-1 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]"
+           role="group" aria-label="Watch or read">
+        {[['film', <Film key="i" size={14} aria-hidden="true" />, `Film (${length})`],
+          ['walk', <BookOpen key="i" size={14} aria-hidden="true" />, 'Walkthrough']].map(([id, icon, label]) => (
+          <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)}
+                  className={`inline-flex items-center gap-1.5 min-h-[36px] px-3.5 rounded-lg text-[12.5px] font-bold cursor-pointer ${
+                    mode === id ? 'bg-[var(--accent-btn)] text-white' : 'text-[var(--text-2)]'}`}>
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'film' ? <FilmPlayer /> : <Walkthrough />}
+
+      <p className="text-[12.5px] leading-normal text-[var(--text-3)]">
+        Figures computed in your browser from the same sample data the sandbox uses.{' '}
+        <button type="button" onClick={() => scrollToSandbox()} className="font-bold underline underline-offset-2 cursor-pointer text-[var(--accent-ink)]">
+          Open the sandbox
+        </button>
+      </p>
     </div>
   )
 }

@@ -1,291 +1,172 @@
+/**
+ * How a change in your base reaches the mirror, one sample event at a time.
+ *
+ * Everything here mirrors backend/app/db/sync.py and routers/webhooks.py:
+ *
+ *   - three routes feed the mirror: a webhook the base sends when a record
+ *     changes, an incremental pass every 30 seconds (the 200 most recently
+ *     modified records per table), and a full pass every 5 minutes (every
+ *     record, which is how a deletion is noticed);
+ *   - all three end in the same comparison against the stored row, so the
+ *     result does not depend on which route arrived first;
+ *   - a copy whose lastModifiedTime is older than the stored one is left
+ *     alone, which is what stops a late webhook undoing a newer save;
+ *   - a record missing from the full pass is marked deleted, not removed, so
+ *     its history survives.
+ *
+ * The invoice is from the sandbox ledger (demoData) and nothing is sent
+ * anywhere. Pressing an event runs it: a marker crosses the four stages and
+ * each one lights as it is reached, then the statement and the history line
+ * appear. Under reduced motion the result is simply shown.
+ */
 import { useState } from 'react'
-import {
-  Database, RefreshCw, Zap,
-  Server, Code2, Play, Layers, Sliders, Activity, Check
-} from 'lucide-react'
-import { useTilt } from '../hooks/useTilt'
-import LoopVideo from './LoopVideo'
+import { Database, Webhook, Timer, RefreshCw, GitCompareArrows, Server, History } from 'lucide-react'
+import { useReveal } from '../hooks/useReveal'
+import { useInk } from '../hooks/useInk'
+import { INVOICES, inr } from './demoData'
 
-const SAMPLE_PAYLOADS = [
+const PAID = INVOICES.find(i => i.id === 'INV-2340') || INVOICES[0]
+const GONE = INVOICES.find(i => i.id === 'INV-2308') || INVOICES[1]
+
+const ROUTES = [
+  { id: 'webhook', icon: Webhook, label: 'Webhook', when: 'on each change' },
+  { id: 'incremental', icon: Timer, label: 'Incremental', when: 'every 30 s' },
+  { id: 'full', icon: RefreshCw, label: 'Full pass', when: 'every 5 min' },
+]
+
+const EVENTS = [
   {
-    id: 'pkt_1',
-    event: 'invoices.updated',
-    record: 'INV-2026-084',
-    client: 'Acme Studio',
-    amount: '₹4,50,000',
-    field: 'payment_status -> Paid',
-    sql: 'UPDATE invoices_mirror SET payment_status = $1, paid_on = $2 WHERE id = $3 RETURNING id;',
-    latency: '8.4ms',
+    id: 'paid',
+    label: 'An invoice is marked paid',
+    inv: PAID,
+    change: ['Payment Status', 'Sent', 'Paid'],
+    route: 'webhook',
+    routeNote: 'The base posts the changed record as soon as it is saved.',
+    check: 'Fields differ from the stored row',
+    outcome: 'Row updated',
+    tone: 'ok',
+    row: 'Paid',
+    sql: 'UPDATE invoices_mirror\n   SET synced_at = NOW(), deleted_at = NULL,\n       fields = $1::jsonb, payment_status = $2, …\n WHERE teable_id = $9',
+    history: 'Change history gets one line: Payment Status, Sent → Paid.',
   },
   {
-    id: 'pkt_2',
-    event: 'projects.margin_recalc',
-    record: 'PROJ-BRAND-09',
-    client: 'Starlight Media',
-    amount: '₹12,80,000',
-    field: 'actual_cost -> ₹7,20,000',
-    sql: 'SELECT p.id, p.billed, p.cost, ROUND(((p.billed - p.cost)::numeric / p.billed) * 100) AS margin FROM projects_mirror p WHERE p.id = $1;',
-    latency: '11.2ms',
+    id: 'late',
+    label: 'An older copy arrives late',
+    inv: PAID,
+    change: ['Payment Status', 'Paid', 'Sent'],
+    route: 'incremental',
+    routeNote: 'The 30-second pass picks up a copy taken before the save.',
+    check: 'This copy is older than the stored row',
+    outcome: 'Left alone',
+    tone: 'hold',
+    row: 'Paid',
+    sql: '-- no statement: the copy\'s lastModifiedTime is\n-- earlier than the stored row\'s, so nothing is written',
+    history: 'Nothing is written. A late copy cannot undo a newer save.',
   },
   {
-    id: 'pkt_3',
-    event: 'tax.tds_withheld',
-    record: 'INV-2026-091',
-    client: 'Nexus Global',
-    amount: '₹8,90,000',
-    field: 'tds_rate -> 10% (194J)',
-    sql: 'SELECT gross_amount, (gross_amount * 0.18) AS gst, (gross_amount * 0.10) AS tds_withheld FROM invoices_mirror WHERE id = $1;',
-    latency: '6.9ms',
+    id: 'deleted',
+    label: 'A record is deleted in the base',
+    inv: GONE,
+    change: ['Record', 'present', 'deleted'],
+    route: 'full',
+    routeNote: 'The 5-minute pass reads every record, so a missing one is noticed.',
+    check: 'Missing from the full set of records',
+    outcome: 'Marked deleted',
+    tone: 'gone',
+    row: 'Hidden from lists',
+    sql: 'UPDATE invoices_mirror\n   SET synced_at = NOW(), deleted_at = NOW()\n WHERE teable_id = $1',
+    history: 'The row is kept, so its change history still reads end to end.',
   },
 ]
 
+const STAGES = [
+  { icon: Database, label: 'Your base' },
+  { icon: null, label: 'Route' },
+  { icon: GitCompareArrows, label: 'Compared' },
+  { icon: Server, label: 'Postgres mirror' },
+]
+
 export default function SyncPipelineSimulator() {
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [activeMedia, setActiveMedia] = useState('simulator') // 'simulator' | 'blueprint'
-  const cardTilt = useTilt({ max: 2.5 })
+  const ref = useReveal({ threshold: 0.2 })
+  const [at, setAt] = useState(0)
+  const [run, setRun] = useState(0)
+  const ink = useInk(at)
+  const ev = EVENTS[at]
+  const route = ROUTES.find(r => r.id === ev.route)
+  const RouteIcon = route.icon
 
-  const pkt = SAMPLE_PAYLOADS[activeIdx]
-
-  const triggerSync = (idx) => {
-    setActiveIdx(idx)
-    setIsSyncing(true)
-    setTimeout(() => {
-      setIsSyncing(false)
-    }, 600)
-  }
+  const fire = (i) => { setAt(i); setRun(n => n + 1) }
 
   return (
-    <div
-      ref={cardTilt}
-      className="rounded-xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
-      style={{
-        background: 'var(--card-bg)',
-        border: '1px solid var(--card-border)',
-        boxShadow: 'var(--card-shadow)',
-      }}
-    >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
-            <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
-            Zero-Migration Realtime Pipeline Telemetry
-          </div>
-          <h3 className="ft-display text-xl sm:text-2xl" style={{ color: 'var(--text-1)' }}>
-            How records sync from your source to Postgres and SQL
-          </h3>
-          <p className="text-xs sm:text-sm mt-1" style={{ color: 'var(--text-2)' }}>
-            Your primary base stays untouched. Changes propagate into the local mirror in under 12ms.
-          </p>
-        </div>
-
-        {/* View Switcher */}
-        <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          <button
-            onClick={() => setActiveMedia('simulator')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
-            style={{
-              background: activeMedia === 'simulator' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'simulator' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'simulator' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Sliders size={13} />
-            Pipeline Simulator
-          </button>
-          <button
-            onClick={() => setActiveMedia('blueprint')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
-            style={{
-              background: activeMedia === 'blueprint' ? 'var(--card-bg)' : 'transparent',
-              color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
-              boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-            }}
-          >
-            <Layers size={13} />
-            3D Pipeline Flow
-          </button>
-        </div>
+    <div ref={ref} className="ft-s-sim" data-hold="">
+      <div className="ft-s-sim-head">
+        <p className="ft-s-kicker">Sample events · nothing is sent anywhere</p>
+        <h3 className="ft-display">How a change in your base reaches the mirror</h3>
+        <p>
+          Three routes keep the mirror current, and all three end in the same
+          comparison with the row already stored. Pick an event to run it.
+        </p>
       </div>
 
-      {activeMedia === 'simulator' ? (
-        <div className="space-y-6">
-          {/* Sample Packet Selector */}
-          <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border"
-               style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-3)] mr-2 flex items-center gap-1">
-              <Play size={12} className="text-[var(--accent)]" /> Fire Sample Ingest Event:
-            </span>
-            {SAMPLE_PAYLOADS.map((p, i) => (
-              <button
-                key={p.id}
-                onClick={() => triggerSync(i)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
-                style={{
-                  background: activeIdx === i ? 'var(--accent)' : 'var(--card-bg)',
-                  borderColor: activeIdx === i ? 'var(--accent)' : 'var(--card-border)',
-                  color: activeIdx === i ? '#fff' : 'var(--text-2)',
-                }}
-              >
-                {p.event} ({p.record})
-              </button>
-            ))}
-          </div>
+      <div ref={ink} className="ft-m-ink ft-s-sim-events" role="group" aria-label="Sample events">
+        {EVENTS.map((e, i) => (
+          <button key={e.id} type="button" aria-pressed={i === at} onClick={() => fire(i)}>
+            {e.label}
+          </button>
+        ))}
+        <span className="ft-m-ink-bar ft-m-ink-pill" aria-hidden="true" />
+      </div>
 
-          {/* 3-Stage Pipeline Diagram */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative">
-            {/* Stage 1: Ingest */}
-            <div className="p-5 rounded-2xl border flex flex-col justify-between"
-                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-3)]">
-                    Step 1 · Source Event
-                  </span>
-                  <Database size={16} className="text-[var(--accent)]" />
-                </div>
-                <h4 className="font-bold text-sm text-[var(--text-1)] mb-1">
-                  Webhook Ingestion
-                </h4>
-                <p className="text-xs text-[var(--text-2)] mb-3">
-                  Changes received from primary data source or native CRM base.
-                </p>
-              </div>
-              <div className="p-2 rounded-xl border text-[11px] font-mono bg-[var(--card-bg)] border-[var(--card-border)] flex items-center justify-between">
-                <span className="text-[var(--text-3)]">Payload ID:</span>
-                <span className="text-[var(--accent)] font-bold">{pkt.id}</span>
-              </div>
-            </div>
-
-            {/* Stage 2: Transform & Validate */}
-            <div className="p-5 rounded-2xl border flex flex-col justify-between"
-                 style={{
-                   background: isSyncing ? 'var(--accent-dim)' : 'var(--bg-input)',
-                   borderColor: isSyncing ? 'var(--accent)' : 'var(--card-border)',
-                   transition: 'all 300ms ease',
-                 }}>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-3)]">
-                    Step 2 · Transform & Scoping
-                  </span>
-                  <Zap size={16} className={isSyncing ? 'text-[var(--accent)] animate-pulse' : 'text-amber-500'} />
-                </div>
-                <h4 className="font-bold text-sm text-[var(--text-1)] mb-1">
-                  Schema Mirroring
-                </h4>
-                <p className="text-xs text-[var(--text-2)] mb-3">
-                  Normalizes payloads into strongly-typed relational tuples.
-                </p>
-              </div>
-              <div className="p-2 rounded-xl border text-[11px] font-mono bg-[var(--card-bg)] border-[var(--card-border)] flex items-center justify-between">
-                <span className="text-[var(--text-3)]">Transit Latency:</span>
-                <span className="text-emerald-500 font-bold">{pkt.latency}</span>
-              </div>
-            </div>
-
-            {/* Stage 3: Local Postgres Mirror */}
-            <div className="p-5 rounded-2xl border flex flex-col justify-between"
-                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-3)]">
-                    Step 3 · Local Postgres
-                  </span>
-                  <Server size={16} className="text-emerald-500" />
-                </div>
-                <h4 className="font-bold text-sm text-[var(--text-1)] mb-1">
-                  Deterministic SQL
-                </h4>
-                <p className="text-xs text-[var(--text-2)] mb-3">
-                  Session scope injected before compile. Model never writes freeform SQL.
-                </p>
-              </div>
-              <div className="p-2 rounded-xl border text-[11px] font-mono bg-[var(--card-bg)] border-[var(--card-border)] flex items-center justify-between">
-                <span className="text-[var(--text-3)]">Audit Status:</span>
-                <span className="text-emerald-500 font-bold">100% Attributed</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Compiled SQL Inspector */}
-          <div className="p-4 rounded-2xl border" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
-                <Code2 size={13} className="text-[var(--accent)]" /> Compiled Parameterized SQL Statement
+      <ol className="ft-s-sim-flow" key={run}>
+        {STAGES.map((s, i) => {
+          const Icon = i === 1 ? RouteIcon : s.icon
+          return (
+            <li key={i} className="ft-s-sim-stage" style={{ '--i': i }}>
+              <span className="ft-s-sim-step">
+                <Icon size={14} aria-hidden="true" />
+                {i + 1}. {i === 1 ? route.label : s.label}
               </span>
-              <span className="text-[10px] font-mono text-[var(--text-3)]">
-                Target: invoices_mirror (Read-Replica)
-              </span>
-            </div>
-            <pre className="p-3 rounded-xl bg-slate-950 text-slate-200 text-xs font-mono overflow-x-auto border border-slate-800 m-0">
-              <code>{pkt.sql}</code>
-            </pre>
-          </div>
-        </div>
-      ) : (
-        /* 3D Telemetry Flow Dual-Pane Presentation */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          {/* Left Column: Pipeline Architecture Specs */}
-          <div className="lg:col-span-6 flex flex-col justify-between">
-            <div className="mb-4">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
-                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
-                <Activity size={12} />
-                Real-Time Ingestion Architecture
-              </div>
-              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
-                Zero-migration read replica with sub-12ms sync telemetry
-              </h4>
-              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
-                Your source tables and records stay pristine. Incremental CDC events sync to an encrypted local Postgres read-replica in milliseconds.
-              </p>
+              {i === 0 && (
+                <>
+                  <span className="ft-s-sim-id">{ev.inv.id} · {ev.inv.client}</span>
+                  <span className="ft-s-sim-change">
+                    {ev.change[0]}: <s>{ev.change[1]}</s> → <b>{ev.change[2]}</b>
+                  </span>
+                </>
+              )}
+              {i === 1 && (
+                <>
+                  <span className="ft-s-sim-routes" aria-hidden="true">
+                    {ROUTES.map(r => (
+                      <span key={r.id} data-on={r.id === ev.route ? '' : undefined}>{r.when}</span>
+                    ))}
+                  </span>
+                  <span className="ft-s-sim-note">{ev.routeNote}</span>
+                </>
+              )}
+              {i === 2 && <span className="ft-s-sim-note ft-s-sim-check">{ev.check}</span>}
+              {i === 3 && (
+                <>
+                  <span className="ft-s-sim-outcome" data-tone={ev.tone}>{ev.outcome}</span>
+                  <span className="ft-s-sim-row" data-tone={ev.tone}>
+                    <span>{ev.inv.id}</span>
+                    <span className="tabular-nums">{inr(ev.inv.amount)}</span>
+                    <span>{ev.row}</span>
+                  </span>
+                </>
+              )}
+              {i < 3 && <span className="ft-s-sim-link" aria-hidden="true"><i /></span>}
+            </li>
+          )
+        })}
+      </ol>
 
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
-                {[
-                  'Zero data migration or schema mutation',
-                  'Sub-12ms incremental replication latency',
-                  'Row-level transactional consistency',
-                  'Dead-letter retry queues with automatic fallback',
-                ].map(h => (
-                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
-                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
-                    <span>{h}</span>
-                  </li>
-                ))}
-              </ul>
+      <p className="sr-only" role="status">{run ? `${ev.label}: ${ev.outcome.toLowerCase()}.` : ''}</p>
 
-              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
-                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Replication Lag</span>
-                  <span className="font-extrabold text-sm text-[var(--accent)]">&lt; 12ms</span>
-                </div>
-                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Data Integrity</span>
-                  <span className="font-extrabold text-sm text-emerald-500">100% ACID</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Framed 3D Render Loop */}
-          <div className="lg:col-span-6 flex items-center justify-center">
-            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
-                 style={{
-                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
-                   border: '1px solid rgba(255,255,255,0.1)',
-                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
-                 }}>
-              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
-                <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="w-full h-full object-cover rounded-lg" />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="ft-s-sim-out" key={`o${run}`}>
+        <pre className="ft-s-sim-sql"><code>{ev.sql}</code></pre>
+        <p className="ft-s-sim-hist"><History size={14} aria-hidden="true" />{ev.history}</p>
+      </div>
     </div>
   )
 }

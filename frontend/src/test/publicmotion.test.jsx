@@ -3,19 +3,29 @@
  *
  * Two kinds of guard. The first renders the shared building blocks and checks
  * the attributes the CSS keys on. The second scans every public page for
- * `ft-*` classes and asserts each one has a rule in index.css — because
+ * `ft-*` classes and asserts each one has a rule in index.css or in a
+ * stylesheet under src/styles — because
  * `ft-cta-link` shipped on /how-it-works with no CSS behind it at all, and a
  * class with no rule is a motion that silently never happens.
  */
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Stagger, Rule, PageHead } from '../components/PublicBits'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const CSS = readFileSync(join(ROOT, 'index.css'), 'utf8')
+// index.css plus every stylesheet under src/styles (the motion system and
+// each public page's own file), read at test time so a new file is covered
+// the moment it exists.
+const STYLES = join(ROOT, 'styles')
+const CSS = [
+  readFileSync(join(ROOT, 'index.css'), 'utf8'),
+  ...(existsSync(STYLES)
+    ? readdirSync(STYLES).filter(n => n.endsWith('.css')).sort().map(n => readFileSync(join(STYLES, n), 'utf8'))
+    : []),
+].join('\n')
 
 describe('public building blocks', () => {
   it('Stagger keeps list semantics and carries the class the CSS keys on', () => {
@@ -39,6 +49,7 @@ describe('public building blocks', () => {
 })
 
 function walk(dir, out = []) {
+  if (!existsSync(dir)) return out
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
     if (statSync(p).isDirectory()) walk(p, out)
@@ -52,7 +63,14 @@ describe('every ft- class used on the public pages has a rule', () => {
     ...walk(join(ROOT, 'pages/public')),
     join(ROOT, 'pages/Landing.jsx'), join(ROOT, 'pages/Features.jsx'), join(ROOT, 'pages/Security.jsx'),
     join(ROOT, 'components/PublicBits.jsx'), join(ROOT, 'components/PublicLayout.jsx'),
-  ]
+    join(ROOT, 'components/MegaNav.jsx'), join(ROOT, 'components/CommandPalette.jsx'),
+    join(ROOT, 'components/LandingVisuals.jsx'),
+    ...walk(join(ROOT, 'components/motion')),
+    ...walk(join(ROOT, 'components/home')),
+    ...walk(join(ROOT, 'components/features')),
+    ...walk(join(ROOT, 'components/secondary')),
+    join(ROOT, 'components/LoginShowcase.jsx'), join(ROOT, 'pages/Login.jsx'),
+  ].filter(f => existsSync(f))
   const used = new Set()
   for (const f of files) {
     const src = readFileSync(f, 'utf8')

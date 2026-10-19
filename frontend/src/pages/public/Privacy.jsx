@@ -1,95 +1,48 @@
-import PublicLayout from '../../components/PublicLayout'
-import { Reveal } from '../../components/PublicBits'
-import { ShieldCheck } from 'lucide-react'
-import { Link } from 'react-router-dom'
+/**
+ * Privacy Policy. The text below is the policy as written; only its frame
+ * (title, landmarks, contents list) lives in LegalPage.
+ */
+import LegalPage from '../../components/secondary/LegalPage'
+
+const META = {
+  title: "Privacy policy — FinTrack",
+  description: "How FinTrack isolates your data, what it records, and why your records are never used to train AI models.",
+  path: '/privacy',
+}
+
+const SECTIONS = [
+  {
+    heading: "1. Zero Foundation Model Training Guarantee",
+    body: "Your proprietary business documents, invoices, client contracts, Master Services Agreements (MSAs), Statements of Work (SOWs), and tax records are strictly confidential. FinTrack does not, and will never, use customer data, uploaded contract vectors, or ledger entries to train, fine-tune, or improve public AI foundation models.",
+  },
+  {
+    heading: "2. Vector Embeddings & Document Isolation",
+    body: "When documents are indexed in FinTrack Studio, 768-dimension vector embeddings generated for semantic retrieval (RAG) are stored strictly within the tenant's isolated pgvector namespace. Document chunks are cited with deterministic page and paragraph offsets and are inaccessible across tenant boundaries.",
+  },
+  {
+    heading: "3. Encryption in Transit and at Rest",
+    body: "All customer ledger databases, file storage buckets, and document stores are encrypted at rest using AES-256. All communications between user browsers, API gateways, and microservices are secured using TLS 1.3 with Perfect Forward Secrecy (PFS).",
+  },
+  {
+    heading: "4. Telemetry, Tracking & Third-Party Sharing",
+    body: "FinTrack does not sell, broker, or monetize user data. Public analytics are strictly limited to anonymized operational performance indicators (e.g. Core Web Vitals, API latency). We do not embed third-party advertising trackers or invasive behavioral tracking pixels into authenticated application workspaces.",
+  },
+  {
+    heading: "5. Statutory Tax Data & Form 26AS Privacy",
+    body: "Statutory GST and TDS withholding entries, taxpayer identification numbers (PAN/GSTIN), and invoice reconciliation summaries are processed solely for the subscriber's statutory reporting (e.g., GSTR-1 preparation, 26AS matching) and are never disclosed to third parties without organizational authorization.",
+  },
+  {
+    heading: "6. Data Sovereignty & Self-Hosting",
+    body: "Organizations requiring complete physical data sovereignty may deploy FinTrack on self-hosted infrastructure (bare metal, private VPC, or sovereign Kubernetes clusters) using our Docker and Helm deployment packages. In self-hosted configurations, 100% of data remains on subscriber hardware.",
+  },
+]
+
+const LINKS = [{ to: '/terms', label: "Terms of service →" }, { to: '/security', label: "Security and access →" }]
 
 export default function Privacy() {
   return (
-    <PublicLayout>
-      <main className="flex-1 mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full" style={{ maxWidth: 880 }}>
-        {/* Header */}
-        <Reveal className="border-b pb-6 mb-8" style={{ borderColor: 'var(--card-border)' }}>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-3"
-               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
-            <ShieldCheck size={13} />
-            Data Protection & Zero-Telemetry Architecture
-          </div>
-          <h1 className="ft-display text-2xl sm:text-3xl font-bold tracking-tight mb-2" style={{ color: 'var(--text-1)' }}>
-            Privacy Policy
-          </h1>
-          <p className="text-xs sm:text-sm font-mono" style={{ color: 'var(--text-3)' }}>
-            Effective Date: January 1, 2026 · FinTrack Financial Operating System · Version 2.8.4
-          </p>
-        </Reveal>
-
-        {/* Legal Body */}
-        <div className="space-y-8 text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              1. Zero Foundation Model Training Guarantee
-            </h2>
-            <p>
-              Your proprietary business documents, invoices, client contracts, Master Services Agreements (MSAs), Statements of Work (SOWs), and tax records are strictly confidential. FinTrack does not, and will never, use customer data, uploaded contract vectors, or ledger entries to train, fine-tune, or improve public AI foundation models.
-            </p>
-          </Reveal>
-
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              2. Vector Embeddings & Document Isolation
-            </h2>
-            <p>
-              When documents are indexed in FinTrack Studio, 768-dimension vector embeddings generated for semantic retrieval (RAG) are stored strictly within the tenant's isolated pgvector namespace. Document chunks are cited with deterministic page and paragraph offsets and are inaccessible across tenant boundaries.
-            </p>
-          </Reveal>
-
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              3. Encryption in Transit and at Rest
-            </h2>
-            <p>
-              All customer ledger databases, file storage buckets, and document stores are encrypted at rest using AES-256. All communications between user browsers, API gateways, and microservices are secured using TLS 1.3 with Perfect Forward Secrecy (PFS).
-            </p>
-          </Reveal>
-
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              4. Telemetry, Tracking & Third-Party Sharing
-            </h2>
-            <p>
-              FinTrack does not sell, broker, or monetize user data. Public analytics are strictly limited to anonymized operational performance indicators (e.g. Core Web Vitals, API latency). We do not embed third-party advertising trackers or invasive behavioral tracking pixels into authenticated application workspaces.
-            </p>
-          </Reveal>
-
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              5. Statutory Tax Data & Form 26AS Privacy
-            </h2>
-            <p>
-              Statutory GST and TDS withholding entries, taxpayer identification numbers (PAN/GSTIN), and invoice reconciliation summaries are processed solely for the subscriber's statutory reporting (e.g., GSTR-1 preparation, 26AS matching) and are never disclosed to third parties without organizational authorization.
-            </p>
-          </Reveal>
-
-          <Reveal className="space-y-2">
-            <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>
-              6. Data Sovereignty & Self-Hosting
-            </h2>
-            <p>
-              Organizations requiring complete physical data sovereignty may deploy FinTrack on self-hosted infrastructure (bare metal, private VPC, or sovereign Kubernetes clusters) using our Docker and Helm deployment packages. In self-hosted configurations, 100% of data remains on subscriber hardware.
-            </p>
-          </Reveal>
-        </div>
-
-        {/* Footer Navigation */}
-        <div className="mt-12 pt-6 border-t flex items-center justify-between flex-wrap gap-4"
-             style={{ borderColor: 'var(--card-border)' }}>
-          <Link to="/terms" className="text-xs font-semibold text-[var(--accent)] hover:underline">
-            ← Review our Terms of Service
-          </Link>
-          <Link to="/security" className="text-xs font-semibold text-[var(--accent)] hover:underline">
-            Explore Security Architecture & RBAC →
-          </Link>
-        </div>
-      </main>
-    </PublicLayout>
+    <LegalPage meta={META} title="Privacy Policy"
+               stamp="Effective Date: January 1, 2026 · FinTrack Financial Operating System · Version 2.8.4"
+               sections={SECTIONS} links={LINKS} />
   )
 }

@@ -35,10 +35,10 @@ const ROUTES = [
   ['/features',     'Features',      'Eleven modules on one set of records: invoices with ageing bands, projects and margin, GST and TDS ledger, analytics, reports, document search and an AI financial query engine.'],
   ['/security',     'Security',      'Invitation-only access with administrator approval, permissions down to the action, data scoped at the query, and every request recorded.'],
   ['/how-it-works', 'How It Works',  'FinTrack sits on the records your team already keeps, mirrors them into Postgres for speed, and compiles plain-language questions into SQL you can read.'],
-  ['/customise',    'Customise',     'Per-person permissions, brand colours, your own domain and invoice numbering, and modules built for your process.'],
+  ['/customise',    'Customise',     'Per-person permissions, a dedicated deployment on your own cloud, and modules built for your process.'],
   ['/faq',          'FAQ',           'Answers about how FinTrack handles invoices, GST and TDS, where your data lives, how the AI analyst works, and getting started.'],
-  ['/terms',        'Terms of Service', 'FinTrack platform terms of service, governance, and institutional SLA.'],
-  ['/privacy',      'Privacy Policy',   'FinTrack data isolation, zero foundation model training guarantee, and privacy policy.'],
+  ['/terms',        'Terms of Service', 'The terms that govern use of the FinTrack platform.'],
+  ['/privacy',      'Privacy Policy',   'How FinTrack isolates your data, what it records, and why your records are never used to train AI models.'],
   ['/',             'Dashboard',     'Receivables, project health and invoice activity at a glance.'],
 ]
 

@@ -1,11 +1,51 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock, Moon, Sun } from 'lucide-react'
 import BrandMark from '../components/BrandMark'
 import LoginShowcase from '../components/LoginShowcase'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { useTilt } from '../hooks/useTilt'
 import { api } from '../services/api'
+import '../styles/public-secondary-login.css'
+
+/* Which sign-in providers this deployment offers, remembered for the tab's
+   session. The buttons arrive after a round trip; without an answer to hand
+   the form either reserves their space or jumps when they land. With the
+   cached answer it renders the right thing at once, and a cached "none"
+   reserves nothing. */
+const PROVIDERS_KEY = 'ft-providers'
+function readProviders() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(PROVIDERS_KEY) || 'null')
+    return v && typeof v === 'object' ? { google: !!v.google, zoho: !!v.zoho } : null
+  } catch { return null }
+}
+function writeProviders(v) {
+  try { sessionStorage.setItem(PROVIDERS_KEY, JSON.stringify(v)) } catch {}
+}
+
+/* The standard marks for the two sign-in buttons. */
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+      <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/>
+    </svg>
+  )
+}
+function ZohoMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <rect x="1" y="1" width="8" height="8" rx="2" fill="#E42527" />
+      <rect x="11" y="1" width="8" height="8" rx="2" fill="#089949" />
+      <rect x="1" y="11" width="8" height="8" rx="2" fill="#226DB4" />
+      <rect x="11" y="11" width="8" height="8" rx="2" fill="#F9B21D" />
+    </svg>
+  )
+}
 
 /* Four independent qualities, so the meter says what is missing rather
    than grading on length alone. Only shown where a password is being set. */
@@ -59,8 +99,11 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mailing, setMailing] = useState(false)
-  const [googleEnabled, setGoogleEnabled] = useState(false)
-  const [zohoEnabled,   setZohoEnabled]   = useState(false)
+  // null until known: the form reserves the providers' space meanwhile.
+  const [providers, setProviders] = useState(readProviders)
+  const googleEnabled = !!providers?.google
+  const zohoEnabled = !!providers?.zoho
+  const theme = useTheme()
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingApproval, setPendingApproval] = useState(false)
@@ -87,20 +130,24 @@ export default function Login() {
     }
   }, [sessionReason])
 
+  // Focus the first field, except on a touch screen, where focusing raises
+  // the keyboard over the form before anyone has asked to type.
   useEffect(() => {
-    if (!oauthToken) inputRef.current?.focus()
+    if (oauthToken) return
+    if (window.matchMedia?.('(pointer: coarse)').matches) return
+    inputRef.current?.focus()
   }, [oauthToken])
 
   useEffect(() => {
     let cancelled = false
     api.auth.providers()
       .then((res) => {
-        if (!cancelled) {
-          setGoogleEnabled(Boolean(res?.google))
-          setZohoEnabled(Boolean(res?.zoho))
-        }
+        if (cancelled) return
+        const v = { google: Boolean(res?.google), zoho: Boolean(res?.zoho) }
+        setProviders(v)
+        writeProviders(v)
       })
-      .catch(() => { if (!cancelled) { setGoogleEnabled(false); setZohoEnabled(false) } })
+      .catch(() => { if (!cancelled) setProviders({ google: false, zoho: false }) })
     return () => { cancelled = true }
   }, [])
 
@@ -324,14 +371,20 @@ export default function Login() {
 
   return (
     <div ref={pageLight} className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      {theme && (
+        <button type="button" onClick={theme.toggle} className="ft-s-theme"
+                aria-label={theme.dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {theme.dark ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
+        </button>
+      )}
       <div className="w-full flex items-center justify-center gap-12 xl:gap-20" style={{ maxWidth: 1180 }}>
       {!resetToken && <LoginShowcase />}
 
       {/* The column arrives in order: way back, mark, card, footnote. */}
       <div className="w-full max-w-sm ft-login-enter">
 
-        <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-5"
-              style={{ color: 'var(--text-3)', textDecoration: 'none' }}>
+        <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-3"
+              style={{ color: 'var(--text-3)', textDecoration: 'none', minHeight: 32 }}>
           <ArrowLeft size={13} aria-hidden="true" /> Back to overview
         </Link>
 
@@ -375,54 +428,57 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4 ft-stagger-in">
-            {(googleEnabled || zohoEnabled) && !resetToken && !registerMode && !legacyMode && (
+            {!resetToken && !registerMode && !legacyMode && (providers === null || googleEnabled || zohoEnabled) && (
               <>
-                <div className="flex flex-col gap-2">
-                  {googleEnabled && (
-                    <button
-                      type="button"
-                      onClick={startGoogleLogin}
-                      disabled={loading}
-                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
-                      style={{
-                        background: 'var(--card-bg)',
-                        border: '1px solid var(--card-border)',
-                        color: 'var(--text-1)',
-                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                        opacity: loading ? 0.6 : 1,
-                      }}
-                    >
-                      <span
-                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
-                        style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
-                        aria-hidden="true"
-                      >G</span>
-                      Continue with Google
-                    </button>
-                  )}
-                  {zohoEnabled && (
-                    <button
-                      type="button"
-                      onClick={startZohoLogin}
-                      disabled={loading}
-                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
-                      style={{
-                        background: 'var(--card-bg)',
-                        border: '1px solid var(--card-border)',
-                        color: 'var(--text-1)',
-                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                        opacity: loading ? 0.6 : 1,
-                      }}
-                    >
-                      <span
-                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
-                        style={{ background: '#E42527', color: '#fff', border: '1px solid rgba(228,37,39,0.3)' }}
-                        aria-hidden="true"
-                      >Z</span>
-                      Continue with Zoho
-                    </button>
-                  )}
-                </div>
+                {providers === null ? (
+                  /* Held space while the providers are asked for: the two
+                     buttons this deployment usually offers, at their height. */
+                  <div className="flex flex-col gap-2" aria-hidden="true" data-providers="pending">
+                    <span className="ft-s-skel" />
+                    <span className="ft-s-skel" />
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2" data-providers="ready">
+                    {googleEnabled && (
+                      <button
+                        type="button"
+                        onClick={startGoogleLogin}
+                        disabled={loading}
+                        className="ft-provider w-full flex items-center justify-center gap-2.5 rounded-xl text-sm font-semibold"
+                        style={{
+                          minHeight: 44,
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--card-border)',
+                          color: 'var(--text-1)',
+                          boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                          opacity: loading ? 0.6 : 1,
+                        }}
+                      >
+                        <span className="badge" style={{ padding: 0 }}><GoogleMark /></span>
+                        Continue with Google
+                      </button>
+                    )}
+                    {zohoEnabled && (
+                      <button
+                        type="button"
+                        onClick={startZohoLogin}
+                        disabled={loading}
+                        className="ft-provider w-full flex items-center justify-center gap-2.5 rounded-xl text-sm font-semibold"
+                        style={{
+                          minHeight: 44,
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--card-border)',
+                          color: 'var(--text-1)',
+                          boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                          opacity: loading ? 0.6 : 1,
+                        }}
+                      >
+                        <span className="badge" style={{ padding: 0 }}><ZohoMark /></span>
+                        Continue with Zoho
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>
                   <span className="h-px flex-1" style={{ background: 'var(--card-border)' }} />
                   or
@@ -650,7 +706,9 @@ export default function Login() {
                 role="status"
                 aria-live="polite"
               >
-                <Mail size={12} className="flex-shrink-0" />
+                <svg key={notice} className="ft-s-tick flex-shrink-0" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M3 8.5l3.2 3L13 4.5" pathLength="1" />
+                </svg>
                 <span>{notice}</span>
               </div>
             )}
@@ -688,17 +746,9 @@ export default function Login() {
               )}
             </button>
             {!resetToken && (
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <button
-                  type="button"
-                  onClick={() => { setLegacyMode(v => !v); setRegisterMode(false); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
-                  className="ft-textlink font-semibold"
-                  style={{ color: 'var(--accent-btn)' }}
-                >
-                  {legacyMode ? 'Use email login' : 'Use legacy password'}
-                </button>
+              <div className="ft-s-links">
                 {!legacyMode && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-3 text-xs">
                     <button
                       type="button"
                       onClick={() => { setRegisterMode(v => !v); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
@@ -720,6 +770,13 @@ export default function Login() {
                     )}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => { setLegacyMode(v => !v); setRegisterMode(false); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
+                  className="ft-textlink ft-s-legacy"
+                >
+                  {legacyMode ? 'Use email login' : 'Use legacy password'}
+                </button>
               </div>
             )}
             {resetToken && notice && (

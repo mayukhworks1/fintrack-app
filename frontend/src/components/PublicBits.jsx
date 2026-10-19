@@ -6,6 +6,8 @@
  * rhythm is different on every route. One set of parts, imported everywhere.
  */
 import { useReveal } from '../hooks/useReveal'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useInView } from '../hooks/useInView'
 import { Grain } from './LandingVisuals'
 
 /** Wraps a block so it animates in the first time it is scrolled to. */
@@ -50,18 +52,27 @@ export function Rule({ className = '', fromLeft = false, style }) {
 }
 
 /**
- * A page opening: eyebrow, serif headline that rises line by line, lede.
+ * A page opening: eyebrow, serif headline that settles line by line, lede.
  *
  * `lines` takes the headline pre-split, because only the author knows where
  * it should break — an automatic split lands mid-clause and reads worse than
  * no split at all.
+ *
+ * `aside` is an optional hero visual. At 1100px and wider the opening becomes
+ * two columns with the aside on the right; below that the aside is not
+ * rendered at all, unless `asideMobile` is set, in which case it follows the
+ * lede in a single column. The headline, eyebrow and lede are never hidden:
+ * they are visible in the first frame and only settle into place.
  */
-export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 3.2rem)' }) {
-  return (
-    <Rising className="relative mx-auto px-4 sm:px-6 pt-10 pb-8 sm:pt-14"
-            style={{ maxWidth: 1120, zIndex: 1 }}>
+export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 3.2rem)', aside, asideMobile = false }) {
+  const wide = useMediaQuery('(min-width: 1100px)')
+  const showAside = !!aside && (wide || asideMobile)
+  const head = (
+    <>
       <p className="ft-eyebrow ft-up mb-3">{eyebrow}</p>
-      <h1 className="ft-display mb-4" style={{ fontSize: size, lineHeight: 1.08 }}>
+      {/* Beside an aside the column is narrower, so the headline steps down
+          a size rather than breaking a line into a single word. */}
+      <h1 className="ft-display mb-4" style={{ fontSize: showAside && wide ? 'clamp(2.4rem, 3.4vw, 2.9rem)' : size, lineHeight: 1.08 }}>
         {lines.map((line, i) => (
           <span key={i} className="ft-rise">
             <span style={{ transitionDelay: `${i * 110}ms` }}>{line}</span>
@@ -69,6 +80,17 @@ export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 
         ))}
       </h1>
       {children && <p className="ft-lede ft-up" style={{ '--d': '260ms' }}>{children}</p>}
+    </>
+  )
+  return (
+    <Rising className="relative mx-auto px-4 sm:px-6 pt-10 pb-8 sm:pt-14"
+            style={{ maxWidth: 1120, zIndex: 1 }}>
+      {showAside ? (
+        <div className="ft-m-head">
+          <div>{head}</div>
+          <div>{aside}</div>
+        </div>
+      ) : head}
     </Rising>
   )
 }
@@ -104,7 +126,7 @@ export function Card({ icon: Icon, kicker, title, body, delay = 0, visual: Visua
       {Visual && <Visual />}
       {(Icon || kicker) && (
         <div className="flex items-center gap-2.5 mb-2.5">
-          {Icon && <Icon size={18} aria-hidden="true" className="ft-ico" style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+          {Icon && <Icon size={18} aria-hidden="true" className="ft-ico" style={{ color: 'var(--accent-ink, var(--accent))', flexShrink: 0 }} />}
           {kicker && <span className="ft-eyebrow" style={{ fontSize: '0.62rem' }}>{kicker}</span>}
         </div>
       )}
@@ -136,15 +158,17 @@ export function Grid({ min = 300, children, className = '', ...rest }) {
  * six bounces rather than one.
  */
 export function Closing({ title, children, cta, to, next }) {
+  // The mesh drifts only while the panel is on screen.
+  const [ref, inView] = useInView({ threshold: 0 })
   return (
-    <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+    <section ref={ref} className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
       {/* It was a flat blue rectangle. A slab that size is the last thing on
           every page, so it is worth more than one colour: a drifting mesh
           behind it, the mark's hairline along the top, and grain over the
           whole thing to stop the gradient banding. */}
       <Reveal className="ft-closing ft-shine relative overflow-hidden rounded-xl
                          px-6 py-14 sm:px-12 sm:py-16 text-center">
-        <span className="ft-closing-mesh" aria-hidden="true" />
+        <span className={`ft-closing-mesh${inView ? '' : ' ft-m-paused'}`} aria-hidden="true" />
         <Grain opacity={0.05} />
         <h2 className="relative ft-display mb-3"
             style={{ zIndex: 1, fontSize: 'clamp(1.6rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>

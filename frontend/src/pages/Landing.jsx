@@ -1,52 +1,53 @@
 /**
  * The public front door.
  *
- * It used to be the whole site — seventeen screens on a phone, carrying the
- * modules, the mechanism, the configuration story and the FAQ. Everything
- * below the fold was competing with everything else below the fold, and the
- * thing most worth reaching was the thing furthest from the top.
+ * It does one job: say what this is, let you use it, and point at the page
+ * that answers whatever you wanted next. In order: the headline beside one
+ * sample record drawn in the four places it appears; the sandbox; four facts
+ * about the software; what is new; the film; the screens; the three problems
+ * (with the tax slider); the modules; and the three deeper pages.
  *
- * It now does one job: say what this is, let you use it, and point at the page
- * that answers whatever you wanted next. Depth lives on its own routes, and
- * the navigation says what each of them holds.
- *
- * The rule the whole site is built around is negative. Nothing here reads a
- * workspace. Every client, project and figure is fiction computed in the
- * browser from demoData.js, and no part of this route makes an API call.
+ * Nothing here reads a workspace. Every client, project and figure is fiction
+ * computed in the browser from demoData.js, and no part of this route makes
+ * an API call. The sandbox stays a static import inside its own error
+ * boundary; the band of new captures and the film are mounted only as they
+ * near the viewport, with their space reserved so nothing below them moves.
  */
+import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
+import { useTilt } from '../hooks/useTilt'
+import { useReveal } from '../hooks/useReveal'
+import { useInView } from '../hooks/useInView'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import PublicLayout from '../components/PublicLayout'
 import DemoWorkspace from '../components/DemoWorkspace'
 import ErrorBoundary from '../components/ErrorBoundary'
-import { useTilt } from '../hooks/useTilt'
-import { useReveal } from '../hooks/useReveal'
-import { Grain, CountUp, MiniBars, MiniDocs } from '../components/LandingVisuals'
+import { Grain, MiniBars, MiniDocs } from '../components/LandingVisuals'
 import {
   GlyphLedger, GlyphMargin, GlyphTaxSplit, GlyphAnalyst,
   GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
+  GlyphLayers, GlyphSwitches, GlyphPermissions,
 } from '../components/Glyphs'
 import Overstatement from '../components/Overstatement'
-import ProductFilm from '../components/ProductFilm'
-import { Reveal, Rising, Stagger, Rule, Head, Card, Grid, Closing } from '../components/PublicBits'
-import {
-  MODULES, PROBLEMS, APP_LD, FAQ_LD, graph,
-} from '../content/publicContent'
 import ScreenGallery from '../components/ScreenGallery'
-import ModuleMarquee from '../components/ModuleMarquee'
+import LazyMount from '../components/motion/LazyMount'
+import OneRecord from '../components/home/OneRecord'
+import Facts from '../components/home/Facts'
+import ShippedBand from '../components/home/ShippedBand'
+import { TotalOpens, TaxSplit, QueryShown } from '../components/home/ProblemVisuals'
+import { Reveal, Rising, Rule, Head, Card, Grid, Closing } from '../components/PublicBits'
+import { MODULES, PROBLEMS, APP_LD, FAQ_LD, graph } from '../content/publicContent'
+import '../styles/public-home.css'
+
+const ProductFilm = lazy(() => import('../components/ProductFilm'))
 
 const LD = graph(APP_LD, FAQ_LD)
 
-/* One mark per module, keyed by the module.
-   This was `CHIP_PEEK[i % 4]` — four generic charts handed to eleven modules
-   by list position, so Tax got a bar chart and Projects got a donut reading
-   68%. The comment below the grid claimed each chip showed "the mark that
-   module carries elsewhere on the site", which the modulo made false.
-   MODULES has carried a `visual` key the whole time; now it is filled for
-   all eleven and this reads it.
-   Drawn marks rather than screenshots: a preview that has to be recaptured
-   whenever a screen changes is a preview that is wrong within a month. */
+/* One mark per module, keyed by the module's `visual`. Drawn marks rather
+   than screenshots: a preview that has to be recaptured whenever a screen
+   changes is a preview that is wrong within a month. */
 const CHIP_PEEK = {
   ledger: <GlyphLedger />, margin: <GlyphMargin />, bars: <MiniBars />,
   tax: <GlyphTaxSplit />, analyst: <GlyphAnalyst />, docs: <MiniDocs />,
@@ -54,11 +55,26 @@ const CHIP_PEEK = {
   board: <GlyphBoard />, share: <GlyphShare mode="link" />, audit: <GlyphAudit />,
 }
 
+/* A picture for each problem card, in PROBLEMS order. */
+const PROBLEM_VISUALS = [TotalOpens, TaxSplit, QueryShown]
+
+const READ_ON = [
+  ['/how-it-works', 'How it works', GlyphLayers,
+   'Your records stay where they are. Then: why an answer here can be checked, stage by stage.'],
+  ['/customise', 'Made yours', GlyphSwitches,
+   'What you change yourself, what runs on your own cloud, and what gets built for your case.'],
+  ['/security', 'Security & access', GlyphPermissions,
+   'Who can see what, scoped at the query rather than the screen, with every request recorded.'],
+]
+
 /** Lies back until it is reached, then straightens. Chrome, never a data mark. */
 function Tilted({ children }) {
   const ref = useReveal({ threshold: 0.08 })
   return <div ref={ref} className="ft-3d">{children}</div>
 }
+
+const reducedMotion = () =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
 export default function Landing() {
   // Rotation of 0 on both: a primary button that tips as you approach it
@@ -66,6 +82,10 @@ export default function Landing() {
   // these write is wanted — for the CTA's glow and the section's spotlight.
   const heroCta = useTilt({ max: 0 })
   const heroLight = useTilt({ max: 0 })
+  // The aurora drifts only while the hero is on screen.
+  const [heroView, heroInView] = useInView({ threshold: 0 })
+  const wide = useMediaQuery('(min-width: 1100px)')
+  const mid = useMediaQuery('(min-width: 640px)')
 
   usePageMeta({
     title: 'FinTrack — project delivery and project finance on one set of records',
@@ -75,36 +95,42 @@ export default function Landing() {
     jsonLd: LD,
   })
 
+  const startTour = (e) => {
+    e.preventDefault()
+    document.getElementById('try')?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' })
+    window.dispatchEvent(new CustomEvent('ft-start-tour'))
+  }
+
   return (
     <PublicLayout>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       {/* overflow: clip, not hidden. Hidden makes the section a scroll
           container, and the hero's scroll-linked drift would then measure
-          its progress against the section instead of the viewport and
-          never move. Clip cuts the grain off at the edges just the same. */}
-      <section ref={heroLight} className="relative" style={{ overflow: 'clip' }}>
+          its progress against the section instead of the viewport. */}
+      <section ref={heroLight} className="ft-h-hero relative" style={{ overflow: 'clip' }}>
         <Grain />
-        <div className="ft-aurora" aria-hidden="true"><span /><span /><span /></div>
+        <div ref={heroView} className={`ft-aurora${heroInView ? '' : ' ft-m-paused'}`} aria-hidden="true">
+          <span /><span /><span />
+        </div>
 
-        <div className="relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
+        <div className="ft-h-hero-grid relative mx-auto px-4 sm:px-6 pt-9 pb-7 sm:pt-14"
              style={{ maxWidth: 1120, zIndex: 1 }}>
           <Rising className="ft-drift" style={{ maxWidth: 820 }}>
-            <span className="ft-up inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
-                  style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+            <span className="ft-h-badge ft-up inline-flex items-center gap-2 rounded-md text-xs font-semibold mb-4 tracking-wide"
+                  style={{ padding: '5px 11px', background: 'var(--accent-dim)', color: 'var(--accent-ink, var(--accent))', border: '1px solid var(--card-border)' }}>
               <span className="ft-live-dot" aria-hidden="true" />
-              Institutional Financial Control Platform
+              Live sandbox below · sample data
             </span>
 
-            {/* Two lines, each rising out of its own mask on a stagger. A
-                headline that assembles reads as composed; the same words
-                fading in as one block read as loaded. */}
-            <h1 className="ft-display mb-5"
-                style={{ fontSize: 'clamp(2.05rem, 6.2vw, 3.9rem)', lineHeight: 1.04,
-                         letterSpacing: '-0.03em' }}>
+            {/* Visible in the first frame: each line settles by a fraction
+                of an em, by transform alone, and only when motion is welcome. */}
+            {/* The headline's sweep pauses with the aurora when the hero
+                is scrolled away. */}
+            <h1 className={`ft-display ft-h-title mb-5${heroInView ? '' : ' ft-m-paused'}`}>
               <span className="ft-rise"><span>The delivery and the money,</span></span>
               <span className="ft-rise">
-                <span style={{ transitionDelay: '110ms', color: 'var(--accent)' }}>
-                  <em className="ft-shine">on one set of records</em>.
+                <span style={{ transitionDelay: '110ms', color: 'var(--accent-ink, var(--accent))' }}>
+                  <em className="ft-shine-text">on one set of records</em>.
                 </span>
               </span>
             </h1>
@@ -117,15 +143,7 @@ export default function Landing() {
             </p>
 
             <div className="ft-up flex flex-col sm:flex-row gap-3" style={{ '--d': '380ms' }}>
-              <a href="#try" ref={heroCta}
-                 onClick={(e) => {
-                   e.preventDefault()
-                   const el = document.getElementById('try')
-                   if (el) {
-                     el.scrollIntoView({ behavior: 'smooth' })
-                   }
-                   window.dispatchEvent(new CustomEvent('ft-start-tour'))
-                 }}
+              <a href="#try" ref={heroCta} onClick={startTour}
                  className="ft-cta ft-magnet flex items-center justify-center gap-2 rounded-xl font-bold cursor-pointer"
                  style={{ minHeight: 52, padding: '0 26px', background: 'var(--accent-btn)',
                           color: '#fff', textDecoration: 'none', fontSize: '0.975rem',
@@ -140,7 +158,15 @@ export default function Landing() {
                 Sign in
               </Link>
             </div>
+
+            {mid && !wide && <div className="ft-up mt-5" style={{ '--d': '460ms' }}><OneRecord variant="chips" /></div>}
           </Rising>
+
+          {wide && (
+            <div className="ft-h-hero-aside">
+              <OneRecord />
+            </div>
+          )}
         </div>
 
         {/* ── The sandbox ──────────────────────────────────────────────── */}
@@ -151,102 +177,97 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Every section below the sandbox is in the page from the start (for
+          keyboards, screen readers and find-in-page) but marked ft-m-cv:
+          the browser skips laying it out and painting it until it nears the
+          screen. --cv-h is the space it holds until then. */}
+      {/* ── Facts about the software ───────────────────────────────────── */}
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120, '--cv-h': '360px' }}
+               aria-label="FinTrack in four numbers">
+        {/* In the page from the start, so it can be read, searched and
+            tabbed to; its figures still count up the first time they are
+            scrolled to. */}
+        <Facts />
+      </section>
+
+      {/* ── New in FinTrack ────────────────────────────────────────────── */}
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120, '--cv-h': '1000px' }}>
+        <Head eyebrow="New in FinTrack" title="Spreadsheets you can publish, and one gateway for AI">
+          Pages now edits spreadsheets and publishes them to a client on a
+          link; every page reports who opened it; and one gateway decides which
+          AI model answers what. Captured from the sample workspace.
+        </Head>
+        {/* The copy is in the page from the start; the images are lazy and
+            the recording's poster waits until it is near. */}
+        <ShippedBand />
+      </section>
+
       {/* ── The film ────────────────────────────────────────────────────
-          Directly under the sandbox, because the two answer different
-          questions: the sandbox proves the thing works by letting you drive
-          it, and the film says what it is for in the time someone will
-          actually give a page they have just landed on. */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 940 }}>
-        <Reveal>
-          <ProductFilm />
-        </Reveal>
-      </section>
-
-      {/* ── Counts ──────────────────────────────────────────────────────
-          Product facts — how many modules, how many roles — not workspace
-          figures. They describe the software, so they are safe to show. */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
-        <Stagger className="grid gap-4 sm:gap-5"
-                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(50% - 0.5rem, 200px), 1fr))' }}>
-          {[
-            ['Modules', 11, '', 'receivables to audit'],
-            ['Permission roles', 8, '', 'each override-able per person'],
-            ['Sync latency', 30, 's', 'incremental, plus webhooks'],
-            ['Answers with the query shown', 100, '%', 'no exceptions'],
-          ].map(([label, value, suffix, sub]) => (
-            <div key={label} className="ft-lift rounded-2xl p-4 sm:p-5"
-                 style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <p className="font-extrabold tracking-tight"
-                 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.3rem)', color: 'var(--accent)',
-                          letterSpacing: '-0.02em' }}>
-                <CountUp to={value} suffix={suffix} />
-              </p>
-              <p className="text-xs font-semibold mt-1" style={{ color: 'var(--text-1)' }}>{label}</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
-            </div>
-          ))}
-        </Stagger>
-      </section>
-
-      {/* ── Modules, moving ─────────────────────────────────────────────── */}
-      <section className="pb-14 sm:pb-20" aria-label="Modules">
-        <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: 1240 }}>
-          <Reveal><ModuleMarquee /></Reveal>
-        </div>
+          The sandbox proves the thing works by letting you drive it; the
+          film says what it is for in the time someone will give a page they
+          have just landed on. */}
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120, '--cv-h': '1000px' }}>
+        <Head eyebrow="The film" title="Half a minute of the product">
+          Recorded in the sample workspace. Watch it, or read the same ground
+          as a walkthrough built from the sandbox&rsquo;s own figures.
+        </Head>
+        {/* The section sits on the page grid like every other; only the film
+            itself is held to 940px. */}
+        <LazyMount className="ft-h-lazy-film" style={{ maxWidth: 940 }}>
+          <Suspense fallback={null}><ProductFilm /></Suspense>
+        </LazyMount>
       </section>
 
       {/* ── Every screen ────────────────────────────────────────────────
           Real captures of the product, from the same sample workspace the
           sandbox runs on: what it looks like before anyone signs in. */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120, '--cv-h': '640px' }}>
         <Head eyebrow="Every screen" title="See it before you sign in">
-          Nine of the screens your team works in, on sample data. Swipe through,
-          or open one to look closer.
+          The screens your team works in, on sample data. Pick a group, swipe
+          through, or open one to look closer.
         </Head>
         <Reveal><ScreenGallery /></Reveal>
       </section>
 
       {/* ── The problem ─────────────────────────────────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120, '--cv-h': '1500px' }}>
         <Head n="01" eyebrow="Why this exists"
               title="Three things go wrong when delivery and money live apart">
           None of them are exotic. They are what happens when the board, the
           ledger and the tax position live in different places and nobody owns
           the reconciliation between them.
         </Head>
-        <Grid min={280} className="mb-10">
-          {PROBLEMS.map(({ icon, title, body }, i) => (
-            <Card key={title} icon={icon} title={title} body={body} delay={Math.min(i, 3) * 70} />
-          ))}
-        </Grid>
+        <div className="mb-10">
+          <Grid min={280}>
+            {PROBLEMS.map(({ icon, title, body }, i) => (
+              <Card key={title} icon={icon} title={title} body={body}
+                    visual={PROBLEM_VISUALS[i]} delay={Math.min(i, 3) * 70} />
+            ))}
+          </Grid>
+        </div>
 
-        {/* The second of those three, at the reader's own numbers. Stated in
-            prose it lands as a technicality; with a figure they chose
-            themselves it lands as money. */}
+        {/* The second of those three, at the reader's own numbers. */}
         <Overstatement />
       </section>
 
       {/* ── Modules, named and nothing more ──────────────────────────────
-          The full cards live on /features, where there is room to say what
-          each one does. Here they are a contents page: what ships, at a
-          glance, and one link to the detail. */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+          The full cards live on /features. Here they are a contents page:
+          what ships, at a glance, and one link to the detail. */}
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120, '--cv-h': '620px' }}>
         <Head n="02" eyebrow="What is inside" title="Eleven modules, one source of truth">
           Records live in one place and every module reads the same rows, so a
           number on the dashboard and a number in a report cannot disagree.
           Every total opens to the invoices underneath it.
         </Head>
 
-        <Reveal className="grid gap-2 mb-7"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 216px), 1fr))' }}>
+        <Reveal className="ft-h-modules grid gap-2">
           {MODULES.map(({ icon: Icon, title, points, visual }) => (
             <Link key={title} to="/features"
                   className="ft-chip ft-chip-peek flex items-start gap-2.5 rounded-xl px-3 py-3"
                   style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                            textDecoration: 'none' }}>
-              {/* Pointing at a name shows the mark that module carries
-                  elsewhere on the site. Eleven names in a grid was the
-                  flattest block on the page. */}
+              {/* Pointing at a name, or focusing it, shows the mark that
+                  module carries elsewhere on the site. */}
               <span className="peek" aria-hidden="true">
                 <span className="flex items-center justify-center" style={{ minHeight: 56 }}>
                   {CHIP_PEEK[visual]}
@@ -257,63 +278,54 @@ export default function Landing() {
                   {title}
                 </span>
               </span>
-              <Icon size={16} aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+              <Icon size={16} aria-hidden="true" style={{ color: 'var(--accent-ink, var(--accent))', flexShrink: 0, marginTop: 2 }} />
               <span className="min-w-0">
                 <span className="block font-bold" style={{ fontSize: 13.5, color: 'var(--text-1)' }}>
                   {title}
                 </span>
-                <span className="ft-chip-bullet block truncate" style={{ color: 'var(--text-3)' }}>
+                {/* Two lines, whole words: a line cut mid-word with an
+                    ellipsis reads as unfinished. */}
+                <span className="ft-chip-bullet ft-h-module-point" style={{ color: 'var(--text-3)' }}>
                   {points[0]}
                 </span>
               </span>
             </Link>
           ))}
-        </Reveal>
-
-        <Reveal>
-          <Link to="/features"
-                className="ft-btn inline-flex items-center gap-2 rounded-xl font-bold"
-                style={{ minHeight: 46, padding: '0 20px', background: 'var(--card-bg)',
-                         border: '1px solid var(--card-border)', color: 'var(--text-1)',
-                         textDecoration: 'none', fontSize: '0.93rem' }}>
+          {/* Eleven modules leave the twelfth cell of the grid for the way on. */}
+          <Link to="/features" className="ft-chip ft-h-modules-all rounded-xl px-3 py-3">
             Take each one in turn <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </Reveal>
       </section>
 
-      {/* ── Where to go next ─────────────────────────────────────────────
-          A short page only works if it hands you somewhere. */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+      {/* ── Where to go next ───────────────────────────────────────────── */}
+      <section className="ft-m-cv mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120, '--cv-h': '700px' }}>
         <Rule className="mb-14" />
         <Head n="03" eyebrow="Read on" title="The rest of it, in three pages">
-          Split up rather than stacked, because a page that takes seventeen
-          screens on a phone is a page nobody finishes.
+          How the records get here, what you can change, and who can see what.
         </Head>
         <Grid min={260}>
-          {[
-            ['/how-it-works', 'How it works',
-             'Your records stay where they are. Then: why an answer here can be checked, stage by stage.'],
-            ['/customise', 'Made yours',
-             'What you change yourself, what runs on your own cloud, and what gets built for your case.'],
-            ['/security', 'Security & access',
-             'Who can see what, scoped at the query rather than the screen, with every request recorded.'],
-          ].map(([to, title, blurb], i) => (
+          {READ_ON.map(([to, title, Glyph, blurb], i) => (
             <Reveal key={to} delay={Math.min(i, 3) * 70} className="h-full">
               <Link to={to} className="ft-chip flex flex-col h-full rounded-2xl p-5 sm:p-6"
                     style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                              textDecoration: 'none' }}>
+                <span className="ft-h-readon-glyph ft-h-wipe-box" aria-hidden="true"
+                      style={{ '--d': `${120 + i * 90}ms` }}>
+                  <Glyph />
+                </span>
                 <h3 className="ft-display mb-2" style={{ fontSize: '1.14rem', color: 'var(--text-1)' }}>
                   {title}
                 </h3>
                 <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>{blurb}</p>
                 <span className="mt-auto inline-flex items-center gap-1.5 font-bold"
-                      style={{ fontSize: 13, color: 'var(--accent)' }}>
+                      style={{ fontSize: 13, color: 'var(--accent-ink, var(--accent))' }}>
                   Read it <ArrowRight size={14} aria-hidden="true" />
                 </span>
               </Link>
             </Reveal>
           ))}
-        </Grid>
+      </Grid>
       </section>
 
       {/* ── Close ───────────────────────────────────────────────────────── */}

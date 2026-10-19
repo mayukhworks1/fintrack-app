@@ -3,19 +3,30 @@
  *
  * "Fully customisable" is the least believable sentence on any product page,
  * because everyone writes it and nobody can check it. This page says who does
- * the work and what it touches, in three tiers, and then hands the visitor a
- * working permission matrix so the first tier is not a claim either.
+ * the work and what it touches, in three tiers, then hands the visitor a
+ * working permission matrix so the first tier is not a claim either, and
+ * draws the second: a dedicated instance is the same build with a different
+ * environment file.
+ *
+ * The playground is the heaviest thing on the page and sits well below the
+ * fold, so its code is fetched only as it approaches; the space it will take
+ * is held from the start, so nothing under it moves when it arrives.
  */
+import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
-import PermissionPlayground from '../../components/PermissionPlayground'
-import BrandCustomizerSandbox from '../../components/BrandCustomizerSandbox'
 import { Grain } from '../../components/LandingVisuals'
-import { PageHead, Card, Grid, Closing, Head, Reveal } from '../../components/PublicBits'
+import { PageHead, Card, Grid, Closing, Head } from '../../components/PublicBits'
 import { PermissionRows, OneBuildTwoHomes, ModuleSlotsIn } from '../../components/SceneDiagrams'
+import LazyMount from '../../components/motion/LazyMount'
+import DedicatedInstance from '../../components/secondary/DedicatedInstance'
 import { SHAPE, APP_LD, crumbs, graph } from '../../content/publicContent'
+import '../../styles/public-secondary.css'
+import '../../styles/public-secondary-customise.css'
+
+const PermissionPlayground = lazy(() => import('../../components/PermissionPlayground'))
 
 const LD = graph(APP_LD, crumbs([{ name: 'Made yours', path: '/customise' }]))
 
@@ -45,7 +56,7 @@ export default function Customise() {
 
       <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
         <Head n="01" eyebrow="Three tiers"
-              title="Who does the work, and what it touches">
+              title="Who does the work, and what it touches" className="mt-12 sm:mt-20">
           In the order a buyer meets them: what you change in the app without
           telling anyone, what runs on infrastructure you own, and what gets
           built because your business does something ours does not.
@@ -62,11 +73,13 @@ export default function Customise() {
         <Head n="02" eyebrow="Try the first one"
               title="A role carries defaults. One person can differ.">
           This is the real shape of the permission model, small enough to fit in
-          a card. Pick somebody, change what they reach, and the line underneath
-          says what they would actually sign in to.
+          a card. Pick somebody, change what they reach, and the panel underneath
+          shows the query their invoice list would run and the rows it returns.
         </Head>
 
-        <Reveal><PermissionPlayground /></Reveal>
+        <LazyMount className="ft-s-perm-slot" rootMargin="800px 0px">
+          <Suspense fallback={null}><PermissionPlayground /></Suspense>
+        </LazyMount>
 
         <p className="mt-6 mb-14 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
           One thing is deliberately not adjustable: the set of measures the
@@ -76,14 +89,13 @@ export default function Customise() {
           never inferred at the moment someone asks a question.
         </p>
 
-        <Head n="03" eyebrow="White-label & themes"
-              title="Custom brand identities, domains, and invoice numbering">
-          Give external clients and internal teams an instance that matches your
-          firm's identity. Pick primary color accents, define dedicated CNAME domains,
-          and customize your invoice taxonomy.
+        <Head n="03" eyebrow="Your infrastructure"
+              title="A dedicated instance is a configuration, not a fork">
+          When the shared deployment is not where your data should live, the
+          same build runs on yours. What changes is one environment file.
         </Head>
 
-        <Reveal><BrandCustomizerSandbox /></Reveal>
+        <DedicatedInstance />
       </section>
 
       <Closing title="Tell us how you work"

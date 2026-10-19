@@ -28,7 +28,7 @@ const PAGES = [
   {
     path: '/features',
     title: 'Features: invoice tracking, project profitability & tax ledger — FinTrack',
-    description: 'Eleven modules on one set of records: invoices with ageing bands, projects and margin, GST and TDS ledger, analytics, executive reports, document search and an AI financial query engine.',
+    description: 'Eleven modules on one set of records: invoices with ageing bands, projects and margin, GST and TDS ledger, analytics, executive reports, document search, an AI financial query engine, and pages and spreadsheets you can publish on a link.',
     crumb: 'Features',
     priority: '0.9',
   },
@@ -48,8 +48,8 @@ const PAGES = [
   },
   {
     path: '/customise',
-    title: 'Customise: roles, white-label branding and your own domain — FinTrack',
-    description: 'Shape FinTrack to how you work: per-person permissions, brand colours, your own domain and invoice numbering, and modules built for your process.',
+    title: 'Customise: per-person roles, your own cloud, modules built for you — FinTrack',
+    description: 'Per-person permissions, a dedicated deployment on your own cloud, and modules built for your process.',
     crumb: 'Made yours',
     priority: '0.7',
   },

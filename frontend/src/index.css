@@ -3251,11 +3251,19 @@ html.dark .web-invoices-shell {
   font-family: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino,
                Georgia, 'Times New Roman', serif;
   font-weight: 600;
-  letter-spacing: -0.022em;
-  /* Optical sizing does the per-size correction, so the tracking here is
-     a single value rather than a table of them. */
+  /* A heading that has to wrap shares its words out evenly instead of
+     leaving one alone on the last line. */
+  text-wrap: balance;
+  /* Optical sizing redraws the outlines per size; tracking still follows
+     size, tighter as the heading grows (a fixed value is wrong at one end):
+     -0.026em on a page headline, -0.02em on a section heading, -0.012em
+     on a card title, where 1.25 leading also gives a wrapped title room. */
+  letter-spacing: -0.02em;
   font-optical-sizing: auto;
+  font-kerning: normal;
 }
+:where(h1).ft-display { letter-spacing: -0.026em; }
+:where(h3, h4).ft-display { letter-spacing: -0.012em; line-height: 1.25; }
 .ft-display em {
   font-style: italic;
   font-weight: 500;
@@ -3303,18 +3311,22 @@ html.dark .web-invoices-shell {
   color: var(--accent);
 }
 
-/* ── Line reveal ───────────────────────────────────────────────────
-   Each line sits in its own overflow-hidden box and rises into it, so
-   the headline assembles rather than fading in as a block. The mask is
-   the box; nothing is clipped once the line has landed. */
-.ft-rise { display: block; overflow: hidden; padding-bottom: 0.06em; }
-.ft-rise > span {
-  display: block;
-  transform: translateY(108%);
-  transition: transform 1000ms cubic-bezier(0.16, 1, 0.3, 1);
+/* ── Line settle ───────────────────────────────────────────────────
+   The headline is usually the largest thing painted, so it is visible in
+   the very first frame: each line used to rise out of an overflow mask,
+   which kept the page's largest paint waiting on a one-second transition.
+   Now each line starts a fraction of an em low and settles into place by
+   transform alone, and only when motion is welcome. */
+.ft-rise { display: block; padding-bottom: 0.06em; }
+.ft-rise > span { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .ft-rise > span {
+    transform: translateY(0.22em);
+    transition: transform var(--m-t-large, 700ms) var(--m-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  }
+  [data-shown] > .ft-rise > span,
+  [data-shown] .ft-rise > span { transform: none; }
 }
-[data-shown] > .ft-rise > span,
-[data-shown] .ft-rise > span { transform: none; }
 
 /* ── Reading progress ──────────────────────────────────────────────
    A hairline under the header. Driven by a scroll-linked animation
@@ -3342,7 +3354,8 @@ html.dark .web-invoices-shell {
    variables it writes and inherits its guards: nothing happens on a
    coarse pointer or under reduced motion. */
 .ft-magnet {
-  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              scale var(--m-t-small, 260ms) var(--m-ease-spring, ease);
 }
 .ft-magnet[data-tilting] {
   transform: translate(
@@ -3449,7 +3462,12 @@ html.dark .main-app-theme {
    The panel is positioned from its trigger and clamped to the
    viewport, so the right-hand group cannot open off the edge of the
    screen. Entrance is a short rise rather than a fade: a panel that
-   only fades in reads as having been there all along. */
+   only fades in reads as having been there all along. It is a transition
+   between data-state values, not a keyframe (MegaPanel keeps it mounted
+   through the exit), so pointing back in mid-close turns it round from
+   where it is, and it leaves by the path it came in. It stays an opaque
+   surface: it hangs from the translucent header, and a blurred layer
+   inside another one samples only the header, not the page. */
 @keyframes ft-mega-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.99) }
   to   { opacity: 1; transform: none }
@@ -3466,7 +3484,8 @@ html.dark .main-app-theme {
   border: 1px solid var(--card-border);
   box-shadow: 0 24px 48px -18px rgba(15, 23, 42, 0.26),
               0 6px 16px -8px rgba(15, 23, 42, 0.14);
-  animation: ft-mega-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: opacity var(--m-t-spring, 220ms) var(--m-ease-spring, ease),
+              transform var(--m-t-spring, 220ms) var(--m-ease-spring, ease);
   /* Clamped rather than flipped. The triggers sit near the left of a
      1120px rail, so a panel anchored to one can never reach the right
      edge — but the clamp costs nothing and removes the question. */
@@ -3494,9 +3513,22 @@ html.dark .main-app-theme {
 }
 .ft-mega-item:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-soft); }
 
-@media (prefers-reduced-motion: reduce) {
-  .ft-mega { animation: none; }
+.ft-mega[data-state="closed"] { opacity: 0; pointer-events: none; transition-duration: var(--m-t-exit, 0ms); }
+@starting-style { .ft-mega[data-state="open"] { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ft-mega[data-state="closed"] { transform: translateY(-6px) scale(0.99); }
+  @starting-style { .ft-mega[data-state="open"] { transform: translateY(-6px) scale(0.99); } }
 }
+@media (prefers-reduced-motion: reduce) {
+  .ft-mega { transition-property: opacity !important; transition-duration: var(--m-t-fade, 150ms) !important; }
+}
+/* The trigger's chevron turns with the same spring. */
+.ft-mega-chev { transition: transform var(--m-t-small, 220ms) var(--m-ease-spring, ease); }
+/* The preview's drawings share one cell; the one pointed at fades up. */
+.ft-mega-art { display: grid; place-items: center; }
+.ft-mega-art > * { grid-area: 1 / 1; display: flex; justify-content: center; opacity: 0;
+                   transition: opacity var(--m-t-small, 200ms) ease; }
+.ft-mega-art > [data-on] { opacity: 1; }
 
 /* A card that is itself a link. Lifts a little and lights its edge, so the
    whole tile reads as the target rather than the words inside it. */
@@ -3511,6 +3543,7 @@ html.dark .main-app-theme {
   outline: none;
 }
 .ft-chip:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft), 0 10px 26px -14px var(--accent-glow); }
+.ft-chip:active { transform: none; } /* pressed down out of the lift; the scale is in motion.css */
 @media (prefers-reduced-motion: reduce) { .ft-chip:hover, .ft-chip:focus-visible { transform: none } }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3596,7 +3629,8 @@ html.dark .main-app-theme {
   .ft-faq-index { display: block; position: sticky; top: 84px; }
 }
 .ft-faq-jump { transition: background 160ms ease; }
-.ft-faq-jump:hover, .ft-faq-jump:focus-visible { background: var(--accent-dim); outline: none; }
+.ft-faq-jump:hover { background: var(--accent-dim); }
+.ft-faq-jump:focus-visible { background: var(--accent-dim); outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── Scroll story ──────────────────────────────────────────────────
    A pinned drawing beside a reading column. Above 1024px the diagram
@@ -3672,18 +3706,10 @@ html.dark .main-app-theme {
 .ft-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-glow); }
 .ft-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--accent-glow); }
 
-/* ── Route change ──────────────────────────────────────────────────
-   A short rise on the incoming page. Deliberately brief: a transition
-   long enough to admire is a transition you wait through on every
-   click, and there are six pages to move between. Nothing is animated
-   out — an exit animation means the new page cannot start until the
-   old one has finished leaving, which is latency you added yourself. */
-@keyframes ft-route-in {
-  from { opacity: 0; transform: translateY(8px) }
-  to   { opacity: 1; transform: none }
-}
-.ft-route { animation: ft-route-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-@media (prefers-reduced-motion: reduce) { .ft-route { animation: none } }
+/* Route change: the public shell persists across navigations and only the
+   page inside <main> enters (.ft-m-page in styles/motion.css). Nothing is
+   animated out — an exit animation means the new page cannot start until
+   the old one has finished leaving, which is latency you added yourself. */
 
 /* ── Command palette ───────────────────────────────────────────────
    Anchored near the top rather than centred: a dialog that opens in
@@ -3945,6 +3971,16 @@ html.dark .main-app-theme {
   animation: ft-fade-up 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--d, 0ms);
 }
+/* The eyebrow and the lede can be the page's largest paint, so they are
+   never hidden and never wait: they settle by transform alone (ft-m-settle,
+   in styles/motion.css), from the first frame. Badges and button rows
+   keep the fade above. */
+.ft-lede.ft-up, .ft-eyebrow.ft-up { opacity: 1; }
+[data-shown] .ft-lede.ft-up, [data-shown].ft-lede.ft-up,
+[data-shown] .ft-eyebrow.ft-up, [data-shown].ft-eyebrow.ft-up {
+  animation: ft-m-settle var(--m-t-large, 700ms) var(--m-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  animation-delay: 0ms;
+}
 
 /* Children of a marked container rise in sequence (Stagger in
    PublicBits). The wrapper carries no motion, so nothing moves twice. */
@@ -4000,7 +4036,7 @@ html.dark .main-app-theme {
               box-shadow 240ms ease, filter 240ms ease;
 }
 .ft-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(20, 32, 51, 0.12); }
-.ft-btn:active { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
+.ft-btn:active { transform: none; } /* settles from the lift; the press scale is in motion.css */
 .ft-btn svg, .ft-cta svg, .ft-cta-link svg { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
 .ft-btn:hover svg, .ft-cta:hover svg, .ft-cta-link:hover svg { transform: translateX(3px); }
 
@@ -4030,7 +4066,6 @@ html.dark .main-app-theme {
               background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 .ft-chipbtn:hover { transform: translateY(-1px); }
-.ft-chipbtn:active { transform: scale(0.96); }
 
 /* Steps: the number badge pops once its step has arrived, and above
    960px a connector draws across behind the cards, so three cards read
@@ -4063,8 +4098,8 @@ html.dark .main-app-theme {
   }
 }
 
-/* The header firms up once the page has moved under it. */
-.ft-header { transition: box-shadow 260ms ease; }
+/* The header firms up once the page has moved under it. Its material and
+   transitions are in styles/motion.css (Translucent chrome). */
 .ft-header[data-scrolled] { box-shadow: 0 6px 24px rgba(20, 32, 51, 0.08); }
 .dark .ft-header[data-scrolled] { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
 
@@ -4122,20 +4157,19 @@ html.dark .main-app-theme {
 /* Show / hide password. */
 .ft-iconbtn { transition: background 160ms ease, color 160ms ease, transform 160ms ease; }
 .ft-iconbtn:hover { background: var(--bg-input); color: var(--text-1); }
-.ft-iconbtn:active { transform: translateY(-50%) scale(0.88); }
 .ft-pop-sm { animation: ft-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
 
 /* Provider buttons lift; their badge turns to meet the pointer. */
 .ft-provider { transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, border-color 220ms ease; }
 .ft-provider:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(20, 32, 51, 0.10); border-color: var(--accent-soft) !important; }
-.ft-provider:active:not(:disabled) { transform: translateY(0) scale(0.985); transition-duration: 80ms; }
+.ft-provider:active:not(:disabled) { transform: none; }
 .ft-provider .badge { transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
 .ft-provider:hover:not(:disabled) .badge { transform: scale(1.15) rotate(-8deg); }
 
 /* Submit lifts when it can be pressed, settles when it is, arrow leads. */
 .ft-submit { transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, background 180ms ease, opacity 180ms ease; }
 .ft-submit:not(:disabled):hover { transform: translateY(-2px); }
-.ft-submit:not(:disabled):active { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
+.ft-submit:not(:disabled):active { transform: none; }
 .ft-submit svg { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
 .ft-submit:not(:disabled):hover svg:last-child { transform: translateX(3px); }
 
@@ -4292,11 +4326,14 @@ html.dark .main-app-theme {
   transition: transform 600ms cubic-bezier(0.22,1,0.36,1);
 }
 .ft-showcase:hover .ft-showcase-frame { transform: perspective(1400px) rotateX(0) rotateY(0); }
+/* The incoming slide fades in over the outgoing one, which stays fully
+   opaque underneath until it is covered and only then drops out. Fading both
+   at once over a light frame gave a washed-out double image mid-way. */
 .ft-showcase-slide {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left;
-  opacity: 0; transform: scale(1.03); transition: opacity 700ms ease, transform 1200ms ease;
+  z-index: 1; opacity: 0; transform: scale(1.03); transition: opacity 0s 700ms, transform 0s 700ms;
 }
-.ft-showcase-slide[data-on] { opacity: 1; transform: none; }
+.ft-showcase-slide[data-on] { z-index: 2; opacity: 1; transform: none; transition: opacity 700ms ease, transform 1200ms ease; }
 .ft-showcase-dot {
   width: 8px; height: 8px; border-radius: 999px; padding: 0; border: 0; cursor: pointer;
   background: rgba(255,255,255,0.3); transition: width 260ms ease, background 260ms ease;
@@ -4326,13 +4363,20 @@ html.dark .main-app-theme {
 @keyframes ft-aurora-b { to { transform: translate(-200px, -60px) scale(.9); } }
 @keyframes ft-aurora-c { to { transform: translate(120px, 40px) scale(1.2); } }
 
-.ft-shine {
+/* A gradient sweep across a run of headline text. It was named .ft-shine,
+   the same class as the hover sweep on the closing slab, so the slab
+   inherited `color: transparent` and its heading, paragraph and buttons
+   vanished. Text gets its own class.
+   background-position is not composited, so every frame of the sweep is a
+   repaint: it runs once, for under two seconds of actual movement, and the
+   hero pauses it (ft-m-paused) whenever the hero is off screen. */
+.ft-shine-text {
   background: linear-gradient(100deg, var(--accent) 0%, var(--accent) 40%, #8b5cf6 50%, var(--accent) 60%, var(--accent) 100%);
   background-size: 250% 100%; background-position: 100% 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: ft-shine 6s ease-in-out 1.2s infinite;
+  animation: ft-shine 2.2s ease-in-out 1.2s 1 forwards;
 }
-@keyframes ft-shine { 0%, 55% { background-position: 100% 0; } 85%, 100% { background-position: 0% 0; } }
+@keyframes ft-shine { 0%, 10% { background-position: 100% 0; } 90%, 100% { background-position: 0% 0; } }
 
 .ft-live-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
 .ft-live-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #10b981; animation: ft-live 2s ease-out infinite; }
@@ -4357,13 +4401,9 @@ html.dark .main-app-theme {
 .ft-marquee:hover .ft-marquee-chip:hover { border-color: var(--accent-soft); color: var(--accent); }
 @keyframes ft-marquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 6px)); } }
 
-/* Public route change: the new page settles in instead of snapping. */
-.ft-page-enter { animation: ft-page-enter 420ms cubic-bezier(0.22,1,0.36,1) both; }
-@keyframes ft-page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
 @media (prefers-reduced-motion: reduce) {
-  .ft-aurora > span, .ft-shine, .ft-live-dot::after, .ft-page-enter { animation: none; }
-  .ft-shine { color: var(--accent); background: none; }
+  .ft-aurora > span, .ft-live-dot::after { animation: none; }
+  .ft-shine-text { color: var(--accent); background: none; animation: none; }
   .ft-marquee { -webkit-mask-image: none; mask-image: none; }
   .ft-marquee-track { animation: none; flex-wrap: wrap; width: auto; justify-content: center; }
   .ft-marquee-track > [aria-hidden="true"] { display: none; }

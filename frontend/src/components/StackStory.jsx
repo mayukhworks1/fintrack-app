@@ -9,8 +9,11 @@
  * Here the diagram is pinned and the scroll position chooses what it shows.
  * Reading the four paragraphs walks you up the stack one slab at a time —
  * records, mirror, modules, analyst — which is the order the data actually
- * moves in, and the picture stays in front of you the whole way rather than
- * scrolling off the moment the text starts explaining it.
+ * moves in. Under the drawing, each layer shows one piece of itself as it
+ * becomes the one being read: three rows from the sample ledger, the mirror's
+ * 30-second pass, the modules that read it, and the first lines of a
+ * statement the analyst's choice compiles to. A rail beside it says where
+ * you are.
  *
  * Degrades on purpose, in two directions:
  *
@@ -19,96 +22,120 @@
  *   it as an ordinary list. A sticky element in a single-column layout just
  *   covers the text it is meant to illustrate.
  *
- *   Under reduced motion nothing is pinned and every layer is lit. The
- *   sequence is in the numbering and the order, not only in the movement.
+ *   Under reduced motion nothing is pinned and every layer is lit, and each
+ *   layer's inset sits in its own paragraph instead of swapping under the
+ *   drawing. The sequence is in the numbering and the order, not only in the
+ *   movement.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { LAYERS, StackDrawing } from './LayerStack'
+import { useActiveStep } from '../hooks/useActiveStep'
+import StepRail from './motion/StepRail'
+import { MODULES } from '../content/publicContent'
+import { INVOICES, inr, ask } from './demoData'
+
+const ROWS = ['INV-2296', 'INV-2271', 'INV-2327']
+  .map(id => INVOICES.find(i => i.id === id)).filter(Boolean)
+const SQL = ask({ measure: 'outstanding', groupBy: 'client', limit: 3 }).sql.split('\n').slice(0, 2)
+
+function Inset({ i }) {
+  if (i === 0) {
+    return (
+      <>
+        <span className="ft-s-inset-cap">Three rows of the sample ledger</span>
+        <ul className="ft-s-inset-rows">
+          {ROWS.map(r => (
+            <li key={r.id}>
+              <span>{r.id}</span>
+              <span>{r.client}</span>
+              <b className="tabular-nums">{inr(r.amount)}</b>
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+  if (i === 1) {
+    return (
+      <div className="ft-s-inset-ring">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="27" className="ft-s-ring-track" />
+          <circle cx="32" cy="32" r="27" pathLength="1" className="ft-s-ring-arc ft-m-draw" />
+        </svg>
+        <span>
+          <b>every 30 s</b>
+          an incremental pass, between the webhooks and the 5-minute full pass
+        </span>
+      </div>
+    )
+  }
+  if (i === 2) {
+    return (
+      <>
+        <span className="ft-s-inset-cap">{MODULES.length} modules, one mirror</span>
+        <ul className="ft-s-inset-mods ft-m-seq">
+          {MODULES.map(({ icon: Icon, title }, k) => (
+            <li key={title} title={title} style={{ '--i': Math.min(k, 7) }}>
+              <Icon size={15} aria-hidden="true" />
+              <span className="sr-only">{title}</span>
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+  return (
+    <>
+      <span className="ft-s-inset-cap">The statement it compiles to, first two lines</span>
+      <pre className="ft-s-inset-sql"><code>{SQL.join('\n')}</code></pre>
+    </>
+  )
+}
 
 export default function StackStory() {
-  const [active, setActive] = useState(0)
-  const [reduced, setReduced] = useState(false)
-  const stepRefs = useRef([])
+  const { active, stepRef, tracking } = useActiveStep(LAYERS.length)
+  const insets = useRef([])
 
+  // An inset draws once: the first time its layer is read it gets
+  // [data-shown], and it keeps it, so scrolling back does not replay it.
   useEffect(() => {
-    setReduced(!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
-  }, [])
-
-  useEffect(() => {
-    if (reduced || typeof IntersectionObserver === 'undefined') return
-    const nodes = stepRefs.current.filter(Boolean)
-    if (!nodes.length) return
-
-    // A narrow band across the middle of the viewport: whichever step is
-    // crossing it is the one being read. Watching for "mostly visible"
-    // instead leaves two steps qualifying at once on a tall screen, and the
-    // diagram flickers between them.
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            const i = nodes.indexOf(e.target)
-            if (i >= 0) setActive(i)
-          }
-        }
-      },
-      { rootMargin: '-45% 0px -45% 0px', threshold: 0 }
-    )
-    nodes.forEach(n => io.observe(n))
-    return () => io.disconnect()
-  }, [reduced])
+    if (!tracking) return
+    insets.current[active]?.setAttribute('data-shown', '')
+  }, [active, tracking])
 
   return (
-    <div className="ft-story">
+    <div className="ft-story ft-s-story" data-tracking={tracking ? '' : undefined}>
       <div className="ft-story-pin">
-        <StackDrawing active={reduced ? null : active} />
-        {/* The legend is the key to the drawing, so it moves with it. */}
-        <ol className="hidden lg:flex flex-col gap-1 mt-4 m-0 p-0" style={{ listStyle: 'none' }}>
-          {LAYERS.map((l, i) => {
-            const on = reduced || i === active
-            return (
-              <li key={l.id} className="flex items-center gap-2.5">
-                <span aria-hidden="true" style={{
-                  width: 9, height: 9, borderRadius: 3, flexShrink: 0,
-                  background: l.top,
-                  opacity: on ? 1 : 0.3,
-                  transition: 'opacity 320ms ease, box-shadow 320ms ease',
-                  boxShadow: on ? `0 0 0 3px color-mix(in srgb, ${l.top} 20%, transparent)` : 'none',
-                }} />
-                <span style={{
-                  fontSize: 12.5, fontWeight: on ? 700 : 500,
-                  color: on ? 'var(--text-1)' : 'var(--text-3)',
-                  transition: 'color 320ms ease',
-                }}>
-                  {l.title}
-                </span>
-              </li>
-            )
-          })}
-        </ol>
+        <StackDrawing active={tracking ? active : null} />
+        {tracking && (
+          <div className="ft-s-insets" aria-hidden="true">
+            {LAYERS.map((l, i) => (
+              <div key={l.id} ref={el => (insets.current[i] = el)} className="ft-s-inset"
+                   data-on={i === active ? '' : undefined}>
+                <Inset i={i} />
+              </div>
+            ))}
+          </div>
+        )}
+        <StepRail count={LAYERS.length} active={active} labels={LAYERS.map(l => l.title)}
+                  className="ft-s-story-rail" />
       </div>
 
       <ol className="ft-story-steps m-0 p-0" style={{ listStyle: 'none' }}>
         {LAYERS.map((l, i) => {
-          const on = reduced || i === active
+          const on = !tracking || i === active
           return (
-            <li key={l.id}
-                ref={el => (stepRefs.current[i] = el)}
-                className="ft-story-step"
-                data-on={on ? '' : undefined}>
+            <li key={l.id} ref={stepRef(i)} className="ft-story-step" data-on={on ? '' : undefined}>
               <div className="flex items-baseline gap-3 mb-2">
-                <span className="tabular-nums font-bold shrink-0"
-                      style={{ fontSize: 12, color: on ? 'var(--accent)' : 'var(--text-3)',
-                               transition: 'color 320ms ease' }}>
+                <span className="ft-s-story-n tabular-nums font-bold shrink-0">
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <h3 className="ft-display" style={{ fontSize: '1.35rem', color: 'var(--text-1)' }}>
                   {l.title}
                 </h3>
               </div>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                {STORY[i]}
-              </p>
+              <p className="text-sm leading-relaxed">{STORY[i]}</p>
+              {!tracking && <div className="ft-s-inset ft-s-inset-flat" data-shown=""><Inset i={i} /></div>}
             </li>
           )
         })}
@@ -123,5 +150,5 @@ const STORY = [
   'The base your team already works in stays the system of record. FinTrack reads and writes it directly, so there is no migration to schedule, no export to reconcile, and no second place for someone to update instead. That last one is the failure mode of every finance tool that asks you to import first.',
   'A Postgres mirror is kept current by webhooks, a thirty-second incremental pass and a periodic full reconciliation. Lists filter and sort against the mirror rather than the source, which is why a screen of six hundred invoices is instant instead of a round trip per view.',
   'Every module reads that one mirror — receivables, projects, tax, analytics, documents, reports, status, shared links and the audit trail. This is the whole reason a figure on the dashboard and a figure in a report cannot disagree: there is no second copy for them to disagree about.',
-  'The analyst sits on top and is the most constrained thing in the stack. It picks a measure and a grouping from a closed list; the application compiles the statement, applies your row scoping as it builds it, runs it, and shows it to you next to the answer.',
+  'The analyst sits on top and is the most constrained thing in the stack. It picks a measure and a grouping from a closed list; the application compiles the statement, applies your row scoping as it builds it, runs it, and shows it to you next to the answer. Every model call goes through one gateway, where each task has an ordered route of providers, a daily cap and a versioned prompt, and every call is logged.',
 ]

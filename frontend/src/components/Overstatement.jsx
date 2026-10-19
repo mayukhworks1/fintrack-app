@@ -1,75 +1,98 @@
 /**
- * What counting the tax costs you, at your own numbers.
+ * What counting the tax does to a receivables figure, at your own numbers.
  *
- * The site states the TDS point four times in prose and it lands every time as
- * a technicality. It is not a technicality — it is the difference between a
- * collections list you can act on and one that sends people chasing money
- * nobody owes. A sentence cannot make that land. A number the reader chose
- * can.
+ * Drag a monthly billing figure (pre-tax) and the invoice opens into its
+ * parts. Everything is computed live from the two rates in demoData, nothing
+ * is fetched, and the arithmetic is the invoice drawer's:
  *
- * So: drag your own monthly billing and watch the gap open. Everything is
- * computed live from the two rates, nothing is fetched, and the arithmetic is
- * the same arithmetic the sandbox and the invoice drawer use — GST is added on
- * top and collected for the state, TDS is withheld by the client before they
- * pay, and the receivable is the pre-tax figure underneath both.
+ *   invoice total        B × (1 + GST)        what the document says
+ *   withheld at source   B × TDS              the client pays it to the state
+ *   cash the client pays B × (1 + GST − TDS)
+ *   GST, for the state   B × GST
+ *   yours                B × (1 − TDS)
  *
- * The slider is a real range input. A custom-drawn one would need keyboard
+ * So a report that shows the invoice total as outstanding overstates the cash
+ * coming by the TDS, and the money that is yours by the GST and the TDS.
+ *
+ * The slider is a real range input: a custom one would need keyboard
  * handling, ARIA and touch geometry rebuilt from nothing to end up where the
- * native control already is.
+ * native control already is. The bars move by transform only, the billed
+ * figure rolls, and the figures are set in Outfit rather than Fraunces, so the
+ * ₹ sign does not pull in a second display font file.
  */
 import { useState } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { GST_RATE, TDS_RATE, inr } from './demoData'
-import { Reveal } from './PublicBits'
+import { useReveal } from '../hooks/useReveal'
+import RollNumber from './motion/RollNumber'
 
 const STOPS = [200000, 500000, 1000000, 2500000, 5000000, 10000000]
 
-/** Compact Indian notation — ₹25L reads faster than ₹25,00,000 on a handle. */
+/** Compact Indian notation: ₹25L reads faster than ₹25,00,000 on a tick. */
 const short = (n) =>
   n >= 1e7 ? `₹${(n / 1e7).toFixed(n % 1e7 ? 1 : 0)}Cr`
   : n >= 1e5 ? `₹${(n / 1e5).toFixed(n % 1e5 ? 1 : 0)}L`
   : `₹${Math.round(n / 1000)}K`
 
+/** Every figure the panel shows, from the pre-tax billing. Exported for the tests. */
+export function split(billed) {
+  const gst = Math.round(billed * GST_RATE)
+  const tds = Math.round(billed * TDS_RATE)
+  return {
+    billed,
+    gst,
+    tds,
+    invoice: billed + gst,          // B × (1 + GST)
+    cash: billed + gst - tds,       // B × (1 + GST − TDS)
+    yours: billed - tds,            // B × (1 − TDS)
+  }
+}
+
+const pct = (n, of) => `${(n / of) * 100}%`
+
+/** One segment of a bar: placed and sized by transform, so it can move. */
+function Seg({ x, w, tone, label, hatch = false }) {
+  return (
+    <span className={`ft-h-seg${hatch ? ' ft-h-seg-hatch' : ''}`}
+          style={{ '--x': x, '--w': w, '--tone': tone }}
+          title={label} />
+  )
+}
+
 export default function Overstatement() {
   // Indexed rather than continuous: a linear slider over two orders of
   // magnitude spends most of its travel in a range nobody is in.
   const [i, setI] = useState(2)
-  const billed = STOPS[i]
+  const f = split(STOPS[i])
+  const ref = useReveal({ threshold: 0.3 })
 
-  const gst = Math.round(billed * GST_RATE)
-  const tds = Math.round(billed * TDS_RATE)
-  const overstated = gst + tds
-  const naive = billed + gst          // what a report that counts the tax shows
-  const pct = Math.round((overstated / billed) * 100)
-
-  const bar = (value, of, tone) => ({
-    width: `${Math.max((value / of) * 100, 2)}%`,
-    background: tone,
-    transition: 'width 420ms cubic-bezier(0.22,1,0.36,1)',
-  })
+  // Both bars are drawn against the invoice total.
+  const of = f.invoice
+  const scale = (n) => String(n / of)
 
   return (
-    <Reveal className="rounded-2xl overflow-hidden"
-            style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+    <div ref={ref} className="ft-h-over ft-reveal rounded-2xl overflow-hidden"
+         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
       <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap"
            style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
-        <TrendingUp size={14} aria-hidden="true" style={{ color: 'var(--accent)' }} />
+        <TrendingUp size={14} aria-hidden="true" style={{ color: 'var(--accent-ink, var(--accent))' }} />
         <span className="font-bold" style={{ fontSize: 12, color: 'var(--text-1)' }}>
-          What counting the tax would cost you
+          What one invoice is made of
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>drag your monthly billing</span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          drag your monthly billing · GST {Math.round(GST_RATE * 100)}%, TDS {Math.round(TDS_RATE * 100)}%
+        </span>
       </div>
 
       <div className="p-4 sm:p-6">
-        <label className="block mb-5">
-          <span className="flex items-baseline justify-between mb-2">
+        <label className="block mb-6">
+          <span className="flex items-baseline justify-between mb-2 gap-3">
             <span className="font-bold uppercase tracking-[0.14em]"
                   style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
               Billed per month, pre-tax
             </span>
-            <span className="ft-display tabular-nums"
-                  style={{ fontSize: 'clamp(1.3rem, 3.4vw, 1.9rem)', color: 'var(--accent)' }}>
-              {inr(billed)}
+            <span className="ft-h-fig" style={{ fontSize: 'clamp(1.3rem, 3.4vw, 1.9rem)', color: 'var(--accent-ink, var(--accent))' }}>
+              <RollNumber value={f.billed} format={inr} />
             </span>
           </span>
           <input
@@ -79,11 +102,11 @@ export default function Overstatement() {
             value={i}
             onChange={e => setI(Number(e.target.value))}
             aria-label="Monthly billing, pre-tax"
-            aria-valuetext={inr(billed)}
+            aria-valuetext={inr(f.billed)}
           />
           <span className="flex justify-between mt-1.5" aria-hidden="true">
             {STOPS.map((s, n) => (
-              <span key={s} style={{ fontSize: 10, color: n === i ? 'var(--accent)' : 'var(--text-3)',
+              <span key={s} style={{ fontSize: 10, color: n === i ? 'var(--accent-ink, var(--accent))' : 'var(--text-3)',
                                      fontWeight: n === i ? 700 : 500 }}>
                 {short(s)}
               </span>
@@ -91,39 +114,59 @@ export default function Overstatement() {
           </span>
         </label>
 
-        <div className="flex flex-col gap-3 mb-5">
-          {[
-            ['A report that counts the tax', naive, 'var(--bad)',
-             `${inr(billed)} + ${inr(gst)} GST`],
-            ['What is actually collectable', billed, 'var(--ok)',
-             'the pre-tax figure — the receivable'],
-          ].map(([label, value, tone, note]) => (
-            <div key={label}>
-              <div className="flex items-baseline justify-between gap-3 mb-1">
-                <span className="font-semibold" style={{ fontSize: 12, color: 'var(--text-1)' }}>{label}</span>
-                <span className="tabular-nums font-extrabold shrink-0"
-                      style={{ fontSize: 14, color: tone }}>{inr(value)}</span>
-              </div>
-              <span className="block" style={{ height: 10, borderRadius: 5, background: 'var(--bg-input)' }}>
-                <span style={{ display: 'block', height: '100%', borderRadius: 5,
-                               ...bar(value, naive, tone) }} />
-              </span>
-              <span className="block mt-1" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{note}</span>
-            </div>
-          ))}
+        <div className="ft-h-bars" aria-hidden="true">
+          <div className="ft-h-bar-row">
+            <span className="ft-h-bar-label">Invoice</span>
+            <span className="ft-h-bar">
+              {/* receivable (pre-tax), with the TDS inside it, then the GST */}
+              <Seg x="0%" w={scale(f.billed - f.tds)} tone="var(--accent)" label="Receivable, less TDS" />
+              <Seg x={pct(f.billed - f.tds, of)} w={scale(f.tds)} tone="var(--warn)" hatch label="TDS withheld" />
+              <Seg x={pct(f.billed, of)} w={scale(f.gst)} tone="var(--text-3)" label="GST" />
+            </span>
+          </div>
+          <div className="ft-h-bar-row">
+            <span className="ft-h-bar-label">Yours</span>
+            <span className="ft-h-bar">
+              <Seg x="0%" w={scale(f.yours)} tone="var(--ok)" label="Yours" />
+            </span>
+          </div>
+          <div className="ft-h-bar-key">
+            <span><i style={{ background: 'var(--accent-btn)' }} />receivable</span>
+            <span><i className="ft-h-key-hatch" />TDS, inside it</span>
+            <span><i style={{ background: 'var(--text-3)' }} />GST</span>
+            <span><i style={{ background: 'var(--ok)' }} />yours</span>
+          </div>
         </div>
 
-        <div className="rounded-xl px-4 py-3"
+        <dl className="ft-h-split">
+          {[
+            ['Invoice total', f.invoice, 'what the document says', 'var(--text-1)'],
+            ['Withheld at source (TDS)', f.tds, 'the client pays it to the state', 'var(--warn)'],
+            ['Cash the client pays', f.cash, 'invoice total less TDS', 'var(--text-1)'],
+            ['GST, held for the state', f.gst, 'collected, not earned', 'var(--text-2)'],
+            ['Yours', f.yours, 'pre-tax billing less TDS', 'var(--ok)'],
+          ].map(([k, v, note, tone]) => (
+            <div key={k} className="ft-h-split-row">
+              <dt>
+                <span className="block font-semibold" style={{ fontSize: 12.5, color: 'var(--text-1)' }}>{k}</span>
+                <span className="block" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{note}</span>
+              </dt>
+              <dd className="ft-h-fig" style={{ color: tone }}>{inr(v)}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="rounded-xl px-4 py-3 mt-5"
              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
           <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-2)' }}>
-            At {inr(billed)} a month you would be chasing{' '}
-            <strong className="tabular-nums" style={{ color: 'var(--accent)' }}>{inr(overstated)}</strong>{' '}
-            that nobody owes you — {pct}% over, every month. {inr(gst)} of it is
-            GST you collected for the state, and {inr(tds)} is TDS your client
-            withheld before paying. Neither is money a client still has.
+            A report that shows <strong className="tabular-nums" style={{ color: 'var(--text-1)' }}>{inr(f.invoice)}</strong>{' '}
+            outstanding overstates the cash coming by{' '}
+            <strong className="tabular-nums" style={{ color: 'var(--accent-ink, var(--accent))' }}>{inr(f.tds)}</strong>{' '}
+            (TDS withheld at source), and the money that is yours by{' '}
+            <strong className="tabular-nums" style={{ color: 'var(--accent-ink, var(--accent))' }}>{inr(f.invoice - f.yours)}</strong>.
           </p>
         </div>
       </div>
-    </Reveal>
+    </div>
   )
 }

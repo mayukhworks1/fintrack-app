@@ -16,6 +16,11 @@
  *
  * All inline SVG. The CSP names no image origin, an authored mark takes the
  * visitor's theme, and none of it costs a request.
+ *
+ * Each one plays once, the first time it is scrolled to, and then rests on
+ * its finished state: the switch on, the module in its slot, the record fed
+ * across. They used to loop, and a page of five drawings all looping is a
+ * page nobody can read. Under reduced motion they are drawn finished.
  */
 import { useReveal } from '../hooks/useReveal'
 
@@ -57,9 +62,9 @@ export function PermissionRows() {
             {/* the switch */}
             <rect x="152" y={y + 5} width="26" height="10" rx="5"
                   fill={on ? ACCENT : LINE}
-                  style={on ? { animation: 'ft-switch-on 2.6s ease-in-out infinite' } : undefined} />
+                  style={on ? { animation: 'ft-switch-on 1.1s ease-in-out 200ms both' } : undefined} />
             <circle cx={on ? 172 : 158} cy={y + 10} r="4" fill="var(--card-bg)"
-                    style={on ? { animation: 'ft-switch-knob 2.6s ease-in-out infinite' } : undefined} />
+                    style={on ? { animation: 'ft-switch-knob 1.1s cubic-bezier(0.22,1,0.36,1) 200ms both' } : undefined} />
           </g>
         )
       })}
@@ -95,7 +100,7 @@ export function OneBuildTwoHomes() {
       {box(108, 'Dedicated', 'your cloud', true)}
       {/* the environment file that is the only difference */}
       <path d="M 92 51 L 108 51" stroke={ACCENT} strokeWidth="1.2" strokeDasharray="3 3"
-            className="ft-dash" />
+            className="ft-s-dash" />
       <circle cx="100" cy="51" r="6.5" fill="var(--bg-input)" stroke={ACCENT} strokeWidth="1" />
       <text x="100" y="53.5" fontSize="6" fontWeight="800" textAnchor="middle" fill={ACCENT}>env</text>
     </Frame>
@@ -118,12 +123,12 @@ export function ModuleSlotsIn() {
         </g>
       ))}
       {/* the arrival */}
-      <g style={{ animation: 'ft-slot-in 3.2s cubic-bezier(0.22,1,0.36,1) infinite' }}>
+      <g style={{ animation: 'ft-slot-in 1.2s cubic-bezier(0.22,1,0.36,1) 150ms both' }}>
         <rect x="19" y="82" width="38" height="10" rx="4" fill={ACCENT} opacity="0.18" />
         <circle cx="25" cy="87" r="2.4" fill={ACCENT} />
         <rect x="31" y="85" width="22" height="4" rx="2" fill={ACCENT} opacity="0.7" />
       </g>
-      <path d="M 96 54 L 72 54" stroke={ACCENT} strokeWidth="1.3" className="ft-dash" />
+      <path d="M 96 54 L 72 54" stroke={ACCENT} strokeWidth="1.3" />
       <path d="M 76 50 L 71 54 L 76 58" fill="none" stroke={ACCENT} strokeWidth="1.3"
             strokeLinecap="round" strokeLinejoin="round" />
       <g>
@@ -155,12 +160,10 @@ export function StaysPut() {
         </text>
         <text x="48" y="97" fontSize="6.5" textAnchor="middle" fill={DIM}>system of record</text>
       </g>
-      {/* one direction, repeatedly */}
+      {/* one direction: a record crosses once, and rests at the mirror */}
       <path d="M 86 52 L 116 52" stroke={ACCENT} strokeWidth="1.2" strokeDasharray="4 4"
-            className="ft-dash" />
-      <circle r="2.6" fill="#4ADE80" className="ft-runner">
-        <animateMotion dur="2.4s" repeatCount="indefinite" path="M 86 52 L 116 52" />
-      </circle>
+            className="ft-s-dash" />
+      <circle cx="86" cy="52" r="2.6" fill="#16a34a" className="ft-s-runner" />
       <g>
         <rect x="122" y="30" width="62" height="44" rx="8"
               fill="var(--card-bg)" stroke={LINE} />
