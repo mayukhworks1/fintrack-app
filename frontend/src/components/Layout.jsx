@@ -379,6 +379,7 @@ export default function Layout({ children, style }) {
           // being decided by whichever rule happened to come last rather
           // than by anyone's intent.
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transitionTimingFunction: 'var(--ease-fluid)',
           boxShadow: drawerOpen ? '8px 0 28px rgba(15,23,42,0.10)' : 'none',
         }}
         aria-label="Mobile navigation"
@@ -394,12 +395,9 @@ export default function Layout({ children, style }) {
 
         {/* ── Mobile top bar ── */}
         <header
-          className="lg:hidden flex items-center justify-between px-4 py-2.5 flex-shrink-0 sticky top-0 z-30"
+          className="app-bar lg:hidden flex items-center justify-between px-4 py-2.5 flex-shrink-0 sticky top-0 z-30"
           style={{
-            background: 'var(--sidebar-bg)',
             borderBottom: '1px solid var(--sidebar-border)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
             paddingTop: 'max(0.625rem, env(safe-area-inset-top))',
           }}
         >
@@ -465,9 +463,8 @@ function MobileBottomNav() {
   return (
     <nav
       aria-label="Primary navigation"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch justify-around"
+      className="app-bar app-bottom-bar lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch justify-around"
       style={{
-        background: 'var(--sidebar-bg)',
         borderTop: '1px solid var(--sidebar-border)',
         paddingBottom: 'env(safe-area-inset-bottom)',
         boxShadow: '0 -6px 24px rgba(15,23,42,0.05)',

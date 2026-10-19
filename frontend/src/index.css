@@ -133,6 +133,17 @@
 
 /* ── Light (default) — Professional Blue & White ──────────────── */
 :root {
+  /* Motion: short, spring-like enter/exit; press lands on pointer-down. */
+  --motion-press:     100ms;
+  --motion-enter:     280ms;
+  --motion-exit:      180ms;
+  --motion-fade:      150ms;
+  --ease-fluid:       cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit:        cubic-bezier(0.4, 0, 1, 1);
+  --ease-press:       cubic-bezier(0, 0, 0.58, 1);
+  --press-scale:      0.97;
+  --press-scale-lg:   0.985;
+  --pop-scale:        0.96;
   --space-2xs:       0.25rem;
   --space-xs:        0.5rem;
   --space-sm:        0.75rem;
@@ -792,13 +803,13 @@ html.dark .main-app-theme {
 
   .card-hover {
     @apply card cursor-pointer;
-    transition: box-shadow var(--dur-med), border-color var(--dur-med), transform var(--dur-med) var(--ease-spring);
+    transition: box-shadow var(--dur-med), border-color var(--dur-med), transform var(--dur-med) var(--ease-spring), scale var(--motion-press) var(--ease-press);
   }
   .card-hover:hover  {
     box-shadow: var(--card-shadow-hover);
     border-color: var(--accent-soft);
   }
-  .card-hover:active { transform: scale(0.99); }
+  .card-hover:active { scale: var(--press-scale-lg); }
 
   /* ── Buttons ── */
   .btn-primary {
@@ -810,7 +821,7 @@ html.dark .main-app-theme {
     border-radius: var(--radius-btn);
     border: 1px solid rgba(255,255,255,0.10);
     box-shadow: var(--btn-shadow);
-    transition: filter var(--dur-fast), box-shadow var(--dur-fast), opacity 0.12s;
+    transition: filter var(--dur-fast), box-shadow var(--dur-fast), opacity 0.12s, scale var(--motion-press) var(--ease-press);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -819,6 +830,7 @@ html.dark .main-app-theme {
     letter-spacing: 0.005em;
   }
   .btn-primary:hover    { filter: brightness(1.04); box-shadow: 0 4px 10px rgba(47,91,255,0.22), 0 14px 28px rgba(47,91,255,0.20); }
+  .btn-primary:active:not(:disabled) { scale: var(--press-scale); }
   .btn-primary:active   { filter: brightness(0.95); box-shadow: 0 1px 2px rgba(37,99,235,0.18); }
   .btn-primary:disabled { opacity: 0.40; cursor: not-allowed; filter: none; box-shadow: none; }
 
@@ -831,7 +843,7 @@ html.dark .main-app-theme {
     border-radius: var(--radius-btn);
     border: 1px solid var(--card-border);
     box-shadow: none;
-    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), scale var(--motion-press) var(--ease-press);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -840,6 +852,7 @@ html.dark .main-app-theme {
   }
   .btn-ghost:hover    { background: var(--accent-dim); border-color: var(--accent-soft); color: var(--accent); }
   .btn-ghost:active   { opacity: 0.85; }
+  .btn-ghost:active:not(:disabled) { scale: var(--press-scale); }
   .btn-ghost:disabled { opacity: 0.40; cursor: not-allowed; }
 
   .btn-danger {
@@ -851,14 +864,14 @@ html.dark .main-app-theme {
     border-radius: var(--radius-btn);
     border: 1px solid transparent;
     box-shadow: 0 1px 2px rgba(220,38,38,0.18);
-    transition: filter var(--dur-fast), transform 0.12s;
+    transition: filter var(--dur-fast), transform 0.12s, scale var(--motion-press) var(--ease-press);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
   }
   .btn-danger:hover    { filter: brightness(0.95); transform: translateY(-1px); }
-  .btn-danger:active   { transform: scale(0.98); }
+  .btn-danger:active:not(:disabled) { transform: none; scale: var(--press-scale); }
   .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 
   .btn-icon {
@@ -869,13 +882,13 @@ html.dark .main-app-theme {
     padding: 0.4375rem;
     border-radius: var(--radius-xs);
     cursor: pointer;
-    transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+    transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), scale var(--motion-press) var(--ease-press);
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
   .btn-icon:hover    { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
-  .btn-icon:active   { transform: scale(0.94); }
+  .btn-icon:active:not(:disabled) { scale: 0.94; }
   .btn-icon:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Secondary — for Refresh / Export / Retry actions ── */
@@ -888,7 +901,7 @@ html.dark .main-app-theme {
     border-radius: var(--radius-btn);
     border: 1px solid var(--card-border);
     box-shadow: none;
-    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast);
+    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast), scale var(--motion-press) var(--ease-press);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -898,6 +911,7 @@ html.dark .main-app-theme {
   }
   .btn-secondary:hover    { background: var(--card-bg); border-color: var(--text-3); color: var(--text-1); box-shadow: var(--shadow-sm); }
   .btn-secondary:active   { opacity: 0.82; }
+  .btn-secondary:active:not(:disabled) { scale: var(--press-scale); }
   .btn-secondary:disabled { opacity: 0.38; cursor: not-allowed; }
 
   /* ── Input ── */
@@ -1811,7 +1825,7 @@ h1 { letter-spacing: -0.03em; }
 
 /* Subtle press feedback for tappable surfaces on touch devices */
 @media (hover: none) {
-  .card-hover:active { transform: scale(0.98); }
+  .card-hover:active { scale: 0.98; }
 }
 
 /* ── Full-screen app shell — Safari-safe height ──────────────────
@@ -2200,7 +2214,7 @@ html.dark .web-invoices-shell {
   background: #1a1a1a;
   color: rgba(255,255,255,0.68);
   box-shadow: 0 8px 18px rgba(0,0,0,0.22);
-  transition: transform 160ms ease, color 160ms ease, background 160ms ease;
+  transition: transform 160ms ease, color 160ms ease, background 160ms ease, scale var(--motion-press) var(--ease-press);
 }
 
 .runey-collapse-button:hover {
@@ -2226,7 +2240,7 @@ html.dark .web-invoices-shell {
   font-size: 0.78rem;
   font-weight: 800;
   text-decoration: none;
-  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease, scale var(--motion-press) var(--ease-press);
 }
 
 .runey-new-button.is-collapsed {
@@ -4595,4 +4609,156 @@ html.dark .main-app-theme {
   .ft-sheet-name { width: 76px; padding: 0 4px; }
   .ft-sheet-input { font-size: 16px; line-height: 20px; }
   .ft-sheet-select { font-size: 16px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   APP MOTION & MATERIALS (signed-in screens)
+   ------------------------------------------------------------------
+   Press feedback lands on pointer-down (:active) with the `scale`
+   property, so it composes with any existing `transform`. Overlays
+   use CSS transitions keyed on data-state, which always run from the
+   current on-screen value: closing a panel mid-open reverses it in
+   place instead of jumping. Menus and toasts enter via
+   @starting-style (a transition, not a keyframe); browsers without
+   it simply show them. Translucent materials sit behind an
+   @supports check, with the solid surface as the fallback.
+══════════════════════════════════════════════════════════════════ */
+
+/* ── Press feedback ── */
+.runey-nav-link {
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease, scale var(--motion-press) var(--ease-press);
+}
+.runey-nav-link:active,
+.runey-new-button:active,
+.runey-collapse-button:active,
+.app-bottom-bar a:active { scale: var(--press-scale); }
+.app-bottom-bar a { transition-property: background, background-color, color, border-color, box-shadow, opacity, transform, scale; }
+.main-app-theme [role="tab"]:active,
+.main-app-theme button[aria-pressed]:active:not(:disabled),
+.main-app-theme button[role="switch"]:active:not(:disabled),
+.app-press:active:not(:disabled) { scale: var(--press-scale); }
+.app-switch { transition: opacity var(--motion-fade) ease, scale var(--motion-press) var(--ease-press); }
+.app-switch:active:not(:disabled) { scale: 0.94; }
+.app-switch-knob { transition: transform var(--motion-enter) var(--ease-fluid); }
+
+/* ── Materials ── */
+.app-bar { background: var(--sidebar-bg); }
+.app-menu { background: var(--card-bg); }
+.app-scrim { background: rgba(0,0,0,0.55); }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-bar {
+    background: color-mix(in srgb, var(--sidebar-bg) 80%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  .app-menu, .ft-sheet-menu {
+    background: color-mix(in srgb, var(--card-bg) 86%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+  .app-scrim {
+    background: rgba(15,23,42,0.42);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  html.dark .app-scrim { background: rgba(0,0,0,0.5); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .app-bar { background: var(--sidebar-bg) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .app-menu, .ft-sheet-menu { background: var(--card-bg) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .app-scrim { background: rgba(0,0,0,0.6) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
+
+/* ── Scrim (modal / drawer backdrop) ── */
+.app-scrim {
+  opacity: 0;
+  transition: opacity var(--motion-exit) var(--ease-exit);
+}
+.app-scrim[data-state="open"] {
+  opacity: 1;
+  transition: opacity var(--motion-enter) var(--ease-fluid);
+}
+
+/* ── Modal: bottom sheet on phones, scale + fade on sm+ ── */
+.app-modal-panel {
+  opacity: 0;
+  transform: translateY(100%);
+  transition: transform var(--motion-exit) var(--ease-exit), opacity var(--motion-exit) var(--ease-exit);
+  will-change: transform, opacity;
+}
+@media (min-width: 640px) {
+  .app-modal-panel { transform: scale(var(--pop-scale)); }
+}
+.app-modal-panel[data-state="open"] {
+  opacity: 1;
+  transform: none;
+  transition: transform var(--motion-enter) var(--ease-fluid), opacity var(--motion-fade) ease-out;
+}
+
+/* ── Drawer: enters and leaves along the same edge ── */
+.app-drawer-panel {
+  transform: translateX(100%);
+  transition: transform var(--motion-exit) var(--ease-exit);
+  will-change: transform;
+}
+.app-drawer-panel[data-state="open"] {
+  transform: none;
+  transition: transform var(--motion-enter) var(--ease-fluid);
+}
+
+/* ── Menus / popovers: scale + fade from the trigger side ── */
+.app-pop, .ft-sheet-menu {
+  transform-origin: var(--pop-origin, top left);
+  transition: opacity var(--motion-fade) ease-out, scale var(--motion-enter) var(--ease-fluid);
+}
+@starting-style {
+  .app-pop, .ft-sheet-menu { opacity: 0; scale: var(--pop-scale); }
+}
+
+/* ── Toasts ── */
+.app-toast {
+  transform-origin: bottom right;
+  transition: opacity var(--motion-fade) ease-out, scale var(--motion-enter) var(--ease-fluid), translate var(--motion-enter) var(--ease-fluid);
+}
+@starting-style {
+  .app-toast { opacity: 0; scale: var(--pop-scale); translate: 0 8px; }
+}
+.app-toast[data-state="closed"] {
+  opacity: 0;
+  scale: var(--pop-scale);
+  pointer-events: none;
+  transition-duration: var(--motion-exit);
+  transition-timing-function: var(--ease-exit);
+}
+
+/* ── Typography: figures line up, big type sits a little tighter ── */
+.main-app-theme table,
+.main-app-theme .executive-stat-value,
+.main-app-theme .display-num,
+.app-modal-panel table,
+.app-drawer-panel table { font-variant-numeric: tabular-nums; }
+.main-app-theme .page-title { letter-spacing: -0.022em; }
+.main-app-theme .executive-stat-value { letter-spacing: -0.03em; }
+
+/* ── Reduced motion: keep the feedback, drop the movement ── */
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:active, .btn-ghost:active, .btn-secondary:active, .btn-danger:active,
+  .btn-icon:active, .card-hover:active, .runey-nav-link:active, .runey-new-button:active,
+  .runey-collapse-button:active, .app-bottom-bar a:active, .app-switch:active, .app-press:active,
+  .main-app-theme [role="tab"]:active, .main-app-theme button[aria-pressed]:active,
+  .main-app-theme button[role="switch"]:active { scale: none !important; }
+  .btn-icon:active:not(:disabled), .runey-nav-link:active, .app-bottom-bar a:active,
+  .main-app-theme [role="tab"]:active, .main-app-theme button[aria-pressed]:active:not(:disabled) { opacity: 0.8; }
+
+  .app-scrim, .app-scrim[data-state="open"],
+  .app-modal-panel, .app-modal-panel[data-state="open"],
+  .app-drawer-panel, .app-drawer-panel[data-state="open"],
+  .app-pop, .ft-sheet-menu, .app-toast {
+    transform: none !important;
+    scale: none !important;
+    translate: none !important;
+    transition: opacity var(--motion-fade) ease !important;
+  }
+  .app-drawer-panel { opacity: 0; }
+  .app-drawer-panel[data-state="open"] { opacity: 1; }
 }

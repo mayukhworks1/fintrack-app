@@ -23,7 +23,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap, isTopmostTrap } from '../hooks/useFocusTrap'
 
-const DURATION = 260 // ms — must match CSS transition duration
+const DURATION = 260 // ms — unmount delay; must outlast the exit transition (--motion-exit) in index.css
 
 export default function Drawer({
   open,
@@ -90,31 +90,23 @@ export default function Drawer({
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0"
+        className="app-scrim absolute inset-0"
+        data-state={visible ? 'open' : 'closed'}
         onClick={onClose}
         aria-hidden="true"
-        style={{
-          background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(5px)',
-          WebkitBackdropFilter: 'blur(5px)',
-          opacity: visible ? 1 : 0,
-          transition: `opacity ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
-        }}
       />
 
       {/* Panel */}
       <aside
         ref={panelRef}
         tabIndex={-1}
-        className="relative ml-auto flex flex-col overflow-hidden"
+        className="app-drawer-panel relative ml-auto flex flex-col overflow-hidden"
+        data-state={visible ? 'open' : 'closed'}
         style={{
           width: `min(100vw, ${width}px)`,
           height: '100%',
           background: 'var(--sidebar-bg)',
           borderLeft: '1px solid var(--glass-border)',
-          transform: visible ? 'translateX(0)' : 'translateX(100%)',
-          transition: `transform ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
-          willChange: 'transform',
           /* Safe areas, both ends. The top one matters most: this panel is
              `fixed inset-0` and full height, so on a notched iPhone its header —
              which holds the only close button — renders under the status bar /

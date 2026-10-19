@@ -140,7 +140,7 @@ export default function AdminDashboard({ embedded = false }) {
         : { background: 'var(--sidebar-bg)', borderBottom: '1px solid var(--border)' }}>
       {tabs.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => setTab(id)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
+          className="app-press flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0"
           style={activeTab === id
             ? { background: 'rgba(220,38,38,0.10)', color: '#dc2626' }
             : { color: 'var(--text-3)', background: 'transparent' }}

@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap, isTopmostTrap } from '../hooks/useFocusTrap'
 
+// Unmount delay; longer than the exit transition (--motion-exit) in index.css.
 const DURATION = 220
 
 export default function Modal({
@@ -76,23 +77,18 @@ export default function Modal({
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0"
+        className="app-scrim absolute inset-0"
+        data-state={visible ? 'open' : 'closed'}
         onClick={onClose}
         aria-hidden="true"
-        style={{
-          background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(5px)',
-          WebkitBackdropFilter: 'blur(5px)',
-          opacity: visible ? 1 : 0,
-          transition: `opacity ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
-        }}
       />
 
       {/* Panel */}
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative flex flex-col overflow-hidden"
+        className="app-modal-panel relative flex flex-col overflow-hidden"
+        data-state={visible ? 'open' : 'closed'}
         style={{
           /* Full-width + rounded top on mobile, centred card on sm+ */
           width: `min(100%, ${width}px)`,
@@ -101,12 +97,6 @@ export default function Modal({
           background: 'var(--card-bg)',
           border: '1px solid var(--card-border)',
           boxShadow: 'var(--card-shadow)',
-          transform: visible
-            ? 'translateY(0) scale(1)'
-            : 'translateY(32px) scale(0.98)',
-          opacity: visible ? 1 : 0,
-          transition: `transform ${DURATION}ms cubic-bezier(0.34,1.26,0.64,1), opacity ${DURATION}ms ease`,
-          willChange: 'transform, opacity',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >

@@ -636,7 +636,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
       <div className="flex items-center gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className="px-4 py-2 text-sm font-semibold transition-colors border-b-2 shrink-0 whitespace-nowrap"
+            className="app-press px-4 py-2 text-sm font-semibold transition-colors border-b-2 shrink-0 whitespace-nowrap"
             style={{
               color: activeTab === t.id ? 'var(--accent)' : 'var(--text-3)',
               borderBottomColor: activeTab === t.id ? 'var(--accent)' : 'transparent',

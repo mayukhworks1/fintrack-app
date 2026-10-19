@@ -124,7 +124,7 @@ export function FilterSelect({
         ref={btnRef}
         type="button"
         onClick={open ? closeDrop : openDrop}
-        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all"
+        className="app-press flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all"
         style={{
           background:   hasValue ? 'var(--accent-dim)'  : 'var(--bg-input)',
           border:       `1px solid ${hasValue ? 'var(--accent-soft)' : 'var(--card-border)'}`,
@@ -154,7 +154,9 @@ export function FilterSelect({
       {open && pos && createPortal(
         <div
           ref={dropRef}
+          className="app-menu app-pop"
           style={{
+            '--pop-origin': pos.bottom != null ? 'bottom left' : 'top left',
             position: 'fixed',
             top:      pos.top    ?? 'auto',
             bottom:   pos.bottom ?? 'auto',
@@ -162,7 +164,6 @@ export function FilterSelect({
             minWidth: pos.minWidth,
             maxWidth: 'min(320px, calc(100vw - 16px))',
             zIndex:   9999,
-            background:   'var(--card-bg)',
             border:       '1px solid var(--card-border)',
             borderRadius: 12,
             boxShadow:    '0 8px 32px rgba(0,0,0,0.16)',
@@ -309,7 +310,7 @@ export function FilterMulti({
         ref={btnRef}
         type="button"
         onClick={open ? closeDrop : openDrop}
-        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all"
+        className="app-press flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all"
         style={{
           background:   hasValue ? 'var(--accent-dim)'  : 'var(--bg-input)',
           border:       `1px solid ${hasValue ? 'var(--accent-soft)' : 'var(--card-border)'}`,
@@ -337,7 +338,9 @@ export function FilterMulti({
       {open && pos && createPortal(
         <div
           ref={dropRef}
+          className="app-menu app-pop"
           style={{
+            '--pop-origin': pos.bottom != null ? 'bottom left' : 'top left',
             position: 'fixed',
             top:      pos.top    ?? 'auto',
             bottom:   pos.bottom ?? 'auto',
@@ -345,7 +348,6 @@ export function FilterMulti({
             minWidth: pos.minWidth,
             maxWidth: 'min(320px, calc(100vw - 16px))',
             zIndex:   9999,
-            background:   'var(--card-bg)',
             border:       '1px solid var(--card-border)',
             borderRadius: 12,
             boxShadow:    '0 8px 32px rgba(0,0,0,0.16)',

@@ -588,12 +588,11 @@ export function Toggle({ checked, onChange, label, disabled = false, busy = fals
       aria-label={label}
       disabled={off}
       onClick={() => onChange(!checked)}
-      className="inline-flex items-center flex-shrink-0 rounded-full"
+      className="app-switch inline-flex items-center flex-shrink-0 rounded-full"
       style={{
         background: 'transparent', border: 'none', padding: 0,
         opacity: off ? 0.55 : 1,
         cursor: busy ? 'wait' : disabled ? 'not-allowed' : 'pointer',
-        transition: 'opacity 150ms ease',
       }}
     >
       <span aria-hidden="true" className="relative block rounded-full" style={{
@@ -601,10 +600,11 @@ export function Toggle({ checked, onChange, label, disabled = false, busy = fals
         background: checked ? 'var(--accent-btn)' : 'var(--text-3)',
         transition: 'background-color 150ms ease',
       }}>
-        <span style={{
-          position: 'absolute', top: 2, left: checked ? 18 : 2,
+        <span className="app-switch-knob" style={{
+          position: 'absolute', top: 2, left: 2,
+          transform: checked ? 'translateX(16px)' : 'none',
           width: 16, height: 16, borderRadius: '50%',
-          background: '#fff', transition: 'left 0.15s',
+          background: '#fff',
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </span>

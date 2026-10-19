@@ -2352,7 +2352,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
           {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
-            <button key={t} onClick={()=>setTab(t)}
+            <button key={t} onClick={()=>setTab(t)} className="app-press"
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
               {t === 'history' ? '🕐 History' : t}
             </button>
@@ -2583,8 +2583,8 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
         <MoreHorizontal size={15} />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} role="menu" aria-label="Page actions"
-          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, background:'var(--card-bg, #fff)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
+        <div ref={menuRef} role="menu" aria-label="Page actions" className="app-menu app-pop"
+          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
           {item(page.is_published ? EyeOff : Globe, page.is_published ? 'Unpublish' : 'Publish', run(onPublish))}
           {page.is_published && item(Share2, 'Share…', run(onShare))}
           {item(BarChart2, 'Views & analytics', run(onAnalytics))}
