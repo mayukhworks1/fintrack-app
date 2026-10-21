@@ -797,7 +797,7 @@ export default function Invoices() {
     return (
       <button onClick={() => handleSort(col)}
         className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
-        aria-label={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
+        aria-label={active ? (asc ? 'Sorted ascending. Click for descending' : 'Sorted descending. Click for ascending') : `Sort by ${col}`}
         style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
         {children}
         <ArrowUpDown size={10} style={{
@@ -814,9 +814,9 @@ export default function Invoices() {
     <ExecutiveShell className="invoice-workspace">
 
       <ExecutiveHero
-        eyebrow="Receivables Command Deck"
+        eyebrow="Receivables"
         title="Invoices"
-        description="Operate collections, aging, retainer billing, and project context from a denser finance workspace."
+        description="Collections, aging, retainer billing and the project behind each invoice."
         icon={Receipt}
         meta={
           <div className="flex flex-wrap items-center gap-2">
@@ -871,7 +871,7 @@ export default function Invoices() {
           <div className="flex items-center gap-2 mt-4 px-4 py-2.5 rounded-xl text-sm"
             style={{ background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)', color: 'var(--fin-warning)' }}>
             <AlertTriangle size={14} style={{ color: 'var(--fin-warning)', flexShrink: 0 }} />
-            <span><strong>Live data unavailable.</strong> Showing cached data from the local mirror — figures may be a few minutes behind. <button onClick={refresh} className="underline font-medium ml-1" style={{ color: 'var(--fin-warning)' }}>Try refreshing</button></span>
+            <span><strong>Live data unavailable.</strong> Showing cached data from the local mirror. Figures may be a few minutes behind. <button onClick={refresh} className="underline font-medium ml-1" style={{ color: 'var(--fin-warning)' }}>Try refreshing</button></span>
           </div>
         )}
 
@@ -905,7 +905,7 @@ export default function Invoices() {
         const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
         const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
         const labelText = chartPreset === 'custom' && chartFrom
-          ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
+          ? `${chartFrom}${chartTo ? ' to ' + chartTo : ''}`
           : `last ${activePreset.label}`
         return (
           <div className="card overflow-hidden" style={{ padding: 0 }}>
@@ -944,7 +944,7 @@ export default function Invoices() {
                     <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
                       className="text-[11px] px-2 py-1 rounded-md"
                       style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
-                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>to</span>
                     <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
                       className="text-[11px] px-2 py-1 rounded-md"
                       style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
@@ -1041,7 +1041,7 @@ export default function Invoices() {
           </div>
         </ExecutivePanel>
 
-        <ExecutivePanel title="Aging buckets" subtitle="Pending invoice exposure by age — click to filter.">
+        <ExecutivePanel title="Aging buckets" subtitle="Pending invoice exposure by age. Click to filter.">
           <div className="space-y-2">
             {Object.entries(agingBuckets).map(([label, { count, amount }]) => {
               const active = agingBandFilter === label
@@ -1274,11 +1274,6 @@ export default function Invoices() {
                   boxShadow: active ? `0 0 0 2px ${tint(m.color, 0.19)}, var(--card-shadow)` : 'var(--card-shadow)',
                 }}
                 aria-pressed={active}>
-                {/* Icon tile */}
-                <div className="kpi-icon flex-shrink-0"
-                  style={{ background: `${tint(m.color, 0.09)}` }}>
-                  {Icon && <Icon size={18} style={{ color: m.color }} />}
-                </div>
                 {/* Text */}
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
@@ -1827,7 +1822,7 @@ export default function Invoices() {
           style={{ background: 'color-mix(in srgb, var(--fin-negative) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)', color: 'var(--fin-negative)' }}>
           <AlertTriangle size={13} className="shrink-0" />
           {error}
-          {/not found/i.test(error) && <span style={{ color: 'var(--text-3)' }}>— backend is deploying, auto-retrying</span>}
+          {/not found/i.test(error) && <span style={{ color: 'var(--text-3)' }}>The backend is deploying; retrying automatically.</span>}
           <button onClick={refresh} className="underline ml-1">retry</button>
         </div>
       )}
@@ -1900,7 +1895,7 @@ export default function Invoices() {
                     {/* Top: invoice # + status */}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
                           Invoice
                         </p>
                         <p className="font-mono text-[13px] font-bold truncate mt-1" style={{ color: 'var(--text-1)' }}>
@@ -1923,13 +1918,13 @@ export default function Invoices() {
                     {/* Middle: amounts */}
                     <div className="invoice-mobile-summary my-3">
                       <div>
-                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Amount</p>
+                        <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Amount</p>
                         <p className="font-bold tabular-nums text-base mt-1" style={{ color: 'var(--text-1)' }}>
                           {fmt(f['Amount Raised'])}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Outstanding</p>
+                        <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Outstanding</p>
                         <p className="font-bold tabular-nums text-sm mt-1" style={{ color: outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>
                           {outstanding > 0 ? fmt(outstanding) : 'Clear'}
                         </p>
@@ -2405,7 +2400,7 @@ export default function Invoices() {
                                   display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                                   padding: '10px 20px 10px 18px',
                                   borderBottom: '1px solid var(--glass-border)',
-                                  background: `linear-gradient(90deg, ${tint(accentColor, 0.03)} 0%, transparent 60%)`,
+                                  background: 'transparent',
                                 }}>
                                   <StatusPill status={f['Payment Status']} />
                                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 2 }}>

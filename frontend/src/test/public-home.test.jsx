@@ -67,7 +67,7 @@ describe('the sandbox tour', () => {
     vi.useFakeTimers()
     motion(false)
     const { container } = render(<DemoWorkspace />)
-    const label = (id) => `fintrack — ${TABS.find(t => t.id === id).label.toLowerCase()}`
+    const label = (id) => `Sample workspace / ${TABS.find(t => t.id === id).label}`
     expect(title(container)).toBe(label('receivables'))
     act(() => { vi.advanceTimersByTime(4900) })
     expect(title(container)).toBe(label('receivables'))
@@ -222,12 +222,13 @@ describe('the rendered home page', () => {
     }))
     const { default: Landing } = await import('../pages/Landing')
     const { container } = render(<MemoryRouter><Landing /></MemoryRouter>)
-    // The lazily mounted band and film arrive a tick later.
-    await screen.findByText(/Pages now has a spreadsheet editor/)
+    // The lazily mounted film arrives a tick later.
     await screen.findByRole('button', { name: 'Play the film (0:29)' })
     expect(container.textContent).not.toMatch(UNBACKED)
-    expect(screen.getByText('Live sandbox below · sample data')).toBeInTheDocument()
-    expect(container.querySelector('.ft-shine-text')).not.toBeNull()
-    expect(container.querySelector('h1 .ft-shine')).toBeNull()
+    // The sandbox is labelled as sample data before a figure is read from it.
+    expect(screen.getByText(/Every figure is sample data/)).toBeInTheDocument()
+    // No decorative sweep on the headline, and no em dash in its copy.
+    expect(container.querySelector('.ft-shine-text, h1 .ft-shine')).toBeNull()
+    expect(container.querySelector('h1').textContent).not.toMatch(/—/)
   })
 })

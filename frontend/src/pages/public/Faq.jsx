@@ -16,15 +16,13 @@
  * narrow the list, and the index beside it follows the group being read.
  */
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowRight, Search, X, RotateCcw } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import { useInk } from '../../hooks/useInk'
 import { useActiveStep } from '../../hooks/useActiveStep'
 import PublicLayout from '../../components/PublicLayout'
 import RollNumber from '../../components/motion/RollNumber'
-import { Grain } from '../../components/LandingVisuals'
-import { PageHead, Closing, Reveal } from '../../components/PublicBits'
+import { PageHead, Closing, Reveal, Btn } from '../../components/PublicBits'
 import { FAQ, FAQ_GROUPS, FAQ_LD, APP_LD, crumbs, graph } from '../../content/publicContent'
 import '../../styles/public-secondary.css'
 import '../../styles/public-secondary-faq.css'
@@ -59,7 +57,7 @@ export default function Faq() {
   const [topic, setTopic] = useState(null)
 
   usePageMeta({
-    title: 'Questions about FinTrack — answered at length',
+    title: 'Questions about FinTrack, answered at length',
     description:
       'What it does, whether the demo is real data, how GST and TDS are handled, whether the AI analyst can invent a figure, running it on your own database, and who can see what.',
     path: '/faq',
@@ -94,19 +92,16 @@ export default function Faq() {
 
   return (
     <PublicLayout>
-      <section className="relative overflow-hidden">
-        <Grain />
-        <PageHead eyebrow="Questions" lines={['Answers,', <em key="e">at length</em>]}>
-          The ones people actually ask before they buy — including the two most
-          worth asking about anything with an AI in it: can it make a figure up,
-          and what happens to our data.
-        </PageHead>
-      </section>
+      <PageHead eyebrow="Questions" lines={['Answers,', <em key="e">at length</em>]}>
+        The ones people ask before they buy, including the two worth asking of
+        anything with a language model in it: can it make a figure up, and what
+        happens to our data.
+      </PageHead>
 
-      <section className="mx-auto px-4 sm:px-6 pt-2 pb-8" style={{ maxWidth: 1120 }}>
+      <section className="pb-wrap" style={{ paddingBottom: 32 }}>
         <Reveal className="ft-s-finder">
           <div className="ft-s-search">
-            <Search size={16} aria-hidden="true" />
+            <Search size={16} strokeWidth={1.5} aria-hidden="true" />
             <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
                    aria-label="Search the questions and answers"
                    placeholder="Search, e.g. GST or permissions" />
@@ -133,7 +128,7 @@ export default function Faq() {
                 <>
                   <span><RollNumber value={total} format={whole} align="end" /> of {FAQ.length} questions</span>
                   <button type="button" onClick={reset} className="ft-s-reset">
-                    <RotateCcw size={12} aria-hidden="true" /> Reset
+                    Reset
                   </button>
                 </>
               ) : `${FAQ.length} questions`}
@@ -143,9 +138,9 @@ export default function Faq() {
       </section>
 
       {/* Two columns above 900px: a standing index on the left and the answers on the right. */}
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24 ft-faq-layout ft-s-faq" style={{ maxWidth: 1120 }}>
+      <section className="pb-wrap ft-faq-layout ft-s-faq" style={{ paddingBottom: 'clamp(56px, 8vw, 112px)' }}>
         <nav className="ft-faq-index" aria-label="Question groups">
-          <p className="ft-eyebrow mb-3" style={{ fontSize: '0.6rem' }}>On this page</p>
+          <p className="pb-label">On this page</p>
           <div ref={indexInk} className="ft-m-ink ft-s-index">
           <ul>
             {FAQ_GROUPS.map(g => {
@@ -176,23 +171,21 @@ export default function Faq() {
               <p><b>No question matches that.</b></p>
               <p>Try a shorter word, or clear the topic.</p>
               <button type="button" onClick={reset}>
-                <RotateCcw size={14} aria-hidden="true" /> Reset filters
+                Reset filters
               </button>
             </div>
           ) : (
             groups.map((g, gi) => (
               <div key={g.name} ref={stepRef(gi)} className={gi ? 'mt-12' : ''}>
                 <Reveal>
-                  <h2 id={slug(g.name)} className="ft-display mb-1 scroll-mt-24"
-                      style={{ fontSize: '1.35rem', color: 'var(--text-1)' }}>
+                  <h2 id={slug(g.name)} className="pb-h3s scroll-mt-24" style={{ marginBottom: 12 }}>
                     {g.name}
                   </h2>
-                  <hr className="ft-rule ft-rule-grow from-left mb-2" style={{ marginLeft: 0, maxWidth: 180 }} />
                   {g.items.map(({ q: question, a }, i) => (
                     <details key={question} className="ft-faq" open={filtered || (gi === 0 && i === 0)}>
                       <summary><span>{marked(question, q)}</span></summary>
                       <div>
-                        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{marked(a, q)}</p>
+                        <p className="pb-body">{marked(a, q)}</p>
                       </div>
                     </details>
                   ))}
@@ -204,18 +197,8 @@ export default function Faq() {
       </section>
 
       <Closing title="Something not answered here?"
-               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
-                          style={{ minHeight: 52, padding: '0 30px', background: '#fff',
-                                   color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
-                      Sign in <ArrowRight size={17} aria-hidden="true" />
-                    </Link>}
-               next={<Link to="/" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
-                           style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
-                                    border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
-                                    textDecoration: 'none', fontSize: '0.95rem' }}>
-                        Back to the sandbox <ArrowRight size={15} aria-hidden="true" />
-                      </Link>}>
-        Access is by invitation — an administrator approves each account, and
+               next={<Btn to="/" quiet>Back to the sandbox</Btn>}>
+        Access is by invitation. An administrator approves each account, and
         nothing on these public pages is read from a workspace.
       </Closing>
     </PublicLayout>

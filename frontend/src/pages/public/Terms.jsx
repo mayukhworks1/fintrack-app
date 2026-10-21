@@ -5,7 +5,7 @@
 import LegalPage from '../../components/secondary/LegalPage'
 
 const META = {
-  title: "Terms of service — FinTrack",
+  title: "Terms of service | FinTrack",
   description: "The terms that govern use of the FinTrack platform.",
   path: '/terms',
 }
@@ -37,7 +37,7 @@ const SECTIONS = [
   },
 ]
 
-const LINKS = [{ to: '/privacy', label: "Privacy policy →" }, { to: '/login', label: "Sign in →" }]
+const LINKS = [{ to: '/privacy', label: "Privacy policy" }, { to: '/login', label: "Sign in" }]
 
 export default function Terms() {
   return (

@@ -339,3 +339,15 @@ html.dark .ft-f-tag { --t-ink: var(--t); }
   .ft-f-stack-card, .ft-f-stack-card:hover { transform: translateX(var(--x)) rotate(var(--r)); }
   .ft-f-gw-link[data-run]::after { display: none; }
 }
+
+/* ── Editorial features page ───────────────────────────────────────── */
+.pb-f-contents { padding-bottom: clamp(40px, 6vw, 72px); }
+.pb-f-toc { list-style: none; margin: 0; padding: 0; columns: 2 220px; column-gap: var(--pb-gap); border-top: 1px solid var(--pb-line); }
+.pb-f-toc li { break-inside: avoid; border-bottom: 1px solid var(--pb-line); }
+.pb-f-toc a { display: flex; gap: 14px; align-items: baseline; padding: 11px 0; color: var(--text-1); text-decoration: none; font-weight: 500; }
+.pb-f-toc a:hover { color: var(--accent-ink, var(--accent)); }
+.pb-f-toc .pb-n { font-size: 0.8125rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pb-f-module .pb-label { font-weight: 600; color: var(--text-1); }
+.pb-f-new { margin-left: 0.6em; font-size: 0.75rem; font-weight: 500; color: var(--accent-ink, var(--accent)); }
+.pb-f-points { columns: 2 260px; column-gap: var(--pb-gap); margin-top: clamp(24px, 3vw, 36px); }
+.pb-f-points li { break-inside: avoid; }

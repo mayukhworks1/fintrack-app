@@ -51,7 +51,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Requests */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           API Traffic
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -69,7 +69,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       {/* Top error paths */}
       {data.top_error_paths?.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
             Top Error Paths (24h)
           </h3>
           <div className="card overflow-hidden p-0">
@@ -102,7 +102,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       {/* Top slow paths */}
       {data.top_slow_paths?.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
             Slow Paths (24h · avg &gt;800ms · ≥2 requests)
           </h3>
           <div className="card overflow-hidden p-0">
@@ -135,22 +135,22 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Requests by role */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           Requests by Role
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          <StatBox label="Editor"   value={data.audit_editor} color="var(--accent)" accent="var(--accent)" />
-          <StatBox label="Web"      value={data.audit_web}    color="var(--chart-3)" accent="var(--chart-3)" />
-          <StatBox label="All"      value={data.audit_all}    color="var(--chart-5)" accent="var(--chart-5)" />
-          <StatBox label="Viewer"   value={data.audit_viewer} color="var(--accent)" accent="var(--accent)" />
-          <StatBox label="Admin"    value={data.audit_admin}  color="var(--fin-negative)" accent="var(--fin-negative)" />
-          <StatBox label="Anonymous" value={data.audit_anon}  color="var(--text-3)" />
+          <StatBox label="Editor"   value={data.audit_editor} />
+          <StatBox label="Web"      value={data.audit_web} />
+          <StatBox label="All"      value={data.audit_all} />
+          <StatBox label="Viewer"   value={data.audit_viewer} />
+          <StatBox label="Admin"    value={data.audit_admin} />
+          <StatBox label="Anonymous" value={data.audit_anon} />
         </div>
       </section>
 
       {/* Sessions */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           Login Sessions
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -164,7 +164,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Mirror */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           Teable Mirror (PostgreSQL)
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -186,7 +186,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
             </p>
             {data.last_sync_error
               ? <p className="text-[11px] truncate" style={{ color: 'var(--fin-negative)' }} title={data.last_sync_error}>
-                  ✕ {data.last_sync_error}
+                  {data.last_sync_error}
                 </p>
               : data.last_sync_source
                 ? <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -199,7 +199,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           Truth Contract
         </h3>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -235,7 +235,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       <section>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
             Mirror Sanity
           </h3>
           <button
@@ -283,7 +283,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
           Shared Link Activity
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

@@ -1,5 +1,4 @@
 import clsx from 'clsx'
-import { useTilt } from '../hooks/useTilt'
 
 export function ExecutiveShell({ children, className = '', flush = false }) {
   return (
@@ -13,7 +12,9 @@ export function ExecutiveHero({
   eyebrow,
   title,
   description,
-  icon: Icon,
+  // `icon` is accepted for call-site compatibility but not drawn: a
+  // heading carries the page, a tinted icon tile beside it adds nothing.
+  icon: _icon,
   actions,
   meta,
   children,
@@ -23,11 +24,6 @@ export function ExecutiveHero({
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-4">
-            {Icon && (
-              <div className="executive-hero-icon">
-                <Icon size={24} />
-              </div>
-            )}
             <div className="min-w-0 flex-1">
               {eyebrow && (
                 <p className="executive-eyebrow">
@@ -69,27 +65,18 @@ export function ExecutiveStatCard({
   value,
   sub,
   accent = 'default',
-  icon: Icon,
+  icon: _icon,
   children,
   compact = false,
 }) {
-  const tilt = useTilt({ max: 6 })
   return (
-    <div
-      ref={tilt}
-      className={clsx('executive-stat-card', 'tilt', 'tilt-sheen', compact && 'executive-stat-card-compact')}
-    >
+    <div className={clsx('executive-stat-card', compact && 'executive-stat-card-compact')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="executive-stat-label">{label}</p>
           <p className={clsx('executive-stat-value', STAT_ACCENT_CLASS[accent])}>{value}</p>
           {sub && <p className="executive-stat-sub">{sub}</p>}
         </div>
-        {Icon && (
-          <div className="executive-stat-icon">
-            <Icon size={16} />
-          </div>
-        )}
       </div>
       {children}
     </div>

@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  Sparkles, FileText, Upload, Trash2, ChevronDown, ChevronRight,
+  FileText, Upload, Trash2, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Loader2, Quote, History, BarChart3,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -488,7 +488,6 @@ export default function Studio() {
           letterSpacing: '-0.025em', color: 'var(--text-1)',
           display: 'flex', alignItems: 'center', gap: 9,
         }}>
-          <Sparkles size={22} aria-hidden="true" style={{ color: 'var(--accent)' }} />
           Studio
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 14, color: 'var(--text-2)', lineHeight: 1.5 }}>
@@ -613,10 +612,10 @@ export default function Studio() {
         {mode === 'documents' && health && ready.length > 0 && (
           <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>
             {health.semantic
-              ? `Keyword and meaning-based search — ${health.reason}.`
+              ? `Keyword and meaning-based search: ${health.reason}.`
               : health.text_search
                 ? `Keyword search over ${health.chunks.toLocaleString()} passages. Meaning-based search is off: ${health.reason}.`
-                : 'Full-text search is not available on this database — answers fall back to plain keyword matching.'}
+                : 'Full-text search is not available on this database. Answers fall back to plain keyword matching.'}
           </div>
         )}
 
@@ -814,7 +813,7 @@ export default function Studio() {
               </button>
               <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.5 }}>
                 Drop files here, or choose them above.<br />
-                PDF, text, Markdown, CSV or JSON — up to 15 MB each. Scanned PDFs
+                PDF, text, Markdown, CSV or JSON, up to 15 MB each. Scanned PDFs
                 need OCR before they can be read.
               </div>
             </div>

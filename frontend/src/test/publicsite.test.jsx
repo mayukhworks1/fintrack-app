@@ -166,7 +166,7 @@ describe('nothing was lost in the split', () => {
   it('still names every module on the overview, and links them to the detail', () => {
     const { container } = at('/')
     for (const m of MODULES) expect(screen.getAllByText(m.title).length).toBeGreaterThan(0)
-    const toFeatures = [...container.querySelectorAll('a[href="/features"]')]
+    const toFeatures = [...container.querySelectorAll('a[href^="/features"]')]
     expect(toFeatures.length).toBeGreaterThanOrEqual(MODULES.length)
   })
 

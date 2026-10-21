@@ -118,7 +118,7 @@ export function InvoicesTab({ drilldown = null }) {
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
-            ? <Empty label="No invoices found — sync may not have run yet" />
+            ? <Empty label="No invoices found. Sync may not have run yet" />
             : (
               <>
                 {/* Mobile cards */}

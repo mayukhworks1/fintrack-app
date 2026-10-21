@@ -188,7 +188,7 @@ async function requestBlob(path, options = {}) {
         e.name = 'AbortError'
         throw e
       }
-      throw new Error('Request timed out — check your connection')
+      throw new Error('Request timed out. Check your connection')
     }
     throw err
   } finally {
@@ -270,7 +270,7 @@ async function _doRequest(path, options = {}, retries = 2) {
         e.name = 'AbortError'
         throw e
       }
-      throw new Error('Request timed out — check your connection')
+      throw new Error('Request timed out. Check your connection')
     }
     // Retry inside this attempt, not through request(): a GET is registered in
     // _inflight until its promise settles, so request() would hand the retry
@@ -767,7 +767,7 @@ export const api = {
         const msg = apiErrorMessage(body, xhr.status)
         reject(new Error(msg === `HTTP ${xhr.status}` ? `Upload failed (${xhr.status})` : msg))
       }
-      xhr.onerror   = () => reject(new Error('Upload failed — check your connection.'))
+      xhr.onerror   = () => reject(new Error('Upload failed. Check your connection.'))
       xhr.ontimeout = () => reject(new Error('Upload timed out. Try a smaller file.'))
       xhr.send(fd)
     }),

@@ -27,7 +27,7 @@ const TOKENS = {
 
 // Graphite light, for environments with no computed styles (tests, SSR).
 const FALLBACK = {
-  series: ['#007aff', '#30b0c7', '#5856d6', '#ff9500', '#ff2d55', '#34c759'],
+  series: ['#007aff', '#004c9e', '#6e6e73', '#80bcff', '#8e8e92', '#afafb2'],
   grid: 'rgba(29,29,31,0.08)', axis: '#6e6e73', accent: '#0071e3',
   positive: '#1e7a37', warning: '#a14d00', negative: '#c4001a',
   text: '#1d1d1f', text2: '#6e6e73', muted: '#6e6e73', card: '#ffffff', border: '#e3e3e8',

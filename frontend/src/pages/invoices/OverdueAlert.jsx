@@ -61,7 +61,7 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
             style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)', cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 28%, transparent)'}
             onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 15%, transparent)'}>
-            View all →
+            View all
           </button>
         </div>
       </div>
@@ -114,11 +114,11 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
                     )}
                     {inv.followup ? (
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--fin-positive)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <span>↻</span> Follow-up <span style={{ textDecoration: 'underline dotted' }}>{String(inv.followup).slice(0,10)}</span>
+                        Follow-up <span style={{ textDecoration: 'underline dotted' }}>{String(inv.followup).slice(0,10)}</span>
                       </span>
                     ) : (
                       <span style={{ fontSize: 11, color: 'var(--fin-warning)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <span>⚠</span> No follow-up scheduled
+                        No follow-up scheduled
                       </span>
                     )}
                   </div>

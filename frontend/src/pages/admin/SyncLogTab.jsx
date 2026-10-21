@@ -48,7 +48,7 @@ export function SyncLogTab() {
     setTrig(true); setTrigMsg(null)
     try {
       await api.admin.triggerSync()
-      setTrigMsg({ ok: true, text: 'Full sync triggered — results appear in a few seconds' })
+      setTrigMsg({ ok: true, text: 'Full sync triggered. Results appear in a few seconds' })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
@@ -61,7 +61,7 @@ export function SyncLogTab() {
     setAgingRefreshing(true); setTrigMsg(null)
     try {
       await api.admin.triggerAgingRefresh()
-      setTrigMsg({ ok: true, text: 'Invoice aging refresh started — numeric aging values will appear in Teable shortly' })
+      setTrigMsg({ ok: true, text: 'Invoice aging refresh started. Numeric aging values will appear in Teable shortly' })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Aging refresh failed' })
@@ -78,9 +78,9 @@ export function SyncLogTab() {
         setTrigMsg({ ok: false, text: `Error: ${res.error} (updated ${res.updated}/${res.total}, ${res.duration_ms}ms)` })
       } else {
         const skipDetail = res.skip_reasons?.length
-          ? ' — skips: ' + res.skip_reasons.map(s => `${s.project}: ${s.reason}`).join('; ')
+          ? '. Skips: ' + res.skip_reasons.map(s => `${s.project}: ${s.reason}`).join('; ')
           : ''
-        setTrigMsg({ ok: true, text: `Done — updated ${res.updated}/${res.total} projects, skipped ${res.skipped}, errors ${res.errors} (${res.duration_ms}ms)${skipDetail}` })
+        setTrigMsg({ ok: true, text: `Done. Updated ${res.updated}/${res.total} projects, skipped ${res.skipped}, errors ${res.errors} (${res.duration_ms}ms)${skipDetail}` })
       }
       setTimeout(() => { load(); setTrigMsg(null) }, 6000)
     } catch (e) {
@@ -107,7 +107,7 @@ export function SyncLogTab() {
     try {
       const res = await api.admin.watchdog()
       const restarted = res.restarted?.join(', ') || 'none'
-      setTrigMsg({ ok: true, text: `Watchdog OK — restarted: ${restarted} | sync=${res.sync_running ? '✓' : '✗'} aging=${res.aging_running ? '✓' : '✗'}` })
+      setTrigMsg({ ok: true, text: `Watchdog OK. Restarted: ${restarted} · sync ${res.sync_running ? 'running' : 'stopped'} · aging ${res.aging_running ? 'running' : 'stopped'}` })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Watchdog failed' })
@@ -184,7 +184,7 @@ export function SyncLogTab() {
             color: 'var(--fin-warning)',
             opacity: diagnosing ? 0.6 : 1,
           }}>
-          🔍 {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
+          {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
         </button>
         <button onClick={triggerWatchdog} disabled={watchdogging}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
@@ -195,7 +195,7 @@ export function SyncLogTab() {
             color: watchdogging ? 'var(--text-3)' : 'var(--fin-negative)',
             opacity: watchdogging ? 0.6 : 1,
           }}>
-          🐕 {watchdogging ? 'Checking…' : 'Watchdog'}
+          {watchdogging ? 'Checking…' : 'Watchdog'}
         </button>
       </div>
 
@@ -204,7 +204,7 @@ export function SyncLogTab() {
         <div className="rounded-xl border p-3 space-y-2 text-xs"
           style={{ borderColor: 'color-mix(in srgb, var(--fin-warning) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-warning) 4%, transparent)' }}>
           <div className="font-semibold" style={{ color: 'var(--fin-warning)' }}>
-            Token/Table connectivity — {diagResult.configured_tokens} token(s) configured
+            Token/Table connectivity: {diagResult.configured_tokens} token(s) configured
           </div>
           {Object.entries(diagResult.tables || {}).map(([tname, info]) => (
             <div key={tname} className="rounded-lg p-2 border" style={{ borderColor: 'var(--border)', background: 'var(--bg-layer)' }}>
@@ -221,12 +221,12 @@ export function SyncLogTab() {
               {Object.entries(info.token_results || {}).map(([tok, res]) => (
                 <div key={tok} className="flex items-center gap-2 pl-2 py-0.5">
                   <span className={res.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
-                    {res.status === 'ok' ? '✓' : '✕'}
+                    {res.status === 'ok' ? 'OK' : 'Failed'}
                   </span>
                   <span style={{ color: 'var(--text-2)' }}>{tok}</span>
                   {res.status === 'ok'
                     ? <span style={{ color: 'var(--text-3)' }}>HTTP {res.http} · {res.total_records} records in Teable</span>
-                    : <span className="text-red-400">HTTP {res.http} — {res.detail}</span>}
+                    : <span className="text-red-400">HTTP {res.http}: {res.detail}</span>}
                 </div>
               ))}
             </div>
@@ -236,7 +236,7 @@ export function SyncLogTab() {
       {diagResult?.error && (
         <div className="text-xs px-3 py-2 rounded-lg text-red-500"
           style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)' }}>
-          ✕ Diagnose failed: {diagResult.error}
+          Diagnose failed: {diagResult.error}
         </div>
       )}
 
@@ -247,13 +247,13 @@ export function SyncLogTab() {
             color: trigMsg.ok ? 'var(--fin-positive)' : 'var(--fin-negative)',
             border: `1px solid ${trigMsg.ok ? 'color-mix(in srgb, var(--fin-positive) 20%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 20%, transparent)'}`,
           }}>
-          {trigMsg.ok ? '✓' : '✕'} {trigMsg.text}
+          {trigMsg.text}
         </div>
       )}
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
-            ? <Empty label="No sync runs yet — check TEABLE_API_TOKEN is set" />
+            ? <Empty label="No sync runs yet. Check TEABLE_API_TOKEN is set" />
             : (
               <>
                 {/* Mobile cards */}
@@ -264,8 +264,8 @@ export function SyncLogTab() {
                         <div className="flex items-center gap-2">
                           <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
                           {row.error
-                            ? <span className="text-[11px] text-red-500">✕ Error</span>
-                            : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>✓ OK</span>}
+                            ? <span className="text-[11px]" style={{ color: 'var(--fin-negative)' }}>Error</span>
+                            : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>OK</span>}
                         </div>
                         <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{ts(row.synced_at)}</span>
                       </div>
@@ -337,8 +337,8 @@ export function SyncLogTab() {
                           </td>
                           <td className="px-3 py-2">
                             {row.error
-                              ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>✕ {row.error}</span>
-                              : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>✓ OK</span>}
+                              ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>{row.error}</span>
+                              : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>OK</span>}
                           </td>
                         </tr>
                       ))}

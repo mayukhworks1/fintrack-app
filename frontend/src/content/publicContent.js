@@ -11,93 +11,88 @@
  * the product does not have is the fastest way to lose the trust the rest of
  * it is trying to earn.
  */
-import {
-  Receipt, FolderKanban, BarChart3, Globe, Activity, ShieldCheck,
-  Share2, Lock, Database, Zap, FileSearch, Landmark, FileText, Gauge,
-  GitBranch, ScrollText, SlidersHorizontal, Server, Blocks, Code2,
-} from 'lucide-react'
 
 /** The one line that says what FinTrack is: the footer and the home page badge share it. */
-export const TAGLINE = 'FinTrack — project delivery and finance on one set of records'
+export const TAGLINE = 'Project delivery and project finance on one set of records, for firms in India that bill by project.'
 
 export const MODULES = [
   {
-    icon: Receipt, visual: 'ledger',
+    visual: 'ledger', id: 'receivables',
     title: 'Invoices',
-    body: 'Track invoices across ageing bands, collection rates, and average days to collect. GST and TDS are segregated automatically to prevent collection overstatement.',
-    points: ['Ageing bands: 0-30, 31-60, 61-90, 90+ days', 'Real-time collection velocity and follow-up queues', 'Automated recurring retainer schedules'],
+    body: 'Every invoice sits in an ageing band with a collection rate and the average days to collect. GST and TDS are kept as separate figures, so the outstanding total is money a client still owes.',
+    points: ['Ageing bands of 0-30, 31-60, 61-90 and 90+ days', 'Follow-ups due today, overdue and next', 'Retainer templates for monthly billing'],
   },
   {
-    icon: FolderKanban, visual: 'margin',
+    visual: 'margin', id: 'projects',
     title: 'Projects',
-    body: 'Real-time billing, cost tracking, and realised profit per engagement with margin thresholds to identify at-risk projects early.',
-    points: ['Realised profit and net margin metrics', 'Automated margin health indicators', 'Client rollups and invoice history'],
+    body: 'Billed, cost and realised profit for each project, with a margin health signal so a job that is losing money shows up while it can still be fixed.',
+    points: ['Billed, profit and margin per project', 'Healthy, watch and at-risk from the margin', 'Client rollups and invoice history'],
   },
   {
-    icon: BarChart3, visual: 'bars',
+    visual: 'bars', id: 'analytics',
     title: 'Analytics',
-    body: 'Cash telemetry, revenue trajectories, and overdue pressure trends across custom time windows. Every metric links directly to underlying ledger entries.',
-    points: ['Cash position and overdue debt trends', 'Client, project, and work category breakdowns', 'Live sync state indicators'],
+    body: 'Cash position, billing and overdue amounts over any period. Each chart opens to the invoices behind it.',
+    points: ['Billed against collected, month by month', 'Breakdowns by client, project and category', 'When the figures were last synced'],
   },
   {
-    icon: Landmark, visual: 'tax',
+    visual: 'tax', id: 'tax',
     title: 'Tax ledger',
-    body: 'Gross billing, GST collections, and net receivables segregated by month and client to maintain statutory filing accuracy.',
-    points: ['Monthly GST liabilities and net receivables', 'Statutory collection rate tracking', 'Filing checklist and audit ready exports'],
+    body: 'Gross billed, GST collected and net receivable by month and by client, kept apart from the cash view so a filing figure is never read as a collections figure.',
+    points: ['Monthly GST and net receivable', 'GST collection rate', 'A filing checklist and CSV export'],
   },
   {
-    icon: FileText, visual: 'analyst',
+    visual: 'analyst', id: 'reports',
     title: 'Executive reports',
-    body: 'Structured period briefings generated over live data with persistent history, board-ready summaries, and verifiable metrics.',
-    points: ['Board, brief, and detailed summary formats', 'Persistent audit trail and report archives', 'Real-time context loading'],
+    body: 'A written report for a period, drawn from your own figures, kept in a history you can reopen, with an assistant that already has the current numbers loaded.',
+    points: ['Board, brief and detailed formats', 'Report history', 'Follow-up questions in context'],
   },
   {
-    icon: FileSearch, visual: 'docs',
+    visual: 'docs', id: 'documents',
     title: 'Document intelligence',
-    body: 'Query contracts, agreements, and statements with verifiable citations linked directly to source passages and page numbers.',
-    points: ['PDF, text, Markdown, CSV, and JSON parsing', 'Direct page and section citations', 'Deterministic claim verification'],
+    body: 'Ask a question of your contracts, scopes and statements. Each claim in the answer is numbered to the passage and page it came from.',
+    points: ['PDF, text, Markdown, CSV and JSON', 'Citations to page and passage', 'Answers checked against their sources'],
   },
   {
-    icon: Code2, visual: 'table',
+    visual: 'table', id: 'analyst',
     title: 'Financial query engine',
-    body: 'Translate financial questions into deterministic, parameterized SQL queries with session-scoped role security and verifiable statements.',
-    points: ['Standard financial measures: outstanding, collected, GST, TDS', 'Flexible grouping by project, client, or category', 'Strict role-based row scoping'],
+    body: 'Ask about invoices and projects in plain words. The question is mapped to a measure and a grouping from a fixed list, the application writes the SQL, and the query is printed beside the answer.',
+    points: ['Outstanding, collected, GST, TDS and collection rate', 'Grouped by project, client, category or month', 'Limited to the rows your account can see'],
   },
   {
-    icon: Globe, visual: 'pages',
+    visual: 'pages', id: 'pages',
     title: 'Pages',
-    body: 'Write pages or edit a spreadsheet, then publish on a link with an optional password, protection code and expiry (IST). Link previews in chat apps, and views per day, device and country.',
-    points: ['Pages and spreadsheets in folders, with formulas and ₹ formats', 'Publish on a link with a password, protection code or expiry (IST)', 'Link previews in chat apps; views per day, device and country'],
+    body: 'Write a page or edit a spreadsheet, then publish it on a link with an optional password, protection code and expiry in IST. Links unfurl as previews in chat apps, and each page counts its views by day, device and country.',
+    points: ['Pages and spreadsheets in folders, with formulas and ₹ formats', 'Password, protection code or expiry (IST) on a link', 'Views per day, device and country'],
   },
   {
-    icon: Activity, visual: 'board',
+    visual: 'board', id: 'status',
     title: 'Delivery & status',
-    body: 'Where every project actually stands — a kanban board or an operational list, grouped by client, project or state, updating live as anyone edits. Delivery sits on the same records as the money, so a card knows what its project is owed.',
-    points: ['Kanban board or operational list', 'Live over an event stream, app or table', 'Extendable status options, AI-drafted updates'],
+    body: 'Where every project stands, as a kanban board or a list, grouped by client, project or state and updated live as anyone edits. The board reads the same records as the money, so each card shows what its project is still owed.',
+    points: ['Kanban board or list', 'Live updates over an event stream', 'Status options you extend yourself'],
   },
   {
-    icon: Share2, visual: 'share',
+    visual: 'share', id: 'shared',
     title: 'Shared views',
-    body: 'Send a filtered, read-only view to a client on a link, and see what they actually opened.',
-    points: ['Read-only links with your filters', 'Column highlighting', 'Viewers, opens and an event timeline'],
+    body: 'Send a client a filtered, read-only view on a link, and see what they opened.',
+    points: ['Read-only links that keep your filters', 'Columns highlighted for the reader', 'Viewers, opens and a timeline'],
   },
   {
-    icon: ShieldCheck, visual: 'audit',
+    visual: 'audit', id: 'admin',
     title: 'Admin & audit',
-    body: 'Account approval, a permission matrix down to the individual action, live sessions, and a full request trail written asynchronously so it never slows the page it is recording.',
-    points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health', 'AI gateway: provider routes, daily caps, versioned prompts, every call logged'],
+    body: 'Account approval, a permission matrix down to the single action, live sessions, and a record of every request, written in the background so it never slows the page it records.',
+    points: ['Grant or revoke one permission for one person', 'Every request and every changed field', 'Sync log and deployment health', 'AI gateway: provider routes, daily caps, versioned prompts and a call log'],
   },
 ]
 
 export const SECURITY = [
-  { icon: Lock,        title: 'Nothing on this page is your data',
-    body: 'Everything above describes what the product does. Figures, clients, projects and documents live behind sign-in and are never rendered publicly.' },
-  { icon: ShieldCheck, title: 'Permissions down to the action',
-    body: 'Roles carry defaults and any individual permission can be granted or revoked per person. A change takes effect on the next request, not the next login.' },
-  { icon: Database,    title: 'Scoped at the query, not the screen',
-    body: 'Row scoping is applied when the query is built, from the session — so a narrower account cannot reach wider data by changing what it asks for.' },
-  { icon: Zap,         title: 'Every request is recorded',
-    body: 'Who, what, when and from where, written asynchronously so the audit trail never slows down the thing it is auditing.' },
+  { title: 'Nothing on this page is your data',
+    body: 'These pages describe the product. Your figures, clients, projects and documents stay behind sign-in and are never rendered publicly.' },
+  { title: 'Permissions down to the action',
+    body: 'Roles carry defaults, and any single permission can be granted or revoked for one person. The change applies from their next request.' },
+  { title: 'Rows are limited when the query is built',
+    body: 'Row scoping comes from the session as the statement is assembled, so an account with narrower access cannot reach wider data by asking differently.' },
+  { title: 'Every request is recorded',
+    body: 'Who, what, when and from where, written in the background so the record never slows down the request it describes.' },
 ]
 
 /* Why the product exists, stated as the three things that are actually wrong
@@ -106,19 +101,16 @@ export const SECURITY = [
 
 export const PROBLEMS = [
   {
-    icon: Gauge,
-    title: 'The total is right. Nobody can prove it.',
-    body: 'A figure arrives on a dashboard with no way back to the rows underneath. When two reports disagree (and they do), the argument is settled by whoever exported last, not by the data.',
+    title: 'A total nobody can trace',
+    body: 'A figure reaches a dashboard with no way back to the rows underneath. When two reports disagree, the argument is settled by whoever exported last.',
   },
   {
-    icon: Landmark,
-    title: 'Tax withheld gets counted as money owed.',
-    body: 'TDS is deducted by the client before they pay. Most receivables reports quietly leave it in the outstanding column, which overstates what you can actually collect and hides the invoices that are genuinely late.',
+    title: 'Tax withheld counted as money owed',
+    body: 'TDS is deducted by the client before they pay. Most receivables reports leave it in the outstanding column, which overstates what you can collect and hides the invoices that are genuinely late.',
   },
   {
-    icon: Code2,
-    title: 'An answer with no query behind it cannot be checked.',
-    body: 'A chat assistant asked for a total writes a number; nothing ran that you can read, so nobody can say where it came from. Here the model only picks a measure and a grouping, the application writes and runs the SQL, and the statement is shown beside the figure.',
+    title: 'An answer with no query behind it',
+    body: 'Ask a chat assistant for a total and it writes a number, with nothing you can read to say where it came from. Here the model only picks a measure and a grouping; the application writes and runs the SQL and prints it beside the figure.',
   },
 ]
 
@@ -127,24 +119,20 @@ export const PROBLEMS = [
 
 export const TRUST = [
   {
-    icon: ScrollText,
     title: 'The model never writes SQL',
-    body: 'It chooses a measure and a grouping from a fixed set. The application compiles the statement, runs it, and shows it to you next to the answer. There is no path from a sentence to arbitrary SQL, which is the same reason the analyst cannot be talked into reading something it should not.',
+    body: 'It chooses a measure and a grouping from a fixed set. The application compiles the statement, runs it and shows it next to the answer. There is no path from a sentence to arbitrary SQL, which is also why the analyst cannot be talked into reading something it should not.',
   },
   {
-    icon: Lock,
     title: 'Scoped where the query is built',
-    body: 'Row limits come from the session at the moment the statement is assembled, not from what the screen chose to render. A narrower account cannot widen its own results by changing what it asks for.',
+    body: 'Row limits come from the session at the moment the statement is assembled. What the screen happens to render has no say, so an account cannot widen its own results by changing what it asks for.',
   },
   {
-    icon: FileSearch,
     title: 'Document answers carry citations',
     body: 'Ask a contract a question and each claim in the reply is numbered to the passage and page it came from. The answer is checked against those sources before it reaches you, and you can open every one.',
   },
   {
-    icon: ScrollText,
     title: 'Everything is written down',
-    body: 'Who did what, when, from where, and which fields changed: recorded asynchronously so the audit trail never becomes the reason a page is slow.',
+    body: 'Who did what, when, from where, and which fields changed. It is recorded in the background, so the audit trail is never the reason a page is slow.',
   },
 ]
 
@@ -157,40 +145,34 @@ export const TRUST = [
 
 export const SHAPE = [
   {
-    icon: SlidersHorizontal,
     kicker: 'You, in the app',
-    title: 'Configured, not commissioned',
-    body: 'Permissions are records, not code: every one belongs to a module, roles map to them, and a single permission can be granted or revoked for one person without inventing a role for them. Views keep your filters, your columns and your grouping, and the same configuration travels into a shared link. Categories, clients and statuses come from your own records; there is no chart of accounts to adopt.',
+    title: 'Set up in the app by your own team',
+    body: 'Permissions are records: each belongs to a module, roles map to them, and a single permission can be granted or revoked for one person without a new role. Views keep your filters, columns and grouping, and carry them into a shared link. Categories, clients and statuses come from your own records, so there is no chart of accounts to adopt.',
   },
   {
-    icon: Server,
     kicker: 'Your infrastructure',
     title: 'Your database, your cloud',
-    body: 'An instance is a container and an environment file. Every endpoint, table, model, mail server and storage target is a setting rather than a constant, so a dedicated deployment on your own Postgres and your own private cloud is a configuration of the same build, not a fork that drifts from it and stops receiving fixes.',
+    body: 'An instance is a container and an environment file. Every endpoint, table, model, mail server and storage target is a setting, so a dedicated deployment on your own Postgres and private cloud runs the same build as everyone else and keeps receiving its fixes.',
   },
   {
-    icon: Blocks,
     kicker: 'Built for you',
     title: 'New modules for your case',
-    body: 'Each module is a self-contained router, and permissions are keyed by module in the database. A module built for how your business works therefore arrives inside the access model and the audit trail rather than beside them: it appears in the permission matrix on day one, and every request it serves is recorded like every other.',
+    body: 'Each module is a self-contained router, and permissions are keyed by module in the database. A module built for how your business works therefore arrives inside the access model and the audit trail: it appears in the permission matrix on day one, and every request it serves is recorded.',
   },
 ]
 
 export const STEPS = [
   {
-    icon: Database,
     title: 'Your records stay where they are',
-    body: 'The base you already work in remains the system of record. FinTrack reads and writes it directly. There is no migration, no export, and no second place for someone to update instead.',
+    body: 'The base you already work in remains the system of record. FinTrack reads and writes it directly: no migration, no export, and no second place for someone to update.',
   },
   {
-    icon: GitBranch,
     title: 'Mirrored into Postgres for speed',
-    body: 'A mirror is kept current by webhooks, a thirty-second incremental pass and a periodic full reconciliation. Lists filter and sort against the mirror, so a screen full of invoices is instant instead of a round trip per view.',
+    body: 'A mirror is kept current by webhooks, an incremental pass every thirty seconds and a periodic full reconciliation. Lists filter and sort against the mirror, so a screen of invoices opens at once.',
   },
   {
-    icon: SlidersHorizontal,
-    title: 'Deterministic query translation',
-    body: 'Natural queries are mapped onto verified measures and groupings, then compiled directly to parameterized SQL by the application engine.',
+    title: 'Questions compiled to SQL',
+    body: 'A question in plain words is mapped to a known measure and grouping, and the application compiles that to parameterised SQL. The statement is shown with the answer.',
   },
 ]
 
@@ -202,7 +184,7 @@ export const FAQ = [
   {
     q: 'What does FinTrack actually do?',
     group: 'The product',
-    a: 'It runs receivables, projects, GST and reporting for businesses that bill by project: agencies, studios, consultancies and firms working on retainers. Invoices carry ageing bands, collection rate and days-to-collect; projects carry billed, cost, realised profit and margin; tax sits in its own ledger; and an AI analyst answers questions across all of it while showing the query it ran.',
+    a: 'It runs receivables, projects, GST and reporting for businesses in India that bill by project: agencies, studios, consultancies and firms on retainers. Invoices carry ageing bands, collection rate and days-to-collect; projects carry billed, cost, realised profit and margin; tax sits in its own ledger; and an AI analyst answers questions across all of it while showing the query it ran.',
   },
   {
     q: 'Is the demo on this page real data?',
@@ -217,7 +199,7 @@ export const FAQ = [
   {
     q: 'Can the AI analyst invent a figure?',
     group: 'Data & AI',
-    a: 'It is not able to. The model never writes SQL: it selects a measure and a grouping from a fixed list, and the application compiles and runs the statement itself. The query is shown with every answer, so a figure about money can be checked rather than trusted. The same design is why the analyst cannot be prompted into reading data the signed-in account is not allowed to see: scoping is applied when the statement is built.',
+    a: 'No. The model never writes SQL: it selects a measure and a grouping from a fixed list, and the application compiles and runs the statement itself. The query is shown with every answer, so a figure about money can be checked. The same design is why the analyst cannot be prompted into reading data the signed-in account is not allowed to see: scoping is applied when the statement is built.',
   },
   {
     q: 'How does it handle GST and TDS?',
@@ -232,27 +214,27 @@ export const FAQ = [
   {
     q: 'What can it do with documents?',
     group: 'Data & AI',
-    a: 'Upload contracts, scopes and notes as PDF, text, Markdown, CSV, JSON or logs, then ask questions about them in plain words. Each answer carries numbered citations you can open to the exact passage and page, and answers are verified against those sources before you see them. The interface also states which retrieval is actually running rather than implying a capability it does not have.',
+    a: 'Upload contracts, scopes and notes as PDF, text, Markdown, CSV, JSON or logs, then ask questions about them in plain words. Each answer carries numbered citations you can open to the exact passage and page, and answers are verified against those sources before you see them. The interface also says which retrieval is actually running.',
   },
   {
     q: 'How much of this can we change ourselves?',
     group: 'Fit & deployment',
-    a: 'Most of what a finance team wants different is a setting rather than a request. Permissions are records grouped by module: roles carry defaults, and any single permission can be granted or revoked for one person without inventing a new role for them. A change takes effect on their next request, not their next sign-in. Views keep your own filters, columns and grouping, and that configuration travels into a shared link. Categories, clients, projects and statuses come from your own records, so there is no chart of accounts to adopt.',
+    a: 'Most of what a finance team wants different is a setting rather than a request. Permissions are records grouped by module: roles carry defaults, and any single permission can be granted or revoked for one person without inventing a new role for them. A change applies from their next request. Views keep your own filters, columns and grouping, and that configuration travels into a shared link. Categories, clients, projects and statuses come from your own records, so there is no chart of accounts to adopt.',
   },
   {
     q: 'Can we run it on our own database and our own cloud?',
     group: 'Fit & deployment',
-    a: 'Yes. The backend is a container and every endpoint, table, model, mail server and storage target is an environment setting rather than a constant, so a dedicated instance on your own Postgres inside your own private cloud is a configuration of the same build. That matters more than it sounds: it is not a fork, so it keeps receiving the same fixes and features as everything else rather than drifting into a version only you are running.',
+    a: 'Yes. The backend is a container and every endpoint, table, model, mail server and storage target is an environment setting rather than a constant, so a dedicated instance on your own Postgres inside your own private cloud is a configuration of the same build. It is the same build as everyone else runs, so it keeps receiving the same fixes and features.',
   },
   {
     q: 'Can you build a module for how our business works?',
     group: 'Fit & deployment',
-    a: 'Yes, and the architecture is why it is worth doing properly. Each module is a self-contained router, and permissions are keyed by module in the database: so a module built for your case arrives inside the access model and the audit trail rather than bolted beside them. It appears in the permission matrix from the first day, every request it serves is recorded like any other, and it reads the same mirrored rows as everything else, so its figures cannot disagree with the rest of the product.',
+    a: 'Yes, and the architecture is why it is worth doing properly. Each module is a self-contained router, and permissions are keyed by module in the database: so a module built for your case arrives inside the access model and the audit trail. It appears in the permission matrix from the first day, every request it serves is recorded like any other, and it reads the same mirrored rows as everything else, so its figures cannot disagree with the rest of the product.',
   },
   {
     q: 'Is anything deliberately not configurable?',
     group: 'Data & AI',
-    a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the entire reason an answer here can be checked rather than trusted. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added to it deliberately and reviewed, the same way a new module is: never inferred in the moment someone asks.',
+    a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the reason an answer here can be checked. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added deliberately and reviewed, the same way a new module is.',
   },
   {
     q: 'Can I publish a spreadsheet to a client?',
@@ -267,7 +249,7 @@ export const FAQ = [
   {
     q: 'Who can see what?',
     group: 'Access',
-    a: 'Roles carry sensible defaults and any individual permission can be granted or revoked per person. A change takes effect on the next request rather than the next login. Every request is recorded with method, path, status, duration and origin, and record-level history keeps which fields changed and who changed them.',
+    a: 'Roles carry sensible defaults and any individual permission can be granted or revoked per person. A change applies from the next request. Every request is recorded with method, path, status, duration and origin, and record-level history keeps which fields changed and who changed them.',
   },
   {
     q: 'How do I get an account?',
@@ -296,7 +278,7 @@ export const APP_LD = {
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
   description:
-    'Delivery and the money for it, in one place. A live project status board, receivables with GST and TDS kept separate, project profitability, document search, and an AI analyst that shows the query behind every figure — for businesses that bill by project.',
+    'Delivery and the money for it, in one place, for businesses in India that bill by project. A live project status board, receivables with GST and TDS kept separate, project margin, document search, and an analyst that shows the query behind every figure.',
   url: SITE + '/',
   featureList: MODULES.map(m => m.title),
 }

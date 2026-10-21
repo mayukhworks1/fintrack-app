@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
+  ArrowLeft, Edit2, Trash2, Loader2, Check, X,
   RefreshCw, Receipt, Clock, TrendingUp, DollarSign,
   Users, Calendar, BarChart2, CheckCircle2, AlertCircle, Activity,
 } from 'lucide-react'
@@ -11,14 +11,13 @@ import { formatInr, formatPct } from '../utils/format'
 import { hexToRgba } from '../utils/color'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { plainLabel } from '../utils/plainLabel'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function clientColor(name = '') {
-  const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)']
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return PALETTE[h % PALETTE.length]
+// One neutral ink for every client; colour is kept for status.
+function clientColor() {
+  return 'var(--text-2)'
 }
 
 const STATUS_COLORS = {
@@ -79,7 +78,7 @@ function AiText({ text }) {
       const rest  = line.slice(ci + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--fin-positive)' }}>{label}</span>
+          <span className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--fin-positive)' }}>{label}</span>
           {rest && <span className="text-sm ml-2 leading-relaxed" style={{ color: 'var(--text-2)' }}
             dangerouslySetInnerHTML={{ __html: mdInline(rest) }} />}
         </div>
@@ -272,7 +271,7 @@ export default function ProjectDetail() {
             <ArrowLeft size={16} />
           </button>
           <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>
-            {isNew ? 'New Project' : `Edit — ${projectName}`}
+            {isNew ? 'New Project' : `Edit ${projectName}`}
           </h1>
         </div>
         <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
@@ -304,7 +303,7 @@ export default function ProjectDetail() {
       {/* ── Hero header ─────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 pt-5 pb-6"
         style={{
-          background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.10)} 0%, var(--card-bg) 60%)`,
+          background: 'var(--card-bg)',
           borderBottom: '1px solid var(--border)',
         }}>
         {/* Breadcrumb row */}
@@ -327,7 +326,7 @@ export default function ProjectDetail() {
             <button onClick={handleAnalyze} disabled={analyzing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
               style={{ color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 6%, transparent)' }}>
-              {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {analyzing && <Loader2 size={12} className="animate-spin" />}
               {analyzing ? 'Analysing…' : 'AI Analyze'}
             </button>
             {isEditor && (
@@ -383,13 +382,13 @@ export default function ProjectDetail() {
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
                   style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.bg}` }}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
-                  {projectStatus}
+                  {plainLabel(projectStatus)}
                 </span>
               )}
               {f['Health'] && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                  {f['Health'] === 'Good' ? '🟢' : f['Health'] === 'At Risk' ? '🟡' : '🔴'} {f['Health']}
+                  {plainLabel(f['Health'])}
                 </span>
               )}
             </div>
@@ -451,15 +450,15 @@ export default function ProjectDetail() {
 
           {/* Project details */}
           <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-            <h2 className="text-xs font-bold uppercase tracking-widest mb-5 flex items-center gap-2"
+            <h2 className="text-xs font-bold uppercase tracking-[0.06em] mb-5 flex items-center gap-2"
               style={{ color: 'var(--text-3)' }}>
               <BarChart2 size={12} /> Project Details
             </h2>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
               <Field label="Client"          value={f['Client']} />
               <Field label="Project Name"    value={f['Project Name']} />
-              <Field label="Status"          value={f['Project Status']} />
-              <Field label="Health"          value={f['Health']} />
+              <Field label="Status"          value={plainLabel(f['Project Status'])} />
+              <Field label="Health"          value={plainLabel(f['Health'])} />
               <Field label="Start Date"      value={f['Project Start Date'] ? new Date(f['Project Start Date']).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
               <Field label="Duration"        value={f['Duration (Months)'] ? `${f['Duration (Months)']} months` : null} />
               <Field label="Resources"       value={f['Resource Count']} />
@@ -498,7 +497,7 @@ export default function ProjectDetail() {
           <div className="rounded-2xl p-5 animate-fade-in"
             style={{ border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 4%, transparent)' }}>
             <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--fin-positive)' }}>
-              <Sparkles size={15} /> AI Analysis
+              AI Analysis
             </h2>
             <AiText text={analysis} />
           </div>

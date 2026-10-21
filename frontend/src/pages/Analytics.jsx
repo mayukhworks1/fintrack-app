@@ -7,7 +7,7 @@ import {
 import {
   RefreshCw, AlertCircle, TrendingUp, TrendingDown, IndianRupee,
   Wallet, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
-  Target, Sparkles, Hourglass, Users, Zap, ArrowRight,
+  Target, Hourglass, Users, Zap, ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
@@ -66,20 +66,13 @@ const ANALYTICS_WIDGET_CATALOG = [
   { id: 'status_breakdown', label: 'Invoice status mix', description: 'Status distribution by amount raised.' },
   { id: 'client_concentration', label: 'Client concentration', description: 'Revenue distribution across clients.' },
   { id: 'project_profitability', label: 'Project profitability', description: 'Project-level revenue, cost, profit, and outstanding exposure.' },
-  { id: 'pipeline', label: 'Revenue pipeline', description: 'Funnel from raised → collected → outstanding → overdue.' },
+  { id: 'pipeline', label: 'Revenue pipeline', description: 'Funnel from raised to collected, outstanding and overdue.' },
   { id: 'dso_trend', label: 'Payment speed trend', description: 'Month-by-month average days to collect.' },
 ]
 
 const ANALYTICS_DEFAULT_WIDGET_IDS = ANALYTICS_WIDGET_CATALOG.map((widget) => widget.id)
 
 /* ── Components ──────────────────────────────────────────────────────── */
-const TILE_PALETTE = [
-  { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
-  { bg: 'var(--fin-pos-bg)', fg: 'var(--fin-positive)' },
-  { bg: 'var(--fin-warn-bg)', fg: 'var(--fin-warning)' },
-  { bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
-  { bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
-]
 
 /* Mini sparkline — area chart, no axes */
 function Sparkline({ data, color = 'var(--accent)', height = 26 }) {
@@ -102,7 +95,6 @@ function Sparkline({ data, color = 'var(--accent)', height = 26 }) {
 }
 
 function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark, sparkColor }) {
-  const palette = TILE_PALETTE[tone % TILE_PALETTE.length]
   const accentColor =
     accent === 'positive' ? 'var(--fin-positive)' :
     accent === 'warning'  ? 'var(--fin-warning)'  :
@@ -110,12 +102,6 @@ function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark
   return (
     <div className="card flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        {Icon && (
-          <div className="rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
-            <Icon size={18} aria-hidden="true" />
-          </div>
-        )}
         <div className="min-w-0 flex-1">
           <p className="display-num tabular-nums break-words leading-tight"
             style={{ color: accentColor, fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)', wordBreak: 'break-word' }}>
@@ -139,7 +125,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark
       </div>
       {spark && spark.length > 1 && (
         <div className="-mx-1">
-          <Sparkline data={spark} color={sparkColor || palette.fg} />
+          <Sparkline data={spark} color={sparkColor || 'var(--accent)'} />
         </div>
       )}
     </div>
@@ -196,14 +182,14 @@ function PipelineFunnel({ data, dark }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {stages.map((s, i) => (
-        <div key={s.label} className="relative overflow-hidden rounded-2xl p-4 transition-transform duration-200 hover:scale-[1.02]"
+        <div key={s.label} className="relative overflow-hidden rounded-2xl p-4"
           style={{ background: 'var(--bg-input)', border: `1px solid ${tint(s.color, 0.13)}` }}>
           {/* Background fill bar */}
           <div className="absolute inset-x-0 bottom-0 rounded-b-2xl transition-all duration-700"
             style={{ height: `${s.pct}%`, background: `${tint(s.color, 0.07)}` }} />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+              <span className="text-[10px] font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
                 {String(i + 1).padStart(2, '0')}
               </span>
               {i > 0 && (
@@ -507,7 +493,7 @@ export default function Analytics() {
     const sorted = [...projMatrix].filter(p => p.billed > 0).sort((a, b) => b.margin - a.margin)
     if (sorted[0]) {
       out.push({
-        icon: Sparkles, tone: 'positive',
+        icon: TrendingUp, tone: 'positive',
         title: `Top performer: ${sorted[0].name}`,
         body: `${formatPct(sorted[0].margin, 2)} margin on ${inr(sorted[0].billed)} billed.`,
       })
@@ -519,7 +505,7 @@ export default function Analytics() {
         icon: Users,
         tone: clientConc[0].pct >= 85 ? 'warning' : 'info',
         title: `${formatPct(clientConc[0].pct, 1)} from ${clientConc[0].name}`,
-        body: `Concentration risk — diversify revenue sources to reduce exposure.`,
+        body: `Concentration risk. Diversify revenue sources to reduce exposure.`,
       })
     }
 
@@ -530,7 +516,7 @@ export default function Analytics() {
         icon: Hourglass,
         tone: dso <= 14 ? 'positive' : dso <= 30 ? 'info' : 'warning',
         title: `${dso.toFixed(0)} day avg payment time`,
-        body: dso <= 14 ? 'Excellent collection speed.' : dso <= 30 ? 'Healthy collection cycle.' : 'Slow — invoices taking >30 days to clear.',
+        body: dso <= 14 ? 'Excellent collection speed.' : dso <= 30 ? 'Healthy collection cycle.' : 'Slow: invoices taking >30 days to clear.',
       })
     }
 
@@ -551,7 +537,7 @@ export default function Analytics() {
       out.push({
         icon: AlertTriangle, tone: 'negative',
         title: `${overdueCount} overdue invoice${overdueCount === 1 ? '' : 's'}`,
-        body: `${inr(overdueAmount)} pending more than 30 days — needs follow-up.`,
+        body: `${inr(overdueAmount)} pending more than 30 days. Needs follow-up.`,
       })
     }
 
@@ -824,14 +810,14 @@ export default function Analytics() {
       <div className="rounded-[30px] p-5 sm:p-7" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>
-              Finance command center
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
+              Analytics
             </p>
-            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.04em', lineHeight: 1.05 }}>
-              Analytics that feel board-room ready
+            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+              Cash, collections and margin
             </h1>
             <p className="text-sm sm:text-base max-w-3xl" style={{ color: 'var(--text-3)' }}>
-              Deep dive into cashflow, collections, concentration, and project profitability without losing the existing operational depth.
+              Cashflow, collections, client concentration and project profitability for the period you pick.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -878,8 +864,8 @@ export default function Analytics() {
           <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Cash position</p>
-                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Cash position</p>
+                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
                   <LiveValue value={filtered.received} format={inr} />
                 </h2>
                 <p className="text-sm mt-2" style={{ color: 'var(--text-3)' }}>
@@ -887,7 +873,7 @@ export default function Analytics() {
                 </p>
               </div>
               <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Collection rate</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Collection rate</p>
                 <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
                   <LiveValue value={filtered.collectionRate} format={v => formatPct(v, 1)} />
                 </p>
@@ -904,7 +890,7 @@ export default function Analytics() {
                 { label: isEarlyMonth ? 'MTD vs last' : 'Month delta', value: monthDelta != null ? formatPct(monthDelta, 1) : '—', tone: monthDelta == null ? 'var(--text-1)' : (isEarlyMonth && monthDelta < 0) ? 'var(--text-3)' : monthDelta >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)', sub: isEarlyMonth && monthDelta != null && monthDelta < 0 ? 'month in progress' : undefined },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
+                  <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
                   {item.sub && <p className="text-[10px] mt-1 italic" style={{ color: 'var(--text-3)' }}>{item.sub}</p>}
                 </div>
@@ -913,18 +899,18 @@ export default function Analytics() {
           </div>
 
           <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Live context</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Live context</p>
             <h2 className="text-2xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>Signals worth noticing</h2>
             <div className="mt-5 space-y-3">
               <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync state</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Sync state</p>
                 <p className="text-sm mt-2 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
                   <LiveDot changeCount={changeCount} loading={syncing && !data} />
-                  {changedAt ? `Figures changed ${changedLabel}` : 'Live — nothing has moved yet'}
+                  {changedAt ? `Figures changed ${changedLabel}` : 'Live. Nothing has moved yet'}
                 </p>
               </div>
               <div className="rounded-2xl p-4" style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Overdue pressure</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Overdue pressure</p>
                 <p className="text-base font-semibold mt-2" style={{ color: (is?.overdue_invoices?.length || 0) > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
                   {is?.overdue_invoices?.length ? `${is.overdue_invoices.length} overdue invoice${is.overdue_invoices.length === 1 ? '' : 's'}` : 'No overdue invoices'}
                 </p>
@@ -989,7 +975,7 @@ export default function Analytics() {
 
       {/* ── Revenue pipeline funnel ── */}
       {visibleWidgets.has('pipeline') && pipeline && (
-        <ChartCard title="Revenue Pipeline" sub="Lifecycle from raised → collected → outstanding → overdue">
+        <ChartCard title="Revenue Pipeline" sub="Lifecycle: raised, collected, outstanding, overdue">
           <PipelineFunnel data={pipeline} dark={dark} />
         </ChartCard>
       )}
@@ -998,7 +984,7 @@ export default function Analytics() {
       {visibleWidgets.has('cashflow') && (
       <ChartCard
         title="Cash Flow"
-        sub="Monthly raised (bars) vs collected (line) — last 12 months"
+        sub="Monthly raised (bars) vs collected (line), last 12 months"
         action={monthDelta != null && (
           <span className="text-[11px] font-semibold tabular-nums px-2 py-1 rounded-md flex items-center gap-1"
             style={{
@@ -1083,7 +1069,7 @@ export default function Analytics() {
 
       {/* ── DSO trend chart ── */}
       {visibleWidgets.has('dso_trend') && dsoTrend.length > 1 && (
-        <ChartCard title="Payment Speed" sub="Average days to collect per month — lower is better">
+        <ChartCard title="Payment Speed" sub="Average days to collect per month. Lower is better">
           <ResponsiveContainer width="100%" height={220}>
             <ComposedChart data={dsoTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
@@ -1140,7 +1126,7 @@ export default function Analytics() {
         <ChartCard title="Receivables Aging" sub="Pending invoice value by age bucket (overall)">
           {aging.every(a => a.amount === 0) ? (
             <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
-              No pending invoices — all caught up 🎉
+              No pending invoices. All caught up.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
@@ -1187,7 +1173,7 @@ export default function Analytics() {
         {visibleWidgets.has('top_pending') && (
         <ChartCard
           title="Top Pending Invoices"
-          sub="Oldest first — needs follow-up"
+          sub="Oldest first, needing follow-up"
           action={topPending.length > 0 && (
             <Link to="/invoices?status=Pending"
               className="text-[11px] font-medium flex items-center gap-1 transition-opacity hover:opacity-70"
@@ -1296,7 +1282,7 @@ export default function Analytics() {
                   const color = STATUS_COLOR(s.name)
                   const bg = STATUS_BG(s.name)
                   return (
-                    <div key={s.name} className="rounded-2xl p-3.5 transition-transform duration-200 hover:scale-[1.01]"
+                    <div key={s.name} className="rounded-2xl p-3.5"
                       style={{ background: bg, border: `1px solid ${tint(color, 0.13)}` }}>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -1348,7 +1334,7 @@ export default function Analytics() {
       {visibleWidgets.has('client_concentration') && clientConc.length > 0 && (
         <ChartCard
           title="Client Concentration"
-          sub="Revenue distribution — diversification risk check"
+          sub="Revenue distribution and diversification risk"
           action={clientConc[0]?.pct >= 70 && (
             <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded"
               style={{ background: 'var(--fin-warn-bg)', color: 'var(--fin-warning)' }}>

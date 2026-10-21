@@ -106,7 +106,6 @@ function ImpersonationBanner() {
       position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 99999,
       height: BANNER_H,
       background: 'rgba(146,64,14,0.92)', color: '#fff',
-      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 16px', fontSize: 13, fontWeight: 600,
       boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
@@ -122,7 +121,7 @@ function ImpersonationBanner() {
       </div>
       <button onClick={handleExit}
         style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-        ✕ Exit impersonation
+        Exit impersonation
       </button>
     </div>
   )
@@ -399,7 +398,6 @@ export default function App() {
 function ViewerGuard() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-5xl mb-4">🔒</p>
       <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Access restricted</p>
       <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>You don't have permission to view this page.</p>
       <Link to="/" className="btn-primary">Go to dashboard</Link>
@@ -410,7 +408,7 @@ function ViewerGuard() {
 function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-7xl font-bold mb-3 tabular-nums" style={{ color: 'var(--text-3)', letterSpacing: '-0.04em' }}>404</p>
+      <p className="text-7xl font-bold mb-3 tabular-nums" style={{ color: 'var(--text-3)', letterSpacing: '-0.02em' }}>404</p>
       <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Page not found</p>
       <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>This route doesn't exist.</p>
       <Link to="/" className="btn-primary">Go to dashboard</Link>

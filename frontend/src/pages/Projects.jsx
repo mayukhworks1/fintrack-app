@@ -11,6 +11,7 @@ import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLink
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import { formatInr, formatPct } from '../utils/format'
+import { plainLabel } from '../utils/plainLabel'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -323,7 +324,7 @@ export default function Projects() {
           <div className="project-filter-grid filter-expanded-panel animate-slide-up">
             <SelectFilter value={status} onChange={v => setFilter('status', v)} label="Filter by status">
               <option value="">All statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{plainLabel(s)}</option>)}
             </SelectFilter>
 
             <SelectFilter value={client} onChange={v => setFilter('client', v)} label="Filter by client">
@@ -369,7 +370,7 @@ export default function Projects() {
                     <ExecutiveChip accent>Review</ExecutiveChip>
                   </div>
                   <p className="signal-list-copy">
-                    {row.fields?.['Health'] || 'Review project health, margin, and delivery status'}
+                    {plainLabel(row.fields?.['Health']) || 'Review project health, margin, and delivery status'}
                   </p>
                 </button>
               ))}
@@ -379,7 +380,7 @@ export default function Projects() {
           )}
           {topClients.length > 0 && (
             <div className="mt-4 space-y-2 rounded-2xl p-3" style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)' }}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--fin-warning)' }}>Client concentration</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--fin-warning)' }}>Client concentration</p>
               {topClients.map(([name, count]) => (
                 <button
                   key={name}

@@ -35,37 +35,41 @@ export default function LegalPage({ meta, title, stamp, sections, links }) {
 
   return (
     <PublicLayout>
-      <article className="ft-s-legal mx-auto px-4 sm:px-6 py-12 sm:py-16" style={{ maxWidth: 1120 }}>
-        <header className="ft-s-legal-head">
-          <p className="ft-eyebrow mb-3">Legal</p>
-          <h1 className="ft-display">{title}</h1>
-          <p className="ft-s-legal-stamp">{stamp}</p>
-        </header>
+      <article className="ft-s-legal pb-wrap pb-open">
+        <div className="pb-row">
+          <div className="pb-margin"><p className="pb-label">Legal</p></div>
+          <header className="pb-main ft-s-legal-head">
+            <h1 className="pb-display" style={{ fontSize: 'clamp(2.2rem, 1.4rem + 3vw, 3.6rem)' }}>{title}</h1>
+            <p className="pb-cap">{stamp}</p>
+          </header>
+        </div>
 
-        <div className="ft-s-legal-body">
-          {wide && (
-            <nav className="ft-s-legal-toc" aria-label="On this page">
-              <p className="ft-eyebrow mb-3" style={{ fontSize: '0.6rem' }}>On this page</p>
-              <div ref={ink} className="ft-m-ink">
-                <ol>
-                  {sections.map(({ heading }, i) => {
-                    const on = tracking && i === active
-                    return (
-                      <li key={heading}>
-                        <a href={`#${slug(heading)}`} aria-current={on ? 'true' : undefined}
-                           data-active={on ? '' : undefined}>
-                          {heading.replace(/^\d+\.\s*/, '')}
-                        </a>
-                      </li>
-                    )
-                  })}
-                </ol>
-                <span className="ft-m-ink-bar" aria-hidden="true" />
-              </div>
-            </nav>
-          )}
+        <div className="pb-row" style={{ marginTop: 'clamp(40px, 6vw, 72px)' }}>
+          <div className="pb-margin">
+            {wide && (
+              <nav className="ft-s-legal-toc" aria-label="On this page">
+                <p className="pb-label">On this page</p>
+                <div ref={ink} className="ft-m-ink">
+                  <ol>
+                    {sections.map(({ heading }, i) => {
+                      const on = tracking && i === active
+                      return (
+                        <li key={heading}>
+                          <a href={`#${slug(heading)}`} aria-current={on ? 'true' : undefined}
+                             data-active={on ? '' : undefined}>
+                            {heading.replace(/^\d+\.\s*/, '')}
+                          </a>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                  <span className="ft-m-ink-bar" aria-hidden="true" />
+                </div>
+              </nav>
+            )}
+          </div>
 
-          <div className="ft-s-legal-text">
+          <div className="pb-main pb-prose ft-s-legal-text">
             {sections.map(({ heading, body }, i) => (
               <section key={heading} ref={stepRef(i)} id={slug(heading)} aria-labelledby={`${slug(heading)}-h`}>
                 <h2 id={`${slug(heading)}-h`}>{heading}</h2>
@@ -75,7 +79,7 @@ export default function LegalPage({ meta, title, stamp, sections, links }) {
 
             <nav className="ft-s-legal-foot" aria-label="Related pages">
               {links.map(({ to, label }) => (
-                <Link key={to} to={to}>{label}</Link>
+                <Link key={to} to={to} className="pb-link">{label.replace(/\s*→$/, '')}</Link>
               ))}
             </nav>
           </div>

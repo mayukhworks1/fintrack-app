@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock, Moon, Sun } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, Mail, Clock, Moon, Sun } from 'lucide-react'
 import BrandMark from '../components/BrandMark'
 import LoginShowcase from '../components/LoginShowcase'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
-import { useTilt } from '../hooks/useTilt'
 import { api } from '../services/api'
+import '../styles/public-site.css'
 import '../styles/public-secondary-login.css'
 
 /* Which sign-in providers this deployment offers, remembered for the tab's
@@ -115,8 +115,6 @@ export default function Login() {
   const [capsOn, setCapsOn] = useState(false)
   // Pointer light behind the page, and a few degrees of tilt on the card.
   // Both hooks are inert on a touch screen and under reduced motion.
-  const pageLight = useTilt({ max: 0 })
-  const cardTilt = useTilt({ max: 3 })
   const strength = useMemo(() => scorePassword(password), [password])
   const mode = resetToken ? (isInvite ? 'invite' : 'reset') : registerMode ? 'register' : legacyMode ? 'legacy' : 'signin'
   const trackCaps = (e) => setCapsOn(Boolean(e.getModifierState && e.getModifierState('CapsLock')))
@@ -192,7 +190,7 @@ export default function Login() {
 
   if (oauthToken && loading) {
     return (
-      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} className="ft-login-mark" />
@@ -205,7 +203,7 @@ export default function Login() {
             style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--card-border)',
-              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
+              boxShadow: 'none',
             }}
           >
             <div
@@ -294,7 +292,7 @@ export default function Login() {
         setPendingApproval(true)
       } else {
         setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
-          ? legacyMode ? 'Incorrect password — please try again' : 'Invalid email or password'
+          ? legacyMode ? 'Incorrect password. Please try again.' : 'Invalid email or password'
           : msg.toLowerCase().includes('disabled')
             ? OAUTH_ERROR_MESSAGES.disabled
             : msg.toLowerCase().includes('rejected')
@@ -326,7 +324,7 @@ export default function Login() {
 
   if (pendingApproval) {
     return (
-      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} className="ft-login-mark" />
@@ -339,7 +337,7 @@ export default function Login() {
             style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--card-border)',
-              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
+              boxShadow: 'none',
             }}
           >
             <div
@@ -353,7 +351,7 @@ export default function Login() {
             </h1>
             <p className="text-sm mb-6" style={{ color: 'var(--text-3)', lineHeight: 1.6 }}>
               Your account has been created and is awaiting superadmin approval.
-              You'll be able to sign in once it's activated — usually within 24 hours.
+              You'll be able to sign in once it's activated, usually within 24 hours.
             </p>
             <button
               type="button"
@@ -370,7 +368,7 @@ export default function Login() {
   }
 
   return (
-    <div ref={pageLight} className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
+    <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
       {theme && (
         <button type="button" onClick={theme.toggle} className="ft-s-theme"
                 aria-label={theme.dark ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -385,7 +383,7 @@ export default function Login() {
 
         <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-3"
               style={{ color: 'var(--text-3)', textDecoration: 'none', minHeight: 32 }}>
-          <ArrowLeft size={13} aria-hidden="true" /> Back to overview
+          Back to overview
         </Link>
 
         {/* Brand wordmark above card. On wide screens the showcase beside
@@ -401,13 +399,12 @@ export default function Login() {
             shakes once when an error lands — the shake is on the card, not
             the field, so the whole answer is seen to be refused. */}
         <div
-          ref={cardTilt}
-          className={`tilt tilt-sheen rounded-2xl p-7${shake ? ' ft-shake' : ''}`}
+          className={`ft-login-card rounded-xl p-7${shake ? ' ft-shake' : ''}`}
           onAnimationEnd={(e) => { if (e.animationName === 'ft-shake') setShake(false) }}
           style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--card-border)',
-            boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
+            boxShadow: 'none',
           }}
         >
           <div className="mb-6" key={mode}>
@@ -741,7 +738,6 @@ export default function Login() {
               ) : (
                 <>
                   {resetToken ? (isInvite ? 'Set password & sign in' : 'Update password') : registerMode ? 'Create account' : 'Sign in'}
-                  <ArrowRight size={14} aria-hidden="true" />
                 </>
               )}
             </button>

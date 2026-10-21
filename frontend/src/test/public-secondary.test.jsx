@@ -68,8 +68,8 @@ const at = (Page) => render(<MemoryRouter><Page /></MemoryRouter>)
 
 describe('privacy and terms', () => {
   it.each([
-    [Privacy, 'Privacy policy — FinTrack', '/privacy'],
-    [Terms, 'Terms of service — FinTrack', '/terms'],
+    [Privacy, 'Privacy policy | FinTrack', '/privacy'],
+    [Terms, 'Terms of service | FinTrack', '/terms'],
   ])('%#: sets its own title, and sits in the shell as an article under one <main>', (Page, title, path) => {
     usePageMeta.mockClear()
     const { container } = at(Page)

@@ -390,16 +390,13 @@
   .ft-m-head { grid-template-columns: minmax(0, 1fr) minmax(0, 360px); gap: 40px; align-items: center; }
 }
 .ft-m-new {
-  display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; padding: 8px 12px;
-  border-radius: 10px; border: 1px solid var(--card-border); text-decoration: none;
-  background: color-mix(in srgb, var(--accent) 6%, transparent); color: var(--text-2); font-size: 12.5px; line-height: 1.4;
+  display: flex; align-items: baseline; gap: 10px; min-height: 44px; margin-top: 8px; padding: 10px 12px;
+  border-radius: 8px; border: 1px solid var(--card-border); text-decoration: none;
+  background: transparent; color: var(--text-2); font-size: 13px; line-height: 1.4;
   transition: border-color var(--m-t-micro) ease, background-color var(--m-t-micro) ease;
 }
-.ft-m-new:hover, .ft-m-new:focus-visible { border-color: var(--accent-soft); background: var(--accent-dim); }
-.ft-m-new-badge {
-  flex-shrink: 0; padding: 2px 7px; border-radius: 999px; background: var(--accent-btn); color: var(--accent-fg);
-  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
-}
+.ft-m-new:hover, .ft-m-new:focus-visible { background: var(--row-hover, var(--bg-2)); }
+.ft-m-new-badge { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--accent-ink, var(--accent)); }
 .ft-m-foot { display: grid; gap: 28px 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ft-m-foot-brand { grid-column: 1 / -1; }
 @media (min-width: 768px) {

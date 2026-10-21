@@ -22,10 +22,10 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
         onClick={() => onFilterStatus('')}
         className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
         style={{
-          background: !filterStatus ? 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, transparent), color-mix(in srgb, var(--accent) 12%, transparent))' : 'rgba(255,255,255,0.03)',
+          background: !filterStatus ? 'var(--accent-btn)' : 'transparent',
           border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--card-border)',
           color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-2)',
-          boxShadow: !filterStatus ? '0 14px 30px color-mix(in srgb, var(--accent) 18%, transparent)' : 'none',
+          boxShadow: 'none',
         }}
       >
         <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-1)' }}>{total}</span>
@@ -96,7 +96,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'var(--scrim)' }}
       onClick={onClose}>
       <div {...dialog.panelProps}
         className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] shadow-2xl"
@@ -104,7 +104,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5"
-          style={{ background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.14)}, var(--card-bg))`, borderBottom: '1px solid var(--border)' }}>
+          style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
@@ -157,7 +157,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           {/* ── Status ─────────────────────────────────────────────────── */}
           {status && (
             <div className="rounded-2xl p-4" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: sc.color }}>Current Status</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: sc.color }}>Current Status</p>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold"
                 style={{ background: 'var(--card-bg)', color: sc.color, border: `1px solid ${sc.border}` }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: sc.dot }} />
@@ -169,12 +169,12 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           <div className="grid grid-cols-1 lg:grid-cols-[0.9fr,1.1fr] gap-5">
             <div className="space-y-5">
               <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
                 <p className="text-sm font-semibold leading-relaxed" style={{ color: 'var(--text-1)' }}>{short || 'No headline added yet.'}</p>
               </div>
 
               <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Portfolio Context</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--text-3)' }}>Portfolio Context</p>
                 <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Client</p>
@@ -194,7 +194,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
             </div>
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Detailed Update</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>Detailed Update</p>
               <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
                 {detail?.trim() || short?.trim() || 'No detailed update added yet.'}
               </div>
@@ -204,7 +204,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           {/* Attachments — still previewable below, but surfaced in the header above */}
           {attachments.length > 0 && (
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
                 Attachments <span className="font-normal normal-case" style={{ color: 'var(--text-3)' }}>· click to preview</span>
               </p>
               <AttachmentList
@@ -577,7 +577,7 @@ export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit
       style={{
         background: dragOver ? sc.bg : 'var(--bg-input)',
         border: dragOver ? `2px dashed ${sc.border}` : '1px solid var(--border)',
-        boxShadow: dragOver ? `0 0 16px ${sc.bg}` : 'none',
+        boxShadow: 'none',
       }}
       onDragOver={handleDragOver}
       onDragLeave={() => setDragOver(false)}

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { api } from '../services/api'
 import { useToast } from '../context/ToastContext'
+import { plainLabel } from '../utils/plainLabel'
 
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
 const PROJECTS = ['ZOHO', 'Pms', 'Innovine']
@@ -39,7 +40,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
     try {
       const { fields } = await api.ai.autofill(aiDesc)
       if (!fields || !Object.keys(fields).length) {
-        toast('AI could not extract fields — try a more detailed description', 'warning')
+        toast('AI could not extract fields. Try a more detailed description', 'warning')
         return
       }
       setForm((f) => ({
@@ -54,7 +55,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
         ...(fields.project_status      && { project_status: fields.project_status }),
         ...(fields.resource_contribution_pct != null && { resource_contribution_pct: String(fields.resource_contribution_pct) }),
       }))
-      toast('Fields filled by AI — review before saving', 'success')
+      toast('Fields filled by AI. Review before saving', 'success')
     } catch (e) {
       toast('AI autofill failed: ' + e.message, 'error')
     } finally {
@@ -82,8 +83,8 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
       {/* AI Autofill */}
       <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-4">
         <p className="text-sm font-medium text-brand-400 mb-2.5 flex items-center gap-2">
-          <Sparkles size={14} aria-hidden="true" /> AI Autofill
-          <span className="text-xs text-gray-500 font-normal">— describe the project and AI will fill the fields</span>
+          AI Autofill
+          <span className="text-xs text-gray-500 font-normal">Describe the project and AI will fill the fields.</span>
         </p>
         <div className="flex gap-2">
           <input
@@ -102,7 +103,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
             className="btn-primary flex items-center gap-2 whitespace-nowrap px-3"
             aria-label="Fill form with AI"
           >
-            {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {aiLoading && <Loader2 size={14} className="animate-spin" />}
             {aiLoading ? 'Filling…' : 'Fill'}
           </button>
         </div>
@@ -147,7 +148,7 @@ export default function ProjectForm({ initial = {}, onSubmit, onCancel, loading 
         <FormField label="Project Status">
           <select className="input" value={form.project_status} onChange={set('project_status')} aria-label="Project status">
             <option value="">Select status</option>
-            {STATUSES.map((s) => <option key={s}>{s}</option>)}
+            {STATUSES.map((s) => <option key={s} value={s}>{plainLabel(s)}</option>)}
           </select>
         </FormField>
 

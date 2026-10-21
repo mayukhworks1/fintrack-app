@@ -205,7 +205,7 @@ export function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment,
         <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '28px 28px 24px', width: 380, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
           <h3 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-1)' }}>Send Payment Reminder</h3>
           <p style={{ margin: '0 0 18px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Invoice <strong>{f['Invoice Number']}</strong> — {f['Client Name'] || f['Project'] || ''}
+            Invoice <strong>{f['Invoice Number']}</strong> · {f['Client Name'] || f['Project'] || ''}
           </p>
           <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>Recipient email address</label>
           <input

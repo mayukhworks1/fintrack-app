@@ -2,7 +2,6 @@
 import { api } from '../../services/api'
 import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { KPI_PALETTE } from './utils'
 import { LiveValue } from '../../components/LiveFigures'
 import { AttachmentUploadField as SharedAttachmentUploadField } from '../invoices/sharedUi'
 
@@ -25,16 +24,9 @@ export function AgingBadge({ days, status }) {
 }
 
 export function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
-  const palette = KPI_PALETTE[tone % KPI_PALETTE.length]
   const color = semantic === 'positive' ? 'var(--fin-positive)' : semantic === 'warning' ? 'var(--fin-warning)' : semantic === 'negative' ? 'var(--fin-negative)' : 'var(--text-1)'
   return (
-    <div className="card flex items-center gap-3 animate-scale-in hover:shadow-md transition-shadow">
-      {Icon && (
-        <div className="flex items-center justify-center flex-shrink-0"
-          style={{ width: 38, height: 38, borderRadius: 8, background: palette.bg, color: palette.fg }}>
-          <Icon size={17} aria-hidden="true" />
-        </div>
-      )}
+    <div className="card flex items-center gap-3 animate-scale-in">
       <div className="min-w-0 flex-1">
         <p className="display-num tabular-nums break-words leading-tight"
           style={{ color, fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)', wordBreak: 'break-word' }}>
@@ -70,11 +62,11 @@ export function DashboardMetric({ label, value, amount, format, sub, icon: Icon,
       style={{
         background: tone,
         border: '1px solid color-mix(in srgb, var(--card-border) 78%, transparent)',
-        boxShadow: '0 10px 24px rgba(15,23,42,0.06)',
+        boxShadow: 'var(--card-shadow)',
       }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase" style={{ color: 'var(--text-3)', letterSpacing: '0.1em', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}</p>
+          <p className="text-[11px] font-semibold uppercase" style={{ color: 'var(--text-3)', letterSpacing: '0.06em', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}</p>
           {currencyMatch ? (
             <div
               className="mt-2 inline-flex items-end gap-1 font-bold tracking-tight min-w-0"
@@ -111,19 +103,6 @@ export function DashboardMetric({ label, value, amount, format, sub, icon: Icon,
           )}
           {sub && <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{sub}</p>}
         </div>
-        {iconSlot && Icon && (
-          <div
-            className="flex items-center justify-center flex-shrink-0 rounded-2xl"
-            style={{
-              width: compact ? 40 : 48,
-              height: compact ? 40 : 48,
-              background: 'color-mix(in srgb, var(--card-bg) 78%, transparent)',
-              color: accent || 'var(--accent)',
-              boxShadow: 'var(--shadow-sm)',
-            }}>
-            <Icon size={compact ? 18 : 21} />
-          </div>
-        )}
       </div>
     </div>
   )
@@ -140,7 +119,7 @@ export function DashboardSignal({ eyebrow, title, body, icon: Icon, tone = 'var(
       }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>{eyebrow}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{eyebrow}</p>
           <p className="mt-2 text-base sm:text-lg font-bold leading-tight" style={{ color: 'var(--text-1)' }}>{title}</p>
           {body && <p className="text-[13px] mt-2 leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>}
         </div>

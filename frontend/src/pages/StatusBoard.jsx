@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
-import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Sparkles, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
+import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -489,7 +489,7 @@ export default function StatusBoard() {
         <div
           className="rounded-[30px] border p-4 sm:p-5 space-y-5"
           style={{
-            background: 'radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 12%, transparent), transparent 24%), var(--card-bg)',
+            background: 'var(--card-bg)',
             borderColor: 'var(--border)',
             boxShadow: 'var(--card-shadow)',
           }}
@@ -501,10 +501,10 @@ export default function StatusBoard() {
                 <Activity size={19} style={{ color: 'var(--accent)' }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] mb-2" style={{ color: 'var(--accent)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--accent)' }}>
                   Portfolio command board
                 </p>
-                <h1 className="text-[32px] sm:text-[36px] font-semibold leading-[0.95] tracking-[-0.04em]" style={{ color: 'var(--text-1)' }}>
+                <h1 className="text-[32px] sm:text-[36px] font-semibold leading-[0.95] tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>
                   Status Board
                 </h1>
                 <p className="text-sm mt-3 leading-6 max-w-2xl" style={{ color: 'var(--text-3)' }}>
@@ -581,7 +581,7 @@ export default function StatusBoard() {
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 w-full xl:w-auto">
                   {viewType === 'board' && (
                     <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group by</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Group by</span>
                       <select
                         className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                         value={boardGroupBy}
@@ -598,7 +598,7 @@ export default function StatusBoard() {
                   {viewType === 'card' && (
                     <>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Group</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardGroupBy}
@@ -611,7 +611,7 @@ export default function StatusBoard() {
                         </select>
                       </label>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[210px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Order</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Order</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardGroupSort}
@@ -624,7 +624,7 @@ export default function StatusBoard() {
                         </select>
                       </label>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[190px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Cards</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Cards</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardRecordSort}
@@ -643,7 +643,7 @@ export default function StatusBoard() {
                         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
                         title={allExpanded ? 'Collapse all cards' : 'Expand all cards'}
                       >
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
                           Details
                         </span>
                         <span className="flex items-center gap-1.5 text-sm font-semibold">
@@ -685,22 +685,22 @@ export default function StatusBoard() {
           {!loading && !error && records.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{records.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{allClients.length} distinct clients</p>
               </div>
               <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{filtered.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{advancedConditions.length ? `${advancedConditions.length} advanced rule${advancedConditions.length !== 1 ? 's' : ''}` : 'No advanced rules'}</p>
               </div>
               <div className="rounded-[24px] p-4" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--fin-positive)' }}>{topStatusSignal?.status || 'No active statuses'}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{topStatusSignal ? `${topStatusSignal.count} project${topStatusSignal.count === 1 ? '' : 's'} currently in this state` : 'Waiting for live status records'}</p>
               </div>
               <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
+                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {viewType === 'card' ? 'Client cards' : viewType === 'list' ? 'Operational list' : 'Kanban board'}
                 </p>
@@ -935,7 +935,7 @@ export default function StatusBoard() {
           <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid var(--card-border)', background: 'var(--glass-bg)', boxShadow: 'var(--card-shadow)' }}>
             <div className="overflow-x-auto">
               <div className="min-w-full">
-                <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em]"
+                <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.06em]"
                   style={{ gridTemplateColumns: listLayout.gridTemplateColumns, minWidth: listLayout.minWidth, background: 'var(--bg-2)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
                   <span />
                   {listLayout.active.map(col => (
@@ -980,7 +980,7 @@ export default function StatusBoard() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3 text-xs font-medium"
                 style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)', color: 'var(--fin-warning)' }}>
                 <GripVertical size={12} />
-                Grouped by <strong>{boardGroupBy}</strong> — drag &amp; drop is disabled. Switch "Group by" to <strong>Status</strong> to move cards between columns.
+                Grouped by <strong>{boardGroupBy}</strong>. Drag &amp; drop is disabled. Switch "Group by" to <strong>Status</strong> to move cards between columns.
               </div>
             )}
             {isEditor && boardIsDraggable && (
@@ -1039,12 +1039,12 @@ export default function StatusBoard() {
             <div className="flex items-center gap-2">
               <button onClick={() => setAiModal(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl transition-all"
-                style={{ background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)', color: 'var(--chart-3)', border: '1px solid color-mix(in srgb, var(--chart-3) 25%, transparent)' }}>
-                <Sparkles size={13} /> <span className="hidden sm:inline">AI Update</span>
+                style={{ background: 'var(--accent-dim)', color: 'var(--accent-ink)', border: '1px solid var(--accent-soft)' }}>
+                <span>Draft update</span>
               </button>
               <button onClick={() => setShareModal(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl transition-all"
-                style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', color: 'var(--chart-2)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
+                style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}>
                 <Share2 size={13} /> <span className="hidden sm:inline">Share</span>
               </button>
               <button aria-label="Clear selection" onClick={clearSelection} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>

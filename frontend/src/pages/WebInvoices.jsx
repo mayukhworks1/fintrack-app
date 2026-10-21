@@ -316,7 +316,7 @@ export default function WebInvoices() {
   // Surfaces for the billing dashboard, drawn from the palette so they follow
   // both the palette and the mode.
   const dashboardStyles = useMemo(() => ({
-    shell: 'radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 9%, transparent), transparent 40%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--fin-positive) 6%, transparent), transparent 40%), var(--card-bg)',
+    shell: 'var(--card-bg)',
     panel: 'var(--card-bg)',
     panelSoft: 'var(--bg-input)',
     accentPanel: 'var(--fin-pos-bg)',
@@ -686,7 +686,7 @@ export default function WebInvoices() {
     return (
       <button onClick={() => handleSort(col)}
         className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
-        aria-label={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
+        aria-label={active ? (asc ? 'Sorted ascending. Click for descending' : 'Sorted descending. Click for ascending') : `Sort by ${col}`}
         style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
         {children}
         <ArrowUpDown size={10} style={{
@@ -733,19 +733,9 @@ export default function WebInvoices() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4 items-start">
               <div className="min-w-0">
                 <div className="flex items-center gap-3 mb-2">
-                  <div
-                    className="flex items-center justify-center rounded-[22px] flex-shrink-0"
-                    style={{
-                      width: 46,
-                      height: 46,
-                      background: 'var(--accent-dim)',
-                      border: `1px solid ${dashboardStyles.line}`,
-                    }}>
-                    <LayoutDashboard size={20} style={{ color: 'var(--accent)' }} />
-                  </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--accent-ink)' }}>
-                      Billing Command Deck
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--accent-ink)' }}>
+                      Billing
                     </p>
                     <h1 className="text-[1.9rem] sm:text-[2.2rem] lg:text-[2.45rem] font-bold tracking-tight mt-0.5 leading-none" style={{ color: 'var(--text-1)' }}>
                       Billing Dashboard
@@ -854,7 +844,7 @@ export default function WebInvoices() {
             <div className="rounded-[26px] p-4 sm:p-5 space-y-3" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables aging</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Receivables aging</p>
                   <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Pending invoice age</h2>
                 </div>
                 <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{agingBuckets.total_pending} pending</span>
@@ -898,13 +888,13 @@ export default function WebInvoices() {
               const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
               const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
               const labelText = chartPreset === 'custom' && chartFrom
-                ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
+                ? `${chartFrom}${chartTo ? ' to ' + chartTo : ''}`
                 : `last ${activePreset.label}`
               return (
                 <div className="rounded-[26px] overflow-hidden" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}`, padding: 0 }}>
                   <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-2">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Invoice activity</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Invoice activity</p>
                       <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Billing activity · {labelText}</h2>
                       <p className="text-[11px] mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
                         Bar height = amount ·&nbsp;
@@ -933,7 +923,7 @@ export default function WebInvoices() {
                           <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
                             className="text-[11px] px-2 py-1 rounded-md"
                             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
-                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
+                          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>to</span>
                           <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
                             className="text-[11px] px-2 py-1 rounded-md"
                             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
@@ -980,10 +970,10 @@ export default function WebInvoices() {
                     const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
                     const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.1, entry.gross / maxMonthlyBalanceMagnitude) : 0.1
                     const barColor = collPct >= 80
-                      ? 'linear-gradient(180deg,var(--fin-positive),var(--fin-positive))'
+                      ? 'var(--fin-positive)'
                       : collPct >= 50
-                      ? 'linear-gradient(180deg,var(--fin-warning),var(--fin-warning))'
-                      : 'linear-gradient(180deg,var(--fin-negative),var(--fin-negative))'
+                      ? 'var(--fin-warning)'
+                      : 'var(--fin-negative)'
                     const badgeLabel = entry.change !== null
                       ? (entry.change >= 0 ? `up ${entry.change.toFixed(0)}%` : `down ${Math.abs(entry.change).toFixed(0)}%`)
                       : `${collPct.toFixed(0)}% collected`
@@ -1085,7 +1075,7 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Raised timeline</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Raised timeline</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Raised by month-year</h2>
                   </div>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Click to filter</span>
@@ -1101,7 +1091,7 @@ export default function WebInvoices() {
                       className="rounded-2xl p-3 text-left transition-all"
                       style={{ background: 'var(--glass-bg)', border: `1px solid ${dashboardStyles.line}` }}
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
                       <p className="text-sm font-semibold tabular-nums mt-2" style={{ color: 'var(--text-1)' }}>{fmt(entry.amount)}</p>
                       <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{entry.count} raised invoice{entry.count !== 1 ? 's' : ''}</p>
                     </button>
@@ -1114,7 +1104,7 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Cleared timeline</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Cleared timeline</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Cleared by month-year</h2>
                   </div>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Click to filter</span>
@@ -1130,7 +1120,7 @@ export default function WebInvoices() {
                       className="rounded-2xl p-3 text-left transition-all"
                       style={{ background: 'var(--glass-bg)', border: `1px solid ${dashboardStyles.line}` }}
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
                       <p className="text-sm font-semibold tabular-nums mt-2" style={{ color: 'var(--fin-positive)' }}>{fmt(entry.amount)}</p>
                       <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{entry.count} cleared invoice{entry.count !== 1 ? 's' : ''}</p>
                     </button>
@@ -1155,7 +1145,7 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Status distribution</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Status distribution</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Collection pulse</h2>
                   </div>
                   <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
@@ -1185,7 +1175,7 @@ export default function WebInvoices() {
                   <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${dashboardStyles.line}` }}>
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>Project pulse</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Project pulse</p>
                         <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Highest invoice-bearing projects in the current scope.</p>
                       </div>
                     </div>
@@ -1235,7 +1225,7 @@ export default function WebInvoices() {
                   style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Attention queue</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Attention queue</p>
                       <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Upcoming follow-ups</h2>
                     </div>
                     <ShieldAlert size={18} style={{ color: 'var(--fin-warning)' }} />
@@ -1279,7 +1269,7 @@ export default function WebInvoices() {
                   style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Retainer desk</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Retainer desk</p>
                       <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Coverage snapshot</h2>
                     </div>
                     <button onClick={() => switchWorkspace('retainers')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
@@ -1322,7 +1312,7 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Latest movement</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Latest movement</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Newest invoices</h2>
                   </div>
                   <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
@@ -1371,7 +1361,7 @@ export default function WebInvoices() {
                 style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Operating notes</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Operating notes</p>
                     <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>How to use this desk</h2>
                   </div>
                   <BookOpen size={18} style={{ color: 'var(--accent)' }} />
@@ -1459,7 +1449,7 @@ export default function WebInvoices() {
           {isStaleData && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)', color: 'var(--fin-warning)' }}>
               <WifiOff size={14} />
-              <span>Live data unavailable — showing cached records. Some changes may not appear.</span>
+              <span>Live data unavailable. Showing cached records. Some changes may not appear.</span>
             </div>
           )}
           </>
@@ -1471,7 +1461,7 @@ export default function WebInvoices() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>Retainers</h1>
               <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                Monthly retainer invoices — use the Zoho form to raise externally.
+                Monthly retainer invoices. Use the Zoho form to raise externally.
               </p>
             </div>
             <button onClick={() => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer')} className="btn-ghost">
@@ -1510,7 +1500,7 @@ export default function WebInvoices() {
                     style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
                     <div className="col-span-full flex items-center gap-2 mb-1">
                       <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>{cur}</span>
-                      <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{cur} Invoices — {data.count} total</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{cur} Invoices · {data.count} total</span>
                     </div>
                     {[
                       { label: 'Raised',      val: data.raised,      tone: 0 },
@@ -1549,9 +1539,6 @@ export default function WebInvoices() {
                           boxShadow: active ? `0 0 0 2px ${tint(m.color, 0.19)}, var(--card-shadow)` : 'var(--card-shadow)',
                         }}
                         aria-pressed={active}>
-                        <div className="kpi-icon flex-shrink-0" style={{ background: `${tint(m.color, 0.09)}` }}>
-                          {Icon && <Icon size={18} style={{ color: m.color }} />}
-                        </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
                           <p className="font-bold text-2xl tabular-nums leading-none" style={{ color: m.color }}>{count}</p>
@@ -1573,7 +1560,7 @@ export default function WebInvoices() {
                   <div className="flex items-center gap-2 mb-3">
                     <AlertOctagon size={14} style={{ color: 'var(--fin-negative)' }} />
                     <p className="text-sm font-semibold" style={{ color: 'var(--fin-negative)' }}>
-                      {overdue.length} Overdue — pending more than 30 days
+                      {overdue.length} Overdue: pending more than 30 days
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -2473,7 +2460,7 @@ export default function WebInvoices() {
                                       display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                                       padding: '10px 20px 10px 18px',
                                       borderBottom: '1px solid var(--glass-border)',
-                                      background: `linear-gradient(90deg, ${tint(accentColor, 0.03)} 0%, transparent 60%)`,
+                                      background: 'transparent',
                                     }}>
                                       <StatusPill status={f['Payment Status']} />
                                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 2 }}>

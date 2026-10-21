@@ -1,146 +1,76 @@
 /**
- * "Recently shipped": the spreadsheet editor, publishing with link previews
- * and view insights, and the AI gateway — told as three steps.
+ * Recently shipped, on /features#shipped.
  *
- * Wide screens: the steps scroll on the left and the media for the step
- * being read sits beside them, pinned, crossfading as the reader moves on
- * (useActiveStep decides which, with a rail to show where you are). The
- * media layers that are not showing are display:none, so the video is off
- * screen to its own observer and stays paused, and nothing behind the
- * current picture is laid out or animated.
- *
- * Phones, reduced motion, or no IntersectionObserver: each step simply
- * carries its own media under its text. Nothing is pinned.
- *
- * Loaded lazily, inside a LazyMount that already holds its space.
+ * Three pieces of new work, each with its screen from the app on sample
+ * data: the spreadsheet editor (its recording, which plays only when asked
+ * or when in view and motion is welcome), the published page's view counts,
+ * and the AI gateway's providers. Set like the module sections above it.
  */
-import { useEffect, useRef, useState } from 'react'
-import { Table2, Link2, Route } from 'lucide-react'
-import { Head } from '../PublicBits'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { useActiveStep } from '../../hooks/useActiveStep'
+import { Section, Plate, Reveal } from '../PublicBits'
 import InViewVideo from '../motion/InViewVideo'
-import Shot from '../motion/Shot'
-import StepRail from '../motion/StepRail'
-import LinkUnfurl from './LinkUnfurl'
-import GatewayRoute from './GatewayRoute'
-import ScreenCrop from './ScreenCrop'
 
 const STEPS = [
   {
-    icon: Table2, kicker: 'Pages · spreadsheet editor',
+    kicker: 'Pages, spreadsheet editor',
     title: 'A spreadsheet that publishes',
     body: 'Pages now edits sheets as well as documents. Type a formula, change an amount, mark an invoice paid, and the totals follow. ₹ number formats, AutoSum, folders, version history and CSV in and out.',
-    points: ['Formulas and AutoSum', '₹ number formats', 'Version history'],
   },
   {
-    icon: Link2, kicker: 'Pages · publishing',
+    kicker: 'Pages, publishing',
     title: 'A link with a preview, and a record of who opened it',
     body: 'Publish a page or a sheet on a link, with an optional password, a protection code and an expiry in IST. Chat apps unfurl it into a preview card, and each page keeps its views per day, device and country.',
-    points: ['Password, code or expiry', 'Preview card in chat apps', 'Views per day, device, country'],
   },
   {
-    icon: Route, kicker: 'Admin · AI gateway',
+    kicker: 'Admin, AI gateway',
     title: 'Every AI call through one gateway',
     body: 'Groq and OpenRouter behind one client. Each task has a route tried in order, a daily cap and a versioned prompt, and every call is logged. Keys are stored encrypted on the server, and a superadmin switches each task on or off.',
-    points: ['Ordered routes with fallback', 'Daily caps, reset at midnight IST', 'Every call in the log'],
   },
 ]
 
-function Media({ i, wide }) {
+function Media({ i }) {
   if (i === 0) {
     return (
-      <InViewVideo
-        id="sheet-demo"
-        name="spreadsheet demo"
-        className="ft-f-ship-video"
-        label="The spreadsheet editor in Pages, on sample data: a formula is typed, an amount changes and the totals follow."
-      />
+      <figure className="pb-plate">
+        <div className="pb-plate-frame" style={{ aspectRatio: 'auto' }}>
+          <InViewVideo id="sheet-demo" name="spreadsheet demo" className="ft-f-ship-video"
+                       label="The spreadsheet editor in Pages, on sample data: a formula is typed, an amount changes and the totals follow." />
+        </div>
+        <figcaption className="pb-cap">The spreadsheet editor in Pages, recorded on sample data.</figcaption>
+      </figure>
     )
   }
   if (i === 1) {
     return (
-      <div className="ft-f-ship-pub">
-        <LinkUnfurl />
-        <Shot id="page-insights-charts" chrome="window" zoom
-              sizes={wide ? '(min-width: 1024px) 460px, 92vw' : '92vw'}
-              alt="Viewer analytics for the Invoice tracker page: totals, views per day, devices and countries, sample data"
-              caption="Each page's views per day, device and country. Sample data." />
-      </div>
+      <Plate id="page-insights-charts"
+             alt="Viewer analytics for the Invoice tracker page: totals, views per day, devices and countries, sample data"
+             caption="A published page's views per day, device and country. Sample data." />
     )
   }
   return (
-    <div className="ft-f-ship-gw" style={{ containerType: 'inline-size' }}>
-      <ScreenCrop id="gateway-providers" crop={[117, 320, 1366, 400]} zoom
-                  sizes={wide ? '(min-width: 1024px) 560px, 92vw' : '92vw'}
-                  alt="AI gateway, providers and caps: Groq and OpenRouter, each on with a key, today's requests against their caps, sample data"
-                  caption="Admin → AI gateway, providers and caps. Sample data." />
-      <GatewayRoute compact />
-    </div>
+    <Plate id="gateway-providers" crop={[117, 320, 1366, 400]}
+           alt="AI gateway, providers and caps: Groq and OpenRouter, each on with a key, today's requests against their caps, sample data"
+           caption="Admin, AI gateway: providers and today's usage against their caps. Sample data." />
   )
 }
 
 export default function ShippedShowcase() {
-  const wide = useMediaQuery('(min-width: 1024px)')
-  const { active, stepRef, tracking } = useActiveStep(STEPS.length, { disabled: !wide })
-  const pinned = wide && tracking
-
-  // The layer leaving stays drawn for the crossfade, then drops out.
-  const [leaving, setLeaving] = useState(-1)
-  const last = useRef(active)
-  useEffect(() => {
-    if (last.current === active) return
-    setLeaving(last.current)
-    last.current = active
-    const t = setTimeout(() => setLeaving(-1), 450)
-    return () => clearTimeout(t)
-  }, [active])
-
   return (
-    <div className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-      <Head eyebrow="Recently shipped" title="Sheets you can publish, and one gateway for the AI">
-        The newest work, shown on the screens it shipped in. Everything here is in the app today,
-        on the same records as the rest of it.
-      </Head>
-
-      <div className={pinned ? 'ft-f-ship is-pinned' : 'ft-f-ship'}>
-        <div className="ft-f-ship-steps">
-          {pinned && (
-            <StepRail count={STEPS.length} active={active} className="ft-f-ship-rail" />
-          )}
-          <div>
-            {STEPS.map((s, i) => {
-              const Icon = s.icon
-              return (
-                <article key={s.title} ref={stepRef(i)} className="ft-f-ship-step"
-                         data-active={!pinned || active === i ? '' : undefined}>
-                  <p className="ft-f-kicker"><Icon size={13} aria-hidden="true" /> {s.kicker}</p>
-                  <h3 className="ft-display">{s.title}</h3>
-                  <p className="ft-f-ship-body">{s.body}</p>
-                  <ul className="ft-f-ship-points">
-                    {s.points.map(p => <li key={p}>{p}</li>)}
-                  </ul>
-                  {!pinned && <div className="ft-f-ship-inline"><Media i={i} wide={wide} /></div>}
-                </article>
-              )
-            })}
-          </div>
-        </div>
-
-        {pinned && (
-          <div className="ft-f-ship-media">
-            <div className="ft-f-ship-stage">
-              {STEPS.map((s, i) => (
-                <div key={s.title} className="ft-f-ship-layer"
-                     data-state={i === active ? 'on' : i === leaving ? 'out' : 'off'}
-                     aria-hidden={i === active ? undefined : 'true'}>
-                  <Media i={i} wide />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    <Section eyebrow="Recently shipped"
+             title="Sheets you can publish, and one gateway for the AI"
+             lede="The newest work, shown on the screens it shipped in. All of it is in the app today, on the same records as the rest.">
+      <ol className="pb-list pb-list-num">
+        {STEPS.map((s, i) => (
+          <li key={s.title}>
+            <span className="pb-n" aria-hidden="true">{i + 1}</span>
+            <article>
+              <p className="pb-label" style={{ marginBottom: 6 }}>{s.kicker}</p>
+              <h3 className="pb-h3s">{s.title}</h3>
+              <p className="pb-body" style={{ marginTop: 8 }}>{s.body}</p>
+              <Reveal style={{ marginTop: 24, marginBottom: 12 }}><Media i={i} /></Reveal>
+            </article>
+          </li>
+        ))}
+      </ol>
+    </Section>
   )
 }

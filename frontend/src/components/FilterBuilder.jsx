@@ -674,7 +674,7 @@ export function FilterBuilder({
         >
           {conditions.length === 0 && (
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-              No filters yet — click <strong>+ Add filter</strong> to begin.
+              No filters yet. Click <strong>+ Add filter</strong> to begin.
             </p>
           )}
 

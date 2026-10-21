@@ -324,3 +324,34 @@
   .ft-h-tour-fill { display: none; }
   .ft-h-seg, .ft-h-one-wire, .ft-h-one-node, .ft-h-film-bar { transition: none; }
 }
+
+/* ── Editorial home (public-site.css carries the system) ───────────── */
+.pb .ft-h-title { font-size: clamp(2.4rem, 1.4rem + 4.2vw, 4.6rem); line-height: 1.02; letter-spacing: -0.028em; max-width: 13em; }
+.pb .ft-h-fig, .pb .ft-h-one-amt { font-family: inherit; font-weight: 600; }
+.pb .ft-h-fact-v { color: var(--text-1); }
+
+/* The modules, as a contents page: number, name, the first thing it does. */
+.pb-h-index > li { padding: 0; }
+.pb-h-index-row {
+  display: grid; grid-template-columns: 2.6em minmax(0, 14em) minmax(0, 1fr);
+  gap: 4px 16px; align-items: baseline; padding: 14px 0;
+  text-decoration: none; color: inherit;
+  transition: background-color 150ms ease;
+}
+.pb-h-index-row:hover .pb-h-index-t { color: var(--accent-ink, var(--accent)); }
+.pb-h-index-row .pb-n { font-size: 0.8125rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pb-h-index-t { font-weight: 600; color: var(--text-1); transition: color 150ms ease; }
+.pb-h-index-d { font-size: 0.9375rem; color: var(--text-2); }
+@media (max-width: 639px) {
+  .pb-h-index-row { grid-template-columns: 2.6em minmax(0, 1fr); }
+  .pb-h-index-d { grid-column: 2; }
+}
+.pb-h-readon { color: var(--text-1); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; text-decoration-color: var(--card-border); }
+.pb-h-readon:hover { color: var(--accent-ink, var(--accent)); text-decoration-color: currentColor; }
+
+/* The sandbox frame sits flat on the page. */
+.pb .ft-h-sandbox .ft-tour { box-shadow: none; }
+.pb .ft-h-lazy-film { min-height: 0; aspect-ratio: auto; }
+.pb .ft-tour { border-radius: 10px; box-shadow: none; }
+.pb .ft-tour::before { content: none; }
+.pb .ft-tour-chrome { background: var(--card-bg); }

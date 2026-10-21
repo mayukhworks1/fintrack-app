@@ -16,7 +16,7 @@
  * play, and always with a pause button. Dots and arrows work either way.
  */
 import { useEffect, useState } from 'react'
-import { ReceiptText, Scale, Code2, Globe, Pause, Play, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pause, Play, ChevronLeft, ChevronRight } from 'lucide-react'
 import BrandMark from './BrandMark'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useAutoplay } from '../hooks/useAutoplay'
@@ -43,10 +43,10 @@ const SLIDES = [
 ]
 
 const POINTS = [
-  { icon: ReceiptText, text: 'Every total opens to the invoices underneath it.' },
-  { icon: Scale,       text: 'GST and TDS kept apart from what clients actually owe.' },
-  { icon: Code2,       text: 'Questions answered with the exact query shown.' },
-  { icon: Globe,       text: 'Publish a sheet on a link, and see when and where it was opened.' },
+  'Every total opens to the invoices underneath it.',
+  'GST and TDS kept apart from what clients actually owe.',
+  'Questions answered with the exact query shown.',
+  'Sheets published on a link, with a record of who opened them.',
 ]
 
 /** Where the ring lands in the frame, given object-fit: cover from the top left. */
@@ -82,26 +82,16 @@ function Showcase() {
 
   return (
     <aside ref={ref} aria-label="About FinTrack" className="ft-showcase flex" data-running={running ? '' : undefined}>
-      <div className="ft-showcase-glow" aria-hidden="true" />
       <div className="relative" style={{ zIndex: 1 }}>
         <div className="flex items-center gap-2.5 mb-8">
           <BrandMark size={30} />
-          <span className="ft-wordmark" style={{ color: '#fff', fontSize: '1.25rem' }}>FinTrack</span>
+          <span className="ft-wordmark" style={{ color: 'var(--text-1)', fontSize: '1.2rem' }}>FinTrack</span>
         </div>
-        <h2 className="ft-display" style={{ color: '#fff', fontSize: 'clamp(1.7rem, 2.6vw, 2.3rem)', lineHeight: 1.12, margin: 0 }}>
-          Your projects, invoices and tax,<br />
-          <em style={{ color: 'color-mix(in srgb, var(--accent-bright) 55%, #fff)' }}>where you left them.</em>
+        <h2 className="pb-h2" style={{ fontSize: 'clamp(1.8rem, 2.6vw, 2.4rem)' }}>
+          Your projects, invoices and tax, <em>where you left them.</em>
         </h2>
-        <ul className="mt-6 flex flex-col gap-3" style={{ listStyle: 'none', padding: 0 }}>
-          {POINTS.map(({ icon: Icon, text }, k) => (
-            <li key={text} className="ft-showcase-point flex items-start gap-3" style={{ animationDelay: `${200 + k * 110}ms` }}>
-              <span className="flex items-center justify-center flex-shrink-0"
-                    style={{ width: 28, height: 28, borderRadius: 8, background: 'color-mix(in srgb, var(--accent-bright) 18%, transparent)', color: 'color-mix(in srgb, var(--accent-bright) 40%, #fff)' }}>
-                <Icon size={15} aria-hidden="true" />
-              </span>
-              <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 14.5, lineHeight: 1.5, paddingTop: 3 }}>{text}</span>
-            </li>
-          ))}
+        <ul className="pb-points" style={{ marginTop: 24, maxWidth: 440 }}>
+          {POINTS.map(text => <li key={text}>{text}</li>)}
         </ul>
       </div>
 

@@ -79,12 +79,12 @@ function summarizeShareScope(view, resourceType = 'status', fallbackCount = 0) {
     if (vc.monthFilter) parts.push(`Month: ${vc.monthFilter}`)
     if (vc.agingBandFilter) parts.push(`Aging: ${vc.agingBandFilter}`)
     if (vc.dateFieldFilter && (vc.dateFrom || vc.dateTo)) {
-      parts.push(`${vc.dateFieldFilter}: ${vc.dateFrom || '…'} → ${vc.dateTo || '…'}`)
+      parts.push(`${vc.dateFieldFilter}: ${vc.dateFrom || '…'} to ${vc.dateTo || '…'}`)
     }
     if (vc.billingFilter && vc.billingFilter !== 'all') parts.push(`Scope: ${vc.billingFilter}`)
     if (vc.invoiceScope && vc.invoiceScope !== 'tax') parts.push(`Invoice scope: ${vc.invoiceScope}`)
     if (vc.periodLabel) parts.push(`Period: ${vc.periodLabel}`)
-    if (vc.periodFrom || vc.periodTo) parts.push(`Date: ${vc.periodFrom || '…'} → ${vc.periodTo || '…'}`)
+    if (vc.periodFrom || vc.periodTo) parts.push(`Date: ${vc.periodFrom || '…'} to ${vc.periodTo || '…'}`)
     if (vc.overdueOnly) parts.push('Outstanding only')
     if (vc.hasDocsOnly) parts.push('With docs only')
     if (vc.followupDueOnly) parts.push('Follow-up due')
@@ -202,16 +202,12 @@ export function ShareLinkModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         {/* sticky header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
-              <Share2 size={15} style={{ color: 'var(--chart-2)' }} />
-            </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? 'Share Current View' : 'Link Ready'}</h2>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -364,7 +360,7 @@ export function ShareLinkModal({
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL. No login required.</p>
                   {enableLiveMode && mode === 'live' && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
                       style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
@@ -469,7 +465,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -805,14 +801,11 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
-              <Link2 size={15} style={{ color: 'var(--chart-2)' }} />
-            </div>
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
           </div>
           <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
@@ -898,7 +891,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                     <div className="px-3 py-2 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs font-bold" style={{ color: 'var(--text-2)' }}>
-                          Events — {filtered.length}/{accesses.length} entries
+                          Events: {filtered.length}/{accesses.length} entries
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => toggleSelectAllFiltered(v.token)} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg"

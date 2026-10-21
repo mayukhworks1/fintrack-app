@@ -136,7 +136,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
       {/* Header + presets */}
       <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Cash Flow</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Cash Flow</p>
           <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Monthly raised (bars) vs collected (line)</h2>
         </div>
         <div className="flex items-center gap-1 flex-wrap">
@@ -162,7 +162,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
                 onChange={e => setCustomFrom(e.target.value + '-01')}
                 style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)' }}
               />
-              <span style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>→</span>
+              <span style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>to</span>
               <input
                 type="month"
                 value={customTo.slice(0, 7)}
@@ -178,7 +178,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
               color: pctChange >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)',
               fontWeight: 600,
             }}>
-              {pctChange >= 0 ? '↗' : '↘'} {Math.abs(pctChange).toFixed(0)}% vs last month
+              {pctChange >= 0 ? '+' : '−'}{Math.abs(pctChange).toFixed(0)}% vs last month
             </span>
           )}
         </div>

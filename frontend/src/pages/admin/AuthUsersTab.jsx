@@ -500,27 +500,27 @@ export function AuthUsersTab() {
       {showCreate && (
         <form onSubmit={createUser} className="rounded-xl border p-3 grid grid-cols-1 md:grid-cols-[1.2fr_1fr_180px_170px_auto] gap-2 items-end"
           style={{ borderColor: 'var(--border)', background: 'var(--card-bg)' }}>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
             Email
             <input value={newUser.email} onChange={e => setNewUser(v => ({ ...v, email: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="name@company.com" type="email" required />
           </label>
           <div style={{ display:'flex', gap:6 }}>
-            <label className="text-[11px] font-semibold uppercase tracking-[0.14em] flex-1" style={{ color: 'var(--text-3)' }}>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.06em] flex-1" style={{ color: 'var(--text-3)' }}>
               First name
               <input value={newUser.first_name} onChange={e => setNewUser(v => ({ ...v, first_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="First" />
             </label>
-            <label className="text-[11px] font-semibold uppercase tracking-[0.14em] flex-1" style={{ color: 'var(--text-3)' }}>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.06em] flex-1" style={{ color: 'var(--text-3)' }}>
               Last name
               <input value={newUser.last_name} onChange={e => setNewUser(v => ({ ...v, last_name: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm" placeholder="Last" />
             </label>
           </div>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
             Role
             <select value={newUser.role_key} onChange={e => setNewUser(v => ({ ...v, role_key: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
               {(grantableRoleOpts.length ? grantableRoleOpts : [['user', 'User'], ['viewer', 'Viewer']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
             Status
             <select value={newUser.status} onChange={e => setNewUser(v => ({ ...v, status: e.target.value }))} className="input mt-1 px-3 py-2 rounded-lg text-sm">
               <option value="active">Active + invite</option>
@@ -621,7 +621,7 @@ export function AuthUsersTab() {
                     className="rounded-2xl border p-4 transition-all"
                     style={{
                       borderColor: row.id === targetUserId ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : 'var(--border)',
-                      background: 'linear-gradient(135deg, var(--card-bg), var(--bg-soft))',
+                      background: 'var(--card-bg)',
                       boxShadow: row.id === targetUserId ? '0 18px 50px color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--shadow-soft)',
                     }}
                   >
@@ -648,7 +648,7 @@ export function AuthUsersTab() {
                       </div>
 
                       <div className="rounded-xl border p-3 min-w-0" style={{ borderColor: 'var(--border)', background: 'var(--glass-bg)' }}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] mb-1" style={{ color: 'var(--text-3)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: 'var(--text-3)' }}>
                           Teable Raised By alias
                         </p>
                         <EditableName
@@ -663,11 +663,11 @@ export function AuthUsersTab() {
                         </p>
                         <div className="grid grid-cols-2 gap-2 mt-3">
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Sessions</p>
+                            <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Sessions</p>
                             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{row.active_session_count || 0} active · {row.session_count || 0} total</p>
                           </div>
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Audit</p>
+                            <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Audit</p>
                             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{row.audit_request_count || 0} req · {row.auth_event_count || 0} events</p>
                           </div>
                         </div>
@@ -675,7 +675,7 @@ export function AuthUsersTab() {
 
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2" style={{ borderColor: 'var(--border)', background: 'var(--glass-bg)' }}>
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>Controls</span>
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Controls</span>
                           <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Last request {relTime(row.last_request_at)}</span>
                         </div>
                         {renderActions(row)}

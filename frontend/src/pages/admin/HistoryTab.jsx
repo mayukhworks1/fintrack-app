@@ -293,7 +293,7 @@ export function HistoryTab({ drilldown = null, onOpenRecord = null }) {
                                       <a href={`https://www.google.com/maps?q=${row.actor_lat},${row.actor_lon}`}
                                          target="_blank" rel="noopener noreferrer"
                                          style={{ color: 'var(--accent)' }}>
-                                        {Number(row.actor_lat).toFixed(3)}, {Number(row.actor_lon).toFixed(3)} ↗
+                                        {Number(row.actor_lat).toFixed(3)}, {Number(row.actor_lon).toFixed(3)}
                                       </a>
                                     } />
                                   )}

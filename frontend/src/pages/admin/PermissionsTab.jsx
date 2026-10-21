@@ -232,7 +232,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
               )}
               {user.roles.length === 0 && (
                 <span style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
-                  ⚠ No role — all permissions will be inherited from overrides only
+                  No role. All permissions come from overrides only.
                 </span>
               )}
             </div>
@@ -244,7 +244,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
               style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--text-2)' }}>
               <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>ℹ</span>
               <span>
-                This user has a <strong>{userRoleKeys.has('web_admin') ? 'web_admin' : 'web'}</strong> role — they only access the{' '}
+                This user has a <strong>{userRoleKeys.has('web_admin') ? 'web_admin' : 'web'}</strong> role, so they only access the{' '}
                 <strong>Web Billing module</strong> (not the main app). Only relevant permissions are shown.
                 Granting AI, Reports, Admin, or other main-app permissions here has no effect.
               </span>
@@ -269,7 +269,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {visibleModules.map(({ module_key, perms }) => (
               <div key={module_key} className="card p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
                   {MODULE_LABELS[module_key] || module_key}
                 </p>
                 <div className="space-y-2">
@@ -288,13 +288,13 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                     let toggleTitle = 'Click to grant'
                     if (hasOverride && !overrideVal) {
                       toggleBg = 'var(--fin-negative)'
-                      toggleTitle = 'Denied by override — click to grant'
+                      toggleTitle = 'Denied by override. Click to grant'
                     } else if (hasOverride && overrideVal) {
                       toggleBg = 'var(--fin-positive)'
-                      toggleTitle = 'Granted by override — click to deny'
+                      toggleTitle = 'Granted by override. Click to deny'
                     } else if (isGranted) {
                       toggleBg = 'var(--accent)'
-                      toggleTitle = 'Granted by role — click to override-deny'
+                      toggleTitle = 'Granted by role. Click to override-deny'
                     }
 
                     // Source label shown inline
@@ -329,7 +329,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                             <button
                               onClick={() => clearOverride(user.id, perm.permission_key, perm.id, overrideVal)}
                               disabled={isBusy}
-                              title={`Clear override — revert to role ${isRoleDefault ? 'default (granted)' : 'default (not granted)'}`}
+                              title={`Clear override. Revert to role ${isRoleDefault ? 'default (granted)' : 'default (not granted)'}`}
                               className="text-[10px] px-1.5 py-0.5 rounded"
                               style={{ background: 'var(--border)', color: 'var(--text-3)', opacity: isBusy ? 0.5 : 1 }}>
                               reset

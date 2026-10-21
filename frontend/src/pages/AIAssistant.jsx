@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Send, Bot, User, Sparkles, Trash2, Database,
+  Send, Bot, User, Trash2, Database,
   AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck, ShieldQuestion,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -85,7 +85,7 @@ function AiText({ text }) {
       const rest = line.slice(colonIdx + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+          <span className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
             {label}
           </span>
           {rest && (
@@ -208,7 +208,7 @@ function ArtifactCard({ artifact }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+        <p className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
           {artifact.artifactType === 'report' ? 'Report Artifact' : 'Artifact'}
         </p>
         <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
@@ -278,7 +278,7 @@ function DashboardCard({ dashboard }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+        <p className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
           {dashboard?.eyebrow || 'Dashboard'}
         </p>
         <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
@@ -458,7 +458,7 @@ function Message({ msg }) {
       <div
         className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
         style={isUser
-          ? { background: 'var(--accent-btn)', boxShadow: '0 0 12px color-mix(in srgb, var(--accent) 25%, transparent)' }
+          ? { background: 'var(--accent-btn)' }
           : { background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }
         }
         aria-hidden="true"
@@ -498,7 +498,6 @@ function Message({ msg }) {
           <div className="flex items-center gap-2 mt-1 px-1">
             {msg.model && (
               <span className="text-[10px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
-                <Sparkles size={9} style={{ color: 'var(--accent)' }} />
                 {msg.model}
               </span>
             )}
@@ -711,7 +710,7 @@ export default function AIAssistant() {
         let errMsg = ''
 
         if (e.status === 403) {
-          errMsg = 'Access Restricted — This feature requires full account access. Contact your admin to upgrade your account.'
+          errMsg = 'Access restricted. This feature requires full account access. Contact your admin to upgrade your account.'
         } else if (/switched off by the administrator|AI limit .*has been reached|No AI provider is available|quota exceeded/i.test(raw)) {
           errMsg = raw
         } else {
@@ -762,16 +761,6 @@ export default function AIAssistant() {
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'var(--accent-dim)',
-              border: '1px solid var(--accent-soft)',
-              boxShadow: '0 0 16px var(--accent-glow)',
-            }}>
-            <Sparkles size={15} style={{ color: 'var(--accent)' }} />
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
-              style={{ background: 'var(--fin-positive)', borderColor: 'var(--bg-base)', boxShadow: '0 0 5px color-mix(in srgb, var(--fin-positive) 60%, transparent)' }} />
-          </div>
           <div className="min-w-0">
             <h1 className="font-bold text-sm truncate" style={{ color: 'var(--text-1)' }}>FinTrack AI</h1>
             <div className="flex items-center gap-1.5">
@@ -831,7 +820,7 @@ export default function AIAssistant() {
         {showSuggestions && !loading && (
           <div className="mt-2">
             <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-              <Sparkles size={11} style={{ color: 'var(--accent)' }} /> Try asking:
+              Try asking:
             </p>
             <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested questions">
               {TASK_CHIPS.map((s) => (

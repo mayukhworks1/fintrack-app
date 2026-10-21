@@ -168,13 +168,33 @@ describe('the audit sandbox', () => {
 })
 
 describe('/features', () => {
-  it('names every panel after its module, never "undefined"', () => {
-    at(Features)
+  it('names every section after its module, never "undefined", and lists it in the contents', () => {
+    const { container } = at(Features)
+    const toc = screen.getByRole('navigation', { name: /modules on this page/i })
     for (const f of FEATURES) {
-      fireEvent.click(screen.getByRole('tab', { name: new RegExp(f.label.replace(/[&]/g, '\\$&')) }))
-      const group = screen.getByRole('tabpanel').querySelector('.ft-f-stage [role="group"][aria-label]')
-      expect(group.getAttribute('aria-label')).not.toMatch(/undefined/)
-      expect(group.getAttribute('aria-label')).toMatch(f.label)
+      const section = container.querySelector(`section#${f.id}`)
+      expect(section, f.id).not.toBeNull()
+      const label = container.querySelector(`#${section.getAttribute('aria-labelledby')}`)
+      expect(label.textContent).not.toMatch(/undefined/)
+      expect(label.textContent).toContain(f.label)
+      expect(within(toc).getByRole('link', { name: new RegExp(f.label.replace(/[&]/g, '\\$&')) }))
+        .toHaveAttribute('href', `#${f.id}`)
+      const points = within(section).getByRole('list', { name: new RegExp(f.label.replace(/[&]/g, '\\$&')) })
+      expect(points.querySelectorAll('li')).toHaveLength(f.points.length)
+    }
+  })
+
+  it('shows real captures, sized and lazy, each labelled as sample data', () => {
+    const { container } = at(Features)
+    const imgs = [...container.querySelectorAll('figure img')]
+    expect(imgs.length).toBeGreaterThanOrEqual(8)
+    for (const img of imgs) {
+      expect(img.getAttribute('src')).toMatch(/^\/media\/screens\//)
+      expect(img.getAttribute('width')).toBeTruthy()
+      expect(img.getAttribute('height')).toBeTruthy()
+      expect(img.getAttribute('loading')).toBe('lazy')
+      expect(img.getAttribute('alt')).toMatch(/sample data/i)
+      expect(img.closest('figure').querySelector('figcaption').textContent).toMatch(/sample data/i)
     }
   })
 
@@ -193,10 +213,7 @@ describe('/features', () => {
     expect(src).not.toMatch(/FEATURE_MEDIA|LoopVideo|ProductMediaShowcase|viewMode/)
     expect(existsSync(join(SRC, 'components', 'ProductMediaShowcase.jsx'))).toBe(false)
     const { container } = at(Features)
-    for (const f of FEATURES) {
-      fireEvent.click(screen.getByRole('tab', { name: new RegExp(f.label.replace(/[&]/g, '\\$&')) }))
-      expect(within(screen.getByRole('tabpanel')).queryByText(/\b3D\b/)).toBeNull()
-    }
+    expect(container.textContent).not.toMatch(/\b3D\b/)
     expect(container.querySelector('video[autoplay]')).toBeNull()
     expect(screen.queryByRole('button', { name: /^motion$/i })).toBeNull()
   })

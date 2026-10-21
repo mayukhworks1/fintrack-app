@@ -84,7 +84,7 @@ function PreviewBody({ doc }) {
       <div className="flex-1 overflow-auto flex items-center justify-center min-h-0 relative"
         style={{ background: 'var(--bg-base)', padding: '1.5rem' }}>
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg z-10"
-          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+          style={{ background: 'rgba(0,0,0,0.55)' }}>
           <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}
             className="w-7 h-7 flex items-center justify-center rounded opacity-80 hover:opacity-100" style={{ color: '#fff' }} title="Zoom out">
             <ZoomOut size={13} />
@@ -267,7 +267,7 @@ export function DocPreviewModal({ state, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-stretch overlay-safe" role="dialog" aria-modal="true" aria-label={`Preview: ${doc?.name}`}>
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)' }} onClick={onClose} />
       <div className="relative flex flex-col w-full m-3 sm:m-6 rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', zIndex: 1 }}>
 

@@ -62,7 +62,7 @@ export function HfLogsTab() {
               style={logType === t
                 ? { background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)' }
                 : { color: 'var(--text-3)' }}>
-              {t === 'run' ? '▶ Runtime' : '🔨 Build'}
+              {t === 'run' ? 'Runtime' : 'Build'}
             </button>
           ))}
         </div>
@@ -123,7 +123,7 @@ export function HfLogsTab() {
             <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
             <span className="ml-2 text-[10px] font-mono" style={{ color: '#64748b' }}>
-              {logType === 'run' ? 'runtime logs' : 'build logs'} — Mayukhj24/fintrack-api
+              {logType === 'run' ? 'runtime logs' : 'build logs'} · Mayukhj24/fintrack-api
             </span>
             {loading && (
               <span className="ml-auto text-[10px] font-mono flex items-center gap-1"

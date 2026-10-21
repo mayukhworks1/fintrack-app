@@ -4,7 +4,7 @@ import {
   MessageSquareText, FileText,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, Globe, Sparkles
+  Plus, Landmark, Globe, SquarePen
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
@@ -41,7 +41,7 @@ export const NAV_ITEMS = [
   { to: '/report',    label: 'Report',       icon: FileText,                    roles: ['editor'],          perm: 'module.reports.view' },
   { to: '/status',    label: 'Status Board', icon: Activity,                    roles: ['editor','viewer'], perm: 'module.status.view' },
   { to: '/pages',     label: 'Pages',        icon: Globe,                       roles: ['editor','viewer'], perm: null },
-  { to: '/studio',    label: 'Studio',       icon: Sparkles,                    roles: ['editor'],          perm: 'module.studio.view' },
+  { to: '/studio',    label: 'Studio',       icon: SquarePen,                   roles: ['editor'],          perm: 'module.studio.view' },
 ]
 
 function OfflineBanner({ collapsed }) {
@@ -97,7 +97,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         {/* Logo — links to dashboard */}
         <Link
           to="/"
-          aria-label="FinTrack — go to dashboard"
+          aria-label="FinTrack, go to dashboard"
           className="runey-brand-link"
           style={{ textDecoration: 'none' }}
         >
@@ -167,8 +167,8 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
         {restrictedNav.length > 0 && restrictedNav.map(({ to, label, icon: Icon }) => (
           <div
             key={to}
-            title={`${label} — not available with your current permissions`}
-            aria-label={`${label} — access restricted`}
+            title={`${label} is not available with your current permissions`}
+            aria-label={`${label}, access restricted`}
             className={`runey-nav-link ${collapsed ? 'is-collapsed' : ''}`}
             style={{ opacity: 0.38, cursor: 'not-allowed', pointerEvents: 'auto' }}
           >
@@ -362,7 +362,7 @@ export default function Layout({ children, style }) {
       {drawerOpen && (
         <div
           className="lg:hidden fixed inset-0 z-40 animate-fade-in"
-          style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'var(--scrim)' }}
           onClick={() => setDrawerOpen(false)}
           aria-hidden="true"
         />
@@ -404,7 +404,7 @@ export default function Layout({ children, style }) {
           {/* Logo — tapping navigates home */}
           <Link
             to="/"
-            aria-label="FinTrack — go to dashboard"
+            aria-label="FinTrack, go to dashboard"
             className="flex items-center gap-2 -ml-0.5 p-1 rounded-xl"
             style={{ textDecoration: 'none' }}
           >

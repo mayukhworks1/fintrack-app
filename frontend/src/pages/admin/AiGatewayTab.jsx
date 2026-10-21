@@ -106,9 +106,6 @@ export function AiGatewayTab() {
       <section className="card space-y-3" aria-labelledby="ai-gateway-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className="kpi-icon" style={{ background: 'var(--kpi-1-bg)', color: 'var(--kpi-1-fg)' }} aria-hidden="true">
-              <Cpu size={17} />
-            </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 id="ai-gateway-title" className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>AI gateway</h2>

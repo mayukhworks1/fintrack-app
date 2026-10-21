@@ -1,7 +1,7 @@
 // Extracted from StatusBoard.jsx — StatusModals.
 import { useToast } from '../../context/ToastContext'
 import { api } from '../../services/api'
-import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
+import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useDialog } from '../../hooks/useDialog'
 import { liveFiltersDropped } from '../../components/SharedLinks'
@@ -50,7 +50,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh', overflow: 'auto' }}>
 
@@ -146,7 +146,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
               Headline <span className="font-normal" style={{ color: 'var(--text-3)' }}>· one-line summary</span>
             </label>
             <input type="text" className="input-field w-full text-sm"
-              placeholder="e.g. UAT in progress — awaiting client sign-off"
+              placeholder="e.g. UAT in progress, awaiting client sign-off"
               value={form.short_status} onChange={e => set('short_status', e.target.value)} maxLength={500} />
           </div>
 
@@ -156,7 +156,7 @@ export function StatusModal({ initial, onClose, onSave, saving, allRecords, stat
               Full Detail <span className="font-normal" style={{ color: 'var(--text-3)' }}>· blockers, next steps, notes</span>
             </label>
             <textarea className="input-field w-full text-sm resize-none" rows={5}
-              placeholder="Full narrative — blockers, dependencies, billing notes…"
+              placeholder="Full narrative: blockers, dependencies, billing notes…"
               maxLength={10000}
               value={form.current_status_detailed}
               onChange={e => set('current_status_detailed', e.target.value)} />
@@ -219,16 +219,12 @@ export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'color-mix(in srgb, var(--chart-3) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-3) 25%, transparent)' }}>
-              <Sparkles size={15} style={{ color: 'var(--chart-3)' }} />
-            </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>AI Status Update</h2>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} selected</p>
@@ -265,8 +261,8 @@ export function AIUpdateModal({ selectedRecords, onClose, onShare }) {
           )}
           {!result && !loading && (
             <button onClick={generate} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm"
-              style={{ background: 'linear-gradient(135deg,var(--chart-3),var(--accent))', color: 'var(--accent-fg)', boxShadow: '0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent)' }}>
-              <Sparkles size={14} /> Generate Status Update
+              style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>
+              Generate Status Update
             </button>
           )}
           {loading && (
@@ -393,15 +389,11 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
-              <Share2 size={15} style={{ color: 'var(--chart-2)' }} />
-            </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? (isViewShare ? 'Share Current View' : 'Share Selected Projects') : 'Link Ready!'}</h2>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} · no login needed</p>
@@ -477,7 +469,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                 <Shield size={13} style={{ color: 'var(--chart-2)', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
                   {isViewShare
-                    ? 'Live link — always fetches the latest data from Teable. New projects added after sharing appear automatically. IP, location & device tracked on every open.'
+                    ? 'Live link. Always fetches the latest data from Teable. New projects added after sharing appear automatically. IP, location & device tracked on every open.'
                     : 'IP, location, device & browser tracked on every open. Disable or delete anytime.'}
                 </p>
               </div>
@@ -508,7 +500,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready!</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL. No login required.</p>
                   {isViewShare && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
                       style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
@@ -595,7 +587,7 @@ function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose, onSave
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -846,7 +838,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '90vh' }}>
 
@@ -854,10 +846,6 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
-              <Link2 size={15} style={{ color: 'var(--chart-2)' }} />
-            </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
               {!loading && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{views.length} link{views.length !== 1 ? 's' : ''}</p>}
@@ -925,7 +913,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
                           onClick={() => { setEditingTitle(v.token); setTitleDraft(v.title || '') }}
                           title="Click to edit page title">
                           <span className="text-sm font-semibold" style={{ color: v.title ? 'var(--text-1)' : 'var(--text-3)' }}>
-                            {v.title || 'Untitled — click to add title'}
+                            {v.title || 'Untitled. Click to add a title'}
                           </span>
                           <Pencil size={10} className="flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--text-3)' }} />
                         </button>
@@ -1088,7 +1076,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
                       style={{ borderBottom: accesses.length > 0 ? '1px solid var(--border)' : 'none' }}>
                       <span className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
                         <Activity size={11} /> Viewer Activity
-                        {!loadingAcc && <span className="font-normal" style={{ color: 'var(--text-3)' }}>— {accesses.length} access{accesses.length !== 1 ? 'es' : ''}</span>}
+                        {!loadingAcc && <span className="font-normal" style={{ color: 'var(--text-3)' }}>· {accesses.length} access{accesses.length !== 1 ? 'es' : ''}</span>}
                       </span>
                       <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>IP · Device · Location</span>
                     </div>
@@ -1101,7 +1089,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
                             <div className="px-4 py-2.5 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
                               <div className="flex items-center justify-between gap-2">
                                 <div className="text-xs font-bold" style={{ color: 'var(--text-2)' }}>
-                                  Events — {filteredAccesses.length}/{accesses.length} entries
+                                  Events: {filteredAccesses.length}/{accesses.length} entries
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button onClick={toggleSelectAllFiltered} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg"
@@ -1309,7 +1297,7 @@ export function ConfirmModal({ message, confirmLabel = 'Delete', onConfirm, onCl
   }, [onClose])
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'var(--scrim)' }}
       onClick={onClose}>
       <div {...dialog.panelProps} className="w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-5"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}

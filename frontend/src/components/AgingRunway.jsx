@@ -12,18 +12,15 @@
  * older. Horizontal, because the value labels sit at the end of each bar where
  * they are read without a second pass.
  *
- * The bars are deliberately flat while the card around them tilts. Perspective
- * shortens whatever is further away, so a bar drawn in 3D reads as a smaller
- * number than an identical bar at the front — the one place in this interface
- * where depth would actively lie.
+ * The card and the bars are flat. Perspective shortens whatever is further
+ * away, so a bar drawn in 3D reads as a smaller number than an identical bar
+ * at the front.
  *
  * The ramp steps are taken from the validated ordinal scale: on a light surface
  * the lightest step must still clear 2:1 against it, which rules out the pale
  * tints that would otherwise look natural at the "fresh" end.
  */
 import { useMemo, useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
-import { useTilt } from '../hooks/useTilt'
 
 // Ordinal ramp, light→dark with age, in the palette's accent hue: the accent
 // mixed toward the card at the fresh end and toward black (white in dark mode)
@@ -61,7 +58,6 @@ export default function AgingRunway({
   title = 'Receivables by age',
   eyebrow = 'Aging buckets',
 }) {
-  const tilt = useTilt({ max: 5 })
   const [hover, setHover] = useState(null)
   const [showTable, setShowTable] = useState(false)
 
@@ -92,8 +88,7 @@ export default function AgingRunway({
 
   return (
     <div
-      ref={tilt}
-      className="tilt tilt-sheen rounded-[26px] p-4 sm:p-5"
+      className="rounded-[18px] p-4 sm:p-5"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -102,11 +97,10 @@ export default function AgingRunway({
     >
       <div className="flex items-start justify-between gap-3 mb-1">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em]"
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]"
              style={{ color: 'var(--text-3)' }}>{eyebrow}</p>
           <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>{title}</h2>
         </div>
-        <ShieldAlert size={18} style={{ color: 'var(--fin-warning)' }} aria-hidden="true" />
       </div>
 
       {/* The headline the old panel never gave: how much is actually old. */}

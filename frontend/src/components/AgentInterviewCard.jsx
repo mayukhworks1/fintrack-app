@@ -71,7 +71,7 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-          🎯 A few questions to craft the perfect page
+          A few questions before drafting the page
         </span>
       </div>
 
@@ -164,7 +164,7 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
             cursor: disabled ? 'default' : 'pointer',
           }}
         >
-          Skip — use prompt as-is
+          Skip and use the prompt as-is
         </button>
         <button
           type="button"
@@ -182,7 +182,7 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
             opacity: disabled ? 0.6 : 1,
           }}
         >
-          ✨ Generate with preferences
+          Generate with preferences
         </button>
       </div>
     </div>

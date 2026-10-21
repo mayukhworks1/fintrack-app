@@ -123,7 +123,7 @@ export default function Drawer({
             className="flex-shrink-0"
             style={{
               height: '3px',
-              background: 'linear-gradient(90deg, var(--accent) 0%, var(--accent-bright) 60%, var(--accent-soft) 100%)',
+              background: 'var(--accent)',
             }}
           />
         )}

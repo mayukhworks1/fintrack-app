@@ -176,7 +176,7 @@ function ProviderCard({ p, taskLabels, busy, readOnly, onTest, onEdit, onSetKey,
           <div className="space-y-1.5">
             {p.key_unreadable ? (
               <p>
-                <span style={{ color: 'var(--fin-negative)' }}>Stored key can't be read — set it again.</span>
+                <span style={{ color: 'var(--fin-negative)' }}>Stored key can't be read. Set it again.</span>
                 {p.key_source === 'env' && ` Using ${p.env_var} from the server environment meanwhile.`}
               </p>
             ) : storedKey ? (
@@ -187,9 +187,9 @@ function ProviderCard({ p, taskLabels, busy, readOnly, onTest, onEdit, onSetKey,
             ) : p.key_source === 'env' ? (
               <p>Using <code className="font-mono">{p.env_var}</code> from the server environment</p>
             ) : envKeyApplies(p) ? (
-              <p>No key — paste one here or set <code className="font-mono">{p.env_var}</code> on the server</p>
+              <p>No key. Paste one here or set <code className="font-mono">{p.env_var}</code> on the server</p>
             ) : (
-              <p>No key for this base URL — paste one here. <code className="font-mono">{p.env_var}</code> is only sent to the default host.</p>
+              <p>No key for this base URL. Paste one here. <code className="font-mono">{p.env_var}</code> is only sent to the default host.</p>
             )}
             <div className="flex flex-wrap gap-1.5">
               <button type="button" className="btn-secondary text-xs px-2.5 py-1" onClick={onSetKey} disabled={readOnly}
@@ -249,7 +249,7 @@ function ProviderCard({ p, taskLabels, busy, readOnly, onTest, onEdit, onSetKey,
                     </div>
                     {missing && (
                       <p className="text-[11px] mt-0.5 flex items-center gap-1" style={{ color: tone }}>
-                        <AlertTriangle size={11} aria-hidden="true" /> Not offered by {p.label} — calls to it will fail
+                        <AlertTriangle size={11} aria-hidden="true" /> Not offered by {p.label}. Calls to it will fail
                       </p>
                     )}
                   </li>
@@ -329,7 +329,7 @@ function SetKeyModal({ provider, readOnly, onClose, onSaved }) {
   const [error, setError] = useState(null)
   const replacing = provider.key_source === 'stored' && !provider.key_unreadable
   const keyId = `${uid}-key`
-  const keyHint = 'Sent once and stored encrypted on the server. It is never shown again — only its last four characters.'
+  const keyHint = 'Sent once and stored encrypted on the server. It is never shown again; only its last four characters are.'
     + (provider.key_source === 'env' ? ` It takes the place of ${provider.env_var} for ${provider.label}.` : '')
 
   const candidate = value.trim()
@@ -401,7 +401,7 @@ function baseUrlProblem(url) {
   if (!url) return null
   if (url.length > 200) return 'The base URL is longer than 200 characters.'
   if (!/^https:\/\/[A-Za-z0-9.-]+(:443)?(\/[A-Za-z0-9._~-]+)*$/.test(url)) {
-    return 'The base URL must be https:// with a host name and a path only — no user name, port, query or fragment.'
+    return 'The base URL must be https:// with a host name and a path only, with no user name, port, query or fragment.'
   }
   const host = url.slice('https://'.length).split(/[:/]/)[0].toLowerCase()
   const tld = host.split('.').pop()

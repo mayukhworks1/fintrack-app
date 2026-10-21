@@ -52,3 +52,28 @@
 }
 /* Paused means everything in the panel holds still, its glow included. */
 .ft-showcase:not([data-running]) .ft-showcase-glow { animation-play-state: paused; }
+
+/* ── Editorial sign-in (public-site.css carries the system) ────────── */
+/* A plain page: no pointer light, no dot grid, no tilt. The showcase is a
+   hairline panel on the page surface with one real screen in it. */
+.pb.ft-login::before { content: none; }
+.pb .ft-login-card { box-shadow: none; }
+.pb .ft-showcase {
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px;
+  box-shadow: none; padding: 40px 40px 32px; min-height: 0; gap: 40px;
+}
+.pb .ft-showcase::after, .pb .ft-showcase-glow { content: none; display: none; }
+.pb .ft-showcase-point { opacity: 1; animation: none; }
+.pb .ft-showcase-frame { transform: none; box-shadow: none; border: 1px solid var(--card-border); border-radius: 8px; transition: none; }
+.pb .ft-showcase:hover .ft-showcase-frame { transform: none; }
+.pb .ft-s-slide img { animation: none !important; }
+.pb .ft-s-ring { border-color: var(--accent); box-shadow: none; }
+.pb .ft-s-dimmer { box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.12); }
+.pb .ft-s-show-cap { color: var(--text-2); }
+.pb .ft-s-show-cap b { color: var(--text-1); }
+.pb .ft-s-show-ctl > button { color: var(--text-2); }
+.pb .ft-s-show-ctl > button:hover { background: var(--row-hover, var(--bg-2)); color: var(--text-1); }
+.pb .ft-showcase-dot { background: var(--card-border); }
+.pb .ft-showcase-dot[data-on] { background: var(--text-1); }
+.pb .ft-s-theme { border-radius: 8px; border: 0; background: transparent; }
+.pb.ft-login h1 { font-family: var(--pb-serif); font-weight: 400; font-size: 1.6rem !important; letter-spacing: -0.015em !important; }

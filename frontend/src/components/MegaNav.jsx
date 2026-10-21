@@ -27,11 +27,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ArrowRight, ChevronDown } from 'lucide-react'
-import {
-  GlyphOneRecord, GlyphModules, GlyphLayers,
-  GlyphPermissions, GlyphSwitches, GlyphQA,
-} from './Glyphs'
+import { ChevronDown } from 'lucide-react'
 import { usePresence } from '../hooks/usePresence'
 
 /* Each entry names a page that exists and says what is on it. A menu that
@@ -44,17 +40,17 @@ export const NAV = [
     items: [
       {
         to: '/', label: 'Overview',
-        blurb: 'Delivery and the money for it — and a working copy you can drive.',
+        blurb: 'Delivery and the money for it, with a sample workspace you can use.',
         visual: 'oneRecord',
       },
       {
         to: '/features', label: 'Features',
-        blurb: 'Eleven modules — delivery, receivables, tax, audit — one at a time.',
+        blurb: 'Eleven modules, from receivables and GST to audit, each on a real screen.',
         visual: 'modules',
       },
       {
         to: '/how-it-works', label: 'How it works',
-        blurb: 'Nothing to migrate, and why an answer here can be checked.',
+        blurb: 'Your records stay where they are, and every answer shows its query.',
         visual: 'layers',
       },
     ],
@@ -95,52 +91,8 @@ export function NewStrip({ onClick }) {
   return (
     <Link to="/features#shipped" className="ft-m-new" onClick={onClick}>
       <span className="ft-m-new-badge">New</span>
-      <span className="flex-1">Pages — spreadsheets, link previews, view insights</span>
-      <ArrowRight size={14} aria-hidden="true" style={{ flexShrink: 0, color: 'var(--accent-ink, var(--accent))' }} />
+      <span className="flex-1">Pages: spreadsheets, link previews and view counts</span>
     </Link>
-  )
-}
-
-/* Keyed by subject, not by shape. The previous map had four entries for six
-   destinations, so two of them were always showing another page's picture. */
-const VISUALS = {
-  oneRecord: <GlyphOneRecord />,
-  modules: <GlyphModules />,
-  layers: <GlyphLayers />,
-  permissions: <GlyphPermissions />,
-  switches: <GlyphSwitches />,
-  qa: <GlyphQA />,
-}
-
-/**
- * The panel's right half: a glance at the page being pointed at.
- *
- * The caption is gone. It printed the page name, which is already set in bold
- * in the row the pointer is resting on — the same word twice in one panel,
- * and a rule drawn under a picture to hold it. If the drawing needs a label
- * naming the thing it is next to, the drawing is not doing its job; the fix
- * was to make the drawing say something, not to caption it.
- */
-function Preview({ items, current }) {
-  // Every drawing for the group sits in one cell and the one being pointed
-  // at fades up over the others. A cross-fade rather than a remount: moving
-  // quickly down the list re-targets the fade from wherever it is, instead
-  // of restarting a wipe from blank on every row. The wipe (ft-m-clip) plays
-  // once, when the panel opens. Static under reduced motion.
-  return (
-    <div data-shown="" className="hidden lg:flex items-center justify-center rounded-xl p-5"
-         style={{
-           width: 244, flexShrink: 0,
-           background: 'var(--bg-input)', border: '1px solid var(--card-border)',
-         }}>
-      <div aria-hidden="true" className="ft-m-clip ft-mega-art w-full" style={{ minHeight: 116 }}>
-        {items.map(item => (
-          <div key={item.to} data-on={item.to === current.to ? '' : undefined}>
-            {VISUALS[item.visual]}
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -213,8 +165,6 @@ export default function MegaNav() {
       {NAV.map(group => {
         const isOpen = open === group.id
         const active = groupActive(group)
-        const current = group.items.find(i => i.to === (hovered[group.id] ?? group.items[0].to))
-          ?? group.items[0]
 
         return (
           // Focus leaving the open group (tabbing on to the next trigger or
@@ -232,14 +182,14 @@ export default function MegaNav() {
               className="ft-m-press flex items-center gap-1.5 rounded-lg text-sm font-medium"
               style={{
                 minHeight: 40, padding: '0 12px', cursor: 'pointer',
-                background: isOpen || active ? 'var(--accent-dim)' : 'transparent',
+                background: isOpen ? 'var(--row-hover, var(--bg-2))' : 'transparent',
                 border: 0,
-                color: isOpen || active ? 'var(--accent-ink, var(--accent))' : 'var(--text-2)',
+                color: active ? 'var(--text-1)' : 'var(--text-2)',
               }}
             >
               {group.label}
               <ChevronDown size={14} aria-hidden="true" className="ft-mega-chev"
-                           style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+                           style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'none' }} />
             </button>
 
             <MegaPanel open={isOpen} fine={fine} onEnter={cancelClose} onLeave={scheduleClose}>
@@ -272,7 +222,6 @@ export default function MegaNav() {
                   </ul>
                   {group.id === 'product' && <NewStrip onClick={() => close()} />}
                 </div>
-                <Preview items={group.items} current={current} />
               </div>
             </MegaPanel>
           </div>

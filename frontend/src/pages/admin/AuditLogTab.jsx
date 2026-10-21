@@ -323,7 +323,7 @@ export function AuditLogTab() {
             <FPill label="City"       value={filterCity}    onChange={setCity}    placeholder="Mumbai…" />
             <FPill label="ISP / Org"  value={filterIsp}     onChange={setIsp}     placeholder="Airtel…" />
             <FMulti label="Device" selected={filterDevice} onChange={setDevice} width={140}
-              opts={[['desktop','🖥 Desktop'],['mobile','📱 Mobile'],['tablet','⬛ Tablet']]} />
+              opts={[['desktop','Desktop'],['mobile','Mobile'],['tablet','Tablet']]} />
             <FPill label="Browser"    value={filterBrowser} onChange={setBrowser} placeholder="Chrome…" />
             <FPill label="OS"         value={filterOs}      onChange={setOs}      placeholder="Windows…" />
             <FPill label="Status ≥"   value={statusMin}     onChange={setStMin}   type="number" placeholder="400" />
@@ -430,7 +430,7 @@ export function AuditLogTab() {
                             <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
                               target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                               style={{ color: 'var(--accent)' }}>
-                              <MapPin size={9} className="inline mr-0.5" />{Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)} ↗
+                              <MapPin size={9} className="inline mr-0.5" />{Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)}
                             </a>
                           )}
                           {row.browser && <span style={{ color: 'var(--text-3)' }}>Browser: <b style={{ color: 'var(--text-1)' }}>{row.browser}</b></span>}
@@ -549,7 +549,7 @@ export function AuditLogTab() {
                             <div className="truncate" style={{ color: 'var(--text-3)', fontSize: 10 }} title={row.org}>{row.org}</div>
                           )}
                           {row.timezone && (
-                            <div style={{ color: 'var(--text-3)', fontSize: 10 }}>🕐 {row.timezone}</div>
+                            <div style={{ color: 'var(--text-3)', fontSize: 10 }}>{row.timezone}</div>
                           )}
                         </td>
 
@@ -607,7 +607,7 @@ export function AuditLogTab() {
                                   <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
                                     target="_blank" rel="noopener noreferrer"
                                     style={{ color: 'var(--accent)' }}>
-                                    {Number(row.lat).toFixed(4)}, {Number(row.lon).toFixed(4)} ↗
+                                    {Number(row.lat).toFixed(4)}, {Number(row.lon).toFixed(4)}
                                   </a>
                                 </span>
                               )}

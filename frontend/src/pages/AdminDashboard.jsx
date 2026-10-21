@@ -189,16 +189,12 @@ export default function AdminDashboard({ embedded = false }) {
     return (
       <div className="p-2 sm:p-4 space-y-4 max-w-[1400px] mx-auto w-full">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)' }}>
-            <Activity size={15} style={{ color: 'var(--fin-negative)' }} />
-          </div>
           <div>
             <h1 className="font-bold text-base leading-tight" style={{ color: 'var(--text-1)' }}>
               Admin Panel
             </h1>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-              PostgreSQL database dashboard — all requests logged
+              PostgreSQL database dashboard. Every request is logged
             </p>
           </div>
         </div>

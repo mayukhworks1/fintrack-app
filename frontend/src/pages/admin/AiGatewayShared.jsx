@@ -85,7 +85,7 @@ export function envKeyApplies(p) {
 
 // Why a provider has no key to call with; the server words it the same way.
 export function missingKeyMessage(p) {
-  if (p.key_unreadable) return "Stored key can't be read — set it again"
+  if (p.key_unreadable) return "Stored key can't be read. Set it again"
   if (!envKeyApplies(p)) return `No key saved for this base URL (${p.env_var} is only sent to ${hostOf(p.default_base_url)})`
   return `No key set (${p.env_var})`
 }
@@ -108,7 +108,7 @@ export function localRouteWarnings(route, providers) {
     if (!p.enabled) out.push({ index, level: 'warn', message: 'Provider is off' })
     const model = String(step.model || '').trim()
     const offered = p.last_test?.ok && p.models?.length ? p.models.some(m => m.id === model) : true
-    if (model && !offered) out.push({ index, level: 'error', message: `Not offered by ${p.label} — calls to it will fail` })
+    if (model && !offered) out.push({ index, level: 'error', message: `Not offered by ${p.label}. Calls to it will fail` })
   })
   return out
 }
@@ -171,7 +171,7 @@ export function Field({ label, hint, error, htmlFor, children, className = '' })
 export function SectionTitle({ children, right }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-      <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{children}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{children}</h3>
       {right}
     </div>
   )

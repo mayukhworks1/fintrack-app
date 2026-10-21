@@ -434,22 +434,14 @@ describe('media registry', () => {
 describe('PageHead aside', () => {
   const aside = <div>hero visual</div>
 
-  it('renders the aside beside the opening on a wide screen', () => {
+  it('sets the aside after the lede, in the main column, at every width', () => {
     setReducedMotion(false, { '(min-width: 1100px)': true })
     const { container } = render(<PageHead eyebrow="E" lines={['one', 'two']} aside={aside}>lede</PageHead>)
-    expect(screen.getByText('hero visual')).toBeInTheDocument()
-    expect(container.querySelector('.ft-m-head')).not.toBeNull()
-    // The structure the rest of the site keys on is unchanged.
-    expect(container.querySelectorAll('.ft-rise')).toHaveLength(2)
-    expect(container.querySelector('.ft-lede.ft-up').style.getPropertyValue('--d')).toBe('260ms')
-  })
-
-  it('leaves the aside out below 1100px unless asked', () => {
-    const { unmount } = render(<PageHead eyebrow="E" lines={['one']} aside={aside}>lede</PageHead>)
-    expect(screen.queryByText('hero visual')).toBeNull()
-    unmount()
-    render(<PageHead eyebrow="E" lines={['one']} aside={aside} asideMobile>lede</PageHead>)
-    expect(screen.getByText('hero visual')).toBeInTheDocument()
+    const main = container.querySelector('.pb-main')
+    expect(main).not.toBeNull()
+    expect(main.textContent).toMatch(/one two.*lede.*hero visual/)
+    // The opening is painted in the first frame: nothing in it waits on a reveal.
+    expect(container.querySelector('.ft-reveal, .ft-rise')).toBeNull()
   })
 })
 
@@ -471,7 +463,7 @@ describe('the public shell', () => {
     expect(header).not.toBeNull()
 
     await act(async () => { go('/features') })
-    await screen.findByRole('tablist', { name: /modules/i }, LAZY_ROUTE)
+    await screen.findByRole('navigation', { name: /modules on this page/i }, LAZY_ROUTE)
     expect(container.querySelector('header')).toBe(header)
     expect(container.querySelectorAll('header')).toHaveLength(1)
     expect(container.querySelectorAll('footer')).toHaveLength(1)

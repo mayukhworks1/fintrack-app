@@ -28,23 +28,26 @@ const CSS = [
 ].join('\n')
 
 describe('public building blocks', () => {
-  it('Stagger keeps list semantics and carries the class the CSS keys on', () => {
+  it('Stagger keeps list semantics', () => {
     const { container } = render(<Stagger as="ol"><li>a</li><li>b</li></Stagger>)
-    const ol = container.querySelector('ol.ft-stagger')
+    const ol = container.querySelector('ol')
     expect(ol).not.toBeNull()
     expect(ol.querySelectorAll('li').length).toBe(2)
   })
 
-  it('Rule draws from the left when asked', () => {
-    const { container } = render(<Rule fromLeft />)
-    expect(container.querySelector('hr.ft-rule.ft-rule-grow.from-left')).not.toBeNull()
+  it('Rule is a plain hairline that does not animate', () => {
+    const { container } = render(<Rule />)
+    const hr = container.querySelector('hr')
+    expect(hr).not.toBeNull()
+    expect(hr.classList.contains('ft-rule-grow')).toBe(false)
   })
 
-  it('PageHead stages its eyebrow and lede after the headline lines', () => {
+  it('PageHead paints its running head, headline and lede in the first frame', () => {
     const { container } = render(<PageHead eyebrow="E" lines={['one', 'two']}>lede</PageHead>)
-    expect(container.querySelectorAll('.ft-rise').length).toBe(2)
-    expect(container.querySelector('.ft-eyebrow.ft-up')).not.toBeNull()
-    expect(container.querySelector('.ft-lede.ft-up').style.getPropertyValue('--d')).toBe('260ms')
+    expect(container.querySelector('h1').textContent).toBe('one two')
+    expect(container.querySelector('.pb-label').textContent).toBe('E')
+    expect(container.querySelector('.pb-lede').textContent).toBe('lede')
+    expect(container.querySelector('.ft-reveal, .ft-rise, .ft-up')).toBeNull()
   })
 })
 

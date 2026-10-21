@@ -66,3 +66,16 @@
 .ft-s-faq .ft-faq > summary:active { background-color: var(--accent-dim); transition-duration: var(--m-t-press); }
 .ft-s-faq .ft-faq > summary:hover { color: var(--accent-ink, var(--accent)); }
 .ft-s-faq .ft-faq > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Editorial overrides: the finder is a plain field and a row of topics. */
+.pb .ft-s-finder { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pb .ft-s-search input { border-radius: 8px; background: var(--card-bg); font-weight: 400; }
+.pb .ft-s-search input:focus { box-shadow: none; }
+.pb .ft-s-chips button { border-radius: 8px; font-weight: 500; font-size: 0.875rem; }
+.pb .ft-s-chips button[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent-btn); border-color: var(--accent-btn); }
+.pb .ft-s-chips .ft-m-ink-pill { display: none; }
+.pb .ft-s-count { font-weight: 500; }
+.pb .ft-s-index a, .pb .ft-s-index-off { font-weight: 500; }
+.pb .ft-s-empty { border-radius: 10px; }
+.pb .ft-s-empty button { border-radius: 8px; }
+.pb .ft-s-faq .ft-faq > summary { font-weight: 600; }

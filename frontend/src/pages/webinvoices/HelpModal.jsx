@@ -11,7 +11,7 @@ export function HelpModal({ open, onClose }) {
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)' }} onClick={onClose} />
       <div {...dialog.panelProps} className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
 
@@ -57,16 +57,16 @@ export function HelpModal({ open, onClose }) {
             <div className="space-y-2">
               {[
                 ['Raise Externally', 'Opens the Zoho invoice request form for official client-facing invoices. Always raise through Zoho for formal billing.'],
-                ['New Invoice', 'Records an invoice directly in the tracker — use this for internal entries, bulk import, or pre-raising before Zoho.'],
+                ['New Invoice', 'Records an invoice directly in the tracker. Use this for internal entries, bulk import, or pre-raising before Zoho.'],
                 ['Filters & Search', 'Filter by project, month, category, raised by, or billing type (Project vs Retainer). The search bar matches invoice number, project, description, category, and milestone.'],
                 ['Status', 'Mark as Pending, Paid, or Cancelled. Invoices unpaid for more than 30 days appear as overdue at the top of the list.'],
                 ['Paid Invoice Rule', 'When marking an invoice Paid, Amount Received and Cleared Date are mandatory. Attach a payment screenshot to the Reference field.'],
-                ['Attachments', 'Drag & drop or click to attach Invoice PDFs and Payment References. Files upload directly to Teable — no size limit from the app side.'],
+                ['Attachments', 'Drag & drop or click to attach Invoice PDFs and Payment References. Files upload directly to Teable. No size limit from the app side.'],
                 ['Project Snapshot', 'The project cards at the top show raised/collected/outstanding per client. Click any card to filter the list to that project instantly.'],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 text-sm">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong> — {desc}</p>
+                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong>: {desc}</p>
                 </div>
               ))}
             </div>
@@ -82,14 +82,14 @@ export function HelpModal({ open, onClose }) {
             <div className="space-y-2">
               {[
                 ['What is a Retainer?', 'A recurring monthly billing arrangement. The Project field holds the client name. All retainer entries use a "Retainer" category type.'],
-                ['Record a month', 'Navigate to the target month using the arrow buttons, then click Record Invoice. The form pre-fills from last month\'s entry — update only what changed.'],
+                ['Record a month', 'Navigate to the target month using the arrow buttons, then click Record Invoice. The form pre-fills from last month\'s entry. Update only what changed.'],
                 ['Pause a month', 'If billing is skipped, click Pause Month to record a zero-value Cancelled entry. This keeps the retainer history clean and shows a "Paused" pill in the timeline.'],
                 ['Invoice number', 'You can leave this blank initially. Once the Zoho invoice is formally raised, the account manager updates the number here.'],
-                ['Timeline view', 'Each retainer shows a month-by-month status strip — green (Paid), orange (Pending), grey (Paused), dashed (not yet raised). Click any month cell to jump to that entry.'],
+                ['Timeline view', 'Each retainer shows a month-by-month status strip: green (Paid), orange (Pending), grey (Paused), dashed (not yet raised). Click any month cell to jump to that entry.'],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 text-sm">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong> — {desc}</p>
+                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong>: {desc}</p>
                 </div>
               ))}
             </div>
@@ -107,13 +107,13 @@ export function HelpModal({ open, onClose }) {
               {[
                 ['Create a project', 'Click + New Project. Fill in name, client, status, priority, timeline, and budget. The profit preview updates live as you type amounts.'],
                 ['Project cards', 'Each card shows live status badge, priority, progress bar, client charge, and estimated profit. Click to open the full project detail view.'],
-                ['Project detail', 'Full KPI breakdown — total cost, profit, margin %, man hours vs planned, and revenue. Also shows all resources assigned and matching invoices.'],
+                ['Project detail', 'Full KPI breakdown: total cost, profit, margin %, man hours vs planned, and revenue. Also shows all resources assigned and matching invoices.'],
                 ['Matching invoices', 'Invoices whose Project field exactly matches the project name are automatically listed with totals. Project name spelling must match precisely.'],
                 ['Progress %', 'Use the slider in the edit form to update completion. This syncs directly to Teable and reflects on the project card.'],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 text-sm">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong> — {desc}</p>
+                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong>: {desc}</p>
                 </div>
               ))}
             </div>
@@ -129,15 +129,15 @@ export function HelpModal({ open, onClose }) {
             </h3>
             <div className="space-y-2">
               {[
-                ['What is a Resource?', 'Any person, tool, or vendor working on a project — Employee, Freelancer, Contractor, Tool/Software, or Cloud Infra.'],
+                ['What is a Resource?', 'Any person, tool, or vendor working on a project: Employee, Freelancer, Contractor, Tool/Software, or Cloud Infra.'],
                 ['Add to a project', 'Open a project → click Add Resource or assign an existing one via the Assign Resources button. A resource can belong to multiple projects.'],
                 ['Rate & cost', 'Set rate (₹), rate unit (Per Hour / Per Day / Per Month / Fixed), and units. Total cost is computed automatically in Teable.'],
-                ['Man Hours', 'Log actual vs. planned hours. Teable computes the variance — red means over budget, green means under.'],
+                ['Man Hours', 'Log actual vs. planned hours. Teable computes the variance: red means over budget, green means under.'],
                 ['Revenue tracking', 'Set a billing rate and billable units to track what you charge vs. what the resource costs. Gross margin is calculated automatically.'],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 text-sm">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong> — {desc}</p>
+                  <p style={{ color: 'var(--text-2)' }}><strong style={{ color: 'var(--text-1)' }}>{title}</strong>: {desc}</p>
                 </div>
               ))}
             </div>
@@ -148,11 +148,11 @@ export function HelpModal({ open, onClose }) {
           {/* Tips */}
           <section>
             <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
-              💡 Quick Tips
+              Quick tips
             </h3>
             <div className="grid grid-cols-1 gap-2">
               {[
-                ['Auto-sync', 'Invoice data refreshes every 10 seconds automatically — no manual refresh needed.'],
+                ['Auto-sync', 'Invoice data refreshes every 10 seconds automatically. No manual refresh needed.'],
                 ['Exact project names', 'Invoice ↔ Project linking is case-sensitive. "Riese Moto" ≠ "riese moto".'],
                 ['Overdue alert', 'Pending invoices older than 30 days appear highlighted in red at the top.'],
                 ['Follow-up filter', 'Use "Follow-up due" filter to surface invoices whose Next Followup date is today or past.'],

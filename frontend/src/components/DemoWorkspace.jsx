@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  Receipt, Timer, FolderKanban, BarChart3, Sparkles, Search, ArrowUpDown,
+  Receipt, Timer, FolderKanban, BarChart3, Search, ArrowUpDown,
   Play, Pause, ChevronLeft, ChevronRight, X, MousePointerClick, Keyboard, Copy, Check as CheckIcon,
   KanbanSquare, Rows3, Mail, FileText, SlidersHorizontal,
   Download, CheckSquare, Square, LayoutDashboard, FileSpreadsheet,
@@ -69,7 +69,7 @@ export const TABS = [
   { id: 'projects',    label: 'Projects',     icon: FolderKanban },
   { id: 'tax',         label: 'Tax Ledger',   icon: FileSpreadsheet },
   { id: 'analytics',   label: 'Analytics',    icon: BarChart3 },
-  { id: 'analyst',     label: 'AI Assistant', icon: Sparkles },
+  { id: 'analyst',     label: 'AI Assistant', icon: MessageSquare },
   { id: 'reports',     label: 'Report',       icon: FileText },
   { id: 'delivery',    label: 'Status Board', icon: KanbanSquare },
   { id: 'pages',       label: 'Pages',        icon: Globe },
@@ -295,7 +295,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
         <p className="rounded-lg px-2.5 py-2 mb-3"
            style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--text-2)',
                     background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-          Outstanding counts <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.amount)}</strong> —
+          Outstanding counts <strong style={{ color: 'var(--text-1)' }}>{inr(invoice.amount)}</strong>,
           the pre-tax figure. GST is collected on the state's behalf and TDS is
           withheld by the client before they pay, so neither is money this client
           still owes. Counting them would overstate what you can collect by{' '}
@@ -317,7 +317,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
               color: showAiReminder ? 'var(--accent-ink, var(--accent))' : 'var(--text-2)',
             }}
           >
-            <Sparkles size={11} /> AI Reminder
+            Draft reminder
           </button>
           <button
             onClick={() => {
@@ -346,7 +346,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
           </button>
         </div>
 
-        {/* AI Reminder Preview Box */}
+        {/* Draft reminder Preview Box */}
         {showAiReminder && (
           <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--accent-soft)' }}>
             <div className="flex items-center justify-between mb-2">
@@ -428,8 +428,8 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
 
       {/* PDF Modal Simulator */}
       {showPdfModal && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center p-3">
-          <div className="bg-white text-slate-900 rounded-xl p-4 w-full max-w-sm shadow-2xl border border-slate-200">
+        <div className="absolute inset-0 bg-black/40 z-20 flex items-center justify-center p-3">
+          <div className="bg-white text-slate-900 rounded-xl p-4 w-full max-w-sm shadow-sm border border-slate-200">
             <div className="flex justify-between items-start border-b border-slate-200 pb-2 mb-2">
               <div>
                 <h4 className="font-bold text-sm tracking-tight">TAX INVOICE</h4>
@@ -455,7 +455,7 @@ function InvoiceDrawer({ invoice, onClose, returnFocusRef, onTogglePaid, takeFoc
                 alert(`Simulated PDF download for Invoice ${invoice.id}`)
                 setShowPdfModal(false)
               }}
-              className="w-full py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs cursor-pointer"
+              className="w-full py-1.5 rounded-lg bg-[var(--accent-btn)] text-[var(--accent-fg)] font-bold text-xs cursor-pointer"
             >
               Download PDF Copy
             </button>
@@ -1073,7 +1073,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
                 <div className="h-6 w-px bg-[var(--card-border)] shrink-0" />
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs text-[var(--text-1)] block truncate">{r.client}</span>
-                  <span className="text-[10px] text-[var(--text-3)] truncate block">{r.id} — {r.project}</span>
+                  <span className="text-[10px] text-[var(--text-3)] truncate block">{r.id} · {r.project}</span>
                 </div>
                 <div className="text-right shrink-0">
                   <span className="font-bold text-xs text-[var(--text-1)] block">{fmtCurrency(r.amount, currency)}</span>
@@ -1087,7 +1087,7 @@ function Receivables({ state, set, onOpen, searchRef }) {
         {/* ── Bulk Actions Floating Drawer ── */}
         {selectedIds.size > 0 && (
           <div
-            className="absolute bottom-8 left-3 right-3 rounded-xl p-2 flex items-center justify-between gap-2 shadow-2xl backdrop-blur-md"
+            className="absolute bottom-8 left-3 right-3 rounded-xl p-2 flex items-center justify-between gap-2 shadow-sm"
             style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--accent)',
@@ -1171,7 +1171,7 @@ function Projects({ state, set }) {
            style={{ background: 'var(--accent-dim)', borderColor: 'var(--accent-soft)' }}>
         <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: 'var(--accent-ink, var(--accent))' }}>
           <AlertTriangle size={13} />
-          <span>{sel.client} ({sel.name}) — {inrShort(sel.billed * 0.35)} milestone ready for invoice review.</span>
+          <span>{sel.client} ({sel.name}): a {inrShort(sel.billed * 0.35)} milestone is ready for invoice review.</span>
         </div>
         <button
           onClick={() => set({ tab: 'delivery' })}
@@ -1263,7 +1263,7 @@ function Projects({ state, set }) {
           </div>
         ))}
         <p className="mt-2" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          Margin is billed less cost — a project cannot claim a margin its invoices do not support.
+          Margin is billed less cost, so a project cannot claim a margin its invoices do not support.
         </p>
       </div>
     </div>
@@ -1894,7 +1894,7 @@ function Analyst({ state, set }) {
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent-soft)', color: 'var(--text-1)' }}>
           <div className="flex items-center justify-between mb-1">
             <span className="font-bold text-[var(--accent-ink)] flex items-center gap-1">
-              <Sparkles size={11} /> AI Synthesis
+              Summary
             </span>
             <button onClick={() => setCustomAnswer(null)} className="text-[var(--text-3)] hover:text-[var(--text-1)] cursor-pointer">
               <X size={12} />
@@ -1921,7 +1921,7 @@ function Analyst({ state, set }) {
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                       animation: 'ft-fade-in 260ms ease both' }}>
           {displayedSql}
-          {typing && <span className="ml-0.5 inline-block animate-pulse" style={{ color: 'var(--accent-ink, var(--accent))' }}>▍</span>}
+          {typing && <span className="ml-0.5 inline-block" style={{ color: 'var(--accent-ink, var(--accent))' }}>▍</span>}
         </pre>
       </div>
 
@@ -1987,7 +1987,7 @@ function Reports() {
       setAiStep(0)
       setGeneratedDoc({
         id: 'ai-custom-report',
-        title: `AI Synthesis: ${prompt.length > 35 ? prompt.slice(0, 35) + '…' : prompt}`,
+        title: `Summary: ${prompt.length > 35 ? prompt.slice(0, 35) + '…' : prompt}`,
         blurb: `Tailored for ${aiAudience} based on active FY26 ledger data.`,
         isAi: true,
         audience: aiAudience,
@@ -2006,7 +2006,7 @@ function Reports() {
         <div className="flex items-center gap-1 p-0.5 rounded-lg border bg-[var(--bg-input)]" style={{ borderColor: 'var(--card-border)' }}>
           {[
             { id: 'templates', label: 'Standard Packs', icon: FileText },
-            { id: 'ai_studio', label: 'AI Report Generator', icon: Sparkles },
+            { id: 'ai_studio', label: 'Report generator', icon: MessageSquare },
           ].map(m => {
             const Icon = m.icon
             return (
@@ -2056,7 +2056,7 @@ function Reports() {
                   </>
                 ) : (
                   <>
-                    <Sparkles size={11} /> Generate {tpl.title}
+                    Generate {tpl.title}
                   </>
                 )}
               </button>
@@ -2064,11 +2064,11 @@ function Reports() {
           ))}
         </div>
       ) : (
-        /* AI Report Generator Studio */
+        /* Report generator Studio */
         <div className="rounded-xl p-3 border space-y-2.5" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
-              <Sparkles size={12} className="text-[var(--accent-ink)]" /> AI Financial Report Generator
+              Financial report generator
             </span>
             <span className="text-[9.5px] font-mono text-[var(--text-3)] font-bold">Over the same rows</span>
           </div>
@@ -2119,7 +2119,7 @@ function Reports() {
                   </>
                 ) : (
                   <>
-                    <Sparkles size={11} /> Generate Report with AI
+                    Generate report
                   </>
                 )}
               </button>
@@ -2152,7 +2152,7 @@ function Reports() {
         <div className="rounded-xl p-3 border" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[var(--fin-positive)]" />
               <span className="text-xs font-bold text-[var(--text-1)]">
                 Compiled: {generatedDoc.title} {generatedDoc.audience ? `[Target: ${generatedDoc.audience}]` : '(FY26 Q2 Edition)'}
               </span>
@@ -2282,7 +2282,7 @@ function Delivery({ state, set }) {
     if (newLane === 'Delivered') {
       setRecentAction({
         type: 'billing_trigger',
-        text: `⚡ Delivered "${projectName}" — ₹${(1.8).toFixed(1)}L milestone unlocked for automatic invoicing.`,
+        text: `Delivered "${projectName}": a ₹${(1.8).toFixed(1)}L milestone is ready to invoice.`,
         time: 'Just now',
       })
     } else {
@@ -2353,8 +2353,8 @@ function Delivery({ state, set }) {
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10.5px] font-bold"
                style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
             <span style={{ color: 'var(--text-3)' }}>Delivered & Incurred:</span>
-            <span className="font-mono text-emerald-500 font-extrabold">{inr(deliveredTotal)}</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-mono text-[var(--fin-positive)] font-extrabold">{inr(deliveredTotal)}</span>
+            <span className="w-2 h-2 rounded-full bg-[var(--fin-positive)]" />
           </div>
 
           <button
@@ -2517,7 +2517,7 @@ function Delivery({ state, set }) {
                     const isDelivered = d.lane === 'Delivered'
                     return (
                       <button key={d.id} onClick={() => set({ card: d.id })}
-                              aria-label={`${d.project} for ${d.client} — ${d.lane}. Open the status note.`}
+                              aria-label={`${d.project} for ${d.client}, ${d.lane}. Open the status note.`}
                               className="ft-card text-left rounded-lg p-2 transition-all relative overflow-hidden cursor-pointer"
                               style={{
                                 background: 'var(--card-bg)',
@@ -2785,7 +2785,7 @@ function Pages() {
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold border cursor-pointer hover:border-[var(--accent)] transition-colors"
             style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
           >
-            <Sparkles size={11} className="text-[var(--accent-ink)]" /> Templates
+            Templates
           </button>
           <button
             onClick={() => setShowEditor(true)}
@@ -2821,7 +2821,7 @@ function Pages() {
              style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
-              <Sparkles size={12} className="text-[var(--accent-ink)]" /> Instant Page Templates
+              Page templates
             </span>
             <button onClick={() => setShowTemplateGallery(false)} className="text-[var(--text-3)] hover:text-[var(--text-1)] cursor-pointer">
               <X size={13} />
@@ -2913,7 +2913,7 @@ function Pages() {
         <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[var(--fin-positive)]" />
               <span className="text-xs font-bold text-[var(--text-1)]">
                 Live Interactive Render: {previewPage.title} ({previewPage.url})
               </span>
@@ -2964,7 +2964,7 @@ function Pages() {
               <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase">Calculated Monthly Scope:</span>
-                  <span className="text-lg font-black text-emerald-400">{inr(calcSprints * calcRate)}</span>
+                  <span className="text-lg font-black text-[var(--fin-positive)]">{inr(calcSprints * calcRate)}</span>
                 </div>
                 <span className="text-[10px] text-slate-400">GST (18%): {inr(calcSprints * calcRate * 0.18)}</span>
               </div>
@@ -2984,10 +2984,10 @@ function Pages() {
             <div className="rounded-xl p-4 bg-white text-slate-900 border border-slate-200 shadow-sm space-y-3">
               <div className="flex justify-between items-start pb-2 border-b border-slate-100">
                 <div>
-                  <h4 className="font-bold text-sm text-blue-600">{previewPage.title}</h4>
+                  <h4 className="font-bold text-sm text-[var(--accent-ink)]">{previewPage.title}</h4>
                   <p className="text-xs text-slate-500">Milestone acceptance gate & Razorpay settlement link</p>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600">Client Portal</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--accent-dim)] text-[var(--accent-ink)]">Client Portal</span>
               </div>
               <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
                 <div>
@@ -3019,7 +3019,7 @@ function Pages() {
         <div className="rounded-xl p-3 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
-              <Sparkles size={12} className="text-[var(--accent-ink)]" /> AI Real-Time Page & Portal Builder
+              Page builder
             </span>
             <button onClick={() => setShowEditor(false)} className="text-[var(--text-3)] hover:text-[var(--text-1)] cursor-pointer">
               <X size={14} />
@@ -3080,7 +3080,7 @@ function Pages() {
                 </>
               ) : (
                 <>
-                  <Sparkles size={11} /> Generate & Publish Page with AI
+                  Draft and publish page
                 </>
               )}
             </button>
@@ -3115,7 +3115,7 @@ function Studio() {
 
   const handleUploadSubmit = (e) => {
     e?.preventDefault()
-    const name = uploadFileName.trim() || 'Vendor Master Agreement — Apex Cloud.pdf'
+    const name = uploadFileName.trim() || 'Vendor Master Agreement, Apex Cloud.pdf'
     setUploading(true)
     setUploadStep(1)
     setTimeout(() => setUploadStep(2), 250)
@@ -3231,7 +3231,7 @@ function Studio() {
               <label className="text-[10px] font-bold uppercase text-[var(--text-3)] block mb-1">Document File Name</label>
               <input
                 type="text"
-                placeholder="e.g. Master Services Agreement — Apex Cloud.pdf"
+                placeholder="e.g. Master Services Agreement, Apex Cloud.pdf"
                 value={uploadFileName}
                 onChange={e => setUploadFileName(e.target.value)}
                 className="w-full px-2.5 py-1.5 rounded-lg text-xs border"
@@ -3381,7 +3381,6 @@ function Studio() {
             <div className="rounded-xl p-3.5 border space-y-2.5 animate-fade-in" style={{ background: 'var(--bg-input)', borderColor: 'var(--accent)' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Sparkles size={13} className="text-[var(--accent-ink)]" />
                   <span className="text-xs font-bold text-[var(--text-1)]">RAG Context Synthesis</span>
                 </div>
                 <span className="px-2 py-0.2 rounded text-[9.5px] font-bold bg-[var(--ok-dim)] text-[var(--ok)]">
@@ -3461,7 +3460,7 @@ function Ageing({ state, set }) {
       </div>
 
       <p className="font-semibold mb-2" style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
-        Pick a band — it filters the invoice list, it does not just colour a chart.
+        Pick a band to filter the invoice list.
       </p>
 
       <div className="flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto">
@@ -3490,8 +3489,8 @@ function Ageing({ state, set }) {
       </div>
 
       <p className="mt-auto pt-3" style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
-        Bands are days <em>past due</em>, not days since raised — an invoice still
-        inside its terms is not late, however old it is.
+        Bands count days <em>past due</em>. An invoice still inside its terms
+        is not late, however old it is.
       </p>
     </div>
   )
@@ -3515,9 +3514,9 @@ function CommandPaletteModal({ onClose, onSelectTab, onSelectInvoice, onSelectPr
   const filteredProjects = PROJECT_ROLLUP.filter(p => `${p.name} ${p.client}`.toLowerCase().includes(q.toLowerCase())).slice(0, 3)
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-10 px-4"
+    <div className="absolute inset-0 z-50 bg-black/40 flex items-start justify-center pt-10 px-4"
          onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border shadow-2xl overflow-hidden"
+      <div className="w-full max-w-lg rounded-xl border shadow-sm overflow-hidden"
            style={{ background: 'var(--card-bg)', borderColor: 'var(--accent)' }}
            onClick={e => e.stopPropagation()}>
         <div className="p-2.5 border-b border-[var(--card-border)] flex items-center gap-2 bg-[var(--bg-input)]">
@@ -3569,7 +3568,7 @@ function CommandPaletteModal({ onClose, onSelectTab, onSelectInvoice, onSelectPr
                     onClick={() => { onSelectInvoice(i.id); onClose(); }}
                     className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left hover:bg-[var(--bg-input)] transition-colors cursor-pointer"
                   >
-                    <span className="font-semibold text-[var(--text-1)]">{i.id} — {i.client}</span>
+                    <span className="font-semibold text-[var(--text-1)]">{i.id} · {i.client}</span>
                     <span className="font-mono text-[var(--text-2)]">{inr(i.amount)}</span>
                   </button>
                 ))}
@@ -3620,13 +3619,13 @@ const PANELS = {
 
 const CAPTION = {
   dashboard:   'Billed, cost, margin and what is outstanding across every project, with the clients behind them.',
-  receivables: 'Filter, search and sort. The total at the bottom is whatever survived — it is the rows, not a number kept somewhere else.',
+  receivables: 'Filter, search and sort. The total at the bottom is the sum of the rows still showing.',
   projects:    'Billed less cost, per project, with the invoices that produced it listed underneath.',
   tax:         'Taxable value, 18% GST (CGST and SGST at 9% each) and 10% TDS withheld at source, kept apart from what clients owe.',
   analytics:   'Move the window and every figure moves with it. One period filter over one set of rows.',
   analyst:     'A question is a measure and a grouping. The model chooses those two; the code writes the SQL and runs it.',
   reports:     'Period briefings written over the same rows the rest of the sandbox reads: board, brief or detailed.',
-  delivery:    'Delivery state on the same records as the money — so a card can tell you what the project is owed without joining two systems together.',
+  delivery:    'Delivery state on the same records as the money, so each card shows what its project is still owed.',
   pages:       'Pages to share with a client: drafted here, then published on a link.',
   studio:      'Contracts and SOWs you can question, with every answer pointing at the passage it came from.',
   ageing:      'Bands are predicates, not colours. Pick one and it opens the invoice list already filtered to it.',
@@ -3917,14 +3916,11 @@ export default function DemoWorkspace() {
       <div ref={frameRef} className="ft-tour relative" tabIndex={-1} onKeyDown={onKeys}>
         {/* Window Chrome Header */}
         <div className="ft-tour-chrome">
-          {['var(--fin-negative)', 'var(--fin-warning)', 'var(--fin-positive)'].map(c => (
-            <span key={c} className="ft-tour-dot" style={{ background: c }} />
-          ))}
           {/* Hidden under 380px, where the row cannot hold it and the badge
               both. The rail already shows which module is open, so the window
               title is the duplicate and the badge is the one that stays. */}
-          <span className="ft-chrome-title hidden min-[380px]:inline ml-2 font-semibold truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-            fintrack — {TABS.find(t => t.id === state.tab)?.label.toLowerCase()}
+          <span className="ft-chrome-title hidden min-[380px]:inline font-semibold truncate" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            Sample workspace / {TABS.find(t => t.id === state.tab)?.label}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
@@ -3941,10 +3937,9 @@ export default function DemoWorkspace() {
                 border: `1px solid ${touring ? 'var(--accent)' : 'var(--card-border)'}`,
                 color: touring ? 'var(--accent-ink, var(--accent))' : 'var(--text-1)',
               }}
-              title="Start Interactive Guided Tour"
+              title="Start the guided tour"
             >
-              <Sparkles size={11} className="text-[var(--accent-ink)]" aria-hidden="true" />
-              <span>{touring ? 'Restart tour' : 'Guided Tour'}</span>
+              <span>{touring ? 'Restart tour' : 'Guided tour'}</span>
             </button>
 
             {/* Quick Command Palette Button */}
@@ -3968,11 +3963,11 @@ export default function DemoWorkspace() {
                 title="Workspace Events"
               >
                 <Bell size={13} />
-                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
               </button>
               {showNotifications && (
                 <div
-                  className="absolute right-0 top-full mt-1.5 w-60 rounded-xl p-2.5 border shadow-xl backdrop-blur-md z-30 text-left"
+                  className="absolute right-0 top-full mt-1.5 w-60 rounded-xl p-2.5 border shadow-sm z-30 text-left"
                   style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
                 >
                   <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-[var(--card-border)]">

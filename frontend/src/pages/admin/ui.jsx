@@ -60,7 +60,7 @@ export function UserAvatar({ row, size = 40 }) {
   )
 }
 
-export function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name — click to set' }) {
+export function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name. Click to set' }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(value)
   if (editing) {
@@ -80,10 +80,10 @@ export function EditableName({ value, saving, onSave, placeholder = '', emptyLab
         />
         <button onClick={() => { onSave(val); setEditing(false) }}
           className="text-[10px] px-1.5 py-0.5 rounded"
-          style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>✓</button>
+          style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>Save</button>
         <button onClick={() => { setVal(value); setEditing(false) }}
           className="text-[10px] px-1.5 py-0.5 rounded"
-          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>✕</button>
+          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>Cancel</button>
       </span>
     )
   }
@@ -190,9 +190,11 @@ export function Pager({ total, limit, offset, onPage }) {
 
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
-export function StatBox({ label, value, sub, color, accent }) {
+// `accent` is accepted for call-site compatibility; a stat is told apart by
+// its label, not by a coloured edge.
+export function StatBox({ label, value, sub, color, accent: _accent }) {
   return (
-    <div className="card flex flex-col gap-1 min-w-0" style={accent ? { borderLeft: `3px solid ${accent}` } : {}}>
+    <div className="card flex flex-col gap-1 min-w-0">
       <p className="text-[11px] font-medium truncate" style={{ color: 'var(--text-3)' }}>{label}</p>
       <p className="text-2xl font-bold tabular-nums leading-none"
         style={{ color: color || 'var(--text-1)' }}>{fmt(value)}</p>
@@ -289,7 +291,7 @@ export function DeploymentChecklist() {
     <section>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
             Production Health
           </h3>
           {data?.deployment && (
@@ -429,7 +431,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(2px)' }}>
+      style={{ background: 'var(--scrim)' }}>
       <div {...dialog.panelProps} style={{
         background: 'var(--card-bg)', border: '1px solid var(--border)',
         borderRadius: 18, padding: 28, width: '100%', maxWidth: 480,
@@ -504,7 +506,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
             style={{ ...CTRL_STYLE, width: 80, textAlign: 'center' }} />
           <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{mode === 'hours' ? 'hours' : 'days'}</span>
           <span style={{ color: 'var(--text-3)', fontSize: 11, marginLeft: 4 }}>
-            → older than <b style={{ color: 'var(--text-2)' }}>{label}</b>
+            Older than <b style={{ color: 'var(--text-2)' }}>{label}</b>
           </span>
         </div>
 
@@ -516,7 +518,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
             color: result.error ? 'var(--fin-negative)' : 'var(--fin-positive)',
             borderRadius: 10, padding: '8px 12px', fontSize: 13, marginBottom: 16,
           }}>
-            {result.error ? `✕ ${result.error}` : `✓ ${result.message || `Deleted ${result.deleted?.toLocaleString()} rows`}`}
+            {result.error ? result.error : (result.message || `Deleted ${result.deleted?.toLocaleString()} rows`)}
           </div>
         )}
 

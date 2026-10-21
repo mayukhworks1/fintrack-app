@@ -994,14 +994,14 @@ export default function InsightWorkbench({
 
               <div className="mt-5 rounded-2xl overflow-hidden" style={{ border: '1px solid var(--card-border)' }}>
                 <div className="px-4 py-3" style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--card-border)' }}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Preview</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Preview</p>
                 </div>
                 <div className="overflow-auto">
                   <table className="min-w-full text-sm">
                     <thead style={{ background: 'var(--bg-layer)' }}>
                       <tr>
                         {previewColumns.map((column) => (
-                          <th key={column.key} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
+                          <th key={column.key} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
                             {column.label}
                           </th>
                         ))}

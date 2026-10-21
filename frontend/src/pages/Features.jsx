@@ -1,79 +1,53 @@
 /**
- * Features — an explorer rather than a list.
+ * Features: the eleven modules, one after another, each on a real screen.
  *
- * The landing page summarises the modules in a grid. Repeating that here in
- * longer form would be a second wall of cards, so this is built to be driven:
- * pick a module and the panel swaps to a working demonstration of it, on the
- * same sample ledger the sandbox runs on, with the screen it lives on one
- * click away.
+ * Set as a long document rather than a picker: a contents list at the top,
+ * then one section per module with its headline, what it does, a capture
+ * of the screen it lives on (cropped to the part that matters, with numbered
+ * notes), and the list of what it carries. Modules with no capture worth
+ * showing say what they do in words, and nothing is drawn in their place.
  *
- * Keyboard-navigable because a tablist that only responds to a mouse is a
- * tablist that half the people using it cannot reach — arrow keys move, Home
- * and End jump, and the panel is wired to its tab.
- *
- * As with every public page: nothing here reads a workspace. Every figure is
- * sample data computed from demoData, or read off a capture of the sample
- * workspace, and each demo and screen says so.
+ * Nothing here reads a workspace. Every capture is of the sample workspace,
+ * and each caption says so.
  */
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import {
-  Receipt, FolderKanban, BarChart3, FileSearch, Code2, Globe,
-  Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck,
-} from 'lucide-react'
+import { Suspense, lazy } from 'react'
 import { usePageMeta } from '../hooks/usePageMeta'
-import { useInk } from '../hooks/useInk'
-import { useReveal } from '../hooks/useReveal'
-import { useMediaQuery } from '../hooks/useMediaQuery'
-import { useReducedMotion } from '../hooks/useReducedMotion'
 import PublicLayout from '../components/PublicLayout'
-import { Head, PageHead, Closing } from '../components/PublicBits'
-import { AnalystDemo, Grain } from '../components/LandingVisuals'
+import { PageHead, Section, Plate, Reveal, Btn, Closing } from '../components/PublicBits'
 import { MODULES } from '../content/publicContent'
-import AgingPreview from '../components/AgingPreview'
-import TaxFlowSimulator from '../components/TaxFlowSimulator'
-import ContractCitationInspector from '../components/ContractCitationInspector'
 import RoiCalculator from '../components/RoiCalculator'
-import ProjectMargins from '../components/features/ProjectMargins'
-import AnalyticsTrend from '../components/features/AnalyticsTrend'
-import ReportFormats from '../components/features/ReportFormats'
-import KanbanMove from '../components/features/KanbanMove'
-import SharedLinkDemo from '../components/features/SharedLinkDemo'
-import GatewayRoute from '../components/features/GatewayRoute'
-import ScreenCrop from '../components/features/ScreenCrop'
-import ShippedStack from '../components/features/ShippedStack'
 import LazyMount from '../components/motion/LazyMount'
 import '../styles/public-features.css'
 
 const ShippedShowcase = lazy(() => import('../components/features/ShippedShowcase'))
 
 /* The Pages module's name comes from the shared list, so a rename there
-   reaches this page's picker, its panel label and the overview together. */
+   reaches this page's contents, its section and the overview together. */
 const PAGES_LABEL = MODULES.find(m => m.visual === 'pages')?.title || 'Pages'
 
 export const FEATURES = [
   {
-    id: 'receivables', icon: Receipt, label: 'Invoices',
+    id: 'receivables', label: 'Invoices',
     headline: 'Know what is owed, how old it is, and what is missing',
-    body: 'Invoices carry ageing bands, a collection rate and average days to collect. GST and TDS are separate figures, because tax withheld at source is not money a client still owes you — counting it as outstanding overstates what you can actually collect.',
+    body: 'Invoices carry ageing bands, a collection rate and average days to collect. GST and TDS are separate figures. Tax withheld at source is money the client will never pay you, so counting it as outstanding overstates what you can collect.',
     points: [
-      'Ageing bands — 0-30, 31-60, 61-90, 90+ — clickable as filters',
+      'Ageing bands of 0-30, 31-60, 61-90 and 90+ days, each a filter',
       'Outstanding, collected and GST totals side by side',
       'Collection rate and average days to collect',
       'Follow-up load: due today, overdue, next follow-up date',
-      'Missing docs — invoices with no PDF or payment reference',
+      'Missing documents: invoices with no PDF or payment reference',
       'Retainer templates for recurring monthly billing',
       'Filters on project, category, status and date; CSV export',
     ],
     demo: 'aging',
   },
   {
-    id: 'projects', icon: FolderKanban, label: 'Projects',
+    id: 'projects', label: 'Projects',
     headline: 'Catch a job going underwater before it lands',
     body: 'Billed, cost and realised profit per project, with margin and a health signal. The point is to see a project turning bad while there is still something to do about it.',
     points: [
       'Amount billed, actual profit and profit percentage',
-      'Health signals — at risk and critical surfaced first',
+      'Health signals, with at-risk and critical projects first',
       'Client rollups and status distribution',
       'Per-project detail with its own invoice history',
       'Top projects by value, and projects running at negative margin',
@@ -81,14 +55,14 @@ export const FEATURES = [
     demo: 'margin',
   },
   {
-    id: 'analytics', icon: BarChart3, label: 'Analytics',
-    headline: 'Trends you can open, not just look at',
-    body: 'Cash position, revenue and overdue pressure over time — and every chart is one click from the rows behind it, so a number you do not believe can be checked rather than argued about.',
+    id: 'analytics', label: 'Analytics',
+    headline: 'Trends that open to the rows behind them',
+    body: 'Cash position, revenue and overdue amounts over time. Every chart is one click from the rows behind it, so a number you doubt can be checked.',
     points: [
       'Cash position, revenue and outstanding over any period',
       'Collection rate and average days to collect as trends',
       'Overdue pressure and invoices cleared per month',
-      'Signals worth noticing — outliers surfaced automatically',
+      'Outliers flagged for a second look',
       'Client, project and category breakdowns',
       'Live sync state, so you know how fresh the figures are',
       'Drill through to the underlying rows; CSV export',
@@ -96,9 +70,9 @@ export const FEATURES = [
     demo: 'bars',
   },
   {
-    id: 'tax', icon: Landmark, label: 'Tax ledger',
+    id: 'tax', label: 'Tax ledger',
     headline: 'GST, month by month, with a filing checklist',
-    body: 'Gross billed, GST collected and net receivable per month and per client — kept separate from the collections view, so a filing figure is never confused with a cash figure.',
+    body: 'Gross billed, GST collected and net receivable per month and per client, kept apart from the collections view so a filing figure is never read as a cash figure.',
     points: [
       'Gross billed, GST amount and net received per month',
       'GST collection rate',
@@ -109,35 +83,35 @@ export const FEATURES = [
     demo: 'tax',
   },
   {
-    id: 'documents', icon: FileSearch, label: 'Document intelligence',
+    id: 'documents', label: 'Document intelligence',
     headline: 'Ask your contracts a question',
-    body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from. An answer you cannot check is barely better than a guess.',
+    body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from.',
     points: [
       'PDF, text, Markdown, CSV, JSON and log files up to 15 MB',
       'Page-level citations you can open inline',
       'Answers verified against the sources before you see them',
       'Full-text search with meaning-based re-ranking where available',
-      'States which retrieval is actually running, rather than implying one',
+      'Says which retrieval is actually running',
       'Conversations saved with their sources, and replayable',
     ],
     demo: 'docs',
   },
   {
-    id: 'analyst', icon: Code2, label: 'Financial query engine',
+    id: 'analyst', label: 'Financial query engine',
     headline: 'It shows you the query it ran',
-    body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the code compiles the SQL — the model never writes SQL itself, and the statement is shown with every answer.',
+    body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the application compiles the SQL. The model never writes SQL, and the statement is shown with every answer.',
     points: [
       'Plain-language questions over invoices and projects',
       'The compiled query is shown with every answer',
       'Measures include outstanding, collected, GST, TDS and collection rate',
       'Group by project, category, client, status, month or quarter',
       'Charts, tables or a single figure, chosen to fit the question',
-      'Scoped to what your account may already see — never a way around a permission',
+      'Limited to the rows your account may already see',
     ],
     demo: 'table',
   },
   {
-    id: 'reports', icon: FileText, label: 'Executive reports',
+    id: 'reports', label: 'Executive reports',
     headline: 'A written report, and someone to ask',
     body: 'Generate a period report over your own figures, keep the history, and ask follow-up questions in a chat that already has the current context loaded.',
     points: [
@@ -146,12 +120,12 @@ export const FEATURES = [
       'Marked confidential for internal use',
       'Assistant with your current data as context',
       'Brief, detailed or board-style output',
-      'A daily AI budget per role, reported honestly rather than guessed',
+      'A daily budget per role, shown as it is spent',
     ],
     demo: 'analyst',
   },
   {
-    id: 'pages', icon: Globe, label: PAGES_LABEL, isNew: true,
+    id: 'pages', label: PAGES_LABEL, isNew: true,
     headline: 'Write a page or a sheet, publish it on a link',
     body: 'Pages keeps documents and spreadsheets in folders. The spreadsheet editor has formulas, AutoSum and ₹ number formats; publish either on a link with an optional password, protection code and expiry in IST. Chat apps show a preview card, and each page keeps its views per day, device and country.',
     points: [
@@ -166,24 +140,24 @@ export const FEATURES = [
     demo: 'pages',
   },
   {
-    id: 'status', icon: Activity, label: 'Delivery & status',
-    headline: 'Run the delivery, not just the invoice',
-    body: 'This is the half people miss: a real project status board sitting on the same records as the money. A kanban board or an operational list, grouped however you work, updating live as anyone changes anything — including someone editing the underlying table directly rather than going through the app.',
+    id: 'status', label: 'Delivery & status',
+    headline: 'Run the delivery from the same records as the invoices',
+    body: 'A project status board on the same records as the money. A kanban board or an operational list, grouped however you work, updated live as anyone changes anything, including someone editing the underlying table directly.',
     points: [
       'Kanban board or operational list, grouped by client, project or state',
       'Short status and a detailed note per project',
-      'Live over an event stream — no refresh, no stale board',
-      'Status options are a picklist you extend, not an enum we ship',
-      'AI-drafted status updates from the current position',
+      'Live over an event stream, with no refresh',
+      'Status options are a picklist you extend',
+      'Drafted status updates from the current position',
       'Attachments on a status entry',
       'Bulk select, advanced filters, and share the view read-only',
     ],
     demo: 'board',
   },
   {
-    id: 'shared', icon: Share2, label: 'Shared views',
+    id: 'shared', label: 'Shared views',
     headline: 'Send a client a link, see what they opened',
-    body: 'A filtered, read-only view on a link — with highlighting for the columns that matter, and analytics for what was actually looked at.',
+    body: 'A filtered, read-only view on a link, with the columns that matter highlighted and a record of what was opened.',
     points: [
       'Read-only links with your filters baked in',
       'Highlight the columns you want read first',
@@ -194,14 +168,14 @@ export const FEATURES = [
     demo: 'share',
   },
   {
-    id: 'admin', icon: ShieldCheck, label: 'Admin & audit', isNew: true,
+    id: 'admin', label: 'Admin & audit', isNew: true,
     headline: 'Every request recorded, every permission adjustable',
     body: 'User approval, a permission matrix down to the individual action, live sessions, and an audit trail written asynchronously so it never becomes the reason a page is slow. The AI gateway sits here too: which provider and model serve each AI task, and what each may spend today.',
     points: [
       'Approve, disable and delete accounts; assign roles',
       'Grant or revoke any single permission per person',
       'Live sessions with device, browser, country and ISP',
-      'Full request audit — method, path, status, duration, referer',
+      'Full request audit: method, path, status, duration, referer',
       'Record-level change history with changed fields',
       'AI gateway: provider routes tried in order, daily caps, versioned prompts, a call log',
       'Gateway keys kept encrypted on the server; superadmin only',
@@ -211,53 +185,8 @@ export const FEATURES = [
   },
 ]
 
-/* One demonstration per module, each on the sample ledger or a capture. The
-   keys stay unique: a drawing beside a claim is read as part of the claim,
-   so no two modules share one. */
-const SHEET_SPOTS = [
-  { x: 205, y: 302, label: 'Formula bar', body: '=D2+E2: the total is the amount plus its GST.' },
-  { x: 480, y: 253, label: 'Number format', body: '₹ Rupee, with Indian digit grouping.' },
-  { x: 897, y: 253, label: 'AutoSum', body: 'Sums the selection into the next cell.', side: 'left' },
-  { x: 640, y: 455, label: 'Selection', body: 'The status bar sums it: Sum ₹15,94,180 · Count 15.' },
-]
-// The admin panel's own tabs, as the gateway capture shows them.
-const ADMIN_TABS = ['Requests', 'Users & Sessions', 'Permissions', 'AI gateway', 'Insights', 'Sync', 'History', 'System Health']
-function AdminDemo() {
-  const ref = useReveal({ threshold: 0.2 })
-  return (
-    <div ref={ref} className="ft-f-demo">
-      <p className="ft-f-kicker">The admin panel</p>
-      <ul className="ft-f-chips ft-m-seq" aria-label="Admin panel tabs">
-        {ADMIN_TABS.map((t, i) => (
-          <li key={t} style={{ '--i': i }} data-on={t === 'AI gateway' ? '' : undefined}>{t}</li>
-        ))}
-      </ul>
-      <GatewayRoute />
-    </div>
-  )
-}
-const DEMOS = {
-  aging: () => <AgingPreview />,
-  margin: () => <ProjectMargins />,
-  bars: () => <AnalyticsTrend />,
-  tax: () => <TaxFlowSimulator />,
-  docs: () => <ContractCitationInspector />,
-  table: () => <div className="ft-f-demo"><AnalystDemo /></div>,
-  analyst: () => <ReportFormats />,
-  pages: () => (
-    <div className="ft-f-demo">
-      <ScreenCrop id="sheet" crop={[0, 215, 1000, 420]} zoom spots={SHEET_SPOTS}
-                  alt="The Pages spreadsheet editor with an invoice tracker: formula bar, ₹ formats and a status-bar sum, sample data"
-                  caption="The spreadsheet editor in Pages, from the app. Sample data." />
-    </div>
-  ),
-  board: () => <KanbanMove />,
-  share: () => <SharedLinkDemo />,
-  audit: () => <AdminDemo />,
-}
 
 const SAMPLE = 'From the sample workspace on the overview. Sample data.'
-const APP = 'From the app, on sample data.'
 const SCREENS = {
   receivables: {
     id: 'invoices', crop: [246, 80, 1330, 825], caption: SAMPLE,
@@ -310,7 +239,7 @@ const SCREENS = {
     ],
   },
   admin: {
-    id: 'gateway-providers', crop: [117, 130, 1366, 830], caption: 'Admin → AI gateway, from the app. Sample data.', zoom: true,
+    id: 'gateway-providers', crop: [117, 130, 1366, 830], caption: 'Admin, AI gateway, from the app. Sample data.', zoom: true,
     alt: 'The AI gateway: providers Groq and OpenRouter with their keys, connection checks and today’s usage against caps, sample data',
     spots: [
       { x: 245, y: 350, label: 'Gateway caps', body: 'Limits across every task and provider, reset at midnight IST.' },
@@ -319,147 +248,80 @@ const SCREENS = {
   },
 }
 
-function ScreenView({ cfg }) {
+
+SCREENS.tax = {
+  id: 'tax', crop: [246, 76, 1330, 870], caption: SAMPLE,
+  alt: 'The tax ledger: taxable value, GST, TDS withheld and net receivable, with GST and TDS by client, sample data',
+  spots: [
+    { x: 1360, y: 190, label: 'TDS withheld', body: 'Deducted by clients at source; reported, never counted as owed.' },
+    { x: 330, y: 732, label: 'By client', body: 'Taxable value, GST and TDS for each client.' },
+  ],
+}
+
+function Module({ f, n }) {
+  const shot = SCREENS[f.id]
   return (
-    <div className="ft-f-demo">
-      <ScreenCrop id={cfg.id} crop={cfg.crop} alt={cfg.alt} caption={cfg.caption} spots={cfg.spots} zoom={!!cfg.zoom} />
-    </div>
+    <section id={f.id} className="pb-section pb-f-module" aria-labelledby={`${f.id}-label`}>
+      <div className="pb-wrap">
+        <div className="pb-row">
+          <div className="pb-margin">
+            <p className="pb-label" id={`${f.id}-label`}>
+              <span className="pb-n">{String(n).padStart(2, '0')}</span>{f.label}
+              {f.isNew && <span className="pb-f-new">New</span>}
+            </p>
+          </div>
+          <div className="pb-main">
+            <Reveal style={{ maxWidth: '40em' }}>
+              <h2 className="pb-h2">{f.headline}</h2>
+              <p className="pb-body" style={{ marginTop: 16, fontSize: '1.0625rem' }}>{f.body}</p>
+            </Reveal>
+            {shot && (
+              <Reveal style={{ marginTop: 'clamp(28px, 4vw, 48px)' }}>
+                <Plate id={shot.id} crop={shot.crop} alt={shot.alt} fig={n}
+                       caption={shot.caption} notes={shot.spots} />
+              </Reveal>
+            )}
+            <ul className="pb-points pb-f-points" aria-label={`${f.label}: what it carries`}>
+              {f.points.map(p => <li key={p}>{p}</li>)}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
 export default function Features() {
-  const [active, setActive] = useState(0)
-  const [view, setView] = useState('demo')
-  const tabsRef = useRef([])
-  const wide = useMediaQuery('(min-width: 1024px)')
-  const reduced = useReducedMotion()
-  const pickInk = useInk(active, { axis: wide ? 'y' : 'x' })
-  const viewInk = useInk(view === 'demo' ? 0 : 1)
-
   usePageMeta({
-    title: 'Features — FinTrack',
-    description: 'Eleven modules — receivables, projects, tax ledger, analytics, documents, an AI analyst that shows the query it ran, reports, pages and spreadsheets, status, shared views and audit.',
+    title: 'Features | FinTrack',
+    description: 'Eleven modules on one set of records: receivables, projects, tax ledger, analytics, documents, an analyst that shows the query it ran, reports, pages and spreadsheets, status, shared views and audit.',
   })
-
-  const pick = useCallback((i) => { setActive(i); setView('demo') }, [])
-
-  // Roving focus: arrows move between tabs, Home and End jump to the ends.
-  const onKeyDown = useCallback((e) => {
-    const last = FEATURES.length - 1
-    let next = null
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = active === last ? 0 : active + 1
-    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = active === 0 ? last : active - 1
-    if (e.key === 'Home') next = 0
-    if (e.key === 'End') next = last
-    if (next === null) return
-    e.preventDefault()
-    pick(next)
-    tabsRef.current[next]?.focus({ preventScroll: true })
-  }, [active, pick])
-
-  // On a phone the picker is a row that scrolls sideways: bring the active
-  // chip to the middle of it without scrolling the page.
-  useEffect(() => {
-    if (wide) return
-    const row = pickInk.current, chip = tabsRef.current[active]
-    if (!row || !chip || typeof row.scrollTo !== 'function') return
-    const left = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2
-    row.scrollTo({ left: Math.max(0, left), behavior: reduced ? 'auto' : 'smooth' })
-  }, [active, wide, reduced, pickInk])
-
-  const f = FEATURES[active]
-  const shot = SCREENS[f.id]
 
   return (
     <PublicLayout>
-      <section className="relative overflow-hidden">
-        <Grain />
-        <PageHead eyebrow="Features"
-                  lines={['Eleven modules,', <em key="em">one set of rows</em>]}
-                  aside={<ShippedStack />}>
-          Pick one to see it working. Every module reads the same records, so a
-          figure on the dashboard and a figure in a report cannot disagree.
-        </PageHead>
-      </section>
+      <PageHead eyebrow="Features" lines={['Eleven modules,', <em key="em">one set of rows</em>]}>
+        Every module reads the same records, so a figure on the dashboard and a
+        figure in a report cannot disagree. Each one below is shown on the
+        screen it lives on, from the sample workspace.
+      </PageHead>
 
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <div className="ft-explorer ft-f-explorer">
-          {/* ── the picker ── */}
-          <div className="ft-f-picker">
-            <p className="ft-f-count" aria-hidden="true">
-              <span>{String(active + 1).padStart(2, '0')}</span> / {FEATURES.length}
-            </p>
-            <div ref={pickInk} role="tablist" aria-orientation={wide ? 'vertical' : 'horizontal'}
-                 aria-label="Modules" onKeyDown={onKeyDown} className="ft-m-ink ft-f-tabs">
-              {FEATURES.map((item, i) => {
-                const Icon = item.icon
-                const on = i === active
-                return (
-                  <button
-                    key={item.id}
-                    ref={el => (tabsRef.current[i] = el)}
-                    role="tab"
-                    id={`tab-${item.id}`}
-                    aria-selected={on}
-                    aria-controls={`panel-${item.id}`}
-                    tabIndex={on ? 0 : -1}
-                    onClick={() => pick(i)}
-                    className="ft-f-tab"
-                  >
-                    <Icon size={16} aria-hidden="true" />
-                    <span>{item.label}</span>
-                    {item.isNew && <span className="ft-f-new">New</span>}
-                  </button>
-                )
-              })}
-              <span className="ft-m-ink-bar ft-m-ink-pill" aria-hidden="true" />
-              <span className="ft-m-ink-bar" aria-hidden="true" />
-            </div>
-          </div>
-
-          {/* ── the panel ── */}
-          <div
-            role="tabpanel"
-            id={`panel-${f.id}`}
-            aria-labelledby={`tab-${f.id}`}
-            key={f.id}
-            className="ft-f-panel"
-          >
-            <div className="ft-f-panel-head">
-              <h2 className="ft-display">{f.headline}</h2>
-              {shot && (
-                <div ref={viewInk} className="ft-m-ink ft-f-seg" role="group" aria-label="Show">
-                  <button type="button" aria-pressed={view === 'demo'} onClick={() => setView('demo')}>Demo</button>
-                  <button type="button" aria-pressed={view === 'screen'} onClick={() => setView('screen')}>Screen</button>
-                  <span className="ft-m-ink-bar ft-m-ink-pill" aria-hidden="true" />
-                </div>
-              )}
-            </div>
-
-            <p className="m-0 mb-4 text-[14px] leading-relaxed text-[var(--text-2)]">{f.body}</p>
-
-            <div className="ft-f-stage">
-              {view === 'screen' && shot ? (
-                <div key="screen" className="ft-f-swap"><ScreenView cfg={shot} /></div>
-              ) : (
-                <div key="demo" className="ft-f-swap" role="group"
-                     aria-label={`${f.label}: interactive demo with sample data`}>
-                  {DEMOS[f.demo]()}
-                </div>
-              )}
-            </div>
-
-            <ul className="ft-f-points">
-              {f.points.map(p => (
-                <li key={p} className="flex gap-2 text-[13px] leading-snug text-[var(--text-2)]">
-                  <Check size={14} aria-hidden="true" className="shrink-0 mt-0.5 text-[var(--accent-ink)]" />
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </div>
+      <nav className="pb-wrap pb-f-contents" aria-label="Modules on this page">
+        <div className="pb-row">
+          <div className="pb-margin"><p className="pb-label">Contents</p></div>
+          <ol className="pb-main pb-f-toc">
+            {FEATURES.map((f, i) => (
+              <li key={f.id}>
+                <a href={`#${f.id}`}>
+                  <span className="pb-n" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+                  {f.label}
+                </a>
+              </li>
+            ))}
+          </ol>
         </div>
-      </section>
+      </nav>
+
+      {FEATURES.map((f, i) => <Module key={f.id} f={f} n={i + 1} />)}
 
       {/* Lazy: the section and its media load when the reader is near, and
           the anchor exists before them, so /features#shipped still lands. */}
@@ -467,27 +329,15 @@ export default function Features() {
         <Suspense fallback={null}><ShippedShowcase /></Suspense>
       </LazyMount>
 
-      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
-        <Head eyebrow="Your own numbers" title="What slow collections cost you">
-          Set your own billing, your days to collect and what money costs you. The arithmetic is
-          written out beside every result, and none of it is a promise about FinTrack.
-        </Head>
-        <RoiCalculator />
-      </section>
+      <Section n="12" eyebrow="Your own numbers" wide
+               title="What slow collections cost you"
+               lede="Set your own billing, your days to collect and what money costs you. The arithmetic is written out beside every result, and none of it is a promise about FinTrack.">
+        <div className="pb-instrument"><RoiCalculator /></div>
+      </Section>
 
       <Closing title="See it on your own numbers"
-               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
-                          style={{ minHeight: 52, padding: '0 30px', background: '#fff',
-                                   color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
-                      Sign in <ArrowRight size={17} aria-hidden="true" />
-                    </Link>}
-               next={<Link to="/how-it-works" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
-                           style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
-                                    border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
-                                    textDecoration: 'none', fontSize: '0.95rem' }}>
-                        Next: how it works <ArrowRight size={15} aria-hidden="true" />
-                      </Link>}>
-        Access is by invitation — an administrator approves each account, and
+               next={<Btn to="/how-it-works" quiet>Next: how it works</Btn>}>
+        Access is by invitation. An administrator approves each account, and
         nothing on these public pages is read from a workspace.
       </Closing>
     </PublicLayout>

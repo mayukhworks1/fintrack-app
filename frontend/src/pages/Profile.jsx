@@ -74,7 +74,7 @@ function Card({ children, className = '', style = {} }) {
 
 function SectionLabel({ children }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-widest mb-3"
+    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-3"
       style={{ color: 'var(--text-3)' }}>{children}</p>
   )
 }
@@ -437,7 +437,7 @@ export default function Profile() {
             style={{ background: 'color-mix(in srgb, var(--accent) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
             <Info size={12} className="flex-shrink-0 mt-px" style={{ color: 'var(--accent)' }} />
             <span style={{ color: 'var(--text-2)' }}>
-              Your Teable "Raised By" identity is <strong>{profile.teable_email}</strong> — invoices matching this email are linked to your account.
+              Your Teable "Raised By" identity is <strong>{profile.teable_email}</strong>. Invoices matching this email are linked to your account.
             </span>
           </div>
         )}
@@ -540,7 +540,7 @@ export default function Profile() {
           <div className="flex items-center gap-3 py-2">
             <Key size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
             <span className="text-xs w-28 flex-shrink-0" style={{ color: 'var(--text-3)' }}>Password</span>
-            <span className="text-sm tracking-[0.3em]" style={{ color: 'var(--text-3)' }}>••••••••</span>
+            <span className="text-sm tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>••••••••</span>
           </div>
         )}
 

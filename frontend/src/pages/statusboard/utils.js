@@ -11,7 +11,7 @@ export const THEME_PRESETS = {
     accent: '#2563eb',
     accentDim: 'rgba(37,99,235,0.12)',
     accentSoft: 'rgba(37,99,235,0.24)',
-    accentGradient: 'linear-gradient(135deg,#2563eb,#1d4ed8)',
+    accentGradient: '#2563eb',
   },
   emerald: {
     id: 'emerald',
@@ -19,7 +19,7 @@ export const THEME_PRESETS = {
     accent: '#059669',
     accentDim: 'rgba(5,150,105,0.12)',
     accentSoft: 'rgba(5,150,105,0.24)',
-    accentGradient: 'linear-gradient(135deg,#059669,#047857)',
+    accentGradient: '#059669',
   },
   amber: {
     id: 'amber',
@@ -27,7 +27,7 @@ export const THEME_PRESETS = {
     accent: '#d97706',
     accentDim: 'rgba(217,119,6,0.12)',
     accentSoft: 'rgba(217,119,6,0.24)',
-    accentGradient: 'linear-gradient(135deg,#f59e0b,#d97706)',
+    accentGradient: '#f59e0b',
   },
   rose: {
     id: 'rose',
@@ -35,7 +35,7 @@ export const THEME_PRESETS = {
     accent: '#e11d48',
     accentDim: 'rgba(225,29,72,0.12)',
     accentSoft: 'rgba(225,29,72,0.24)',
-    accentGradient: 'linear-gradient(135deg,#f43f5e,#e11d48)',
+    accentGradient: '#f43f5e',
   },
   slate: {
     id: 'slate',
@@ -43,7 +43,7 @@ export const THEME_PRESETS = {
     accent: '#475569',
     accentDim: 'rgba(71,85,105,0.12)',
     accentSoft: 'rgba(71,85,105,0.24)',
-    accentGradient: 'linear-gradient(135deg,#64748b,#475569)',
+    accentGradient: '#64748b',
   },
 }
 
@@ -97,13 +97,10 @@ export function getListLayout(columns, isEditor) {
 
 // ── Client colour palette ─────────────────────────────────────────────────────
 
-const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316','#6366f1','#84cc16']
-
-const _clientMap = {}
-
-export function clientColor(name) {
-  if (!_clientMap[name]) { _clientMap[name] = PALETTE[Object.keys(_clientMap).length % PALETTE.length] }
-  return _clientMap[name]
+// Clients are told apart by name, not by hue: one neutral ink for every
+// client keeps colour free to mean status (paid, overdue, at risk).
+export function clientColor() {
+  return 'var(--text-2)'
 }
 
 export function parseAttachments(value) {

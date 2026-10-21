@@ -132,7 +132,7 @@ const VAR_WARN = { color: 'var(--fin-warning)' }
 const VAR_BAD  = { color: 'var(--fin-negative)' }
 function taxStatus(gstPct) {
   if (gstPct === 0) return { label: 'No GST', style: VAR_WARN, icon: Info }
-  if (PCT_OK(gstPct, 18)) return { label: '18% ✓', style: VAR_GOOD, icon: CheckCircle2 }
+  if (PCT_OK(gstPct, 18)) return { label: '18%', style: VAR_GOOD, icon: CheckCircle2 }
   if (PCT_OK(gstPct, 12)) return { label: '12%', style: VAR_WARN, icon: Info }
   if (PCT_OK(gstPct, 5))  return { label: '5%',  style: VAR_WARN, icon: Info }
   return { label: `${FMT_PCT(gstPct)}`, style: VAR_BAD, icon: AlertCircle }
@@ -160,7 +160,7 @@ function StatCard({ label, value, sub, accent = false, warn = false }) {
       background: 'var(--card-bg)',
       border: `1px solid ${warn ? 'color-mix(in srgb, var(--fin-warning) 30%, transparent)' : accent ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'var(--border)'}`,
     }}>
-      <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{label}</p>
       <p className="text-2xl font-bold tabular-nums" style={{ color: warn ? 'var(--fin-warning)' : accent ? 'var(--accent)' : 'var(--text-1)' }}>{value}</p>
       {sub && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{sub}</p>}
     </div>
@@ -207,7 +207,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
   // Active period
   const period = useMemo(() => {
     if (useCustom && customFrom && customTo) {
-      return { type: 'custom', label: `${customFrom} → ${customTo}`, from: customFrom, to: customTo }
+      return { type: 'custom', label: `${customFrom} to ${customTo}`, from: customFrom, to: customTo }
     }
     return PERIODS.find(p => p.key === selectedPeriodKey) || PERIODS[0]
   }, [selectedPeriodKey, useCustom, customFrom, customTo])
@@ -652,7 +652,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
         <div className="space-y-4">
           {/* Filing reference */}
           <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--accent) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
-            <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>GST Filing Reference — {period.label}</p>
+            <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>GST Filing Reference: {period.label}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { l: 'Total Taxable Turnover',   v: FMT_INR(totals.taxable)     },
@@ -671,7 +671,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
           {/* TDS reference */}
           {totals.tdsAmt > 0 && (
             <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--fin-warning) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 20%, transparent)' }}>
-              <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--fin-warning)' }}>TDS Reference — {period.label}</p>
+              <p className="text-xs font-bold mb-3 uppercase tracking-wider" style={{ color: 'var(--fin-warning)' }}>TDS Reference: {period.label}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
                   { l: 'Gross Amount Billed',  v: FMT_INR(totals.gross)           },
@@ -733,7 +733,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
       {/* ── Monthly tab ────────────────────────────────────────────────────── */}
       {activeTab === 'monthly' && (
         <div className="space-y-3">
-          <SectionHead title="Month-by-Month GST Register" sub="GSTR-1 style — sorted chronologically" />
+          <SectionHead title="Month-by-Month GST Register" sub="GSTR-1 style, sorted chronologically" />
           <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--border)' }}>
             <table className="w-full text-sm" style={{ minWidth: 1040 }}>
               <thead>

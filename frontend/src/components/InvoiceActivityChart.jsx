@@ -194,14 +194,6 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
             <stop offset="65%"  stopColor={AREA_COLOR} stopOpacity="0.05" />
             <stop offset="100%" stopColor={AREA_COLOR} stopOpacity="0"    />
           </linearGradient>
-          <filter id={`${UID}-glow`} x="-30%" y="-80%" width="160%" height="260%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id={`${UID}-bardrop`} x="-50%" y="-20%" width="200%" height="140%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
           <clipPath id={`${UID}-clip`}>
             <rect x={PAD_L} y={PAD_TOP} width={chartW} height={chartH} />
           </clipPath>
@@ -224,7 +216,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
           <path d={areaPath} fill={`url(#${UID}-grad)`} />
         </g>
         <path d={linePath} fill="none" stroke={AREA_COLOR} strokeWidth="2.5"
-          strokeLinecap="round" strokeLinejoin="round" filter={`url(#${UID}-glow)`} />
+          strokeLinecap="round" strokeLinejoin="round" />
 
         {/* ── event bars ── */}
         {data.map((day, i) => {
@@ -243,14 +235,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
           const rx     = barW / 2
 
           return (
-            <g key={day.key} filter={isHov ? `url(#${UID}-bardrop)` : undefined}>
-              {/* glow halo */}
-              <rect
-                x={x - barW / 2 - 3} y={top - 2} width={barW + 6} height={h + 2}
-                rx={rx + 2}
-                fill={meta.dot}
-                opacity={isHov ? 0.18 : 0.10}
-              />
+            <g key={day.key}>
               {/* bar body */}
               <rect
                 x={x - barW / 2} y={top} width={barW} height={h}
@@ -276,7 +261,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                     textAnchor="middle" dominantBaseline="central"
                     fontSize={isHov ? "8.5" : "7.5"} fontWeight="700"
                     fill="var(--card-bg)"
-                    fontFamily="Outfit, ui-sans-serif, system-ui"
+                    fontFamily="inherit"
                   >
                     {initials(day.invoices[0].project || day.invoices[0].client || day.invoices[0].raisedBy)}
                   </text>
@@ -287,7 +272,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                       <text x={x + 9} y={top - 22}
                         textAnchor="middle" dominantBaseline="central"
                         fontSize="6.5" fontWeight="800" fill="var(--card-bg)"
-                        fontFamily="Outfit, ui-sans-serif, system-ui"
+                        fontFamily="inherit"
                       >{day.invoices.length}</text>
                     </g>
                   )}
@@ -318,7 +303,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
               <text x={x} y={PAD_TOP - 12}
                 textAnchor="middle" dominantBaseline="central"
                 fontSize="9" fontWeight="700" fill="var(--card-bg)"
-                fontFamily="Outfit, ui-sans-serif, system-ui"
+                fontFamily="inherit"
               >{fmtInr(hoverDay.cum)} total</text>
             </g>
           )
@@ -344,7 +329,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                   fontSize={isHov ? "9.5" : "9"}
                   fontWeight={isHov ? "700" : "500"}
                   fill={isHov ? 'var(--accent)' : 'var(--text-3)'}
-                  fontFamily="Outfit, ui-sans-serif, system-ui"
+                  fontFamily="inherit"
                 >{shortDate(day.date)}</text>
               )}
             </g>
@@ -412,14 +397,14 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                       }}>{meta.label}</span>
                     </div>
                     <p style={{ fontSize: 12, fontWeight: 800, color: meta.dot, marginBottom: 2 }}>{fmtInr(inv.amount)}</p>
-                    {inv.project && <p style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📁 {inv.project}</p>}
-                    {inv.client  && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {inv.client}</p>}
+                    {inv.project && <p style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.project}</p>}
+                    {inv.client  && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>{inv.client}</p>}
                     {inv.raisedBy && <AvatarChip email={inv.raisedBy} avatarMap={avatarMap} />}
                     {inv.aging > 0 && inv.status !== 'Paid' && (
-                      <p style={{ fontSize: 10, color: meta.fill, fontWeight: 600, marginTop: 2 }}>⏱ {inv.aging}d aging</p>
+                      <p style={{ fontSize: 10, color: meta.fill, fontWeight: 600, marginTop: 2 }}>{inv.aging}d aging</p>
                     )}
                     {onInvoiceClick && (
-                      <p style={{ fontSize: 9, color: 'var(--accent)', marginTop: 4, opacity: 0.7 }}>Tap to open →</p>
+                      <p style={{ fontSize: 9, color: 'var(--accent)', marginTop: 4, opacity: 0.7 }}>Tap to open</p>
                     )}
                   </div>
                 )

@@ -114,10 +114,10 @@ export function SessionsTab() {
         <FMulti label="Role" selected={filterRole} onChange={setSRole} width={140}
           opts={[['editor','editor'],['viewer','viewer'],['web','web'],['all','all'],['admin','admin']]} />
         <FMulti label="Status" selected={filterStatus} onChange={setSStatus} width={150}
-          opts={[['online','🟢 Online'],['idle','🟡 Idle'],['logged_out','⚫ Logged out'],['expired','🔴 Expired']]} />
+          opts={[['online','Online'],['idle','Idle'],['logged_out','Logged out'],['expired','Expired']]} />
         <FPill label="Country" value={filterCountry} onChange={setSCountry} placeholder="US · India…" width={130} />
         <FMulti label="Device" selected={filterDevice} onChange={setSDevice} width={140}
-          opts={[['desktop','🖥 Desktop'],['mobile','📱 Mobile'],['tablet','⬛ Tablet']]} />
+          opts={[['desktop','Desktop'],['mobile','Mobile'],['tablet','Tablet']]} />
       </FilterBar>
       {data && (
         <div className="text-xs flex flex-wrap items-center gap-2" style={{ color: 'var(--text-3)' }}>
@@ -129,7 +129,7 @@ export function SessionsTab() {
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
-            ? <Empty label={activeOnly ? 'No active sessions — log in again to create one' : 'No sessions recorded yet'} />
+            ? <Empty label={activeOnly ? 'No active sessions. Log in again to create one' : 'No sessions recorded yet'} />
             : (
               <>
                 {/* Mobile cards */}

@@ -5,7 +5,7 @@
 import LegalPage from '../../components/secondary/LegalPage'
 
 const META = {
-  title: "Privacy policy — FinTrack",
+  title: "Privacy policy | FinTrack",
   description: "How FinTrack isolates your data, what it records, and why your records are never used to train AI models.",
   path: '/privacy',
 }
@@ -37,7 +37,7 @@ const SECTIONS = [
   },
 ]
 
-const LINKS = [{ to: '/terms', label: "Terms of service →" }, { to: '/security', label: "Security and access →" }]
+const LINKS = [{ to: '/terms', label: "Terms of service" }, { to: '/security', label: "Security and access" }]
 
 export default function Privacy() {
   return (
