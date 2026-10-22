@@ -1,15 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { Calendar, Users, TrendingUp, TrendingDown, ChevronRight, AlertTriangle, Activity, ReceiptText } from 'lucide-react'
 import { formatInr, formatPct } from '../utils/format'
-import { plainLabel } from '../utils/plainLabel'
 
 function StatusBadge({ status }) {
   if (!status) return null
-  const text = plainLabel(status)
-  if (status.includes('Active'))    return <span className="badge-active">{text}</span>
-  if (status.includes('Completed')) return <span className="badge-completed">{text}</span>
-  if (status.includes('Hold'))      return <span className="badge-hold">{text}</span>
-  return <span className="badge-cancelled">{text}</span>
+  if (status.includes('Active'))    return <span className="badge-active">{status}</span>
+  if (status.includes('Completed')) return <span className="badge-completed">{status}</span>
+  if (status.includes('Hold'))      return <span className="badge-hold">{status}</span>
+  return <span className="badge-cancelled">{status}</span>
 }
 
 function SignalBadge({ signal, override }) {
@@ -41,8 +39,8 @@ export default function ProjectCard({ record }) {
   const targetPct  = target > 0 ? Math.min((billed / target) * 100, 100) : 0
   const isProfit   = profitPct >= 0
   const negativeMargin = profitPct < 0
-  const health = plainLabel(f['Health']) || 'Not tracked'
-  const projectStatus = plainLabel(f['Project Status']) || 'Unknown'
+  const health = f['Health'] || 'Not tracked'
+  const projectStatus = f['Project Status'] || 'Unknown'
   const primarySignal = negativeMargin
     ? {
         severity: 'danger',
@@ -66,7 +64,7 @@ export default function ProjectCard({ record }) {
       onClick={() => navigate(`/projects/${record.id}`)}
       onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate(`/projects/${record.id}`)}
       tabIndex={0} role="button"
-      aria-label={`${f['Project Name']}, open details`}
+      aria-label={`${f['Project Name']} — click for details`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-3">
@@ -77,7 +75,7 @@ export default function ProjectCard({ record }) {
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <StatusBadge status={f['Project Status']} />
           <ChevronRight size={14}
-            className=""
+            className="transition-all group-hover:translate-x-0.5"
             style={{ color: 'var(--text-3)' }} />
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Edit2, Trash2, Loader2, Check, X,
+  ArrowLeft, Edit2, Trash2, Sparkles, Loader2, Check, X,
   RefreshCw, Receipt, Clock, TrendingUp, DollarSign,
   Users, Calendar, BarChart2, CheckCircle2, AlertCircle, Activity,
 } from 'lucide-react'
@@ -11,24 +11,25 @@ import { formatInr, formatPct } from '../utils/format'
 import { hexToRgba } from '../utils/color'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
-import { plainLabel } from '../utils/plainLabel'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-// One neutral ink for every client; colour is kept for status.
-function clientColor() {
-  return 'var(--text-2)'
+function clientColor(name = '') {
+  const PALETTE = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#6366f1','#14b8a6','#f97316']
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return PALETTE[h % PALETTE.length]
 }
 
 const STATUS_COLORS = {
-  'Active':      { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', dot: 'var(--fin-positive)' },
-  'Completed':   { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  color: 'var(--accent)', dot: 'var(--accent)' },
-  'On Hold':     { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',  color: 'var(--fin-warning)', dot: 'var(--fin-warning)' },
-  'Cancelled':   { bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)',   color: 'var(--fin-negative)', dot: 'var(--fin-negative)' },
-  'In Progress': { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  color: 'var(--accent)', dot: 'var(--accent)' },
+  'Active':      { bg: 'rgba(16,185,129,0.12)', color: '#10b981', dot: '#10b981' },
+  'Completed':   { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8', dot: '#6366f1' },
+  'On Hold':     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b', dot: '#f59e0b' },
+  'Cancelled':   { bg: 'rgba(239,68,68,0.12)',   color: '#f87171', dot: '#ef4444' },
+  'In Progress': { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', dot: '#3b82f6' },
 }
 function statusStyle(s) {
-  return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: 'var(--text-3)' }
+  return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: '#94a3b8' }
 }
 
 // ── AI text renderer ───────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ function AiText({ text }) {
           {items.map((item, j) => (
             <li key={j} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
               <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
-                style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)' }}>{j + 1}</span>
+                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j + 1}</span>
               <span dangerouslySetInnerHTML={{ __html: mdInline(item) }} />
             </li>
           ))}
@@ -78,7 +79,7 @@ function AiText({ text }) {
       const rest  = line.slice(ci + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--fin-positive)' }}>{label}</span>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
           {rest && <span className="text-sm ml-2 leading-relaxed" style={{ color: 'var(--text-2)' }}
             dangerouslySetInnerHTML={{ __html: mdInline(rest) }} />}
         </div>
@@ -271,7 +272,7 @@ export default function ProjectDetail() {
             <ArrowLeft size={16} />
           </button>
           <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>
-            {isNew ? 'New Project' : `Edit ${projectName}`}
+            {isNew ? 'New Project' : `Edit — ${projectName}`}
           </h1>
         </div>
         <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
@@ -303,7 +304,7 @@ export default function ProjectDetail() {
       {/* ── Hero header ─────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 pt-5 pb-6"
         style={{
-          background: 'var(--card-bg)',
+          background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.10)} 0%, var(--card-bg) 60%)`,
           borderBottom: '1px solid var(--border)',
         }}>
         {/* Breadcrumb row */}
@@ -325,8 +326,8 @@ export default function ProjectDetail() {
             </button>
             <button onClick={handleAnalyze} disabled={analyzing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-              style={{ color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 6%, transparent)' }}>
-              {analyzing && <Loader2 size={12} className="animate-spin" />}
+              style={{ color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>
+              {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {analyzing ? 'Analysing…' : 'AI Analyze'}
             </button>
             {isEditor && (
@@ -340,7 +341,7 @@ export default function ProjectDetail() {
                   <div className="flex gap-1 items-center">
                     <button onClick={handleDelete} disabled={deleting}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)', color: 'var(--fin-negative)' }}>
+                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
                       {deleting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                       Confirm delete
                     </button>
@@ -353,7 +354,7 @@ export default function ProjectDetail() {
                 ) : (
                   <button onClick={() => setDeleteConfirm(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                    style={{ color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', background: 'var(--card-bg)' }}>
+                    style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', background: 'var(--card-bg)' }}>
                     <Trash2 size={12} /> Delete
                   </button>
                 )}
@@ -382,13 +383,13 @@ export default function ProjectDetail() {
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
                   style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.bg}` }}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
-                  {plainLabel(projectStatus)}
+                  {projectStatus}
                 </span>
               )}
               {f['Health'] && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                  {plainLabel(f['Health'])}
+                  {f['Health'] === 'Good' ? '🟢' : f['Health'] === 'At Risk' ? '🟡' : '🔴'} {f['Health']}
                 </span>
               )}
             </div>
@@ -439,10 +440,10 @@ export default function ProjectDetail() {
 
         {/* ── Key metrics ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard icon={DollarSign}  label="Billed so far"  value={f['Amount Billed So far'] ? formatInr(f['Amount Billed So far']) : null} accent="var(--accent)" />
-          <StatCard icon={TrendingUp}  label="Actual profit"  value={f['Actual Profit'] ? formatInr(f['Actual Profit']) : null} accent={profitPct > 0 ? 'var(--fin-positive)' : 'var(--fin-negative)'} />
-          <StatCard icon={BarChart2}   label="Profit %"       value={profitPct ? formatPct(profitPct, 1) : null} accent={profitPct > 20 ? 'var(--fin-positive)' : profitPct > 0 ? 'var(--fin-warning)' : 'var(--fin-negative)'} />
-          <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="var(--chart-3)" />
+          <StatCard icon={DollarSign}  label="Billed so far"  value={f['Amount Billed So far'] ? formatInr(f['Amount Billed So far']) : null} accent="#3b82f6" />
+          <StatCard icon={TrendingUp}  label="Actual profit"  value={f['Actual Profit'] ? formatInr(f['Actual Profit']) : null} accent={profitPct > 0 ? '#22c55e' : '#ef4444'} />
+          <StatCard icon={BarChart2}   label="Profit %"       value={profitPct ? formatPct(profitPct, 1) : null} accent={profitPct > 20 ? '#22c55e' : profitPct > 0 ? '#f59e0b' : '#ef4444'} />
+          <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="#8b5cf6" />
         </div>
 
         {/* ── Project details ───────────────────────────────────────────── */}
@@ -450,15 +451,15 @@ export default function ProjectDetail() {
 
           {/* Project details */}
           <div className="rounded-2xl p-5" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-            <h2 className="text-xs font-bold uppercase tracking-[0.06em] mb-5 flex items-center gap-2"
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-5 flex items-center gap-2"
               style={{ color: 'var(--text-3)' }}>
               <BarChart2 size={12} /> Project Details
             </h2>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
               <Field label="Client"          value={f['Client']} />
               <Field label="Project Name"    value={f['Project Name']} />
-              <Field label="Status"          value={plainLabel(f['Project Status'])} />
-              <Field label="Health"          value={plainLabel(f['Health'])} />
+              <Field label="Status"          value={f['Project Status']} />
+              <Field label="Health"          value={f['Health']} />
               <Field label="Start Date"      value={f['Project Start Date'] ? new Date(f['Project Start Date']).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null} />
               <Field label="Duration"        value={f['Duration (Months)'] ? `${f['Duration (Months)']} months` : null} />
               <Field label="Resources"       value={f['Resource Count']} />
@@ -471,7 +472,7 @@ export default function ProjectDetail() {
                 <div>
                   <dt className="text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Target Achieved</dt>
                   <dd className="flex items-center gap-1.5 text-sm font-semibold"
-                    style={{ color: f['Target Achieved '] ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
+                    style={{ color: f['Target Achieved '] ? '#22c55e' : '#f87171' }}>
                     {f['Target Achieved ']
                       ? <><CheckCircle2 size={13} /> Yes</>
                       : <><AlertCircle size={13} /> No</>}
@@ -486,7 +487,7 @@ export default function ProjectDetail() {
         {/* ── AI analysis loading ────────────────────────────────────────── */}
         {analyzing && (
           <div className="rounded-2xl p-4 flex items-center gap-3 text-sm"
-            style={{ border: '1px solid color-mix(in srgb, var(--fin-positive) 20%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 4%, transparent)', color: 'var(--fin-positive)' }}>
+            style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)', color: '#4ade80' }}>
             <Loader2 size={16} className="animate-spin flex-shrink-0" />
             Generating AI analysis for this project…
           </div>
@@ -495,9 +496,9 @@ export default function ProjectDetail() {
         {/* ── AI analysis result ─────────────────────────────────────────── */}
         {analysis && !analyzing && (
           <div className="rounded-2xl p-5 animate-fade-in"
-            style={{ border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 4%, transparent)' }}>
-            <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--fin-positive)' }}>
-              AI Analysis
+            style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.04)' }}>
+            <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: '#4ade80' }}>
+              <Sparkles size={15} /> AI Analysis
             </h2>
             <AiText text={analysis} />
           </div>

@@ -18,7 +18,7 @@ export function MobileHeader({ onHelp, onLogout }) {
       }}>
       <div className="flex items-center gap-2">
         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent)' }}>
+          style={{ background: 'var(--accent-btn)', boxShadow: '0 2px 8px rgba(37,99,235,0.3)' }}>
           <Globe size={12} className="text-white" />
         </div>
         <div>
@@ -36,8 +36,8 @@ export function MobileHeader({ onHelp, onLogout }) {
           className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
           style={{ color: 'var(--text-3)' }}>
           {dark
-            ? <Sun size={16} style={{ color: 'var(--fin-warning)' }} />
-            : <Moon size={16} style={{ color: 'var(--accent)' }} />}
+            ? <Sun size={16} style={{ color: '#facc15' }} />
+            : <Moon size={16} style={{ color: '#818cf8' }} />}
         </button>
         <button onClick={onLogout} title="Sign out"
           className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"

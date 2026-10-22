@@ -18,13 +18,11 @@ import {
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
   MoreHorizontal, EyeOff, Check, ArrowUpDown,
-  AlertTriangle, Highlighter, ListChecks, Quote, List, Minus, Image as ImageIcon,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
 import SheetView from '../components/sheet/SheetView'
 import SheetEditor from '../components/sheet/SheetEditor'
-import { tint } from '../utils/color'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -168,7 +166,7 @@ function HTMLPreview({ content, height = '100%' }) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [content])
 
-  if (err) return <div style={{ padding:20, fontSize:12, color:'var(--fin-warning)', textAlign:'center' }}>{err}</div>
+  if (err) return <div style={{ padding:20, fontSize:12, color:'#b45309', textAlign:'center' }}>{err}</div>
   if (!url) return <div style={{ padding:20, fontSize:12, color:'var(--text-2)', textAlign:'center' }}>Rendering preview…</div>
   return (
     <iframe
@@ -361,7 +359,7 @@ function DetailGrid({ geo, cli, v, isMobile }) {
   const rows = [
     {section:'Network',label:'IP Address',value:v.viewer_ip},{section:'Network',label:'ISP',value:v.isp},{section:'Network',label:'Organisation',value:geo.org},{section:'Network',label:'AS Number',value:geo.as},{section:'Network',label:'Connection Type',value:cli.connection_type},{section:'Network',label:'Downlink',value:cli.connection_downlink!=null?`${cli.connection_downlink} Mbps`:null},
     // Resolved location — tells you whether this came from precise GPS or IP
-    {section:'Location',label:'Source',value:loc?.source?(loc.source==='gps'?'GPS (precise)':loc.source==='ip'?'IP (approximate)':loc.source):(gps?'GPS (precise)':'IP (approximate)')},
+    {section:'Location',label:'Source',value:loc?.source?(loc.source==='gps'?'🛰️ GPS (precise)':loc.source==='ip'?'🌐 IP (approximate)':loc.source):(gps?'🛰️ GPS (precise)':'🌐 IP (approximate)')},
     ...(gps?[
       {section:'Location',label:'GPS Latitude',value:gps.lat!=null?String(gps.lat):null},
       {section:'Location',label:'GPS Longitude',value:gps.lon!=null?String(gps.lon):null},
@@ -392,11 +390,11 @@ function DetailGrid({ geo, cli, v, isMobile }) {
       ))}
       {mapLat&&mapLon&&(
         <div>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map {gps?'(GPS, precise)':'(IP, approximate)'}</div>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--accent)', marginBottom:8 }}>Map {gps?'(GPS — precise)':'(IP — approximate)'}</div>
           <div style={{ fontSize:11, color:'var(--text-2)', marginBottom:6, wordBreak:'break-all', fontFamily:'monospace' }}>{`https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}&zoom=${gps?16:14}`}</div>
           <a href={`https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}&zoom=${gps?16:14}`} target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-block', fontSize:12, color:'var(--accent)', textDecoration:'none', border:'1px solid var(--border)', borderRadius:6, padding:'5px 10px' }}>
-            {Number(mapLat).toFixed(4)}, {Number(mapLon).toFixed(4)} · Open in map
+            📍 {Number(mapLat).toFixed(4)}, {Number(mapLon).toFixed(4)} — Open in map ↗
           </a>
         </div>
       )}
@@ -555,8 +553,8 @@ function AnalyticsDrawer({ page, onClose }) {
             </select>
             <select value={filterDevice} onChange={e=>setFilterDevice(e.target.value)} style={inputStyle}>
               <option value="">All devices</option>
-              <option value="desktop">Desktop</option>
-              <option value="mobile">Mobile</option>
+              <option value="desktop">🖥 Desktop</option>
+              <option value="mobile">📱 Mobile</option>
             </select>
             <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={inputStyle} title="From date" />
             <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} style={inputStyle} title="To date" />
@@ -564,7 +562,7 @@ function AnalyticsDrawer({ page, onClose }) {
             {selected.size>0 && (
               <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
                 <span style={{ fontSize:12, color:'var(--text-2)', fontWeight:600 }}>{selected.size} selected</span>
-                <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:5 }}>
+                <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:5 }}>
                   <Trash2 size={12} strokeWidth={2} />{bulkDeleting?'Deleting…':'Delete selected'}
                 </button>
               </div>
@@ -578,7 +576,7 @@ function AnalyticsDrawer({ page, onClose }) {
             <SkeletonList rows={6} label="Loading views" />
           ) : !data?.items?.length ? (
             <div style={{ color:'var(--text-2)', fontSize:14, padding:'60px 0', textAlign:'center' }}>
-              No views yet.
+              <div style={{ fontSize:40, marginBottom:12 }}>👁</div>No views yet.
             </div>
           ) : (
             <>
@@ -601,11 +599,11 @@ function AnalyticsDrawer({ page, onClose }) {
                             <div>
                               <div style={{ fontSize:12, fontWeight:600 }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city||v.country}</>:v.viewer_ip||'—'}</div>
                               <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-                              <div style={{ fontSize:11, color:'var(--text-2)' }}>{fmtBrowser(v.user_agent)}{cli.touch_support===true?' · Touch':''}</div>
+                              <div style={{ fontSize:11, color:'var(--text-2)' }}>{cli.touch_support===true?'📱 ':cli.touch_support===false?'🖥️ ':''}{fmtBrowser(v.user_agent)}</div>
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                            <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Del'}</button>
+                            <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Del'}</button>
                             <span style={{ color:'var(--text-2)', fontSize:14 }}>{exp?'▲':'▼'}</span>
                           </div>
                         </div>
@@ -637,14 +635,14 @@ function AnalyticsDrawer({ page, onClose }) {
                             <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11 }}>{v.viewer_ip||'—'}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city?`${v.city}, `:''}{geo.country_code||v.country}</>:'—'}</td>
                             <td style={{ padding:'9px 12px', maxWidth:130, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.isp}>{v.isp||'—'}</td>
-                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{cli.platform||'—'}{cli.touch_support===true?' · Touch':''}</td>
+                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{cli.touch_support===true?'📱 ':cli.touch_support===false?'🖥️ ':''}{cli.platform||'—'}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }} title={v.user_agent}>{fmtBrowser(v.user_agent)}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>{cli.screen_width?`${cli.screen_width}×${cli.screen_height}`:''}{cli.pixel_ratio>1?<span style={{ color:'var(--accent)', fontSize:10 }}> @{cli.pixel_ratio}x</span>:''}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11, maxWidth:120, overflow:'hidden', textOverflow:'ellipsis' }}>{cli.timezone||geo.timezone||'—'}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{cli.language||'—'}</td>
                             <td style={{ padding:'9px 12px', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.referer}>{fmtRef(v.referer)}</td>
                             <td style={{ padding:'9px 8px' }} onClick={e=>e.stopPropagation()}>
-                              <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Delete'}</button>
+                              <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Delete'}</button>
                             </td>
                           </tr>,
                           exp&&<tr key={`${v.id}-exp`} style={{ background:'var(--card-bg)', borderBottom:'2px solid var(--accent)' }}>
@@ -697,11 +695,11 @@ function ShareModal({ page, onClose, onCopy }) {
         </div>
         <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 12px', marginBottom:12, display:'flex', gap:8, alignItems:'center' }}>
           <span style={{ flex:1, fontSize:12, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{url}</span>
-          <button onClick={copy} style={{ ...btnPrimary, padding:'5px 12px', fontSize:12, whiteSpace:'nowrap' }}>{copied?'Copied':'Copy'}</button>
+          <button onClick={copy} style={{ ...btnPrimary, padding:'5px 12px', fontSize:12, whiteSpace:'nowrap' }}>{copied?'✓ Copied!':'Copy'}</button>
         </div>
         <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer"
           style={{ display:'block', textAlign:'center', fontSize:13, color:'var(--accent)', textDecoration:'none', padding:'8px', border:'1px solid var(--border)', borderRadius:8 }}>
-          Open page
+          Open page ↗
         </a>
         <div style={{ marginTop:12, display:'flex', gap:8, justifyContent:'center' }}>
           {[
@@ -736,18 +734,18 @@ const sheetTemplate = (name, icon, rows, sheet) => ({
   name, icon, content: toCSV(rows), sheet: sheet ? { v:1, header:true, freezeRows:1, ...sheet } : undefined,
 })
 const SHEET_TEMPLATES = [
-  sheetTemplate('Blank', '', [
+  sheetTemplate('Blank', '📄', [
     ['Column A','Column B','Column C','Column D','Column E','Column F'],
     ...Array.from({ length:20 }, () => ['','','','','','']),
   ]),
-  sheetTemplate('Budget vs actual', '', [
+  sheetTemplate('Budget vs actual', '💰', [
     ['Category','Budget','Actual','Difference','Variance %','Notes'],
     ...[['Rent',45000,45000,''],['Salaries',350000,362000,'Two contractors this quarter'],['Software',18000,21500,''],
       ['Marketing',60000,48000,''],['Travel',25000,31200,'Client visits'],['Utilities',12000,10850,''],['Office supplies',8000,6400,'']]
       .map(([cat, budget, actual, note], i) => [cat, String(budget), String(actual), `=B${i+2}-C${i+2}`, `=IF(B${i+2}=0,0,D${i+2}/B${i+2})`, note]),
     ['Total','=SUM(B2:B8)','=SUM(C2:C8)','=B9-C9','=IF(B9=0,0,D9/B9)',''],
   ], { colWidths:{ 0:160, 5:220 }, colFormats:{ 1:INR, 2:INR, 3:INR, 4:{ type:'percent', decimals:1 } } }),
-  sheetTemplate('Invoice tracker', '', [
+  sheetTemplate('Invoice tracker', '🧾', [
     ['Client','Invoice #','Date','Amount','GST 18%','Total','Status','Days outstanding'],
     ...[['Acme Traders',-64,120000,'Paid'],['Northwind Foods',-41,86500,'Paid'],['Globex Retail',-27,240000,'Sent'],
       ['Initech Labs',-12,54000,'Sent'],['Umbrella Health',-3,175000,'Draft']]
@@ -759,7 +757,7 @@ const SHEET_TEMPLATES = [
     ['Total','','','=SUM(D2:D6)','=SUM(E2:E6)','=SUM(F2:F6)','',''],
     ['Outstanding','','','','','=SUMIF(G2:G6,"<>Paid",F2:F6)','',''],
   ], { colWidths:{ 0:170, 1:100, 7:140 }, colFormats:{ 2:{ type:'date' }, 3:INR, 4:INR, 5:INR, 7:{ type:'number', decimals:0 } }, colAlign:{ 6:'center' } }),
-  sheetTemplate('Project P&L', '', [
+  sheetTemplate('Project P&L', '📈', [
     ['Project','Client','Revenue','Direct cost','Overheads','Profit','Margin'],
     ...[['Website rebuild','Acme Traders',450000,210000,45000],['Mobile app','Northwind Foods',820000,515000,82000],
       ['Brand refresh','Globex Retail',260000,98000,26000],['Data migration','Initech Labs',380000,240000,38000]]
@@ -769,7 +767,7 @@ const SHEET_TEMPLATES = [
       }),
     ['Total','','=SUM(C2:C5)','=SUM(D2:D5)','=SUM(E2:E5)','=SUM(F2:F5)','=IF(C6=0,0,F6/C6)'],
   ], { colWidths:{ 0:160, 1:150 }, colFormats:{ 2:INR, 3:INR, 4:INR, 5:INR, 6:{ type:'percent', decimals:1 } } }),
-  sheetTemplate('Inventory', '', [
+  sheetTemplate('Inventory', '📦', [
     ['SKU','Item','Category','In stock','Reorder at','Unit cost','Stock value','Status'],
     ...[['Printer paper A4','Office',120,50,240],['Toner cartridge','Office',6,10,3400],['Laptop stand','Equipment',14,5,1850],
       ['USB-C hub','Equipment',3,8,2200],['Notebook','Stationery',240,100,85],['Whiteboard markers','Stationery',18,24,60]]
@@ -780,7 +778,7 @@ const SHEET_TEMPLATES = [
       }),
     ['Total','','','=SUM(D2:D7)','','','=SUM(G2:G7)','=COUNTIF(H2:H7,"Reorder")&" to reorder"'],
   ], { colWidths:{ 1:170 }, colFormats:{ 5:INR, 6:INR }, colAlign:{ 7:'center' } }),
-  sheetTemplate('Task list', '', [
+  sheetTemplate('Task list', '✅', [
     ['Task','Owner','Priority','Status','Start','Due','Days left'],
     ...[['Draft proposal','Asha','High','Done',-14,-4],['Client review','Rahul','High','In progress',-3,4],
       ['Design mockups','Meera','Medium','In progress',-1,9],['Build first release','Vikram','High','Not started',5,26],
@@ -800,48 +798,48 @@ const BLANK_SHEET = SHEET_TEMPLATES[0]
 const TEMPLATES = {
   markdown: [
     {
-      name: 'Blank', icon: '',
+      name: 'Blank', icon: '📄',
       content: '',
     },
     {
-      name: 'Article', icon: '',
+      name: 'Article', icon: '📰',
       content: `# Article Title\n\n> A compelling one-line summary of your article.\n\n## Introduction\n\nWrite your opening paragraph here. Hook the reader with an interesting fact or question.\n\n## Main Section\n\nDevelop your ideas here. You can use **bold**, *italic*, or \`inline code\`.\n\n### Sub-section\n\nBreak down complex topics into smaller sections.\n\n## Conclusion\n\nSummarize your key points and leave the reader with a clear takeaway.\n\n---\n\n*Published by Author Name*`,
     },
     {
-      name: 'Meeting Notes', icon: '',
+      name: 'Meeting Notes', icon: '📋',
       content: `# Meeting Notes\n\n**Date:** ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}\n**Time:** \n**Location / Link:** \n**Attendees:** \n\n---\n\n## Agenda\n\n1. \n2. \n3. \n\n## Discussion\n\n### Topic 1\n\n\n\n### Topic 2\n\n\n\n## Action Items\n\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n\n## Next Meeting\n\n**Date:** \n**Topics:** `,
     },
     {
-      name: 'Resume / CV', icon: '',
-      content: `# Your Name\n\nemail@example.com · +1 (555) 000-0000 · yourwebsite.com · City, Country\n\n---\n\n## Summary\n\nA brief professional summary (2-3 sentences) about your expertise and goals.\n\n## Experience\n\n### Job Title — Company Name\n*Month Year – Present · City, Country*\n\n- Key achievement or responsibility\n- Key achievement or responsibility\n- Key achievement or responsibility\n\n### Previous Job Title — Company Name\n*Month Year – Month Year · City, Country*\n\n- Key achievement\n- Key achievement\n\n## Education\n\n### Degree — University Name\n*Year – Year*\n\n## Skills\n\n**Technical:** Skill 1, Skill 2, Skill 3\n**Tools:** Tool 1, Tool 2, Tool 3\n**Languages:** English (Native), Other (Level)\n\n## Projects\n\n### Project Name\n[View project](https://example.com) — Brief description of the project and your role.\n\n---\n\n*References available upon request*`,
+      name: 'Resume / CV', icon: '👤',
+      content: `# Your Name\n\n📧 email@example.com · 📞 +1 (555) 000-0000 · 🌐 yourwebsite.com · 📍 City, Country\n\n---\n\n## Summary\n\nA brief professional summary (2-3 sentences) about your expertise and goals.\n\n## Experience\n\n### Job Title — Company Name\n*Month Year – Present · City, Country*\n\n- Key achievement or responsibility\n- Key achievement or responsibility\n- Key achievement or responsibility\n\n### Previous Job Title — Company Name\n*Month Year – Month Year · City, Country*\n\n- Key achievement\n- Key achievement\n\n## Education\n\n### Degree — University Name\n*Year – Year*\n\n## Skills\n\n**Technical:** Skill 1, Skill 2, Skill 3\n**Tools:** Tool 1, Tool 2, Tool 3\n**Languages:** English (Native), Other (Level)\n\n## Projects\n\n### Project Name\n[View project](https://example.com) — Brief description of the project and your role.\n\n---\n\n*References available upon request*`,
     },
     {
-      name: 'Invoice', icon: '',
-      content: `# Invoice\n\n| | |\n|---|---|\n| **Invoice #** | INV-001 |\n| **Date** | ${new Date().toLocaleDateString()} |\n| **Due Date** | ${new Date(Date.now()+30*864e5).toLocaleDateString()} |\n| **Status** | Pending |\n\n---\n\n## From\n\n**Your Name / Company**\nyour@email.com\nAddress Line 1\nCity, State, ZIP\n\n## Bill To\n\n**Client Name / Company**\nclient@email.com\nClient Address\n\n---\n\n## Services\n\n| Description | Qty | Rate | Amount |\n|---|---|---|---|\n| Service or product description | 1 | $1,000.00 | $1,000.00 |\n| Service or product description | 2 | $500.00 | $1,000.00 |\n\n---\n\n| | |\n|---|---|\n| **Subtotal** | $2,000.00 |\n| **Tax (0%)** | $0.00 |\n| **Total Due** | **$2,000.00** |\n\n---\n\n## Payment Details\n\n**Bank:** Bank Name\n**Account:** 0000 0000\n**Reference:** INV-001\n\n*Thank you for your business!*`,
+      name: 'Invoice', icon: '🧾',
+      content: `# Invoice\n\n| | |\n|---|---|\n| **Invoice #** | INV-001 |\n| **Date** | ${new Date().toLocaleDateString()} |\n| **Due Date** | ${new Date(Date.now()+30*864e5).toLocaleDateString()} |\n| **Status** | 🟡 Pending |\n\n---\n\n## From\n\n**Your Name / Company**\nyour@email.com\nAddress Line 1\nCity, State, ZIP\n\n## Bill To\n\n**Client Name / Company**\nclient@email.com\nClient Address\n\n---\n\n## Services\n\n| Description | Qty | Rate | Amount |\n|---|---|---|---|\n| Service or product description | 1 | $1,000.00 | $1,000.00 |\n| Service or product description | 2 | $500.00 | $1,000.00 |\n\n---\n\n| | |\n|---|---|\n| **Subtotal** | $2,000.00 |\n| **Tax (0%)** | $0.00 |\n| **Total Due** | **$2,000.00** |\n\n---\n\n## Payment Details\n\n**Bank:** Bank Name\n**Account:** 0000 0000\n**Reference:** INV-001\n\n*Thank you for your business!*`,
     },
     {
-      name: 'Product Spec', icon: '',
+      name: 'Product Spec', icon: '📐',
       content: `# Product / Feature Specification\n\n**Version:** 1.0 · **Status:** Draft · **Owner:** Your Name\n\n---\n\n## Overview\n\nOne paragraph describing what this product/feature does and why it exists.\n\n## Problem Statement\n\nWhat problem are we solving? Who has this problem?\n\n## Goals\n\n- Primary goal\n- Secondary goal\n\n## Non-Goals\n\n- What this does NOT do\n\n## User Stories\n\n> As a **[user type]**, I want to **[action]** so that **[benefit]**.\n\n## Requirements\n\n### Functional\n\n- [ ] Requirement 1\n- [ ] Requirement 2\n\n### Non-Functional\n\n- Performance: \n- Security: \n- Accessibility: \n\n## Design\n\n*Attach design links here*\n\n## Open Questions\n\n1. Question?\n\n## Timeline\n\n| Milestone | Date |\n|---|---|\n| Design complete | |\n| Dev complete | |\n| Launch | |`,
     },
   ],
   html: [
     {
-      name: 'Blank', icon: '',
+      name: 'Blank', icon: '📄',
       content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My Page</title>\n  <style>\n    * { box-sizing: border-box; margin: 0; padding: 0; }\n    body { font-family: -apple-system, sans-serif; color: #1e293b; background: #f8fafc; padding: 40px 24px; }\n  </style>\n</head>\n<body>\n  <h1>Hello World</h1>\n</body>\n</html>`,
     },
     {
-      name: 'Landing Page', icon: '',
-      content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Landing Page</title>\n  <style>\n    *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;background:#fff}.hero{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:80px 24px;text-align:center}.hero h1{font-size:clamp(28px,5vw,52px);font-weight:800;margin-bottom:16px;line-height:1.15}.hero p{font-size:clamp(14px,2vw,18px);opacity:.9;max-width:540px;margin:0 auto 32px}.btn{display:inline-block;background:#fff;color:#667eea;font-weight:700;padding:14px 32px;border-radius:50px;text-decoration:none;font-size:16px;transition:transform .15s}.btn:hover{transform:translateY(-2px)}.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:32px;padding:64px 24px;max-width:1000px;margin:0 auto}.feature{text-align:center;padding:32px 24px}.feature .icon{font-size:40px;margin-bottom:16px}.feature h3{font-size:20px;font-weight:700;margin-bottom:8px}.feature p{color:#64748b;line-height:1.6}.footer{background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;padding:32px;font-size:13px;color:#94a3b8}\n  </style>\n</head>\n<body>\n  <section class="hero">\n    <h1>Your Amazing Product</h1>\n    <p>A short description of what makes your product special and why people should care about it.</p>\n    <a href="#" class="btn">Get Started Free</a>\n  </section>\n  <section class="features">\n    <div class="feature"><h3>Fast</h3><p>Blazing fast performance that keeps your users happy and engaged at all times.</p></div>\n    <div class="feature"><h3>Secure</h3><p>Enterprise-grade security built in from day one. Your data is always protected.</p></div>\n    <div class="feature"><h3>Simple</h3><p>Intuitive interface that anyone can use without reading a manual.</p></div>\n  </section>\n  <footer class="footer">© ${new Date().getFullYear()} Your Company · All rights reserved</footer>\n</body>\n</html>`,
+      name: 'Landing Page', icon: '🚀',
+      content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Landing Page</title>\n  <style>\n    *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;background:#fff}.hero{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:80px 24px;text-align:center}.hero h1{font-size:clamp(28px,5vw,52px);font-weight:800;margin-bottom:16px;line-height:1.15}.hero p{font-size:clamp(14px,2vw,18px);opacity:.9;max-width:540px;margin:0 auto 32px}.btn{display:inline-block;background:#fff;color:#667eea;font-weight:700;padding:14px 32px;border-radius:50px;text-decoration:none;font-size:16px;transition:transform .15s}.btn:hover{transform:translateY(-2px)}.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:32px;padding:64px 24px;max-width:1000px;margin:0 auto}.feature{text-align:center;padding:32px 24px}.feature .icon{font-size:40px;margin-bottom:16px}.feature h3{font-size:20px;font-weight:700;margin-bottom:8px}.feature p{color:#64748b;line-height:1.6}.footer{background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;padding:32px;font-size:13px;color:#94a3b8}\n  </style>\n</head>\n<body>\n  <section class="hero">\n    <h1>Your Amazing Product</h1>\n    <p>A short description of what makes your product special and why people should care about it.</p>\n    <a href="#" class="btn">Get Started Free →</a>\n  </section>\n  <section class="features">\n    <div class="feature"><div class="icon">⚡</div><h3>Fast</h3><p>Blazing fast performance that keeps your users happy and engaged at all times.</p></div>\n    <div class="feature"><div class="icon">🔒</div><h3>Secure</h3><p>Enterprise-grade security built in from day one. Your data is always protected.</p></div>\n    <div class="feature"><div class="icon">🎯</div><h3>Simple</h3><p>Intuitive interface that anyone can use without reading a manual.</p></div>\n  </section>\n  <footer class="footer">© ${new Date().getFullYear()} Your Company · All rights reserved</footer>\n</body>\n</html>`,
     },
     {
-      name: 'Bio / Profile', icon: '',
-      content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Profile</title>\n  <style>\n    *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border-radius:20px;box-shadow:0 4px 40px rgba(0,0,0,0.1);max-width:480px;width:100%;overflow:hidden}.cover{height:120px;background:linear-gradient(135deg,#667eea,#764ba2)}.content{padding:0 28px 32px;text-align:center}.avatar{width:96px;height:96px;border-radius:50%;border:4px solid #fff;background:#e2e8f0;margin:-48px auto 16px;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}.name{font-size:24px;font-weight:800;color:#0f172a;margin-bottom:4px}.handle{color:#64748b;font-size:14px;margin-bottom:12px}.bio{color:#475569;line-height:1.6;font-size:14px;margin-bottom:24px}.links{display:flex;flex-direction:column;gap:10px}.link{display:block;padding:12px 20px;border:1px solid #e2e8f0;border-radius:12px;text-decoration:none;font-weight:600;color:#1e293b;font-size:14px;transition:background .15s}.link:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border-radius:50px;padding:6px 14px;font-size:12px;color:#64748b;margin-bottom:20px}\n  </style>\n</head>\n<body>\n  <div class="card">\n    <div class="cover"></div>\n    <div class="content">\n      <div class="avatar">YN</div>\n      <div class="name">Your Name</div>\n      <div class="handle">@username</div>\n      <div class="badge">City, Country</div>\n      <div class="bio">Designer, developer & creator. I build things for the web and occasionally write about it. Always curious, always learning.</div>\n      <div class="links">\n        <a class="link" href="#">Personal Website</a>\n        <a class="link" href="#">Twitter / X</a>\n        <a class="link" href="#">LinkedIn</a>\n        <a class="link" href="#">Send me an email</a>\n      </div>\n    </div>\n  </div>\n</body>\n</html>`,
+      name: 'Bio / Profile', icon: '👤',
+      content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Profile</title>\n  <style>\n    *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border-radius:20px;box-shadow:0 4px 40px rgba(0,0,0,0.1);max-width:480px;width:100%;overflow:hidden}.cover{height:120px;background:linear-gradient(135deg,#667eea,#764ba2)}.content{padding:0 28px 32px;text-align:center}.avatar{width:96px;height:96px;border-radius:50%;border:4px solid #fff;background:#e2e8f0;margin:-48px auto 16px;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}.name{font-size:24px;font-weight:800;color:#0f172a;margin-bottom:4px}.handle{color:#64748b;font-size:14px;margin-bottom:12px}.bio{color:#475569;line-height:1.6;font-size:14px;margin-bottom:24px}.links{display:flex;flex-direction:column;gap:10px}.link{display:block;padding:12px 20px;border:1px solid #e2e8f0;border-radius:12px;text-decoration:none;font-weight:600;color:#1e293b;font-size:14px;transition:background .15s}.link:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border-radius:50px;padding:6px 14px;font-size:12px;color:#64748b;margin-bottom:20px}\n  </style>\n</head>\n<body>\n  <div class="card">\n    <div class="cover"></div>\n    <div class="content">\n      <div class="avatar">😊</div>\n      <div class="name">Your Name</div>\n      <div class="handle">@username</div>\n      <div class="badge">🌍 City, Country</div>\n      <div class="bio">Designer, developer & creator. I build things for the web and occasionally write about it. Always curious, always learning.</div>\n      <div class="links">\n        <a class="link" href="#">🌐 Personal Website</a>\n        <a class="link" href="#">🐦 Twitter / X</a>\n        <a class="link" href="#">💼 LinkedIn</a>\n        <a class="link" href="#">📧 Send me an email</a>\n      </div>\n    </div>\n  </div>\n</body>\n</html>`,
     },
   ],
   csv: SHEET_TEMPLATES,
   text: [
-    { name: 'Blank', icon: '', content: '' },
-    { name: 'Changelog', icon: '', content: `CHANGELOG\n=========\n\nv2.0.0 — ${new Date().toLocaleDateString()}\n  ADDED: New feature description\n  CHANGED: Updated behavior description  \n  FIXED: Bug fix description\n  REMOVED: Deprecated feature\n\nv1.1.0 — Previous Date\n  ADDED: Feature\n  FIXED: Bug\n\nv1.0.0 — Initial Release\n  ADDED: Initial version` },
+    { name: 'Blank', icon: '📄', content: '' },
+    { name: 'Changelog', icon: '📝', content: `CHANGELOG\n=========\n\nv2.0.0 — ${new Date().toLocaleDateString()}\n  ADDED: New feature description\n  CHANGED: Updated behavior description  \n  FIXED: Bug fix description\n  REMOVED: Deprecated feature\n\nv1.1.0 — Previous Date\n  ADDED: Feature\n  FIXED: Bug\n\nv1.0.0 — Initial Release\n  ADDED: Initial version` },
   ],
 }
 
@@ -850,7 +848,7 @@ const TEMPLATES = {
 // ---------------------------------------------------------------------------
 // Upload an image/file to HF storage and insert a reference at the cursor.
 // `format(res)` turns the upload result into the snippet for the content type.
-function AssetButton({ textareaRef, value, onChange, format, label = 'Attach' }) {
+function AssetButton({ textareaRef, value, onChange, format, label = '📎 Attach' }) {
   const [busy, setBusy] = useState(false)
   const inputRef = useRef(null)
   const onFile = async (e) => {
@@ -879,7 +877,7 @@ function AssetButton({ textareaRef, value, onChange, format, label = 'Attach' })
         style={{ background:'transparent', border:'none', borderRadius:5, padding:'4px 7px', fontSize:12, cursor:busy?'wait':'pointer', color:'var(--text-1)', userSelect:'none', whiteSpace:'nowrap' }}
         onMouseEnter={e=>e.target.style.background='var(--border)'}
         onMouseLeave={e=>e.target.style.background='transparent'}>
-        {busy ? 'Uploading…' : label}
+        {busy ? '⏳ Uploading…' : label}
       </button>
     </>
   )
@@ -887,7 +885,7 @@ function AssetButton({ textareaRef, value, onChange, format, label = 'Attach' })
 
 // Load a whole .html file from disk into the editor, replacing the content.
 // Read in the browser — nothing is uploaded until the page is saved.
-function ImportHtmlButton({ value, onChange, onTitle, label = 'Upload HTML file' }) {
+function ImportHtmlButton({ value, onChange, onTitle, label = '📄 Upload HTML file' }) {
   const confirm = useConfirm()
   const inputRef = useRef(null)
   const onFile = async (e) => {
@@ -940,17 +938,17 @@ function AttachmentsBar({ content, onChange }) {
   }
   return (
     <div style={{ display:'flex', gap:8, flexWrap:'wrap', padding:'8px 12px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
-      <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', marginRight:4 }}>{assets.length} attachment{assets.length!==1?'s':''}</span>
+      <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)', marginRight:4 }}>📎 {assets.length} attachment{assets.length!==1?'s':''}</span>
       {assets.map(a=>(
         <div key={a.path} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 6px 3px 4px', border:'1px solid var(--border)', borderRadius:6, background:'var(--bg-base)' }}>
           {a.isImg
             ? <img src={a.url} alt="" style={{ width:24, height:24, objectFit:'cover', borderRadius:4 }} />
-            : <FileText size={14} aria-hidden="true" />}
+            : <span style={{ fontSize:14 }}>📄</span>}
           <span style={{ fontSize:11, color:'var(--text-1)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.name}>{a.name}</span>
           <button type="button" title="Delete attachment" disabled={deleting===a.path}
             onClick={()=>remove(a)}
-            style={{ border:'none', background:'transparent', color:'var(--fin-negative)', cursor:'pointer', fontSize:13, lineHeight:1, padding:'0 2px' }}>
-            {deleting===a.path ? '…' : <X size={12} aria-hidden="true" />}
+            style={{ border:'none', background:'transparent', color:'#ef4444', cursor:'pointer', fontSize:13, lineHeight:1, padding:'0 2px' }}>
+            {deleting===a.path ? '…' : '✕'}
           </button>
         </div>
       ))}
@@ -961,13 +959,13 @@ function AttachmentsBar({ content, onChange }) {
 // Format an uploaded asset into markdown or HTML markup
 function formatAssetMd(res) {
   const url = absUrl(res.url)
-  return res.is_image ? `![${res.filename||'image'}](${url})` : `[${res.filename||'file'}](${url})`
+  return res.is_image ? `![${res.filename||'image'}](${url})` : `[📎 ${res.filename||'file'}](${url})`
 }
 function formatAssetHtml(res) {
   const url = absUrl(res.url)
   return res.is_image
     ? `<img src="${url}" alt="${res.filename||''}" style="max-width:100%;height:auto" />`
-    : `<a href="${url}" target="_blank" rel="noopener">${res.filename||'Download file'}</a>`
+    : `<a href="${url}" target="_blank" rel="noopener">📎 ${res.filename||'Download file'}</a>`
 }
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
@@ -1036,7 +1034,7 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
       { tip:'Bold (Ctrl+B)', label:<b>B</b>, action:()=>wrap('**','**') },
       { tip:'Italic (Ctrl+I)', label:<i>I</i>, action:()=>wrap('*','*') },
       { tip:'Strikethrough', label:<del>S</del>, action:()=>wrap('~~','~~') },
-      { tip:'Highlight', label:<Highlighter size={14} aria-hidden="true" />, action:()=>wrap('==','==') },
+      { tip:'Highlight', label:'🖊', action:()=>wrap('==','==') },
       { tip:'Inline Code', label:'`c`', action:()=>wrap('`','`','code'), mono:true },
     ]},
     { groups: [
@@ -1045,17 +1043,17 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
       { tip:'Heading 3', label:'H3', action:()=>prefix('### '), bold:true },
     ]},
     { groups: [
-      { tip:'Bullet List', label:<List size={14} aria-hidden="true" />, action:()=>prefix('- ') },
+      { tip:'Bullet List', label:'• —', action:()=>prefix('- ') },
       { tip:'Numbered List', label:'1.', action:()=>prefix('1. ') },
-      { tip:'Checklist', label:<ListChecks size={14} aria-hidden="true" />, action:()=>prefix('- [ ] ') },
-      { tip:'Blockquote', label:<Quote size={14} aria-hidden="true" />, action:()=>prefix('> ') },
+      { tip:'Checklist', label:'☐', action:()=>prefix('- [ ] ') },
+      { tip:'Blockquote', label:'❝', action:()=>prefix('> ') },
     ]},
     { groups: [
-      { tip:'Link', label:<Link2 size={14} aria-hidden="true" />, action:()=>wrap('[','](https://)','link text') },
-      { tip:'Image by URL (or use Image / File to upload)', label:<ImageIcon size={14} aria-hidden="true" />, action:()=>insertAt('\n\n![description](https://paste-image-url-here)\n\n') },
+      { tip:'Link', label:'🔗', action:()=>wrap('[','](https://)','link text') },
+      { tip:'Image by URL (or use 📎 to upload)', label:'🖼', action:()=>insertAt('\n\n![description](https://paste-image-url-here)\n\n') },
       { tip:'Code Block', label:'```', action:()=>wrap('```\n','```','code here'), mono:true },
-      { tip:'Table', label:<Table2 size={14} aria-hidden="true" />, action:()=>insertAt('\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n') },
-      { tip:'Divider', label:<Minus size={14} aria-hidden="true" />, action:()=>insertAt('\n---\n') },
+      { tip:'Table', label:'⊞', action:()=>insertAt('\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n') },
+      { tip:'Divider', label:'—', action:()=>insertAt('\n---\n') },
     ]},
   ]
 
@@ -1081,7 +1079,7 @@ function MarkdownToolbar({ textareaRef, value, onChange, isMobile }) {
       ))}
       <div style={{ width:1, background:'var(--border)', margin:'2px 4px', flexShrink:0 }} />
       <span style={{ flexShrink:0 }}>
-        <AssetButton textareaRef={textareaRef} value={value} onChange={onChange} format={formatAssetMd} label={isMobile ? 'Image' : 'Image / File'} />
+        <AssetButton textareaRef={textareaRef} value={value} onChange={onChange} format={formatAssetMd} label={isMobile ? '📎 Image' : '📎 Image / File'} />
       </span>
     </div>
   )
@@ -1114,7 +1112,7 @@ function TemplatePicker({ contentType, onSelect }) {
       <span style={{ fontSize:11, color:'var(--text-2)', fontWeight:600, whiteSpace:'nowrap', alignSelf:'center' }}>Templates:</span>
       {list.map(t=>(
         <button key={t.name} onClick={()=>onSelect(t)} style={{ ...btnTiny, whiteSpace:'nowrap', fontSize:11, padding:'4px 10px', flexShrink:0 }}>
-          {t.name}
+          {t.icon} {t.name}
         </button>
       ))}
     </div>
@@ -1175,13 +1173,13 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
           const updated = await api.pages.update(pageId, { metadata }).catch(() => null)
           if (updated?.id) restored = updated
         }
-        setToast('Restored. Reloading editor…')
+        setToast('✓ Restored! Reloading editor…')
         setTimeout(() => { onRestore(restored, versionSheet); setToast('') }, 1500)
         // Refresh version list
         const fresh = await api.pages.versions(pageId)
         setVersions(fresh.items || [])
       }
-    } catch { setToast('Restore failed') }
+    } catch { setToast('⚠ Restore failed') }
     setRestoring(null)
   }
 
@@ -1198,8 +1196,9 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
 
   if (!pageId) return (
     <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:'var(--text-2)', fontSize:13 }}>
+      <div style={{ fontSize:32 }}>🕐</div>
       <div style={{ fontWeight:600 }}>Save the page first to enable version history</div>
-      <div style={{ fontSize:12 }}>Every edit auto-saves to the cloud, and a version is captured every 5 minutes.</div>
+      <div style={{ fontSize:12 }}>Every edit auto-saves to the cloud — versions are captured every 5 minutes</div>
     </div>
   )
 
@@ -1208,25 +1207,26 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
       {/* Version list (left) */}
       <div style={{ width:previewVer ? 260 : '100%', minWidth:220, borderRight:'1px solid var(--border)', overflowY:'auto', flexShrink:0 }}>
         {toast && (
-          <div style={{ padding:'10px 16px', background:'var(--fin-pos-bg)', color:'var(--fin-positive)', fontSize:12, fontWeight:600, borderBottom:'1px solid var(--border)' }}>{toast}</div>
+          <div style={{ padding:'10px 16px', background:'#d1fae5', color:'#065f46', fontSize:12, fontWeight:600, borderBottom:'1px solid var(--border)' }}>{toast}</div>
         )}
         <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Version History</span>
           <button onClick={()=>{ setLoading(true); api.pages.versions(pageId).then(r=>{setVersions(r.items||[]);setLoading(false)}).catch(()=>setLoading(false)) }}
-            style={{ fontSize:12, color:'var(--accent)', border:'none', background:'none', cursor:'pointer', padding:'2px 4px', display:'inline-flex' }} aria-label="Refresh history" title="Refresh"><RefreshCw size={13} aria-hidden="true" /></button>
+            style={{ fontSize:12, color:'var(--accent)', border:'none', background:'none', cursor:'pointer', padding:'2px 4px' }}>↻</button>
         </div>
         {loading ? (
           <div style={{ padding:'12px 16px' }}><SkeletonList rows={4} compact label="Loading history" /></div>
         ) : !versions?.length ? (
           <div style={{ padding:'24px 16px', fontSize:13, color:'var(--text-2)', textAlign:'center' }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
             No versions yet. Versions are captured automatically every 5 minutes while editing.
           </div>
         ) : (
           <div>
             {/* Current state indicator */}
-            <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--fin-pos-bg)' }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--fin-positive)' }}>● Current version</div>
-              <div style={{ fontSize:11, color:'var(--fin-positive)', marginTop:2 }}>
+            <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'#f0fdf4' }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#15803d' }}>● Current version</div>
+              <div style={{ fontSize:11, color:'#16a34a', marginTop:2 }}>
                 {currentContent ? `${currentContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words` : '—'}
               </div>
             </div>
@@ -1247,15 +1247,15 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
                   <div style={{ fontSize:11, color:'var(--text-2)' }}>
                     {fmtTime(ver.saved_at)}
                     {ver.word_count > 0 && ` · ${ver.word_count.toLocaleString()} words`}
-                    {ver.note && <span style={{ color:'var(--chart-3)' }}> · {ver.note}</span>}
+                    {ver.note && <span style={{ color:'#7c3aed' }}> · {ver.note}</span>}
                   </div>
                   {ver.saved_by_name && <div style={{ fontSize:10, color:'var(--text-2)', marginTop:2 }}>by {ver.saved_by_name}</div>}
                   {isSelected && (
                     <button
                       onClick={e=>{ e.stopPropagation(); handleRestore(ver) }}
                       disabled={isRestoring}
-                      style={{ marginTop:8, width:'100%', padding:'5px 10px', fontSize:12, fontWeight:600, border:'1px solid var(--accent)', borderRadius:6, background:'var(--accent-btn)', color:'var(--accent-fg)', cursor:'pointer', opacity:isRestoring?0.6:1 }}>
-                      {isRestoring ? 'Restoring…' : 'Restore this version'}
+                      style={{ marginTop:8, width:'100%', padding:'5px 10px', fontSize:12, fontWeight:600, border:'1px solid var(--accent)', borderRadius:6, background:'var(--accent)', color:'#fff', cursor:'pointer', opacity:isRestoring?0.6:1 }}>
+                      {isRestoring ? 'Restoring…' : '↩ Restore this version'}
                     </button>
                   )}
                   {previewLoading === ver.id && (
@@ -1290,10 +1290,10 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
 // Page Drawer — Advanced editor
 // ---------------------------------------------------------------------------
 const CONTENT_TYPES = [
-  { value:'markdown',    label:'Document',    hint:'Rich text / markdown' },
-  { value:'html',        label:'Web Page',     hint:'HTML / CSS / JS' },
-  { value:'csv',         label:'Spreadsheet',  hint:'Editable grid / table' },
-  { value:'text',        label:'Plain Text',   hint:'Plain text / code' },
+  { value:'markdown',    label:'📝 Document',    hint:'Rich text / markdown' },
+  { value:'html',        label:'🌐 Web Page',     hint:'HTML / CSS / JS' },
+  { value:'csv',         label:'📊 Spreadsheet',  hint:'Editable grid / table' },
+  { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
 ]
 
 // Prompt-driven page generation.
@@ -1578,7 +1578,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
     return (
       <div style={{ padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
         <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
-          Agent Studio
+          ✨ Agent Studio
         </button>
         {/* The strapline wraps to a second line on a phone, doubling the height
             of a row that exists only to hold one button. */}
@@ -1590,11 +1590,11 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
         {/* Self-healing error banner — visible even when the studio is collapsed */}
         {pageError && (
-          <div style={{ marginTop:4, padding:'6px 10px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
-            <span style={{ color:'var(--fin-negative)' }}>Runtime error: {pageError.message.slice(0, 80)}</span>
+          <div style={{ marginTop:4, padding:'6px 10px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+            <span style={{ color:'#dc2626' }}>⚠ Runtime error: {pageError.message.slice(0, 80)}</span>
             <button onClick={runFixError} disabled={busy}
-              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', marginLeft:'auto', flexShrink:0 }}>
-              Auto-fix
+              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'#dc2626', marginLeft:'auto', flexShrink:0 }}>
+              🔧 Auto-Fix
             </button>
           </div>
         )}
@@ -1605,9 +1605,9 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   return (
     <div style={{ padding:isMobile?'10px 12px':'10px 14px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <span style={{ fontSize:12, fontWeight:700 }}>Agent Studio</span>
+        <span style={{ fontSize:12, fontWeight:700 }}>✨ Agent Studio</span>
         {mode === 'streaming' && (
-          <span style={{ fontSize:11, color:'var(--accent)', fontWeight:600 }}>
+          <span style={{ fontSize:11, color:'var(--accent, #3b82f6)', fontWeight:600 }}>
             ● Live streaming
           </span>
         )}
@@ -1616,9 +1616,9 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
       {/* ── Section Edit Mode ──────────────────────────────────────────── */}
       {mode === 'section-edit' && sectionEdit && (
-        <div style={{ padding:'10px 12px', background:'color-mix(in srgb, var(--accent) 6%, transparent)', borderRadius:'var(--radius, 8px)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
+        <div style={{ padding:'10px 12px', background:'color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent)', borderRadius:'var(--radius, 8px)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
           <span style={{ fontSize:12, fontWeight:600, color:'var(--text-1)' }}>
-            Editing section: <code style={{ background:'var(--bg-base)', padding:'1px 6px', borderRadius:4, fontSize:11 }}>{sectionEdit.sectionId}</code>
+            ✏️ Editing section: <code style={{ background:'var(--bg-base)', padding:'1px 6px', borderRadius:4, fontSize:11 }}>{sectionEdit.sectionId}</code>
           </span>
           <textarea
             value={sectionEdit.prompt}
@@ -1642,14 +1642,14 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
       {/* ── Self-healing error banner ──────────────────────────────────── */}
       {pageError && mode !== 'section-edit' && (
-        <div style={{ padding:'8px 12px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <span style={{ fontSize:12, color:'var(--fin-negative)', flex:1, minWidth:0 }}>
-            Script error: {pageError.message.slice(0, 120)}
-            {pageError.lineno > 0 && <span style={{ color:'var(--text-3)' }}> (line {pageError.lineno})</span>}
+        <div style={{ padding:'8px 12px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ fontSize:12, color:'#dc2626', flex:1, minWidth:0 }}>
+            ⚠ Script error: {pageError.message.slice(0, 120)}
+            {pageError.lineno > 0 && <span style={{ color:'#9ca3af' }}> (line {pageError.lineno})</span>}
           </span>
           <button onClick={runFixError} disabled={busy}
-            style={{ ...btnPrimary, padding:'4px 12px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', flexShrink:0 }}>
-            {busy && mode === 'error-fix' ? `Fixing… ${elapsed}s` : 'Auto-fix with AI'}
+            style={{ ...btnPrimary, padding:'4px 12px', fontSize:11, background:'#dc2626', flexShrink:0 }}>
+            {busy && mode === 'error-fix' ? `Fixing… ${elapsed}s` : '🔧 Auto-Fix with AI'}
           </button>
           <button onClick={() => setPageError(null)}
             style={{ ...btnGhost, padding:'4px 8px', fontSize:11 }}>Dismiss</button>
@@ -1671,14 +1671,14 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
           {thought && (
             <div style={{ fontSize:11, color:'var(--text-2)', fontStyle:'italic', padding:'4px 8px', background:'var(--bg-base)', borderRadius:'var(--radius, 8px)' }}>
-              {thought}
+              💭 {thought}
             </div>
           )}
           {plan && plan.sections?.length > 0 && (
             <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
               <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)' }}>Sections:</span>
               {plan.sections.map(s => (
-                <span key={s} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'color-mix(in srgb, var(--accent) 10%, transparent)', color:'var(--accent)', fontWeight:500 }}>
+                <span key={s} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent)', color:'var(--accent, #3b82f6)', fontWeight:500 }}>
                   {s}
                 </span>
               ))}
@@ -1690,11 +1690,11 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
                 <div key={i} style={{
                   display:'flex', alignItems:'baseline', gap:8, fontSize:11,
                   padding:'5px 9px', borderRadius:6,
-                  background: e.ok ? 'var(--bg-base)' : 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',
+                  background: e.ok ? 'var(--bg-base)' : 'color-mix(in srgb, #f59e0b 12%, transparent)',
                   border:'1px solid var(--border)',
                 }}>
-                  <span style={{ color: e.ok ? 'var(--fin-positive)' : 'var(--fin-warning)', fontWeight:700, flexShrink:0 }}>
-                    {e.ok ? <Check size={12} aria-label="Passed" /> : <AlertTriangle size={12} aria-label="Warning" />}
+                  <span style={{ color: e.ok ? '#16a34a' : '#b45309', fontWeight:700, flexShrink:0 }}>
+                    {e.ok ? '✓' : '⚠'}
                   </span>
                   <code style={{
                     flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
@@ -1714,10 +1714,10 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
           )}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, height:3, borderRadius:2, background:'var(--border)', overflow:'hidden' }}>
-              <div style={{ width:'100%', height:'100%', background:'var(--accent)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
+              <div style={{ width:'100%', height:'100%', background:'var(--accent, #3b82f6)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
             </div>
             <span style={{ fontSize:11, color:'var(--text-2)', flexShrink:0 }}>{elapsed}s</span>
-            <button onClick={cancel} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', color:'var(--fin-negative)' }}>Cancel</button>
+            <button onClick={cancel} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', color:'#ef4444' }}>Cancel</button>
           </div>
           <style>{`@keyframes indeterminate { 0% { transform:scaleX(0) translateX(-50%) } 50% { transform:scaleX(0.4) translateX(25%) } 100% { transform:scaleX(0) translateX(150%) } }`}</style>
         </div>
@@ -1763,7 +1763,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
               </button>
               <button onClick={run} disabled={busy || !prompt.trim()}
                 style={{ ...btnPrimary, opacity:(busy||!prompt.trim())?0.6:1 }}>
-                {busy && mode !== 'streaming' ? `Generating… ${elapsed}s` : (hasContent && refine ? 'Revise' : 'Generate')}
+                {busy && mode !== 'streaming' ? `Generating… ${elapsed}s` : (hasContent && refine ? '✨ Revise' : '✨ Generate')}
               </button>
             </div>
           </div>
@@ -1772,16 +1772,16 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
       {!busy && mode === 'idle' && (
         <div style={{ fontSize:10, color:'var(--text-2)', opacity:0.7 }}>
-          Tip: click a section in Preview to edit just that section. Runtime errors trigger auto-fix.
+          💡 Tip: Click a section in Preview to edit it surgically. Runtime errors trigger auto-fix.
         </div>
       )}
 
-      {err && <div style={{ fontSize:12, color:'var(--fin-negative)' }}>{err}</div>}
+      {err && <div style={{ fontSize:12, color:'#ef4444' }}>{err}</div>}
       {note && (
         <div style={{ fontSize:11, color:'var(--text-2)' }}>
-          Generated with {note.model || 'AI'}. Review it in Preview before publishing.
+          ✓ Generated with {note.model || 'AI'}. Review it in Preview before publishing.
           {note.warnings.length > 0 && (
-            <span style={{ color:'var(--fin-warning)' }}>
+            <span style={{ color:'#b45309' }}>
               {' '}Check {note.warnings.join('; ')}.
             </span>
           )}
@@ -1822,8 +1822,8 @@ function ExpiryField({ value, onChange, isMobile }) {
         </select>
       </div>
       {value && (
-        <div style={{ fontSize:11, marginTop:3, color:expired?'var(--fin-negative)':'var(--text-2)' }}>
-          {expired ? 'Expired: the link no longer opens' : `${formatIst(value)} · ${countdown(value, now)}`}
+        <div style={{ fontSize:11, marginTop:3, color:expired?'#dc2626':'var(--text-2)' }}>
+          {expired ? '⛔ Expired: the link no longer opens' : `⏳ ${formatIst(value)} · ${countdown(value, now)}`}
         </div>
       )}
     </div>
@@ -2171,14 +2171,14 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               <span style={{ flex:1, minWidth:0, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 /p/{form.slug || '…'}
               </span>
-              {autoSaveStatus === 'saved'  && <span style={{ color:'var(--fin-positive)', flexShrink:0 }}>Saved</span>}
-              {autoSaveStatus === 'saving' && <span style={{ flexShrink:0 }}>Saving…</span>}
-              {autoSaveStatus === 'error'  && <span style={{ color:'var(--fin-negative)', flexShrink:0 }} title={autoSaveError}>Not saved</span>}
+              {autoSaveStatus === 'saved'  && <span style={{ color:'#10b981', flexShrink:0 }}>✓ Saved</span>}
+              {autoSaveStatus === 'saving' && <span style={{ flexShrink:0 }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error'  && <span style={{ color:'#ef4444', flexShrink:0 }} title={autoSaveError}>⚠ Not saved</span>}
               <span style={{ flexShrink:0, fontWeight:700, color:'var(--accent)' }}>
                 Settings {showSettings ? '▲' : '▼'}
               </span>
             </button>
-            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'var(--fin-negative)', flexShrink:0 }}>{error}</div>}
+            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'#ef4444', flexShrink:0 }}>{error}</div>}
           </>
         ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
@@ -2191,17 +2191,17 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               {stats.label && <span>{stats.label}</span>}
               {stats.readTime !== '—' && <span>· {stats.readTime}</span>}
               {form.content.length > charLimit * 0.8 && (
-                <span style={{ color:form.content.length>charLimit?'var(--fin-negative)':'var(--fin-warning)', fontWeight:600 }}>
+                <span style={{ color:form.content.length>charLimit?'#ef4444':'#f59e0b', fontWeight:600 }}>
                   {form.content.length.toLocaleString()} / {charLimit.toLocaleString()} chars
                 </span>
               )}
-              {autoSaveStatus === 'saved' && <span style={{ color:'var(--fin-positive)' }}>Saved to cloud</span>}
-              {autoSaveStatus === 'saving' && <span style={{ color:'var(--text-3)' }}>Saving…</span>}
-              {autoSaveStatus === 'error' && <span style={{ color:'var(--fin-negative)' }} title={autoSaveError}>Save failed: {autoSaveError || 'kept local backup'}</span>}
+              {autoSaveStatus === 'saved' && <span style={{ color:'#10b981' }}>✓ Saved to cloud</span>}
+              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error' && <span style={{ color:'#ef4444' }} title={autoSaveError}>⚠ Save failed — {autoSaveError || 'kept local backup'}</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-            {error && <span style={{ color:'var(--fin-negative)', fontSize:12 }}>{error}</span>}
+            {error && <span style={{ color:'#ef4444', fontSize:12 }}>{error}</span>}
             <button onClick={()=>setFullscreen(f=>!f)} style={{ ...btnGhost, fontSize:14, padding:'5px 10px' }} title={fullscreen?'Exit fullscreen':'Fullscreen'}>{fullscreen?'⊡':'⊞'}</button>
             <button onClick={flushAndClose} style={btnGhost} disabled={saving}>Close</button>
             <button onClick={()=>handleSave(false)} style={btnSecondary} disabled={saving}>{saving?'Saving…':'Save Draft'}</button>
@@ -2247,8 +2247,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             </div>
             {shareUrl&&<div style={{ fontSize:10, color:'var(--accent)', marginTop:2, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{shareUrl}</div>}
             {slugStatus && !slugStatus.available && (
-              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-warning)' }}>
-                This URL is already taken{slugStatus.suggestions?.length ? '. Try:' : '.'}
+              <div style={{ marginTop:4, fontSize:11, color:'#b45309' }}>
+                ⚠ This URL is already taken{slugStatus.suggestions?.length ? ' — try:' : '.'}
                 {slugStatus.suggestions?.length > 0 && (
                   <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:3 }}>
                     {slugStatus.suggestions.map(s=>(
@@ -2260,7 +2260,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               </div>
             )}
             {slugStatus && slugStatus.available && form.slug && (
-              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-positive)' }}>URL is available</div>
+              <div style={{ marginTop:4, fontSize:11, color:'#16a34a' }}>✓ URL is available</div>
             )}
           </div>
           <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
@@ -2270,7 +2270,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
           <div style={{ flex:isMobile?'1 1 100%':'0 0 auto', display:'flex', alignItems:isMobile?'center':'flex-end', gap:8, flexWrap:'wrap' }}>
             <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' }}>
               <input type="checkbox" checked={form.is_password_protected} onChange={e=>set('is_password_protected',e.target.checked)} />
-              Password
+              🔒 Password
             </label>
             {form.is_password_protected&&(
               <input style={{ ...inputStyle, width:isMobile?'100%':110, fontSize:12 }} type="password" placeholder="Set password" value={form.password} onChange={e=>set('password',e.target.value)} />
@@ -2289,7 +2289,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             <label title="Visitors cannot right-click, save the page, or open its source with keyboard shortcuts, and the code is not sent outside the page itself."
               style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap', paddingBottom:isMobile?0:6 }}>
               <input type="checkbox" checked={form.protect_source} onChange={e=>set('protect_source',e.target.checked)} />
-              Protect code
+              🛡 Protect code
             </label>
           </div>
           {isMobile && (stats.label || stats.readTime !== '—') && (
@@ -2337,8 +2337,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {isHtml && tab === 'edit' && (
           <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
             <ImportHtmlButton value={form.content} onChange={c=>{ setContent(c); setShowTemplates(false) }}
-              onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? 'Upload HTML' : 'Upload HTML file'} />
-            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? 'Insert image' : 'Insert image / file'} />
+              onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? '📄 Upload HTML' : '📄 Upload HTML file'} />
+            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
             {/* The explanation is worth a line on a desktop toolbar and worth a
                 row of a phone screen — which it is not. */}
             {!isMobile && <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>}
@@ -2352,9 +2352,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
           {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
-            <button key={t} onClick={()=>setTab(t)} className="app-press"
+            <button key={t} onClick={()=>setTab(t)}
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
-              {t === 'history' ? 'History' : t}
+              {t === 'history' ? '🕐 History' : t}
             </button>
           ))}
           {!showTemplates && tab !== 'history' && (
@@ -2368,12 +2368,12 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isSpreadsheet ? 'Spreadsheet' : isHtml ? 'Web Page (HTML)' : isMarkdown ? 'Document' : 'Plain Text'}
+              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
             </span>
             <span>
               {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
-                : isHtml ? 'Write raw HTML/CSS/JS. It renders as a full web page'
-                : isMarkdown ? 'Rich document. Use the toolbar for headings, bold, tables, images'
+                : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
+                : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
                 : 'Plain text / code'}
             </span>
           </div>
@@ -2434,12 +2434,12 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
     <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onCancel}>
-      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'var(--shadow-popover)' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>Confirm</div>
         <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:22 }}>{message}</div>
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
           <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={onConfirm} style={{ ...btnPrimary, background:'var(--danger-btn)', color:'var(--danger-fg)' }}>Delete</button>
+          <button onClick={onConfirm} style={{ ...btnPrimary, background:'#ef4444' }}>Delete</button>
         </div>
       </div>
     </div>
@@ -2569,8 +2569,8 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
   const run = (fn) => () => { setOpen(false); fn(page) }
   const item = (Icon, label, onClick, opts = {}) => (
     <button type="button" role="menuitem" onClick={onClick} disabled={opts.disabled}
-      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:36, padding:'8px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:'pointer', borderRadius:7, color:opts.danger?'var(--fin-negative)':'var(--text-1)' }}
-      onMouseEnter={e=>e.currentTarget.style.background=opts.danger?'var(--fin-neg-bg)':'var(--bg-base)'}
+      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:36, padding:'8px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:'pointer', borderRadius:7, color:opts.danger?'#dc2626':'var(--text-1)' }}
+      onMouseEnter={e=>e.currentTarget.style.background=opts.danger?'#fef2f2':'var(--bg-base)'}
       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <Icon size={14} strokeWidth={1.9} style={{ flexShrink:0, opacity:0.8 }} /> {label}
     </button>
@@ -2583,8 +2583,8 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
         <MoreHorizontal size={15} />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} role="menu" aria-label="Page actions" className="app-menu app-pop"
-          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
+        <div ref={menuRef} role="menu" aria-label="Page actions"
+          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, background:'var(--card-bg, #fff)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
           {item(page.is_published ? EyeOff : Globe, page.is_published ? 'Unpublish' : 'Publish', run(onPublish))}
           {page.is_published && item(Share2, 'Share…', run(onShare))}
           {item(BarChart2, 'Views & analytics', run(onAnalytics))}
@@ -2609,7 +2609,7 @@ function CopyLinkButton({ page, onCopied, compact }) {
   return (
     <button type="button" onClick={copy} disabled={!page.is_published}
       title={page.is_published ? 'Copy public link' : 'Publish the page to get a link'}
-      style={{ ...btnTiny, padding:compact?'7px 9px':'6px 10px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:done?'var(--fin-positive)':'var(--text-1)', opacity:page.is_published?1:0.45, cursor:page.is_published?'pointer':'not-allowed' }}>
+      style={{ ...btnTiny, padding:compact?'7px 9px':'6px 10px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:done?'#15803d':'var(--text-1)', opacity:page.is_published?1:0.45, cursor:page.is_published?'pointer':'not-allowed' }}>
       {done ? <Check size={13} /> : <Link2 size={13} />}{!compact && (done ? 'Copied' : 'Copy link')}
     </button>
   )
@@ -2617,9 +2617,9 @@ function CopyLinkButton({ page, onCopied, compact }) {
 
 function StatusPill({ page }) {
   const expired = page.expires_at && msUntil(page.expires_at) <= 0
-  const s = expired ? { label:'Expired', bg:'var(--fin-neg-bg)', fg:'var(--fin-negative)', dot:'var(--fin-negative)' }
-    : page.is_published ? { label:'Live', bg:'var(--fin-pos-bg)', fg:'var(--fin-positive)', dot:'var(--fin-positive)' }
-    : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'var(--text-3)' }
+  const s = expired ? { label:'Expired', bg:'#fef2f2', fg:'#b91c1c', dot:'#ef4444' }
+    : page.is_published ? { label:'Live', bg:'#ecfdf5', fg:'#047857', dot:'#10b981' }
+    : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'#94a3b8' }
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'3px 10px', borderRadius:999, fontSize:12, fontWeight:600, background:s.bg, color:s.fg, whiteSpace:'nowrap' }}>
       <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }} />{s.label}
@@ -2663,7 +2663,7 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
       </td>
       <td style={{ ...cell, whiteSpace:'nowrap', textAlign:'right' }}>
         <div style={{ display:'inline-flex', gap:6, alignItems:'center' }}>
-          <button style={{ ...btnTiny, background:'var(--accent-btn)', color:'var(--accent-fg)', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:600, fontSize:12, display:'inline-flex', alignItems:'center', gap:5 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
+          <button style={{ ...btnTiny, background:'var(--accent)', color:'#fff', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:600, fontSize:12, display:'inline-flex', alignItems:'center', gap:5 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
             <PenLine size={12} /> {openingId===page.id ? 'Opening…' : 'Edit'}
           </button>
           <CopyLinkButton page={page} onCopied={onCopied} />
@@ -2789,7 +2789,7 @@ export default function PagesManager() {
       const updated = await api.pages.publish(page.id, !page.is_published)
       if (updated?.detail) throw new Error(updated.detail)
       setPages(prev=>prev.map(p=>p.id===updated.id?updated:p))
-      showToast(updated.is_published?'Published. The link is now live.':'Unpublished')
+      showToast(updated.is_published?'✓ Published — link is now live':'Unpublished')
     } catch (e) { showToast(e?.message||'Failed',false) }
   }
 
@@ -2894,7 +2894,7 @@ export default function PagesManager() {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
         <div>
           <h1 style={{ margin:0, fontSize:isMobile?20:26, fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em' }}>Pages</h1>
-          {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages, and share them publicly with full analytics on every view.</p>}
+          {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages — share publicly with full analytics on every view.</p>}
         </div>
         <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'markdown'})}>
           <Plus size={15} strokeWidth={2.5} /> New Page
@@ -2905,13 +2905,13 @@ export default function PagesManager() {
       {pages.length>0&&(
         <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10, marginBottom:22 }}>
           {[
-            { label:'Total Pages', value:pages.length, Icon:Layers, accent:'var(--accent)' },
-            { label:'Live', value:pages.filter(p=>p.is_published).length, Icon:CheckCircle2, accent:'var(--fin-positive)' },
-            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'var(--fin-warning)' },
-            { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'var(--accent)' },
+            { label:'Total Pages', value:pages.length, Icon:Layers, accent:'#6366f1' },
+            { label:'Live', value:pages.filter(p=>p.is_published).length, Icon:CheckCircle2, accent:'#10b981' },
+            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'#f59e0b' },
+            { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'#3b82f6' },
           ].map(({ label, value, Icon, accent })=>(
             <div key={label} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ width:34, height:34, borderRadius:9, background:`${tint(accent, 0.08)}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
+              <div style={{ width:34, height:34, borderRadius:9, background:`${accent}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
                 <Icon size={16} strokeWidth={2} />
               </div>
               <div>
@@ -2933,7 +2933,7 @@ export default function PagesManager() {
           </div>
           <div style={{ display:'flex', gap:2, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
             {[['all','All'],['published','Live'],['drafts','Drafts'],['expired','Expired']].map(([val,label])=>(
-              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent-btn)':'transparent', color:filterTab===val?'var(--accent-fg)':'var(--text-2)' }}>{label}</button>
+              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
             ))}
           </div>
           <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginLeft:isMobile?0:'auto', fontSize:12, color:'var(--text-2)' }}>
@@ -2958,7 +2958,7 @@ export default function PagesManager() {
             const on = folderFilter===val
             return (
               <button key={val||'__all'} onClick={()=>setFolderFilter(val)} aria-pressed={on}
-                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent-btn)':'var(--card-bg)', color:on?'var(--accent-fg)':'var(--text-2)' }}>
+                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card-bg)', color:on?'#fff':'var(--text-2)' }}>
                 {val!=='' && val!==UNFILED && <Folder size={12} />}{label} <span style={{ opacity:0.7 }}>{n}</span>
               </button>
             )
@@ -2966,7 +2966,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {error&&<div style={{ background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'var(--fin-negative)', marginBottom:16 }}>{error}</div>}
+      {error&&<div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#991b1b', marginBottom:16 }}>{error}</div>}
 
       {loading ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -2987,7 +2987,7 @@ export default function PagesManager() {
             <FileText size={22} strokeWidth={1.5} />
           </div>
           <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
-          <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages. Share with anyone via a public link.</div>
+          <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
             {[{Icon:FileText,label:'Document',type:'markdown'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'}].map(b=>(
               <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
@@ -3040,7 +3040,7 @@ export default function PagesManager() {
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
 
       {toast.msg&&(
-        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'var(--tooltip-bg)':'var(--danger-btn)', color:'var(--tooltip-fg)', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
+        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'#1e293b':'#dc2626', color:'#f8fafc', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
           {toast.msg}
         </div>
       )}
@@ -3054,7 +3054,7 @@ export default function PagesManager() {
 const inputStyle = { display:'block', width:'100%', padding:'7px 10px', border:'1px solid var(--border)', borderRadius:'10px', background:'var(--card-bg)', color:'var(--text-1)', fontSize:13, outline:'none', boxSizing:'border-box' }
 const labelStyle = { display:'block', fontSize:10, fontWeight:600, color:'var(--text-2)', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.05em' }
 const btnBase = { border:'none', borderRadius:'10px', padding:'8px 16px', fontSize:13, fontWeight:600, cursor:'pointer' }
-const btnPrimary = { ...btnBase, background:'var(--accent-btn)', color:'var(--accent-fg)' }
+const btnPrimary = { ...btnBase, background:'var(--accent)', color:'#fff' }
 const btnSecondary = { ...btnBase, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }
 const btnGhost = { ...btnBase, background:'transparent', color:'var(--text-2)', padding:'7px 12px' }
 const btnTiny = { ...btnBase, padding:'4px 10px', fontSize:12, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }

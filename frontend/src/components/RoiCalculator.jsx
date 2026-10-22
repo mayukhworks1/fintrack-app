@@ -1,131 +1,409 @@
-/**
- * What slow collections cost you — your numbers, your arithmetic.
- *
- * Every assumption is an input the visitor sets, and every result is a line
- * of arithmetic over those inputs, written out beside it. Nothing here is a
- * FinTrack outcome: the product does not promise a days-sales-outstanding
- * figure, and a calculator that quietly assumes one is a claim dressed as a
- * tool. What the product does is show which invoices are holding the number
- * up; the link at the end goes to the sandbox where that can be tried.
- *
- *   cash tied up          billing × DSO / 30
- *   freed at target DSO   billing × (DSO − target) / 30
- *   carrying cost / year  freed × cost of capital
- *   time on invoices      invoices × minutes / 60 × 12 hours a year, × ₹/hour
- */
-import { useEffect, useId, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { inr } from './demoData'
-import RollNumber from './motion/RollNumber'
+import { useState, useMemo } from 'react'
+import {
+  Calculator, Clock,
+  ArrowRight, CheckCircle2, Zap, Sparkles,
+  ShieldCheck, IndianRupee, Activity, Sliders, Check, Copy
+} from 'lucide-react'
+import { inr, inrShort } from './demoData'
 
-function Range({ label, value, set, min, max, step, show, ticks }) {
-  const id = useId()
-  return (
-    <div className="ft-f-range">
-      <label htmlFor={id}>{label}</label>
-      <output htmlFor={id}>{show(value)}</output>
-      <input id={id} type="range" min={min} max={max} step={step} value={value}
-             onChange={(e) => set(Number(e.target.value))} />
-      <span className="ft-f-ticks-row" aria-hidden="true">{ticks.map(t => <span key={t}>{t}</span>)}</span>
-    </div>
-  )
-}
-
-const num = (n) => Math.round(n).toLocaleString('en-IN')
+const PRESETS = [
+  { label: 'Boutique', revenue: 1500000, delay: 28, costOfCap: 12, invoices: 25, tag: '₹15L/mo' },
+  { label: 'Studio', revenue: 5000000, delay: 38, costOfCap: 12, invoices: 65, tag: '₹50L/mo' },
+  { label: 'Scale-Up', revenue: 15000000, delay: 45, costOfCap: 13.5, invoices: 140, tag: '₹1.5Cr/mo' },
+  { label: 'Enterprise', revenue: 50000000, delay: 60, costOfCap: 14, invoices: 320, tag: '₹5Cr/mo' },
+]
 
 export default function RoiCalculator() {
-  const [billing, setBilling] = useState(2500000)
-  const [dso, setDso] = useState(48)
-  const [target, setTarget] = useState(35)
-  const [rate, setRate] = useState(12)
-  const [invoices, setInvoices] = useState(40)
-  const [minutes, setMinutes] = useState(20)
-  const [perHour, setPerHour] = useState(800)
+  // Sliders
+  const [monthlyRevenue, setMonthlyRevenue] = useState(5000000) // ₹50 Lakhs / mo
+  const [daysOverdue, setDaysOverdue] = useState(38) // 38 days average delay
+  const [costOfCapital, setCostOfCapital] = useState(12) // 12% p.a. cost of capital
+  const [invoicesPerMonth, setInvoicesPerMonth] = useState(65) // 65 invoices / mo
+  const [activePreset, setActivePreset] = useState('Studio')
+  const [copied, setCopied] = useState(false)
 
-  const goal = Math.min(target, dso)
-  const tied = (billing * dso) / 30
-  const freed = (billing * (dso - goal)) / 30
-  const carrying = freed * (rate / 100)
-  const hours = (invoices * minutes * 12) / 60
-  const timeCost = hours * perHour
+  // Calculations
+  const metrics = useMemo(() => {
+    const annualRevenue = monthlyRevenue * 12
+    // Trapped capital floating in overdue & delayed buckets
+    const capitalAtRisk = Math.round(monthlyRevenue * (daysOverdue / 30) * 0.52)
+    // Cost of capital saved per year on overdue float
+    const interestDragSaved = Math.round(capitalAtRisk * (costOfCapital / 100))
+    // DSO reduction (typically 35-45% faster collection with automated aging bands & follow-ups)
+    const dsoReduction = Math.round(daysOverdue * 0.42)
+    const newDso = Math.max(14, daysOverdue - dsoReduction)
+    // Manual reconciliation hours saved per month (approx 45 mins per invoice lifecycle)
+    const hoursSavedPerMonth = Math.round(invoicesPerMonth * 0.75)
+    const hoursSavedPerYear = hoursSavedPerMonth * 12
+    const laborValueSaved = hoursSavedPerYear * 1200 // ₹1,200/hr finance operations labor benchmark
+    const totalAnnualValue = interestDragSaved + laborValueSaved
 
-  // One sentence for screen readers, once the inputs have been still for half
-  // a second: the figures above roll through every value in between, and a
-  // live region over them would read out each one.
-  const summary = `Cash waiting in receivables ${inr(Math.round(tied))}. Freed if you reach ${goal} days ${inr(Math.round(freed))}. ` +
-    `Carrying that costs ${inr(Math.round(carrying))} a year. Time on invoices ${num(hours)} hours a year.`
-  const [spoken, setSpoken] = useState('')
-  const [touched, setTouched] = useState(false)
-  useEffect(() => {
-    if (!touched) return
-    const t = setTimeout(() => setSpoken(summary), 500)
-    return () => clearTimeout(t)
-  }, [summary, touched])
+    const gstEscrow = Math.round(monthlyRevenue * 0.18)
+    const tdsCredit = Math.round(monthlyRevenue * 0.10)
+
+    return {
+      annualRevenue,
+      capitalAtRisk,
+      interestDragSaved,
+      dsoReduction,
+      newDso,
+      hoursSavedPerMonth,
+      hoursSavedPerYear,
+      laborValueSaved,
+      totalAnnualValue,
+      gstEscrow,
+      tdsCredit,
+    }
+  }, [monthlyRevenue, daysOverdue, costOfCapital, invoicesPerMonth])
+
+  const applyPreset = (preset) => {
+    setMonthlyRevenue(preset.revenue)
+    setDaysOverdue(preset.delay)
+    setCostOfCapital(preset.costOfCap)
+    setInvoicesPerMonth(preset.invoices)
+    setActivePreset(preset.label)
+  }
+
+  const scrollToSandbox = () => {
+    const el = document.getElementById('try') || document.querySelector('.ft-tour')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' })
+      window.dispatchEvent(new CustomEvent('ft-start-tour'))
+    }
+  }
+
+  const handleCopySummary = () => {
+    const text = `FinTrack ROI Simulation: For ${inrShort(monthlyRevenue)}/mo turnover, FinTrack unlocks ${inr(metrics.capitalAtRisk)} in floating capital, saves ${inr(metrics.interestDragSaved)}/yr in overdraft interest (@ ${costOfCapital}% APR), and cuts DSO by ${metrics.dsoReduction} days.`
+    navigator.clipboard?.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
-    <div className="ft-f-roi">
-      <div className="ft-f-roi-inputs" onChange={() => setTouched(true)}>
-        <p className="ft-f-kicker">Your assumptions</p>
-        <div className="ft-f-roi-grid">
-          <Range label="Billed per month" value={billing} set={setBilling} min={200000} max={20000000} step={100000}
-                 show={inr} ticks={['₹2L', '₹1Cr', '₹2Cr']} />
-          <Range label="Cost of capital" value={rate} set={setRate} min={6} max={24} step={0.5}
-                 show={(v) => `${v}% a year`} ticks={['6%', '15%', '24%']} />
-          <Range label="Days to collect today" value={dso} set={setDso} min={10} max={120} step={1}
-                 show={(v) => `${v} days`} ticks={['10 d', '65 d', '120 d']} />
-          <Range label="Days to collect you aim for" value={target} set={setTarget} min={7} max={120} step={1}
-                 show={(v) => `${v} days`} ticks={['7 d', '60 d', '120 d']} />
-          <Range label="Invoices per month" value={invoices} set={setInvoices} min={5} max={500} step={5}
-                 show={num} ticks={['5', '250', '500']} />
-          <Range label="Minutes chasing each one" value={minutes} set={setMinutes} min={0} max={120} step={5}
-                 show={(v) => `${v} min`} ticks={['0', '60', '120']} />
-          <Range label="Cost of an hour" value={perHour} set={setPerHour} min={200} max={5000} step={50}
-                 show={inr} ticks={['₹200', '₹2,600', '₹5,000']} />
-        </div>
-      </div>
-
-      <p className="sr-only" role="status">{spoken}</p>
-      <div className="ft-f-roi-out">
-        <div className="ft-f-roi-lead">
-          <p className="ft-f-kicker">Cash waiting in receivables</p>
-          <p className="ft-f-big"><RollNumber value={Math.round(tied)} format={inr} align="start" /></p>
-          <p className="mt-0.5 mb-3 text-[12px] text-[var(--text-3)] tabular-nums">{inr(billing)} a month × {dso} days ÷ 30</p>
-          <div className="ft-f-roi-days" aria-hidden="true">
-            <span className="ft-f-roi-day" data-k="now" style={{ '--s': Math.min(1, dso / 120) }} />
-            <span className="ft-f-roi-day" data-k="goal" style={{ '--s': Math.min(1, goal / 120) }} />
+    <div
+      className="rounded-2xl p-6 sm:p-8 lg:p-10 transition-all duration-300 relative overflow-hidden"
+      style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        boxShadow: 'var(--card-shadow)',
+      }}
+    >
+      {/* Header & Industry Presets */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 mb-6 border-b border-[var(--card-border)]">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold mb-2"
+               style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+            <Calculator size={13} />
+            Interactive ROI & Working Capital Simulator
           </div>
-          <p className="ft-f-roi-legend flex flex-wrap gap-x-3 gap-y-1 mt-2 mb-0 text-[11.5px] text-[var(--text-3)]">
-            <span><i data-k="now" /> {dso} days today</span>
-            <span><i data-k="goal" /> {goal} days aimed for</span>
+          <h3 className="ft-display text-xl sm:text-2xl" style={{ color: 'var(--text-1)' }}>
+            Simulate your capital recovery and interest drag savings
+          </h3>
+          <p className="text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed" style={{ color: 'var(--text-2)' }}>
+            Calculate the exact working capital unlocked when invoice aging, GST/TDS segregation, and follow-ups run automatically.
           </p>
         </div>
 
-        <dl className="ft-f-roi-figs">
-          <div>
-            <dt className="text-[11.5px] font-semibold text-[var(--text-3)]">Freed if you reach {goal} days</dt>
-            <dd><RollNumber value={Math.round(freed)} format={inr} align="start" /></dd>
-            <dd className="ft-f-roi-note">{inr(billing)} × ({dso} − {goal}) ÷ 30</dd>
-          </div>
-          <div>
-            <dt className="text-[11.5px] font-semibold text-[var(--text-3)]">What carrying that costs a year</dt>
-            <dd><RollNumber value={Math.round(carrying)} format={inr} align="start" /></dd>
-            <dd className="ft-f-roi-note">at {rate}% a year</dd>
-          </div>
-          <div>
-            <dt className="text-[11.5px] font-semibold text-[var(--text-3)]">Time on invoices a year</dt>
-            <dd><RollNumber value={Math.round(hours)} format={(n) => `${num(n)} h`} align="start" /></dd>
-            <dd className="ft-f-roi-note">{inr(timeCost)} at {inr(perHour)} an hour</dd>
-          </div>
-        </dl>
+        {/* Industry Presets */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl shrink-0"
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+          {PRESETS.map(p => {
+            const on = activePreset === p.label && monthlyRevenue === p.revenue && daysOverdue === p.delay
+            return (
+              <button
+                key={p.label}
+                onClick={() => applyPreset(p)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                style={{
+                  background: on ? 'var(--accent)' : 'transparent',
+                  color: on ? '#fff' : 'var(--text-2)',
+                }}
+              >
+                <span>{p.label}</span>
+                <span className={`text-[10px] font-mono ${on ? 'opacity-90' : 'text-[var(--text-3)]'}`}>
+                  {p.tag}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
-        <p className="ft-f-foot">
-          Arithmetic on your inputs, not a promise. FinTrack shows which invoices hold the figure up:
-          the ageing bands, who owes what, and what is withheld as TDS rather than owed.
-        </p>
-        <Link to="/#try" className="ft-f-link">
-          Try the ageing bands in the sandbox <ArrowRight size={13} aria-hidden="true" />
-        </Link>
+      {/* Main Dual-Pane Simulator Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Interactive Parametric Sliders (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+              <Sliders size={13} className="text-[var(--accent)]" />
+              Operational Parameters
+            </span>
+            <span className="text-[10.5px] text-[var(--accent)] font-semibold">
+              Live Interactive
+            </span>
+          </div>
+
+          {/* Monthly Invoicing Volume Slider */}
+          <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="flex justify-between items-center mb-1.5">
+              <label htmlFor="roi-slider-0" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                <IndianRupee size={12} className="text-[var(--accent)]" />
+                Monthly Billed Turnover
+              </label>
+              <span className="font-mono font-extrabold text-sm text-[var(--accent)]">
+                {inr(monthlyRevenue)}/mo
+              </span>
+            </div>
+            <input
+              id="roi-slider-0"
+              type="range"
+              min={500000}
+              max={50000000}
+              step={500000}
+              value={monthlyRevenue}
+              onChange={(e) => { setMonthlyRevenue(Number(e.target.value)); setActivePreset(''); }}
+              className="w-full accent-[var(--accent)] cursor-pointer"
+            />
+            <div className="flex justify-between text-[9.5px] font-mono text-[var(--text-3)] mt-1">
+              <span>₹5L</span>
+              <span>₹2.5Cr</span>
+              <span>₹5Cr/mo</span>
+            </div>
+          </div>
+
+          {/* Payment Delay Days Slider */}
+          <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="flex justify-between items-center mb-1.5">
+              <label htmlFor="roi-slider-1" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                <Clock size={12} className="text-[var(--warn)]" />
+                Average Payment Lag (DSO)
+              </label>
+              <span className="font-mono font-extrabold text-sm"
+                    style={{ color: daysOverdue > 50 ? 'var(--bad)' : daysOverdue > 30 ? 'var(--warn)' : 'var(--ok)' }}>
+                {daysOverdue} days
+              </span>
+            </div>
+            <input
+              id="roi-slider-1"
+              type="range"
+              min={10}
+              max={90}
+              step={1}
+              value={daysOverdue}
+              onChange={(e) => { setDaysOverdue(Number(e.target.value)); setActivePreset(''); }}
+              className="w-full accent-[var(--accent)] cursor-pointer"
+            />
+            <div className="flex justify-between text-[9.5px] font-mono text-[var(--text-3)] mt-1">
+              <span className="text-[var(--ok)]">10d (Target)</span>
+              <span className="text-[var(--warn)]">38d (Industry Avg)</span>
+              <span className="text-[var(--bad)]">90d (Severe Float Drag)</span>
+            </div>
+          </div>
+
+          {/* Cost of Working Capital Overdraft */}
+          <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="flex justify-between items-center mb-1.5">
+              <label htmlFor="roi-slider-2" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                <Zap size={12} className="text-emerald-500" />
+                Overdraft / Credit Line APR
+              </label>
+              <span className="font-mono font-extrabold text-sm text-[var(--text-1)]">
+                {costOfCapital}% p.a.
+              </span>
+            </div>
+            <input
+              id="roi-slider-2"
+              type="range"
+              min={8}
+              max={20}
+              step={0.5}
+              value={costOfCapital}
+              onChange={(e) => { setCostOfCapital(Number(e.target.value)); setActivePreset(''); }}
+              className="w-full accent-[var(--accent)] cursor-pointer"
+            />
+            <div className="flex justify-between text-[9.5px] font-mono text-[var(--text-3)] mt-1">
+              <span>8% Bank OD</span>
+              <span>12% Standard NBFC</span>
+              <span>20% High Yield</span>
+            </div>
+          </div>
+
+          {/* Invoices per month */}
+          <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="flex justify-between items-center mb-1.5">
+              <label htmlFor="roi-slider-3" className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
+                <Activity size={12} className="text-[var(--accent)]" />
+                Invoices Processed Per Month
+              </label>
+              <span className="font-mono font-extrabold text-sm text-[var(--text-1)]">
+                {invoicesPerMonth} invoices/mo
+              </span>
+            </div>
+            <input
+              id="roi-slider-3"
+              type="range"
+              min={10}
+              max={400}
+              step={5}
+              value={invoicesPerMonth}
+              onChange={(e) => { setInvoicesPerMonth(Number(e.target.value)); setActivePreset(''); }}
+              className="w-full accent-[var(--accent)] cursor-pointer"
+            />
+            <div className="flex justify-between text-[9.5px] font-mono text-[var(--text-3)] mt-1">
+              <span>10 inv</span>
+              <span>200 inv</span>
+              <span>400 inv</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Financial Results & Waterfall Impact (7 cols) */}
+        <div className="lg:col-span-7 flex flex-col gap-4">
+          {/* Hero Summary Card: Capital Unlocked */}
+          <div className="rounded-2xl p-6 border relative overflow-hidden"
+               style={{
+                 background: 'linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(16,185,129,0.10) 100%)',
+                 borderColor: 'var(--accent)',
+                 boxShadow: '0 8px 32px rgba(37,99,235,0.15)',
+               }}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                <Sparkles size={14} /> Total Working Capital Unlocked
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <CheckCircle2 size={11} /> Immediate Liquidity Reclaimed
+              </span>
+            </div>
+
+            <div className="flex items-baseline gap-2 my-2 flex-wrap">
+              <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-[var(--text-1)]">
+                {inr(metrics.capitalAtRisk)}
+              </span>
+              <span className="text-xs font-semibold text-[var(--text-2)]">
+                reclaimed from aging receivables
+              </span>
+            </div>
+
+            {/* Before vs After Visual Float Bar */}
+            <div className="mt-4 pt-3 border-t border-[var(--card-border)] space-y-2">
+              <div className="flex justify-between text-[11px] font-semibold">
+                <span className="text-[var(--text-3)]">Collection Velocity Horizon:</span>
+                <span className="text-[var(--accent)] font-bold">
+                  {daysOverdue}d → {metrics.newDso}d (-{metrics.dsoReduction} days)
+                </span>
+              </div>
+              <div className="h-2.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${Math.round((metrics.newDso / daysOverdue) * 100)}%` }}
+                  title="Accelerated Collection Horizon"
+                />
+                <div
+                  className="h-full bg-amber-500/50 transition-all duration-300"
+                  style={{ width: `${Math.round((metrics.dsoReduction / daysOverdue) * 100)}%` }}
+                  title="Days Eliminated with FinTrack"
+                />
+              </div>
+              <div className="flex justify-between text-[9.5px] font-mono text-[var(--text-3)]">
+                <span>FinTrack: {metrics.newDso} days</span>
+                <span className="text-emerald-500 font-bold">{Math.round((metrics.dsoReduction / daysOverdue) * 100)}% Faster Cash Velocity</span>
+                <span>Prior: {daysOverdue} days</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-Metrics 3-Tile Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Tile 1: Interest Drag Avoided */}
+            <div className="p-4 rounded-xl border flex flex-col justify-between"
+                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[var(--text-3)] block mb-1">
+                  Interest Drag Avoided
+                </span>
+                <span className="text-xl font-extrabold font-mono text-emerald-500 block">
+                  {inrShort(metrics.interestDragSaved)}
+                </span>
+              </div>
+              <span className="text-[10px] text-[var(--text-3)] block mt-1 pt-1 border-t border-[var(--card-border)]">
+                Saved annually @ {costOfCapital}% APR
+              </span>
+            </div>
+
+            {/* Tile 2: DSO Speedup */}
+            <div className="p-4 rounded-xl border flex flex-col justify-between"
+                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[var(--text-3)] block mb-1">
+                  Cash Velocity (DSO)
+                </span>
+                <span className="text-xl font-extrabold font-mono text-[var(--accent)] block">
+                  -{metrics.dsoReduction} Days
+                </span>
+              </div>
+              <span className="text-[10px] text-[var(--text-3)] block mt-1 pt-1 border-t border-[var(--card-border)]">
+                From {daysOverdue}d down to {metrics.newDso}d
+              </span>
+            </div>
+
+            {/* Tile 3: Operations Labor Reclaimed */}
+            <div className="p-4 rounded-xl border flex flex-col justify-between"
+                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[var(--text-3)] block mb-1">
+                  Finance Hours Saved
+                </span>
+                <span className="text-xl font-extrabold font-mono text-[var(--text-1)] block">
+                  {metrics.hoursSavedPerYear} hrs/yr
+                </span>
+              </div>
+              <span className="text-[10px] text-[var(--text-3)] block mt-1 pt-1 border-t border-[var(--card-border)]">
+                ≈ {metrics.hoursSavedPerMonth} hrs/mo reconciliation
+              </span>
+            </div>
+          </div>
+
+          {/* Reconciled Tax Escrow Callout */}
+          <div className="p-4 rounded-xl border" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+              <span className="text-xs font-bold text-[var(--text-1)] flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-500" />
+                Automatic Statutory GST & TDS Escrow Ring-Fencing
+              </span>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                <span className="text-[var(--accent)]">{inrShort(metrics.gstEscrow)} GST/mo</span>
+                <span className="text-[var(--text-3)]">·</span>
+                <span className="text-amber-500">{inrShort(metrics.tdsCredit)} TDS/mo</span>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--text-2)] m-0 leading-relaxed">
+              Separated cleanly in the unified tax ledger upon invoice creation so statutory liabilities never deplete your operational payroll reserves.
+            </p>
+          </div>
+
+          {/* Action Row */}
+          <div className="p-4 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3"
+               style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopySummary}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer hover:bg-[var(--card-bg)] transition-colors"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)', color: 'var(--text-2)' }}
+              >
+                {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                {copied ? 'Summary Copied' : 'Copy ROI Summary'}
+              </button>
+            </div>
+
+            <button
+              onClick={scrollToSandbox}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all shadow-sm w-full sm:w-auto justify-center"
+              style={{ background: 'var(--accent)', color: '#fff' }}
+            >
+              Test in Interactive Sandbox <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

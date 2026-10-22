@@ -1,68 +1,56 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { applyTheme, darkQuery, readPrefs, resolveDark, savePrefs, normalizePrefs } from '../theme/themeStore'
+import { createContext, useContext, useState, useEffect } from 'react'
 
 const ThemeCtx = createContext(null)
 
-/**
- * Appearance state: { palette, mode } where mode is 'light' | 'dark' |
- * 'system'. `dark` is the resolved value, so screens that only care whether
- * the lights are off keep reading it as before.
- *
- * main.jsx has already put the saved choice on <html> before this mounts
- * (themeStore.bootstrapTheme), so the first render agrees with the page.
- */
 export function ThemeProvider({ children }) {
-  const [prefs, setPrefs] = useState(readPrefs)
-  const [systemDark, setSystemDark] = useState(() => resolveDark('system'))
-  const applied = useRef(null)
-
-  // Follow the OS while in 'system' mode, live.
-  useEffect(() => {
-    const mq = darkQuery()
-    if (!mq) return undefined
-    const onChange = (e) => setSystemDark(!!e.matches)
-    if (mq.addEventListener) mq.addEventListener('change', onChange)
-    else mq.addListener?.(onChange)
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', onChange)
-      else mq.removeListener?.(onChange)
-    }
-  }, [])
-
-  const dark = prefs.mode === 'system' ? systemDark : prefs.mode === 'dark'
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('fintrack-theme')
+    return saved ? saved === 'dark' : false // default light
+  })
 
   useEffect(() => {
-    // The first pass only re-asserts what main.jsx already applied; every
-    // later change is a switch, gets the cross-fade, and is saved. Comparing
-    // against the last applied value keeps StrictMode's double effect run
-    // from counting as a switch.
-    const key = `${prefs.palette}/${prefs.mode}/${dark}`
-    if (applied.current === key) return
-    const isSwitch = applied.current !== null
-    applied.current = key
-    applyTheme(prefs, { animate: isSwitch })
-    if (isSwitch) savePrefs(prefs)
-  }, [prefs, dark])
-
-  const setPalette = useCallback((palette) => {
-    setPrefs(p => normalizePrefs({ ...p, palette }))
-  }, [])
-
-  const setMode = useCallback((mode) => {
-    setPrefs(p => normalizePrefs({ ...p, mode }))
-  }, [])
-
-  /** The sun / moon buttons: flip to the opposite of what is showing now. */
-  const toggle = useCallback(() => {
-    setPrefs(p => ({ ...p, mode: dark ? 'light' : 'dark' }))
+    const html = document.documentElement
+    // :root = light, html.dark = dark  (no .light class needed)
+    html.classList.remove('light', 'dark')
+    if (dark) html.classList.add('dark')
+    localStorage.setItem('fintrack-theme', dark ? 'dark' : 'light')
   }, [dark])
 
-  const value = useMemo(
-    () => ({ dark, palette: prefs.palette, mode: prefs.mode, setPalette, setMode, toggle }),
-    [dark, prefs.palette, prefs.mode, setPalette, setMode, toggle]
-  )
+  /**
+   * Flip the theme, wiping the new one in as a circle from wherever the
+   * request came from.
+   *
+   * View transitions are progressive: where the API is missing the callback
+   * runs immediately and the existing 0.3s background transition on body
+   * carries the change, which is what happened before this existed. The
+   * circle is clipped from the pointer's last position, so the theme appears
+   * to spread from the button that was pressed rather than the page flipping
+   * colour all at once.
+   */
+  const toggle = (e) => {
+    const flip = () => setDark(d => !d)
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced || !document.startViewTransition) return flip()
 
-  return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>
+    const x = e?.clientX ?? window.innerWidth - 72
+    const y = e?.clientY ?? 30
+    const reach = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
+
+    const t = document.startViewTransition(() => flip())
+    t.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${reach}px at ${x}px ${y}px)`] },
+        { duration: 520, easing: 'cubic-bezier(0.22,1,0.36,1)',
+          pseudoElement: '::view-transition-new(root)' }
+      )
+    }).catch(() => {})
+  }
+
+  return (
+    <ThemeCtx.Provider value={{ dark, toggle }}>
+      {children}
+    </ThemeCtx.Provider>
+  )
 }
 
 export function useTheme() {

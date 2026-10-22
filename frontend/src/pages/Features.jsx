@@ -1,53 +1,65 @@
 /**
- * Features: the eleven modules, one after another, each on a real screen.
+ * Features — an explorer rather than a list.
  *
- * Set as a long document rather than a picker: a contents list at the top,
- * then one section per module with its headline, what it does, a capture
- * of the screen it lives on (cropped to the part that matters, with numbered
- * notes), and the list of what it carries. Modules with no capture worth
- * showing say what they do in words, and nothing is drawn in their place.
+ * The landing page summarises the modules in a grid. Repeating that here in
+ * longer form would be a second wall of cards, so this is built to be driven:
+ * pick a module on the left and the panel on the right swaps, with a working
+ * demonstration of that module rather than a paragraph about it.
  *
- * Nothing here reads a workspace. Every capture is of the sample workspace,
- * and each caption says so.
+ * Keyboard-navigable because a tablist that only responds to a mouse is a
+ * tablist that half the people using it cannot reach — arrow keys move, Home
+ * and End jump, and the panel is wired to its tab.
+ *
+ * As with every public page: nothing here reads a workspace. Each demo is
+ * invented data, and the panels that show figures are marked so a screen
+ * reader does not read them out as real.
  */
-import { Suspense, lazy } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  Receipt, FolderKanban, BarChart3, FileSearch, Code2, Globe,
+  Activity, Share2, ArrowRight, Check, Landmark, FileText, ShieldCheck, Play,
+} from 'lucide-react'
 import { usePageMeta } from '../hooks/usePageMeta'
+import { useReveal } from '../hooks/useReveal'
+import { useTilt } from '../hooks/useTilt'
 import PublicLayout from '../components/PublicLayout'
-import { PageHead, Section, Plate, Reveal, Btn, Closing } from '../components/PublicBits'
-import { MODULES } from '../content/publicContent'
+import { Head, Reveal } from '../components/PublicBits'
+import ProductMediaShowcase from '../components/ProductMediaShowcase'
 import RoiCalculator from '../components/RoiCalculator'
-import LazyMount from '../components/motion/LazyMount'
-import '../styles/public-features.css'
-
-const ShippedShowcase = lazy(() => import('../components/features/ShippedShowcase'))
-
-/* The Pages module's name comes from the shared list, so a rename there
-   reaches this page's contents, its section and the overview together. */
-const PAGES_LABEL = MODULES.find(m => m.visual === 'pages')?.title || 'Pages'
+import { AnalystDemo, Grain } from '../components/LandingVisuals'
+import {
+  GlyphMargin, GlyphTable, GlyphShare, GlyphBoard, GlyphAudit,
+} from '../components/Glyphs'
+import AgingPreview from '../components/AgingPreview'
+import TaxFlowSimulator from '../components/TaxFlowSimulator'
+import ContractCitationInspector from '../components/ContractCitationInspector'
+import RunwayStressTester from '../components/RunwayStressTester'
+import LoopVideo from '../components/LoopVideo'
 
 export const FEATURES = [
   {
-    id: 'receivables', label: 'Invoices',
+    id: 'receivables', icon: Receipt, label: 'Invoices',
     headline: 'Know what is owed, how old it is, and what is missing',
-    body: 'Invoices carry ageing bands, a collection rate and average days to collect. GST and TDS are separate figures. Tax withheld at source is money the client will never pay you, so counting it as outstanding overstates what you can collect.',
+    body: 'Invoices carry aging bands, a collection rate and average days to collect. GST and TDS are separate figures, because tax withheld at source is not money a client still owes you — counting it as outstanding overstates what you can actually collect.',
     points: [
-      'Ageing bands of 0-30, 31-60, 61-90 and 90+ days, each a filter',
+      'Aging bands — 0-30, 31-60, 61-90, 90+ — clickable as filters',
       'Outstanding, collected and GST totals side by side',
       'Collection rate and average days to collect',
       'Follow-up load: due today, overdue, next follow-up date',
-      'Missing documents: invoices with no PDF or payment reference',
+      'Missing docs — invoices with no PDF or payment reference',
       'Retainer templates for recurring monthly billing',
       'Filters on project, category, status and date; CSV export',
     ],
     demo: 'aging',
   },
   {
-    id: 'projects', label: 'Projects',
+    id: 'projects', icon: FolderKanban, label: 'Projects',
     headline: 'Catch a job going underwater before it lands',
     body: 'Billed, cost and realised profit per project, with margin and a health signal. The point is to see a project turning bad while there is still something to do about it.',
     points: [
       'Amount billed, actual profit and profit percentage',
-      'Health signals, with at-risk and critical projects first',
+      'Health signals — at risk and critical surfaced first',
       'Client rollups and status distribution',
       'Per-project detail with its own invoice history',
       'Top projects by value, and projects running at negative margin',
@@ -55,14 +67,14 @@ export const FEATURES = [
     demo: 'margin',
   },
   {
-    id: 'analytics', label: 'Analytics',
-    headline: 'Trends that open to the rows behind them',
-    body: 'Cash position, revenue and overdue amounts over time. Every chart is one click from the rows behind it, so a number you doubt can be checked.',
+    id: 'analytics', icon: BarChart3, label: 'Analytics',
+    headline: 'Trends you can open, not just look at',
+    body: 'Cash position, revenue and overdue pressure over time — and every chart is one click from the rows behind it, so a number you do not believe can be checked rather than argued about.',
     points: [
       'Cash position, revenue and outstanding over any period',
       'Collection rate and average days to collect as trends',
       'Overdue pressure and invoices cleared per month',
-      'Outliers flagged for a second look',
+      'Signals worth noticing — outliers surfaced automatically',
       'Client, project and category breakdowns',
       'Live sync state, so you know how fresh the figures are',
       'Drill through to the underlying rows; CSV export',
@@ -70,9 +82,9 @@ export const FEATURES = [
     demo: 'bars',
   },
   {
-    id: 'tax', label: 'Tax ledger',
+    id: 'tax', icon: Landmark, label: 'Tax ledger',
     headline: 'GST, month by month, with a filing checklist',
-    body: 'Gross billed, GST collected and net receivable per month and per client, kept apart from the collections view so a filing figure is never read as a cash figure.',
+    body: 'Gross billed, GST collected and net receivable per month and per client — kept separate from the collections view, so a filing figure is never confused with a cash figure.',
     points: [
       'Gross billed, GST amount and net received per month',
       'GST collection rate',
@@ -83,35 +95,35 @@ export const FEATURES = [
     demo: 'tax',
   },
   {
-    id: 'documents', label: 'Document intelligence',
+    id: 'documents', icon: FileSearch, label: 'Document intelligence',
     headline: 'Ask your contracts a question',
-    body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from.',
+    body: 'Upload agreements and notes, then ask in plain words. Every answer carries numbered citations, and each one opens the passage and page it came from. An answer you cannot check is barely better than a guess.',
     points: [
       'PDF, text, Markdown, CSV, JSON and log files up to 15 MB',
       'Page-level citations you can open inline',
       'Answers verified against the sources before you see them',
       'Full-text search with meaning-based re-ranking where available',
-      'Says which retrieval is actually running',
+      'States which retrieval is actually running, rather than implying one',
       'Conversations saved with their sources, and replayable',
     ],
     demo: 'docs',
   },
   {
-    id: 'analyst', label: 'Financial query engine',
+    id: 'analyst', icon: Code2, label: 'Financial query engine',
     headline: 'It shows you the query it ran',
-    body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the application compiles the SQL. The model never writes SQL, and the statement is shown with every answer.',
+    body: 'Ask your invoices and projects a question. The model maps it onto a fixed set of measures and the code compiles the SQL — the model never writes SQL itself, and the statement is shown with every answer.',
     points: [
       'Plain-language questions over invoices and projects',
       'The compiled query is shown with every answer',
       'Measures include outstanding, collected, GST, TDS and collection rate',
       'Group by project, category, client, status, month or quarter',
       'Charts, tables or a single figure, chosen to fit the question',
-      'Limited to the rows your account may already see',
+      'Scoped to what your account may already see — never a way around a permission',
     ],
     demo: 'table',
   },
   {
-    id: 'reports', label: 'Executive reports',
+    id: 'reports', icon: FileText, label: 'Executive reports',
     headline: 'A written report, and someone to ask',
     body: 'Generate a period report over your own figures, keep the history, and ask follow-up questions in a chat that already has the current context loaded.',
     points: [
@@ -120,44 +132,43 @@ export const FEATURES = [
       'Marked confidential for internal use',
       'Assistant with your current data as context',
       'Brief, detailed or board-style output',
-      'A daily budget per role, shown as it is spent',
+      'A daily AI budget per role, reported honestly rather than guessed',
     ],
     demo: 'analyst',
   },
   {
-    id: 'pages', label: PAGES_LABEL, isNew: true,
-    headline: 'Write a page or a sheet, publish it on a link',
-    body: 'Pages keeps documents and spreadsheets in folders. The spreadsheet editor has formulas, AutoSum and ₹ number formats; publish either on a link with an optional password, protection code and expiry in IST. Chat apps show a preview card, and each page keeps its views per day, device and country.',
+    id: 'pages', icon: Globe, label: 'Web studio',
+    headline: 'Describe a page, watch it get written',
+    body: 'The generator streams as it works, so you see the page appear rather than a spinner. Revisions edit the document in place instead of regenerating it, so the parts you did not mention stay exactly as they were.',
     points: [
-      'Spreadsheet editor: formulas, AutoSum, ₹ number formats',
-      'Folders and search across pages and sheets',
-      'Password, protection code and expiry (IST) on any link',
-      'Version history; CSV in and out',
-      'Link previews in chat apps',
-      'Views per day, device and country for each page',
-      'Describe a page and it is written as you watch; revisions edit in place',
+      'Streamed token by token as it writes',
+      'Surgical revisions — edits the page rather than rebuilding it',
+      'Published on a slug, with version history',
+      'Optional password and expiry date',
+      'View counts per page',
+      'Served as its own document, sandboxed away from your session',
     ],
     demo: 'pages',
   },
   {
-    id: 'status', label: 'Delivery & status',
-    headline: 'Run the delivery from the same records as the invoices',
-    body: 'A project status board on the same records as the money. A kanban board or an operational list, grouped however you work, updated live as anyone changes anything, including someone editing the underlying table directly.',
+    id: 'status', icon: Activity, label: 'Delivery & status',
+    headline: 'Run the delivery, not just the invoice',
+    body: 'This is the half people miss: a real project status board sitting on the same records as the money. A kanban board or an operational list, grouped however you work, updating live as anyone changes anything — including someone editing the underlying table directly rather than going through the app.',
     points: [
       'Kanban board or operational list, grouped by client, project or state',
       'Short status and a detailed note per project',
-      'Live over an event stream, with no refresh',
-      'Status options are a picklist you extend',
-      'Drafted status updates from the current position',
+      'Live over an event stream — no refresh, no stale board',
+      'Status options are a picklist you extend, not an enum we ship',
+      'AI-drafted status updates from the current position',
       'Attachments on a status entry',
       'Bulk select, advanced filters, and share the view read-only',
     ],
     demo: 'board',
   },
   {
-    id: 'shared', label: 'Shared views',
+    id: 'shared', icon: Share2, label: 'Shared views',
     headline: 'Send a client a link, see what they opened',
-    body: 'A filtered, read-only view on a link, with the columns that matter highlighted and a record of what was opened.',
+    body: 'A filtered, read-only view on a link — with highlighting for the columns that matter, and analytics for what was actually looked at.',
     points: [
       'Read-only links with your filters baked in',
       'Highlight the columns you want read first',
@@ -168,178 +179,287 @@ export const FEATURES = [
     demo: 'share',
   },
   {
-    id: 'admin', label: 'Admin & audit', isNew: true,
+    id: 'admin', icon: ShieldCheck, label: 'Admin & audit',
     headline: 'Every request recorded, every permission adjustable',
-    body: 'User approval, a permission matrix down to the individual action, live sessions, and an audit trail written asynchronously so it never becomes the reason a page is slow. The AI gateway sits here too: which provider and model serve each AI task, and what each may spend today.',
+    body: 'User approval, a permission matrix down to the individual action, live sessions, and an audit trail written asynchronously so it never becomes the reason a page is slow.',
     points: [
       'Approve, disable and delete accounts; assign roles',
       'Grant or revoke any single permission per person',
       'Live sessions with device, browser, country and ISP',
-      'Full request audit: method, path, status, duration, referer',
+      'Full request audit — method, path, status, duration, referer',
       'Record-level change history with changed fields',
-      'AI gateway: provider routes tried in order, daily caps, versioned prompts, a call log',
-      'Gateway keys kept encrypted on the server; superadmin only',
-      'Sync log, mirror health and deployment health checks',
+      'Sync log and mirror health per source table',
+      'AI run history and per-user usage',
+      'Deployment health checks for every dependency',
     ],
     demo: 'audit',
   },
 ]
 
-
-const SAMPLE = 'From the sample workspace on the overview. Sample data.'
-const SCREENS = {
-  receivables: {
-    id: 'invoices', crop: [246, 80, 1330, 825], caption: SAMPLE,
-    alt: 'The invoices screen: outstanding, collected and overdue totals above the invoice list, sample data',
-    spots: [
-      { x: 1290, y: 157, label: 'Overdue', body: 'Open invoices past their due date.', side: 'left' },
-      { x: 905, y: 214, label: 'Status filters', body: 'Overdue, sent and paid narrow the list in place.' },
-    ],
-  },
-  projects: {
-    id: 'projects', crop: [248, 378, 1327, 564], caption: SAMPLE,
-    alt: 'A project card for Site rebuild: billed, cost, profit and a 76% margin over its four invoices, sample data',
-    spots: [
-      { x: 1470, y: 399, label: 'Health', body: 'Healthy, watch or at risk, from the margin.', side: 'left' },
-      { x: 1395, y: 607, label: 'Margin', body: 'Billed less cost, over billed.', side: 'left' },
-    ],
-  },
-  analytics: {
-    id: 'analytics', crop: [248, 272, 1327, 443], caption: SAMPLE,
-    alt: 'The analytics chart: billed per month as bars and settled inflow as a line, sample data',
-    spots: [
-      { x: 545, y: 470, label: 'Billed', body: 'What was invoiced in each month.' },
-      { x: 1030, y: 610, label: 'Settled inflow', body: 'What was collected in each month.', side: 'top' },
-    ],
-  },
-  documents: {
-    id: 'studio', crop: [246, 75, 1330, 530], caption: SAMPLE,
-    alt: 'Studio documents: four uploaded agreements, each indexed, sample data',
-    spots: [{ x: 1452, y: 240, label: 'Indexed', body: 'A document is indexed before it can be asked about.', side: 'left' }],
-  },
-  analyst: {
-    id: 'assistant', crop: [246, 125, 1330, 600], caption: SAMPLE,
-    alt: 'The assistant: a question, the compiled SQL query and the answer as bars by client, sample data',
-    spots: [
-      { x: 700, y: 262, label: 'Compiled query', body: 'Written by the application from a measure and a grouping.' },
-      { x: 1100, y: 563, label: 'The answer', body: 'Outstanding by client, from the query above.', side: 'left' },
-    ],
-  },
-  pages: {
-    id: 'sheet-public', crop: [180, 30, 1240, 690], caption: 'The published sheet, from the app. Sample data.', zoom: true,
-    alt: 'A published Invoice tracker sheet with search, CSV download and totals, sample data',
-    spots: [{ x: 1262, y: 240, label: 'Download CSV', body: 'Anyone with the link can search the rows and take a copy.', side: 'left' }],
-  },
-  status: {
-    id: 'status', crop: [246, 80, 1330, 580], caption: SAMPLE,
-    alt: 'The status board by status: projects in lanes, each with what it is still owed, sample data',
-    spots: [
-      { x: 600, y: 316, label: 'Owed, on the card', body: 'What the project is still owed, from its invoices.' },
-      { x: 1503, y: 100, label: 'Share view', body: 'The board as a read-only link.', side: 'left' },
-    ],
-  },
-  admin: {
-    id: 'gateway-providers', crop: [117, 130, 1366, 830], caption: 'Admin, AI gateway, from the app. Sample data.', zoom: true,
-    alt: 'The AI gateway: providers Groq and OpenRouter with their keys, connection checks and today’s usage against caps, sample data',
-    spots: [
-      { x: 245, y: 350, label: 'Gateway caps', body: 'Limits across every task and provider, reset at midnight IST.' },
-      { x: 228, y: 641, label: 'Connection', body: 'A test asks the provider for its model list with the key in use.' },
-    ],
-  },
+/* One entry per module, chosen for what the module does. The map used to have
+   six entries for eleven modules, four of them generic charts, so seven
+   modules were illustrated with another module's picture — bars appeared
+   against Tax, Pages and Audit alike, and a donut reading 68% against
+   Projects. A drawing beside a claim is read as part of the claim. */
+const DEMOS = {
+  aging:   <AgingPreview />,
+  margin:  <div className="px-4 py-6"><GlyphMargin /></div>,
+  bars:    <RunwayStressTester />,
+  tax:     <TaxFlowSimulator />,
+  docs:    <ContractCitationInspector />,
+  table:   <div className="px-4 py-6"><GlyphTable /></div>,
+  analyst: <AnalystDemo />,
+  pages:   <div className="px-4 py-6"><GlyphShare mode="stream" /></div>,
+  board:   <div className="px-4 py-6"><GlyphBoard /></div>,
+  share:   <div className="px-4 py-6"><GlyphShare mode="link" /></div>,
+  audit:   <div className="px-4 py-6"><GlyphAudit /></div>,
 }
 
-
-SCREENS.tax = {
-  id: 'tax', crop: [246, 76, 1330, 870], caption: SAMPLE,
-  alt: 'The tax ledger: taxable value, GST, TDS withheld and net receivable, with GST and TDS by client, sample data',
-  spots: [
-    { x: 1360, y: 190, label: 'TDS withheld', body: 'Deducted by clients at source; reported, never counted as owed.' },
-    { x: 330, y: 732, label: 'By client', body: 'Taxable value, GST and TDS for each client.' },
-  ],
-}
-
-function Module({ f, n }) {
-  const shot = SCREENS[f.id]
-  return (
-    <section id={f.id} className="pb-section pb-f-module" aria-labelledby={`${f.id}-label`}>
-      <div className="pb-wrap">
-        <div className="pb-row">
-          <div className="pb-margin">
-            <p className="pb-label" id={`${f.id}-label`}>
-              <span className="pb-n">{String(n).padStart(2, '0')}</span>{f.label}
-              {f.isNew && <span className="pb-f-new">New</span>}
-            </p>
-          </div>
-          <div className="pb-main">
-            <Reveal style={{ maxWidth: '40em' }}>
-              <h2 className="pb-h2">{f.headline}</h2>
-              <p className="pb-body" style={{ marginTop: 16, fontSize: '1.0625rem' }}>{f.body}</p>
-            </Reveal>
-            {shot && (
-              <Reveal style={{ marginTop: 'clamp(28px, 4vw, 48px)' }}>
-                <Plate id={shot.id} crop={shot.crop} alt={shot.alt} fig={n}
-                       caption={shot.caption} notes={shot.spots} />
-              </Reveal>
-            )}
-            <ul className="pb-points pb-f-points" aria-label={`${f.label}: what it carries`}>
-              {f.points.map(p => <li key={p}>{p}</li>)}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
+const FEATURE_MEDIA = {
+  receivables: { video: '/media/pomelli_photoshoot-5.mp4', label: '3D Receivables & Tax Blueprint' },
+  projects:    { video: '/media/pomelli_photoshoot-5.mp4', label: '3D Margin & Project Health Matrix' },
+  analytics:   { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Realtime Telemetry' },
+  tax:         { video: '/media/pomelli_photoshoot-5.mp4', label: '3D GST & TDS Filing Pipeline' },
+  documents:   { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Document & Citation System' },
+  analyst:     { video: '/media/pomelli_photoshoot-5.mp4', label: '3D SQL Transpiler Engine' },
+  reports:     { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Executive Briefing Output' },
+  pages:       { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Streamed Web Document' },
+  status:      { video: '/media/pomelli_photoshoot-6.mp4', label: '3D Live Delivery Kanban' },
+  shared:      { video: '/media/pomelli_photoshoot-7.mp4', label: '3D Sandboxed Share Portal' },
+  admin:       { video: '/media/pomelli_photoshoot-7.mp4', label: '3D RBAC & Session Telemetry' },
 }
 
 export default function Features() {
+  const [active, setActive] = useState(0)
+  const [viewMode, setViewMode] = useState('demo') // 'demo' | 'isometric' | 'video'
+  const tabsRef = useRef([])
   usePageMeta({
-    title: 'Features | FinTrack',
-    description: 'Eleven modules on one set of records: receivables, projects, tax ledger, analytics, documents, an analyst that shows the query it ran, reports, pages and spreadsheets, status, shared views and audit.',
+    title: 'Features — FinTrack',
+    description: 'Eleven modules — receivables, projects, tax ledger, analytics, documents, an AI analyst that shows the query it ran, reports, pages, status, shared views and audit.',
   })
+
+  // Roving focus: arrows move between tabs, Home and End jump to the ends.
+  const onKeyDown = useCallback((e) => {
+    const last = FEATURES.length - 1
+    let next = null
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = active === last ? 0 : active + 1
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = active === 0 ? last : active - 1
+    if (e.key === 'Home') next = 0
+    if (e.key === 'End') next = last
+    if (next === null) return
+    e.preventDefault()
+    setActive(next)
+    tabsRef.current[next]?.focus()
+  }, [active])
+
+  const f = FEATURES[active]
+  const media = FEATURE_MEDIA[f.id] || FEATURE_MEDIA.receivables
+  const panelTilt = useTilt({ max: 2.5 })
+  const headRef = useReveal()
 
   return (
     <PublicLayout>
-      <PageHead eyebrow="Features" lines={['Eleven modules,', <em key="em">one set of rows</em>]}>
-        Every module reads the same records, so a figure on the dashboard and a
-        figure in a report cannot disagree. Each one below is shown on the
-        screen it lives on, from the sample workspace.
-      </PageHead>
-
-      <nav className="pb-wrap pb-f-contents" aria-label="Modules on this page">
-        <div className="pb-row">
-          <div className="pb-margin"><p className="pb-label">Contents</p></div>
-          <ol className="pb-main pb-f-toc">
-            {FEATURES.map((f, i) => (
-              <li key={f.id}>
-                <a href={`#${f.id}`}>
-                  <span className="pb-n" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
-                  {f.label}
-                </a>
-              </li>
-            ))}
-          </ol>
+      <section className="relative overflow-hidden">
+        <Grain />
+        <div ref={headRef} className="relative mx-auto px-4 sm:px-6 pt-12 pb-8 sm:pt-16"
+             style={{ maxWidth: 1120, zIndex: 1 }}>
+          <p className="ft-eyebrow ft-up mb-3">Features</p>
+          <h1 className="ft-display mb-4"
+              style={{ fontSize: 'clamp(2rem, 5.6vw, 3.2rem)', lineHeight: 1.08 }}>
+            <span className="ft-rise"><span>Eleven modules,</span></span>
+            <span className="ft-rise">
+              <span style={{ transitionDelay: '110ms' }}><em>one set of rows</em></span>
+            </span>
+          </h1>
+          <p className="ft-lede ft-up" style={{ '--d': '260ms' }}>
+            Pick one to see what it does. Every module reads the same records, so a
+            figure on the dashboard and a figure in a report cannot disagree.
+          </p>
         </div>
-      </nav>
+      </section>
 
-      {FEATURES.map((f, i) => <Module key={f.id} f={f} n={i + 1} />)}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <div className="grid gap-5 lg:gap-7"
+             style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <div className="ft-explorer">
+            {/* ── the picker ── */}
+            <div role="tablist" aria-orientation="vertical" aria-label="Modules"
+                 onKeyDown={onKeyDown}
+                 className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+              {FEATURES.map((item, i) => {
+                const Icon = item.icon
+                const on = i === active
+                return (
+                  <button
+                    key={item.id}
+                    ref={el => (tabsRef.current[i] = el)}
+                    role="tab"
+                    id={`tab-${item.id}`}
+                    aria-selected={on}
+                    aria-controls={`panel-${item.id}`}
+                    tabIndex={on ? 0 : -1}
+                    onClick={() => {
+                      setActive(i)
+                      setViewMode('demo')
+                    }}
+                    className="ft-pick flex items-center gap-2.5 rounded-xl text-left shrink-0"
+                    style={{
+                      minHeight: 48, padding: '0 14px',
+                      background: on ? 'var(--accent-dim)' : 'var(--card-bg)',
+                      border: `1px solid ${on ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                      color: on ? 'var(--accent)' : 'var(--text-2)',
+                      cursor: 'pointer',
+                      fontWeight: on ? 700 : 600,
+                      fontSize: 13,
+                      whiteSpace: 'nowrap',
+                      transition: 'background 200ms ease, border-color 200ms ease, color 200ms ease',
+                    }}
+                  >
+                    <Icon size={16} aria-hidden="true" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
 
-      {/* Lazy: the section and its media load when the reader is near, and
-          the anchor exists before them, so /features#shipped still lands. */}
-      <LazyMount id="shipped" className="ft-f-shipped-slot" rootMargin="250px 0px">
-        <Suspense fallback={null}><ShippedShowcase /></Suspense>
-      </LazyMount>
+            {/* ── the panel ── */}
+            <div
+              ref={panelTilt}
+              role="tabpanel"
+              id={`panel-${f.id}`}
+              aria-labelledby={`tab-${f.id}`}
+              key={f.id}
+              className="tilt tilt-sheen rounded-2xl p-5 sm:p-7"
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+                boxShadow: 'var(--card-shadow)',
+                animation: 'ft-panel-in 460ms cubic-bezier(0.22,1,0.36,1) both',
+              }}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h2 className="ft-display"
+                    style={{ fontSize: 'clamp(1.35rem, 3.1vw, 1.95rem)', lineHeight: 1.16 }}>
+                  {f.headline}
+                </h2>
 
-      <Section n="12" eyebrow="Your own numbers" wide
-               title="What slow collections cost you"
-               lede="Set your own billing, your days to collect and what money costs you. The arithmetic is written out beside every result, and none of it is a promise about FinTrack.">
-        <div className="pb-instrument"><RoiCalculator /></div>
-      </Section>
+                {/* Perspective Mode Switcher */}
+                <div className="inline-flex p-1 rounded-xl shrink-0 self-start sm:self-auto"
+                     style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <button
+                    onClick={() => setViewMode('demo')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                    style={{
+                      background: viewMode === 'demo' ? 'var(--card-bg)' : 'transparent',
+                      color: viewMode === 'demo' ? 'var(--accent)' : 'var(--text-3)',
+                      boxShadow: viewMode === 'demo' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    Interactive Demo
+                  </button>
+                  {media.video && (
+                    <button
+                      onClick={() => setViewMode('video')}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                      style={{
+                        background: viewMode === 'video' ? 'var(--card-bg)' : 'transparent',
+                        color: viewMode === 'video' ? 'var(--accent)' : 'var(--text-3)',
+                        boxShadow: viewMode === 'video' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                      }}
+                    >
+                      <Play size={13} />
+                      Motion
+                    </button>
+                  )}
+                </div>
+              </div>
 
-      <Closing title="See it on your own numbers"
-               next={<Btn to="/how-it-works" quiet>Next: how it works</Btn>}>
-        Access is by invitation. An administrator approves each account, and
-        nothing on these public pages is read from a workspace.
-      </Closing>
+              <p className="text-sm sm:text-[15px] leading-relaxed mb-5"
+                 style={{ color: 'var(--text-2)' }}>
+                {f.body}
+              </p>
+
+              {/* Dynamic Visual Stage */}
+              <div className="rounded-xl overflow-hidden mb-5 relative"
+                   style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
+                {viewMode === 'demo' && (
+                  <div role="group" aria-label={`${f.title}: interactive demo with illustrative figures`}>
+                    {DEMOS[f.demo]}
+                  </div>
+                )}
+
+                {viewMode === 'video' && (
+                  <div className="relative p-6 flex items-center justify-center min-h-[340px]"
+                       style={{ background: 'var(--bg-base)' }}>
+                    <div className="relative max-w-[280px] sm:max-w-[320px] rounded-2xl overflow-hidden shadow-lg border"
+                         style={{ borderColor: 'var(--card-border)' }}>
+                      <LoopVideo src={media.video} className="w-full h-auto object-cover" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <ul className="ft-stagger-in grid gap-2 m-0 p-0" style={{
+                listStyle: 'none',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+              }}>
+                {f.points.map(p => (
+                  <li key={p} className="flex items-start gap-2 text-[13px]"
+                      style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} aria-hidden="true"
+                           style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Both of these lived on the landing page, where they cost 4.8 of its
+          13.2 screens on a phone — more than a third of the page, for the two
+          sections furthest from what a first-time reader needs. They belong
+          here beside the other working simulators, where someone has already
+          decided they want detail. */}
+      {/* ── 3D Architecture & Live Motion Showcase ──────────────────────── */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Head n="02" eyebrow="3D Architecture & Live Motion" title="Interactive visual blueprint & real-time telemetry">
+          Explore FinTrack's single-ledger architecture in 3D. Inspect how natural language queries transpiled into parameterized SQL, how GST/TDS are segregated, and watch live operation streams in action.
+        </Head>
+        <Reveal>
+          <ProductMediaShowcase />
+        </Reveal>
+      </section>
+
+      {/* ── Working Capital & ROI Simulator ─────────────────────────────── */}
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Head n="03" eyebrow="Working Capital & ROI" title="Calculate your capital unlocked and interest saved">
+          Simulate how much floating capital is currently locked in aging receivables, and calculate the exact annual interest drag saved when invoices and GST/TDS are reconciled automatically.
+        </Head>
+        <Reveal>
+          <RoiCalculator />
+        </Reveal>
+      </section>
+
+      <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+        <Reveal className="ft-shine rounded-xl px-6 py-12 sm:px-12 sm:py-14 text-center"
+                style={{ background: 'linear-gradient(135deg, var(--accent-btn), var(--accent-bright))', color: '#fff' }}>
+          <h2 className="ft-display mb-3"
+              style={{ fontSize: 'clamp(1.5rem, 4.2vw, 2.4rem)', lineHeight: 1.14 }}>
+            See it on your own numbers
+          </h2>
+          <p className="mx-auto mb-7" style={{ fontSize: '0.975rem', lineHeight: 1.6, opacity: 0.92, maxWidth: 440 }}>
+            Access is by invitation — an administrator approves each account.
+          </p>
+          <Link to="/login"
+                className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                style={{ minHeight: 52, padding: '0 30px', background: '#fff',
+                         color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
+            Sign in <ArrowRight size={17} aria-hidden="true" />
+          </Link>
+        </Reveal>
+      </section>
     </PublicLayout>
   )
 }

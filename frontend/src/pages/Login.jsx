@@ -1,51 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Lock, Eye, EyeOff, Loader2, AlertCircle, Mail, Clock, Moon, Sun } from 'lucide-react'
+import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock } from 'lucide-react'
 import BrandMark from '../components/BrandMark'
 import LoginShowcase from '../components/LoginShowcase'
 import { useAuth } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
+import { useTilt } from '../hooks/useTilt'
 import { api } from '../services/api'
-import '../styles/public-site.css'
-import '../styles/public-secondary-login.css'
-
-/* Which sign-in providers this deployment offers, remembered for the tab's
-   session. The buttons arrive after a round trip; without an answer to hand
-   the form either reserves their space or jumps when they land. With the
-   cached answer it renders the right thing at once, and a cached "none"
-   reserves nothing. */
-const PROVIDERS_KEY = 'ft-providers'
-function readProviders() {
-  try {
-    const v = JSON.parse(sessionStorage.getItem(PROVIDERS_KEY) || 'null')
-    return v && typeof v === 'object' ? { google: !!v.google, zoho: !!v.zoho } : null
-  } catch { return null }
-}
-function writeProviders(v) {
-  try { sessionStorage.setItem(PROVIDERS_KEY, JSON.stringify(v)) } catch {}
-}
-
-/* The standard marks for the two sign-in buttons. */
-function GoogleMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-      <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
-      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
-      <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/>
-    </svg>
-  )
-}
-function ZohoMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <rect x="1" y="1" width="8" height="8" rx="2" fill="var(--fin-negative)" />
-      <rect x="11" y="1" width="8" height="8" rx="2" fill="#089949" />
-      <rect x="1" y="11" width="8" height="8" rx="2" fill="#226DB4" />
-      <rect x="11" y="11" width="8" height="8" rx="2" fill="#F9B21D" />
-    </svg>
-  )
-}
 
 /* Four independent qualities, so the meter says what is missing rather
    than grading on length alone. Only shown where a password is being set. */
@@ -61,9 +21,9 @@ export function scorePassword(p) {
 const STRENGTH = [
   ['', ''],
   ['Weak', 'var(--fin-negative)'],
-  ['Fair', 'var(--fin-warning)'],
+  ['Fair', '#D18A1A'],
   ['Good', 'var(--accent)'],
-  ['Strong', 'var(--fin-positive)'],
+  ['Strong', '#1B9A66'],
 ]
 
 const OAUTH_ERROR_MESSAGES = {
@@ -99,11 +59,8 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mailing, setMailing] = useState(false)
-  // null until known: the form reserves the providers' space meanwhile.
-  const [providers, setProviders] = useState(readProviders)
-  const googleEnabled = !!providers?.google
-  const zohoEnabled = !!providers?.zoho
-  const theme = useTheme()
+  const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [zohoEnabled,   setZohoEnabled]   = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingApproval, setPendingApproval] = useState(false)
@@ -115,6 +72,8 @@ export default function Login() {
   const [capsOn, setCapsOn] = useState(false)
   // Pointer light behind the page, and a few degrees of tilt on the card.
   // Both hooks are inert on a touch screen and under reduced motion.
+  const pageLight = useTilt({ max: 0 })
+  const cardTilt = useTilt({ max: 3 })
   const strength = useMemo(() => scorePassword(password), [password])
   const mode = resetToken ? (isInvite ? 'invite' : 'reset') : registerMode ? 'register' : legacyMode ? 'legacy' : 'signin'
   const trackCaps = (e) => setCapsOn(Boolean(e.getModifierState && e.getModifierState('CapsLock')))
@@ -128,24 +87,20 @@ export default function Login() {
     }
   }, [sessionReason])
 
-  // Focus the first field, except on a touch screen, where focusing raises
-  // the keyboard over the form before anyone has asked to type.
   useEffect(() => {
-    if (oauthToken) return
-    if (window.matchMedia?.('(pointer: coarse)').matches) return
-    inputRef.current?.focus()
+    if (!oauthToken) inputRef.current?.focus()
   }, [oauthToken])
 
   useEffect(() => {
     let cancelled = false
     api.auth.providers()
       .then((res) => {
-        if (cancelled) return
-        const v = { google: Boolean(res?.google), zoho: Boolean(res?.zoho) }
-        setProviders(v)
-        writeProviders(v)
+        if (!cancelled) {
+          setGoogleEnabled(Boolean(res?.google))
+          setZohoEnabled(Boolean(res?.zoho))
+        }
       })
-      .catch(() => { if (!cancelled) setProviders({ google: false, zoho: false }) })
+      .catch(() => { if (!cancelled) { setGoogleEnabled(false); setZohoEnabled(false) } })
     return () => { cancelled = true }
   }, [])
 
@@ -190,7 +145,7 @@ export default function Login() {
 
   if (oauthToken && loading) {
     return (
-      <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} className="ft-login-mark" />
@@ -203,14 +158,14 @@ export default function Login() {
             style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--card-border)',
-              boxShadow: 'none',
+              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
             }}
           >
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}
+              style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.25)' }}
             >
-              <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent)' }} />
+              <Loader2 size={26} className="animate-spin" style={{ color: '#2563eb' }} />
             </div>
             <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
               Signing you in
@@ -292,7 +247,7 @@ export default function Login() {
         setPendingApproval(true)
       } else {
         setError(msg.includes('401') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('invalid email')
-          ? legacyMode ? 'Incorrect password. Please try again.' : 'Invalid email or password'
+          ? legacyMode ? 'Incorrect password — please try again' : 'Invalid email or password'
           : msg.toLowerCase().includes('disabled')
             ? OAUTH_ERROR_MESSAGES.disabled
             : msg.toLowerCase().includes('rejected')
@@ -324,7 +279,7 @@ export default function Login() {
 
   if (pendingApproval) {
     return (
-      <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm ft-login-enter">
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <BrandMark size={36} className="ft-login-mark" />
@@ -337,21 +292,21 @@ export default function Login() {
             style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--card-border)',
-              boxShadow: 'none',
+              boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
             }}
           >
             <div
               className="ft-pop w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)' }}
+              style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}
             >
-              <Clock size={26} style={{ color: 'var(--fin-warning)' }} />
+              <Clock size={26} style={{ color: '#f59e0b' }} />
             </div>
             <h1 className="text-base font-bold mb-2" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
               Account pending approval
             </h1>
             <p className="text-sm mb-6" style={{ color: 'var(--text-3)', lineHeight: 1.6 }}>
               Your account has been created and is awaiting superadmin approval.
-              You'll be able to sign in once it's activated, usually within 24 hours.
+              You'll be able to sign in once it's activated — usually within 24 hours.
             </p>
             <button
               type="button"
@@ -368,22 +323,16 @@ export default function Login() {
   }
 
   return (
-    <div className="pb ft-login min-h-screen flex items-center justify-center px-4 py-8">
-      {theme && (
-        <button type="button" onClick={theme.toggle} className="ft-s-theme"
-                aria-label={theme.dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-          {theme.dark ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
-        </button>
-      )}
+    <div ref={pageLight} className="login-bg ft-login min-h-screen flex items-center justify-center px-4 py-8">
       <div className="w-full flex items-center justify-center gap-12 xl:gap-20" style={{ maxWidth: 1180 }}>
       {!resetToken && <LoginShowcase />}
 
       {/* The column arrives in order: way back, mark, card, footnote. */}
       <div className="w-full max-w-sm ft-login-enter">
 
-        <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-3"
-              style={{ color: 'var(--text-3)', textDecoration: 'none', minHeight: 32 }}>
-          Back to overview
+        <Link to="/" className="ft-textlink inline-flex items-center gap-1 text-xs font-semibold mb-5"
+              style={{ color: 'var(--text-3)', textDecoration: 'none' }}>
+          <ArrowLeft size={13} aria-hidden="true" /> Back to overview
         </Link>
 
         {/* Brand wordmark above card. On wide screens the showcase beside
@@ -399,12 +348,13 @@ export default function Login() {
             shakes once when an error lands — the shake is on the card, not
             the field, so the whole answer is seen to be refused. */}
         <div
-          className={`ft-login-card rounded-xl p-7${shake ? ' ft-shake' : ''}`}
+          ref={cardTilt}
+          className={`tilt tilt-sheen rounded-2xl p-7${shake ? ' ft-shake' : ''}`}
           onAnimationEnd={(e) => { if (e.animationName === 'ft-shake') setShake(false) }}
           style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--card-border)',
-            boxShadow: 'none',
+            boxShadow: '0 4px 6px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)',
           }}
         >
           <div className="mb-6" key={mode}>
@@ -425,57 +375,54 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-4 ft-stagger-in">
-            {!resetToken && !registerMode && !legacyMode && (providers === null || googleEnabled || zohoEnabled) && (
+            {(googleEnabled || zohoEnabled) && !resetToken && !registerMode && !legacyMode && (
               <>
-                {providers === null ? (
-                  /* Held space while the providers are asked for: the two
-                     buttons this deployment usually offers, at their height. */
-                  <div className="flex flex-col gap-2" aria-hidden="true" data-providers="pending">
-                    <span className="ft-s-skel" />
-                    <span className="ft-s-skel" />
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2" data-providers="ready">
-                    {googleEnabled && (
-                      <button
-                        type="button"
-                        onClick={startGoogleLogin}
-                        disabled={loading}
-                        className="ft-provider w-full flex items-center justify-center gap-2.5 rounded-xl text-sm font-semibold"
-                        style={{
-                          minHeight: 44,
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--card-border)',
-                          color: 'var(--text-1)',
-                          boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                          opacity: loading ? 0.6 : 1,
-                        }}
-                      >
-                        <span className="badge" style={{ padding: 0 }}><GoogleMark /></span>
-                        Continue with Google
-                      </button>
-                    )}
-                    {zohoEnabled && (
-                      <button
-                        type="button"
-                        onClick={startZohoLogin}
-                        disabled={loading}
-                        className="ft-provider w-full flex items-center justify-center gap-2.5 rounded-xl text-sm font-semibold"
-                        style={{
-                          minHeight: 44,
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--card-border)',
-                          color: 'var(--text-1)',
-                          boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                          opacity: loading ? 0.6 : 1,
-                        }}
-                      >
-                        <span className="badge" style={{ padding: 0 }}><ZohoMark /></span>
-                        Continue with Zoho
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="flex flex-col gap-2">
+                  {googleEnabled && (
+                    <button
+                      type="button"
+                      onClick={startGoogleLogin}
+                      disabled={loading}
+                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
+                      style={{
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text-1)',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                        opacity: loading ? 0.6 : 1,
+                      }}
+                    >
+                      <span
+                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.35)' }}
+                        aria-hidden="true"
+                      >G</span>
+                      Continue with Google
+                    </button>
+                  )}
+                  {zohoEnabled && (
+                    <button
+                      type="button"
+                      onClick={startZohoLogin}
+                      disabled={loading}
+                      className="ft-provider w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
+                      style={{
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text-1)',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                        opacity: loading ? 0.6 : 1,
+                      }}
+                    >
+                      <span
+                        className="badge w-5 h-5 rounded-full flex items-center justify-center text-xs font-black"
+                        style={{ background: '#E42527', color: '#fff', border: '1px solid rgba(228,37,39,0.3)' }}
+                        aria-hidden="true"
+                      >Z</span>
+                      Continue with Zoho
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>
                   <span className="h-px flex-1" style={{ background: 'var(--card-border)' }} />
                   or
@@ -487,8 +434,8 @@ export default function Login() {
             {/* Show email read-only on invite so user knows whose account this is */}
             {resetToken && isInvite && email && (
               <div className="rounded-xl px-3 py-2.5 text-sm flex items-center gap-2"
-                style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--text-2)' }}>
-                <Mail size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: 'var(--text-2)' }}>
+                <Mail size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
                 {email}
               </div>
             )}
@@ -576,8 +523,8 @@ export default function Login() {
                   placeholder="Enter your password"
                   className="input pl-9 pr-10 py-2.5 text-sm rounded-xl"
                   style={{
-                    borderColor: error ? 'color-mix(in srgb, var(--fin-negative) 45%, transparent)' : undefined,
-                    boxShadow: error ? '0 0 0 3px color-mix(in srgb, var(--fin-negative) 10%, transparent)' : undefined,
+                    borderColor: error ? 'rgba(239,68,68,0.45)' : undefined,
+                    boxShadow: error ? '0 0 0 3px rgba(239,68,68,0.1)' : undefined,
                   }}
                   aria-label="Password"
                   aria-invalid={!!error}
@@ -606,7 +553,7 @@ export default function Login() {
                 </button>
               </div>
               {capsOn && !show && (
-                <p className="ft-caps flex items-center gap-1.5 text-[11px] mt-1.5" style={{ color: 'var(--fin-warning)' }}>
+                <p className="ft-caps flex items-center gap-1.5 text-[11px] mt-1.5" style={{ color: '#D18A1A' }}>
                   <AlertCircle size={11} aria-hidden="true" /> Caps Lock is on
                 </p>
               )}
@@ -696,16 +643,14 @@ export default function Login() {
               <div
                 className="flex items-center gap-2 text-xs px-3 py-2.5 rounded-xl"
                 style={{
-                  background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--fin-positive) 22%, transparent)',
-                  color: 'var(--fin-positive)',
+                  background: 'rgba(22,163,74,0.10)',
+                  border: '1px solid rgba(22,163,74,0.22)',
+                  color: '#16a34a',
                 }}
                 role="status"
                 aria-live="polite"
               >
-                <svg key={notice} className="ft-s-tick flex-shrink-0" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M3 8.5l3.2 3L13 4.5" pathLength="1" />
-                </svg>
+                <Mail size={12} className="flex-shrink-0" />
                 <span>{notice}</span>
               </div>
             )}
@@ -717,12 +662,12 @@ export default function Login() {
               className="ft-submit w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
               style={{
                 background: 'var(--accent-btn)',
-                color: 'var(--accent-fg)',
+                color: 'white',
                 opacity: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword) ? 0.55 : 1,
                 cursor: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword) ? 'not-allowed' : 'pointer',
                 boxShadow: loading || !password || (!legacyMode && !email && !resetToken) || ((resetToken || registerMode) && !confirmPassword)
                   ? 'none'
-                  : '0 2px 4px color-mix(in srgb, var(--accent) 20%, transparent), 0 6px 16px color-mix(in srgb, var(--accent) 18%, transparent)',
+                  : '0 2px 4px rgba(37,99,235,0.2), 0 6px 16px rgba(37,99,235,0.18)',
                 letterSpacing: '-0.01em',
               }}
               onMouseEnter={e => {
@@ -738,13 +683,22 @@ export default function Login() {
               ) : (
                 <>
                   {resetToken ? (isInvite ? 'Set password & sign in' : 'Update password') : registerMode ? 'Create account' : 'Sign in'}
+                  <ArrowRight size={14} aria-hidden="true" />
                 </>
               )}
             </button>
             {!resetToken && (
-              <div className="ft-s-links">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setLegacyMode(v => !v); setRegisterMode(false); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
+                  className="ft-textlink font-semibold"
+                  style={{ color: 'var(--accent-btn)' }}
+                >
+                  {legacyMode ? 'Use email login' : 'Use legacy password'}
+                </button>
                 {!legacyMode && (
-                  <div className="flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => { setRegisterMode(v => !v); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
@@ -766,13 +720,6 @@ export default function Login() {
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => { setLegacyMode(v => !v); setRegisterMode(false); setError(''); setNotice(''); setPassword(''); setConfirmPassword('') }}
-                  className="ft-textlink ft-s-legacy"
-                >
-                  {legacyMode ? 'Use email login' : 'Use legacy password'}
-                </button>
               </div>
             )}
             {resetToken && notice && (

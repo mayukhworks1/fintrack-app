@@ -97,9 +97,7 @@ export function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, '')
 }
 
-// Colour-code log lines by severity. The log viewer is a terminal panel
-// that is dark in every palette and mode, so these are fixed light tones
-// chosen for that surface rather than palette tokens.
+// Colour-code log lines by severity
 
 export function logLineColor(text) {
   const t = text.toUpperCase()

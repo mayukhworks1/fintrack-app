@@ -3,102 +3,101 @@
  *
  * "Fully customisable" is the least believable sentence on any product page,
  * because everyone writes it and nobody can check it. This page says who does
- * the work and what it touches, in three tiers, then hands the visitor a
- * working permission matrix so the first tier is not a claim either, and
- * draws the second: a dedicated instance is the same build with a different
- * environment file.
- *
- * The playground is the heaviest thing on the page and sits well below the
- * fold, so its code is fetched only as it approaches; the space it will take
- * is held from the start, so nothing under it moves when it arrives.
+ * the work and what it touches, in three tiers, and then hands the visitor a
+ * working permission matrix so the first tier is not a claim either.
  */
-import { lazy, Suspense } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
 import PublicLayout from '../../components/PublicLayout'
-import { PageHead, Section, Card, Grid, Btn, Closing } from '../../components/PublicBits'
-import LazyMount from '../../components/motion/LazyMount'
+import PermissionPlayground from '../../components/PermissionPlayground'
+import BrandCustomizerSandbox from '../../components/BrandCustomizerSandbox'
+import { Grain } from '../../components/LandingVisuals'
+import { PageHead, Card, Grid, Closing, Head, Reveal } from '../../components/PublicBits'
+import { PermissionRows, OneBuildTwoHomes, ModuleSlotsIn } from '../../components/SceneDiagrams'
 import { SHAPE, APP_LD, crumbs, graph } from '../../content/publicContent'
-import '../../styles/public-secondary.css'
-import '../../styles/public-secondary-customise.css'
-
-const PermissionPlayground = lazy(() => import('../../components/PermissionPlayground'))
 
 const LD = graph(APP_LD, crumbs([{ name: 'Made yours', path: '/customise' }]))
 
-/* What one environment file changes between the shared deployment and yours. */
-const INSTANCE = [
-  ['Database', 'Our Postgres', 'Your Postgres, in your private cloud'],
-  ['Mail sender', 'Ours', 'Your mail server'],
-  ['File storage', 'Ours', 'Your storage target'],
-  ['Source base', 'Yours', 'Yours'],
-  ['Build', 'The current release', 'The same release, with the same fixes'],
-  ['Permissions and audit', 'Roles, overrides, request log', 'Identical'],
-]
-
 export default function Customise() {
   usePageMeta({
-    title: 'Made yours: configure it, host it yourself, or extend it | FinTrack',
+    title: 'Made yours — configure it, host it yourself, or extend it | FinTrack',
     description:
-      'Permissions are records your own team changes. An instance is a container and an environment file, so a dedicated deployment on your own Postgres and private cloud runs the same build. New modules arrive inside the permission matrix and the audit trail.',
+      'Permissions are records you change, not code. An instance is a container and an environment file, so a dedicated deployment on your own Postgres and your own private cloud is a configuration of the same build. New modules arrive inside the permission matrix and the audit trail.',
     path: '/customise',
     jsonLd: LD,
   })
 
   return (
     <PublicLayout>
-      <PageHead eyebrow="Made yours"
-                lines={['Shaped to how you work,', <em key="e">with one thing held fixed</em>]}>
-        Most of what a finance team wants changed is a setting your own people
-        can make. Where it is not, the answer is a dedicated instance or a module
-        built for the case, and both stay inside the same build, the same
-        permission model and the same audit trail.
-      </PageHead>
+      <section className="relative overflow-hidden">
+        <Grain />
+        <PageHead eyebrow="Made yours"
+                  lines={['Shaped to how you work —', <em key="e">except the one thing that must not move</em>]}
+                  size="clamp(1.85rem, 5vw, 3rem)">
+          Most of what a finance team wants changed is a setting here rather
+          than a request to us. Where it genuinely is not, the answer is a
+          dedicated instance or a module built for the case — both of which stay
+          inside the same build, the same permission model and the same audit
+          trail.
+        </PageHead>
+      </section>
 
-      <Section flush n="01" eyebrow="Three tiers"
-               title="Who does the work, and what it touches"
-               lede="In the order a buyer meets them: what you change in the app, what runs on infrastructure you own, and what gets built because your business works differently.">
-        <Grid>
-          {SHAPE.map(({ kicker, title, body }) => (
-            <Card key={title} kicker={kicker} title={title} body={body} />
+      <section className="mx-auto px-4 sm:px-6 pb-14 sm:pb-20" style={{ maxWidth: 1120 }}>
+        <Head n="01" eyebrow="Three tiers"
+              title="Who does the work, and what it touches">
+          In the order a buyer meets them: what you change in the app without
+          telling anyone, what runs on infrastructure you own, and what gets
+          built because your business does something ours does not.
+        </Head>
+
+        <Grid className="mb-14">
+          {SHAPE.map(({ icon, kicker, title, body }, i) => (
+            <Card key={title} icon={icon} kicker={kicker} title={title} body={body}
+                  visual={[PermissionRows, OneBuildTwoHomes, ModuleSlotsIn][i]}
+                  delay={Math.min(i, 3) * 70} />
           ))}
         </Grid>
-      </Section>
 
-      <Section n="02" eyebrow="Try the first one" wide
-               title="A role carries defaults. One person can differ."
-               lede="The permission model at a size that fits on the page. Pick somebody, change what they reach, and the panel shows the query their invoice list would run and the rows it returns.">
-        <LazyMount className="ft-s-perm-slot pb-instrument" rootMargin="800px 0px">
-          <Suspense fallback={null}><PermissionPlayground /></Suspense>
-        </LazyMount>
-        <div className="pb-row" style={{ marginTop: 28 }}>
-          <p className="pb-body pb-main">
-            The one thing held fixed is the set of measures the analyst may use.
-            Opening it up would make an answer impossible to check, and being
-            checkable is the point. New measures are added on purpose and
-            reviewed, the same way a new module is.
-          </p>
-        </div>
-      </Section>
+        <Head n="02" eyebrow="Try the first one"
+              title="A role carries defaults. One person can differ.">
+          This is the real shape of the permission model, small enough to fit in
+          a card. Pick somebody, change what they reach, and the line underneath
+          says what they would actually sign in to.
+        </Head>
 
-      <Section n="03" eyebrow="Your infrastructure"
-               title="A dedicated instance is the same build with one file changed"
-               lede="When the shared deployment is not where your data should live, the same build runs on yours. The backend is one container, and every endpoint, table, model, mail server and storage target is read from its environment.">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="pb-table">
-            <thead>
-              <tr><th scope="col">Setting</th><th scope="col">Shared</th><th scope="col">Dedicated</th></tr>
-            </thead>
-            <tbody>
-              {INSTANCE.map(([k, a, b]) => (
-                <tr key={k}><td>{k}</td><td>{a}</td><td>{b}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
+        <Reveal><PermissionPlayground /></Reveal>
+
+        <p className="mt-6 mb-14 text-sm leading-relaxed" style={{ color: 'var(--text-2)', maxWidth: 700 }}>
+          One thing is deliberately not adjustable: the set of measures the
+          analyst may use. Open that up and an answer stops being checkable,
+          which is the only thing this product is really selling. New measures
+          get added to it on purpose, reviewed, the same way a new module does —
+          never inferred at the moment someone asks a question.
+        </p>
+
+        <Head n="03" eyebrow="White-label & themes"
+              title="Custom brand identities, domains, and invoice numbering">
+          Give external clients and internal teams an instance that matches your
+          firm's identity. Pick primary color accents, define dedicated CNAME domains,
+          and customize your invoice taxonomy.
+        </Head>
+
+        <Reveal><BrandCustomizerSandbox /></Reveal>
+      </section>
 
       <Closing title="Tell us how you work"
-               next={<Btn to="/security" quiet>Next: who can see what</Btn>}>
+               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                          style={{ minHeight: 52, padding: '0 30px', background: '#fff',
+                                   color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
+                      Sign in <ArrowRight size={17} aria-hidden="true" />
+                    </Link>}
+               next={<Link to="/security" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+                           style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
+                                    border: '1px solid rgba(255,255,255,0.4)', color: '#fff',
+                                    textDecoration: 'none', fontSize: '0.95rem' }}>
+                       Next: who can see what <ArrowRight size={15} aria-hidden="true" />
+                     </Link>}>
         Access is by invitation, and an administrator approves each account
         before it can see anything.
       </Closing>

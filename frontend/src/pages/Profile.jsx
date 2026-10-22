@@ -10,7 +10,6 @@ import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import { useToast } from '../context/ToastContext'
 import { ts } from '../utils/dates'
-import AppearancePicker from '../components/AppearancePicker'
 
 function Avatar({ name, email, avatarUrl, size = 56 }) {
   const src = useAvatarSrc(avatarUrl)
@@ -23,7 +22,7 @@ function Avatar({ name, email, avatarUrl, size = 56 }) {
         src={src}
         alt={name || email || 'Avatar'}
         className="rounded-full flex-shrink-0 object-cover"
-        style={{ width: size, height: size, boxShadow: '0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent)' }}
+        style={{ width: size, height: size, boxShadow: '0 4px 14px rgba(99,102,241,0.25)' }}
       />
     )
   }
@@ -32,11 +31,11 @@ function Avatar({ name, email, avatarUrl, size = 56 }) {
       className="rounded-full flex items-center justify-center font-bold flex-shrink-0 select-none"
       style={{
         width: size, height: size,
-        background: 'var(--avatar-gradient)',
-        color: 'var(--accent-fg)',
+        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        color: '#fff',
         fontSize: size * 0.35,
         letterSpacing: '0.02em',
-        boxShadow: '0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent)',
+        boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
       }}
     >
       {initials}
@@ -45,16 +44,16 @@ function Avatar({ name, email, avatarUrl, size = 56 }) {
 }
 
 const ROLE_STYLE = {
-  superadmin: { label: 'Super Admin', bg: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)',   fg: 'var(--fin-negative)' },
-  admin:      { label: 'Admin',       bg: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)',   fg: 'var(--fin-negative)' },
-  editor:     { label: 'Editor',      bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  fg: 'var(--accent)' },
-  viewer:     { label: 'Viewer',      bg: 'color-mix(in srgb, var(--text-3) 12%, transparent)', fg: 'var(--text-2)' },
-  user:       { label: 'User',        bg: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)',   fg: 'var(--fin-positive)' },
-  web:        { label: 'Web Invoice User', bg: 'var(--kpi-3-bg)', fg: 'var(--kpi-3-fg)' },
-  all:        { label: 'Workspace User',   bg: 'var(--kpi-5-bg)', fg: 'var(--kpi-5-fg)' },
+  superadmin: { label: 'Super Admin', bg: 'rgba(220,38,38,0.10)',   fg: '#dc2626' },
+  admin:      { label: 'Admin',       bg: 'rgba(220,38,38,0.10)',   fg: '#dc2626' },
+  editor:     { label: 'Editor',      bg: 'rgba(99,102,241,0.12)',  fg: '#6366f1' },
+  viewer:     { label: 'Viewer',      bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
+  user:       { label: 'User',        bg: 'rgba(22,163,74,0.10)',   fg: '#16a34a' },
+  web:        { label: 'Web Invoice User', bg: 'rgba(124,58,237,0.12)', fg: '#7c3aed' },
+  all:        { label: 'Workspace User',   bg: 'rgba(236,72,153,0.12)', fg: '#db2777' },
 }
 function RoleBadge({ role }) {
-  const s = ROLE_STYLE[role] || { label: role || 'Unknown', bg: 'color-mix(in srgb, var(--text-3) 12%, transparent)', fg: 'var(--text-2)' }
+  const s = ROLE_STYLE[role] || { label: role || 'Unknown', bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' }
   return (
     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
       style={{ background: s.bg, color: s.fg }}>
@@ -74,7 +73,7 @@ function Card({ children, className = '', style = {} }) {
 
 function SectionLabel({ children }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-3"
+    <p className="text-[11px] font-semibold uppercase tracking-widest mb-3"
       style={{ color: 'var(--text-3)' }}>{children}</p>
   )
 }
@@ -232,13 +231,13 @@ export default function Profile() {
     return (
       <div className="p-6 max-w-xl mx-auto">
         <div className="rounded-xl border p-4 flex items-start gap-3"
-          style={{ borderColor: 'color-mix(in srgb, var(--fin-negative) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 5%, transparent)' }}>
-          <AlertCircle size={16} style={{ color: 'var(--fin-negative)', flexShrink: 0, marginTop: 1 }} />
+          style={{ borderColor: 'rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.05)' }}>
+          <AlertCircle size={16} style={{ color: '#dc2626', flexShrink: 0, marginTop: 1 }} />
           <div>
-            <p className="text-sm font-medium" style={{ color: 'var(--fin-negative)' }}>Could not load profile</p>
+            <p className="text-sm font-medium" style={{ color: '#dc2626' }}>Could not load profile</p>
             <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--text-3)' }}>{error}</p>
             <button onClick={load} className="text-xs px-2.5 py-1 rounded-lg border inline-flex items-center gap-1.5"
-              style={{ borderColor: 'color-mix(in srgb, var(--fin-negative) 30%, transparent)', color: 'var(--fin-negative)' }}>
+              style={{ borderColor: 'rgba(220,38,38,0.3)', color: '#dc2626' }}>
               <RefreshCw size={11} /> Retry
             </button>
           </div>
@@ -264,9 +263,9 @@ export default function Profile() {
             <svg className="absolute inset-0 animate-spin" width="64" height="64" viewBox="0 0 64 64"
               style={{ zIndex: 10 }}>
               <circle cx="32" cy="32" r="30" fill="none" strokeWidth="3"
-                stroke="color-mix(in srgb, var(--accent) 20%, transparent)" />
+                stroke="rgba(99,102,241,0.2)" />
               <circle cx="32" cy="32" r="30" fill="none" strokeWidth="3"
-                stroke="var(--accent)" strokeLinecap="round"
+                stroke="#6366f1" strokeLinecap="round"
                 strokeDasharray="48 140" />
             </svg>
           )}
@@ -311,7 +310,7 @@ export default function Profile() {
               onClick={() => !avatarUploading && avatarInputRef.current?.click()}
               disabled={avatarUploading}
               className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border transition-colors"
-              style={{ color: 'var(--accent)', borderColor: 'var(--accent)', background: 'var(--accent-dim, color-mix(in srgb, var(--accent) 8%, transparent))', opacity: avatarUploading ? 0.7 : 1 }}
+              style={{ color: 'var(--accent)', borderColor: 'var(--accent)', background: 'var(--accent-dim, rgba(99,102,241,0.08))', opacity: avatarUploading ? 0.7 : 1 }}
             >
               {avatarUploading
                 ? <><RefreshCw size={10} className="animate-spin" /> Uploading…</>
@@ -362,7 +361,7 @@ export default function Profile() {
         {/* Google */}
         <div className="flex items-center gap-3 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
-            style={{ background: 'white', color: 'var(--accent)', border: '1px solid rgba(148,163,184,0.4)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            style={{ background: 'white', color: '#2563eb', border: '1px solid rgba(148,163,184,0.4)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
             G
           </span>
           <div className="flex-1 min-w-0">
@@ -376,11 +375,11 @@ export default function Profile() {
           </div>
           {googleIdentity
             ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>
+                style={{ background: 'rgba(22,163,74,0.10)', color: '#16a34a' }}>
                 <Check size={10} /> Connected
               </span>
             : <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                style={{ background: 'color-mix(in srgb, var(--text-3) 10%, transparent)', color: 'var(--text-3)' }}>
+                style={{ background: 'rgba(100,116,139,0.10)', color: 'var(--text-3)' }}>
                 <Unlink size={10} /> Not linked
               </span>
           }
@@ -389,7 +388,7 @@ export default function Profile() {
         {/* Zoho */}
         <div className="flex items-center gap-3 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0"
-            style={{ background: 'var(--danger-btn)', color: 'var(--danger-fg)', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}>
+            style={{ background: '#E42527', color: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}>
             Z
           </span>
           <div className="flex-1 min-w-0">
@@ -403,11 +402,11 @@ export default function Profile() {
           </div>
           {zohoIdentity
             ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>
+                style={{ background: 'rgba(22,163,74,0.10)', color: '#16a34a' }}>
                 <Check size={10} /> Connected
               </span>
             : <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                style={{ background: 'color-mix(in srgb, var(--text-3) 10%, transparent)', color: 'var(--text-3)' }}>
+                style={{ background: 'rgba(100,116,139,0.10)', color: 'var(--text-3)' }}>
                 <Unlink size={10} /> Not linked
               </span>
           }
@@ -426,7 +425,7 @@ export default function Profile() {
             </p>
           </div>
           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-            style={{ background: hasPassword ? 'color-mix(in srgb, var(--fin-positive) 10%, transparent)' : 'color-mix(in srgb, var(--text-3) 10%, transparent)', color: hasPassword ? 'var(--fin-positive)' : 'var(--text-3)' }}>
+            style={{ background: hasPassword ? 'rgba(22,163,74,0.10)' : 'rgba(100,116,139,0.10)', color: hasPassword ? '#16a34a' : 'var(--text-3)' }}>
             {hasPassword ? <><Check size={10} /> Active</> : <><Unlink size={10} /> None</>}
           </span>
         </div>
@@ -434,10 +433,10 @@ export default function Profile() {
         {/* Teable email note */}
         {profile?.teable_email && profile.teable_email !== profile.email && (
           <div className="mt-1 flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs"
-            style={{ background: 'color-mix(in srgb, var(--accent) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
-            <Info size={12} className="flex-shrink-0 mt-px" style={{ color: 'var(--accent)' }} />
+            style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)' }}>
+            <Info size={12} className="flex-shrink-0 mt-px" style={{ color: '#6366f1' }} />
             <span style={{ color: 'var(--text-2)' }}>
-              Your Teable "Raised By" identity is <strong>{profile.teable_email}</strong>. Invoices matching this email are linked to your account.
+              Your Teable "Raised By" identity is <strong>{profile.teable_email}</strong> — invoices matching this email are linked to your account.
             </span>
           </div>
         )}
@@ -515,12 +514,6 @@ export default function Profile() {
         )}
       </Card>
 
-      {/* ── Appearance ── */}
-      <Card>
-        <SectionLabel>Appearance</SectionLabel>
-        <AppearancePicker />
-      </Card>
-
       {/* ── Security: password ── */}
       <Card>
         <div className="flex items-center justify-between mb-1">
@@ -540,7 +533,7 @@ export default function Profile() {
           <div className="flex items-center gap-3 py-2">
             <Key size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
             <span className="text-xs w-28 flex-shrink-0" style={{ color: 'var(--text-3)' }}>Password</span>
-            <span className="text-sm tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>••••••••</span>
+            <span className="text-sm tracking-[0.3em]" style={{ color: 'var(--text-3)' }}>••••••••</span>
           </div>
         )}
 
@@ -573,10 +566,10 @@ export default function Profile() {
       </Card>
 
       {/* ── Sign out ── */}
-      <Card style={{ borderColor: 'color-mix(in srgb, var(--fin-negative) 18%, transparent)' }}>
+      <Card style={{ borderColor: 'rgba(220,38,38,0.18)' }}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold mb-0.5" style={{ color: 'var(--fin-negative)' }}>Sign out</p>
+            <p className="text-sm font-semibold mb-0.5" style={{ color: '#dc2626' }}>Sign out</p>
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               Ends your current session and returns you to the login screen.
             </p>
@@ -584,9 +577,9 @@ export default function Profile() {
           <button
             onClick={logout}
             className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border transition-all flex-shrink-0"
-            style={{ color: 'var(--fin-negative)', borderColor: 'color-mix(in srgb, var(--fin-negative) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 12%, transparent)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 6%, transparent)' }}
+            style={{ color: '#dc2626', borderColor: 'rgba(220,38,38,0.3)', background: 'rgba(220,38,38,0.06)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.12)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
           >
             <LogOut size={12} /> Sign out
           </button>

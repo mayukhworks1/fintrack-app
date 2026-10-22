@@ -12,15 +12,15 @@ import { useDialog } from '../../hooks/useDialog'
 export function Badge({ children, color = 'default' }) {
   const colors = {
     default:  { bg: 'rgba(100,116,139,0.12)', fg: 'var(--text-2)' },
-    green:    { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)',   fg: 'var(--fin-positive)' },
-    blue:     { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',   fg: 'var(--accent)' },
-    amber:    { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',   fg: 'var(--fin-warning)' },
-    red:      { bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)',   fg: 'var(--fin-negative)' },
-    purple:   { bg: 'color-mix(in srgb, var(--chart-3) 12%, transparent)',  fg: 'var(--chart-3)' },
-    indigo:   { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  fg: 'var(--accent)' },
-    pink:     { bg: 'color-mix(in srgb, var(--chart-5) 12%, transparent)',  fg: 'var(--chart-5)' },
-    teal:     { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)',  fg: 'var(--fin-positive)' },
-    orange:   { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',   fg: 'var(--fin-warning)' },
+    green:    { bg: 'rgba(22,163,74,0.12)',   fg: '#16a34a' },
+    blue:     { bg: 'rgba(37,99,235,0.12)',   fg: '#2563eb' },
+    amber:    { bg: 'rgba(217,119,6,0.12)',   fg: '#d97706' },
+    red:      { bg: 'rgba(220,38,38,0.12)',   fg: '#dc2626' },
+    purple:   { bg: 'rgba(124,58,237,0.12)',  fg: '#7c3aed' },
+    indigo:   { bg: 'rgba(99,102,241,0.12)',  fg: '#6366f1' },
+    pink:     { bg: 'rgba(219,39,119,0.12)',  fg: '#db2777' },
+    teal:     { bg: 'rgba(13,148,136,0.12)',  fg: '#0d9488' },
+    orange:   { bg: 'rgba(234,88,12,0.12)',   fg: '#ea580c' },
   }
   const { bg, fg } = colors[color] || colors.default
   return (
@@ -53,14 +53,14 @@ export function UserAvatar({ row, size = 40 }) {
   return (
     <div
       className="rounded-2xl flex items-center justify-center text-xs font-black shrink-0"
-      style={{ width: size, height: size, background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }}
+      style={{ width: size, height: size, background: 'rgba(99,102,241,0.14)', color: '#6366f1' }}
     >
       {initials}
     </div>
   )
 }
 
-export function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name. Click to set' }) {
+export function EditableName({ value, saving, onSave, placeholder = '', emptyLabel = 'No name — click to set' }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(value)
   if (editing) {
@@ -80,10 +80,10 @@ export function EditableName({ value, saving, onSave, placeholder = '', emptyLab
         />
         <button onClick={() => { onSave(val); setEditing(false) }}
           className="text-[10px] px-1.5 py-0.5 rounded"
-          style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>Save</button>
+          style={{ background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>✓</button>
         <button onClick={() => { setVal(value); setEditing(false) }}
           className="text-[10px] px-1.5 py-0.5 rounded"
-          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>Cancel</button>
+          style={{ background: 'var(--bg-input)', color: 'var(--text-3)' }}>✕</button>
       </span>
     )
   }
@@ -190,11 +190,9 @@ export function Pager({ total, limit, offset, onPage }) {
 
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
-// `accent` is accepted for call-site compatibility; a stat is told apart by
-// its label, not by a coloured edge.
-export function StatBox({ label, value, sub, color, accent: _accent }) {
+export function StatBox({ label, value, sub, color, accent }) {
   return (
-    <div className="card flex flex-col gap-1 min-w-0">
+    <div className="card flex flex-col gap-1 min-w-0" style={accent ? { borderLeft: `3px solid ${accent}` } : {}}>
       <p className="text-[11px] font-medium truncate" style={{ color: 'var(--text-3)' }}>{label}</p>
       <p className="text-2xl font-bold tabular-nums leading-none"
         style={{ color: color || 'var(--text-1)' }}>{fmt(value)}</p>
@@ -206,7 +204,7 @@ export function StatBox({ label, value, sub, color, accent: _accent }) {
 export function HealthEvidenceCard({ label, item }) {
   const ok = Boolean(item?.ok)
   return (
-    <div className="card min-w-0 space-y-2" style={{ borderLeft: `3px solid ${ok ? 'var(--fin-positive)' : 'var(--fin-negative)'}` }}>
+    <div className="card min-w-0 space-y-2" style={{ borderLeft: `3px solid ${ok ? '#16a34a' : '#dc2626'}` }}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{label}</p>
         <Badge color={ok ? 'green' : 'red'}>{ok ? 'OK' : 'Check'}</Badge>
@@ -216,7 +214,7 @@ export function HealthEvidenceCard({ label, item }) {
       </p>
 
       {label === 'Sync Freshness' && item?.stale_sources?.length > 0 && (
-        <p className="text-[11px]" style={{ color: 'var(--fin-warning)' }}>Stale mirrors: {item.stale_sources.join(', ')}</p>
+        <p className="text-[11px]" style={{ color: '#d97706' }}>Stale mirrors: {item.stale_sources.join(', ')}</p>
       )}
 
       {label === 'Teable' && item?.tables && (
@@ -235,11 +233,11 @@ export function HealthEvidenceCard({ label, item }) {
             ))}
           </div>
           {item.missing?.length > 0 && (
-            <div className="rounded-lg p-2" style={{ background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)' }}>
-              <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--fin-negative)' }}>Action needed in production secrets</p>
+            <div className="rounded-lg p-2" style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.18)' }}>
+              <p className="text-[11px] font-semibold mb-1" style={{ color: '#dc2626' }}>Action needed in production secrets</p>
               {item.missing.map(name => (
                 <p key={name} className="text-[11px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                  <code style={{ color: 'var(--fin-negative)' }}>{name}</code>: {item.guidance?.[name] || 'Set this value in the deployment environment.'}
+                  <code style={{ color: '#dc2626' }}>{name}</code>: {item.guidance?.[name] || 'Set this value in the deployment environment.'}
                 </p>
               ))}
             </div>
@@ -291,7 +289,7 @@ export function DeploymentChecklist() {
     <section>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
             Production Health
           </h3>
           {data?.deployment && (
@@ -431,7 +429,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--scrim)' }}>
+      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}>
       <div {...dialog.panelProps} style={{
         background: 'var(--card-bg)', border: '1px solid var(--border)',
         borderRadius: 18, padding: 28, width: '100%', maxWidth: 480,
@@ -439,8 +437,8 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
       }}>
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div style={{ background: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)', borderRadius: 10, padding: 8 }}>
-            <Trash2 size={18} style={{ color: 'var(--fin-negative)' }} />
+          <div style={{ background: 'rgba(220,38,38,0.12)', borderRadius: 10, padding: 8 }}>
+            <Trash2 size={18} style={{ color: '#dc2626' }} />
           </div>
           <div>
             <h3 style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: 16, margin: 0 }}>Purge Audit Log</h3>
@@ -453,12 +451,12 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
 
         {/* Safety notice */}
         <div style={{
-          background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)',
+          background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
           borderRadius: 10, padding: '8px 12px', marginBottom: 20,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <AlertCircle size={14} style={{ color: 'var(--fin-warning)', flexShrink: 0 }} />
-          <span style={{ color: 'var(--fin-warning)', fontSize: 12, fontWeight: 500 }}>
+          <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+          <span style={{ color: '#92400e', fontSize: 12, fontWeight: 500 }}>
             Always keeps the 200 most-recent rows as a safety floor.
           </span>
         </div>
@@ -483,9 +481,9 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
           {(mode === 'hours' ? hourPresets : dayPresets).map(([v, l]) => (
             <button key={v} onClick={() => setActive(v)} style={{
               padding: '6px 14px', borderRadius: 8, border: '1px solid',
-              borderColor: activePreset === v ? 'var(--fin-negative)' : 'var(--border)',
-              background: activePreset === v ? 'var(--danger-btn)' : 'var(--bg-input)',
-              color: activePreset === v ? 'var(--danger-fg)' : 'var(--text-2)',
+              borderColor: activePreset === v ? '#dc2626' : 'var(--border)',
+              background: activePreset === v ? '#dc2626' : 'var(--bg-input)',
+              color: activePreset === v ? '#fff' : 'var(--text-2)',
               fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s',
             }}>
               {l}
@@ -506,19 +504,19 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
             style={{ ...CTRL_STYLE, width: 80, textAlign: 'center' }} />
           <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{mode === 'hours' ? 'hours' : 'days'}</span>
           <span style={{ color: 'var(--text-3)', fontSize: 11, marginLeft: 4 }}>
-            Older than <b style={{ color: 'var(--text-2)' }}>{label}</b>
+            → older than <b style={{ color: 'var(--text-2)' }}>{label}</b>
           </span>
         </div>
 
         {/* Result */}
         {result && (
           <div style={{
-            background: result.error ? 'color-mix(in srgb, var(--fin-negative) 8%, transparent)' : 'color-mix(in srgb, var(--fin-positive) 8%, transparent)',
-            border: `1px solid ${result.error ? 'color-mix(in srgb, var(--fin-negative) 20%, transparent)' : 'color-mix(in srgb, var(--fin-positive) 20%, transparent)'}`,
-            color: result.error ? 'var(--fin-negative)' : 'var(--fin-positive)',
+            background: result.error ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
+            border: `1px solid ${result.error ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}`,
+            color: result.error ? '#dc2626' : '#16a34a',
             borderRadius: 10, padding: '8px 12px', fontSize: 13, marginBottom: 16,
           }}>
-            {result.error ? result.error : (result.message || `Deleted ${result.deleted?.toLocaleString()} rows`)}
+            {result.error ? `✕ ${result.error}` : `✓ ${result.message || `Deleted ${result.deleted?.toLocaleString()} rows`}`}
           </div>
         )}
 
@@ -529,7 +527,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
           }}>Cancel</button>
           <button onClick={handleConfirm} disabled={purging} style={{
             padding: '8px 20px', borderRadius: 10, border: 'none', cursor: purging ? 'not-allowed' : 'pointer',
-            background: purging ? 'var(--danger-btn)' : 'var(--danger-btn)', color: 'var(--danger-fg)',
+            background: purging ? '#991b1b' : '#dc2626', color: '#fff',
             fontWeight: 700, fontSize: 13, opacity: purging ? 0.7 : 1,
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
@@ -563,10 +561,10 @@ export function AuthStatusBadge({ status }) {
 
 export function SessionStatusChip({ status }) {
   const cfg = {
-    online:     { label: 'Online',      color: 'var(--fin-positive)', bg: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)',   icon: <CheckCircle2 size={11} /> },
-    idle:       { label: 'Idle',        color: 'var(--fin-warning)', bg: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)',   icon: <Clock size={11} /> },
+    online:     { label: 'Online',      color: '#16a34a', bg: 'rgba(22,163,74,0.10)',   icon: <CheckCircle2 size={11} /> },
+    idle:       { label: 'Idle',        color: '#d97706', bg: 'rgba(217,119,6,0.10)',   icon: <Clock size={11} /> },
     logged_out: { label: 'Logged out',  color: 'var(--text-3)', bg: 'var(--bg-input)',  icon: <MinusCircle size={11} /> },
-    expired:    { label: 'Expired',     color: 'var(--fin-negative)', bg: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',   icon: <XCircle size={11} /> },
+    expired:    { label: 'Expired',     color: '#dc2626', bg: 'rgba(220,38,38,0.08)',   icon: <XCircle size={11} /> },
   }
   const s = cfg[status] || cfg.expired
   return (
@@ -590,11 +588,12 @@ export function Toggle({ checked, onChange, label, disabled = false, busy = fals
       aria-label={label}
       disabled={off}
       onClick={() => onChange(!checked)}
-      className="app-switch inline-flex items-center flex-shrink-0 rounded-full"
+      className="inline-flex items-center flex-shrink-0 rounded-full"
       style={{
         background: 'transparent', border: 'none', padding: 0,
         opacity: off ? 0.55 : 1,
         cursor: busy ? 'wait' : disabled ? 'not-allowed' : 'pointer',
+        transition: 'opacity 150ms ease',
       }}
     >
       <span aria-hidden="true" className="relative block rounded-full" style={{
@@ -602,11 +601,10 @@ export function Toggle({ checked, onChange, label, disabled = false, busy = fals
         background: checked ? 'var(--accent-btn)' : 'var(--text-3)',
         transition: 'background-color 150ms ease',
       }}>
-        <span className="app-switch-knob" style={{
-          position: 'absolute', top: 2, left: 2,
-          transform: checked ? 'translateX(16px)' : 'none',
+        <span style={{
+          position: 'absolute', top: 2, left: checked ? 18 : 2,
           width: 16, height: 16, borderRadius: '50%',
-          background: '#fff',
+          background: '#fff', transition: 'left 0.15s',
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </span>

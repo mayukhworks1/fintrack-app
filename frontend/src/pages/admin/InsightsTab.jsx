@@ -76,11 +76,11 @@ export function InsightsTab() {
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        <StatBox label="Saved dashboards" value={dashboardCounts.configsTotal} sub="Active custom insight presets" color="var(--accent)" accent="var(--accent)" />
-        <StatBox label="Export events" value={dashboardCounts.exportsTotal} sub="All tracked downloads" color="var(--fin-positive)" accent="var(--fin-positive)" />
-        <StatBox label="Pages customized" value={dashboardCounts.dashboardPages} sub="Dashboard + Analytics adoption" color="var(--chart-3)" accent="var(--chart-3)" />
-        <StatBox label="Excel exports" value={dashboardCounts.excelExports} sub="Spreadsheet downloads" color="var(--fin-positive)" accent="var(--fin-positive)" />
-        <StatBox label="PDF exports" value={dashboardCounts.pdfExports} sub="Portable report downloads" color="var(--fin-warning)" accent="var(--fin-warning)" />
+        <StatBox label="Saved dashboards" value={dashboardCounts.configsTotal} sub="Active custom insight presets" color="#2563eb" accent="#2563eb" />
+        <StatBox label="Export events" value={dashboardCounts.exportsTotal} sub="All tracked downloads" color="#16a34a" accent="#16a34a" />
+        <StatBox label="Pages customized" value={dashboardCounts.dashboardPages} sub="Dashboard + Analytics adoption" color="#7c3aed" accent="#7c3aed" />
+        <StatBox label="Excel exports" value={dashboardCounts.excelExports} sub="Spreadsheet downloads" color="#0d9488" accent="#0d9488" />
+        <StatBox label="PDF exports" value={dashboardCounts.pdfExports} sub="Portable report downloads" color="#d97706" accent="#d97706" />
       </div>
 
       {loading ? <Skeleton rows={8} /> : error ? <Err msg={error} onRetry={load} /> : (

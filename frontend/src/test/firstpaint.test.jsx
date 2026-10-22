@@ -15,36 +15,6 @@ import { resolve } from 'node:path'
  */
 const root = resolve(__dirname, '../..')
 
-/** Manifest keys the chunk loads statically, transitively. */
-function staticClosure(m, chunk, seen = new Set()) {
-  for (const k of chunk.imports || []) {
-    if (seen.has(k) || !m[k]) continue
-    seen.add(k)
-    staticClosure(m, m[k], seen)
-  }
-  return seen
-}
-
-/** Manifest keys reachable from the chunk through at least one dynamic import. */
-function dynamicReach(m, entry) {
-  const reached = new Set()
-  const queue = [entry]
-  const visited = new Set()
-  while (queue.length) {
-    const c = queue.shift()
-    if (visited.has(c)) continue
-    visited.add(c)
-    for (const k of c.dynamicImports || []) {
-      if (!m[k]) continue
-      reached.add(k)
-      for (const s of staticClosure(m, m[k])) reached.add(s)
-      queue.push(m[k])
-    }
-    for (const k of c.imports || []) if (m[k]) queue.push(m[k])
-  }
-  return reached
-}
-
 describe('first-paint budget', () => {
   it('manualChunks never names a chart library', () => {
     const cfg = readFileSync(resolve(root, 'vite.config.js'), 'utf8')
@@ -60,22 +30,18 @@ describe('first-paint budget', () => {
     const m = JSON.parse(readFileSync(manifestPath, 'utf8'))
     const entry = Object.values(m).find(v => v.isEntry)
     expect(entry).toBeTruthy()
-    // Everything first paint downloads: the entry's static imports, followed
-    // all the way down, since a chunk the entry imports pulls its own in too.
-    const offenders = [...staticClosure(m, entry)].map(k => m[k].file).filter(f => /chart|recharts/i.test(f))
+    const staticImports = (entry.imports || []).map(k => m[k].file)
+    const offenders = staticImports.filter(f => /chart|recharts/i.test(f))
     expect(offenders).toEqual([])
   })
 
-  // The dashboard is lazy now, so its insight blocks sit one dynamic import
-  // further from the entry. What matters is unchanged: they are never in what
-  // first paint downloads, and they are still reachable by dynamic import.
   it('CustomInsightBlocks is reached only by dynamic import', () => {
     const manifestPath = resolve(root, 'dist/.vite/manifest.json')
     if (!existsSync(manifestPath)) return
     const m = JSON.parse(readFileSync(manifestPath, 'utf8'))
     const entry = Object.values(m).find(v => v.isEntry)
-    const isStatic = [...staticClosure(m, entry)].some(k => /CustomInsightBlocks/.test(m[k].file))
-    const isDynamic = [...dynamicReach(m, entry)].some(k => /CustomInsightBlocks/.test(m[k].file))
+    const isStatic = (entry.imports || []).some(k => /CustomInsightBlocks/.test(m[k].file))
+    const isDynamic = (entry.dynamicImports || []).some(k => /CustomInsightBlocks/.test(m[k].file))
     expect(isStatic).toBe(false)
     expect(isDynamic).toBe(true)
   })

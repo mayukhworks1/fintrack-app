@@ -2,8 +2,8 @@ import { BarChart3, PieChart as PieChartIcon, Table2, TrendingUp } from 'lucide-
 import {
   Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import useChartColors from '../hooks/useChartColors'
 
+const DONUT_COLORS = ['#4b67ff', '#16915f', '#ca7f14', '#d85f58', '#7c3aed', '#0891b2', '#6b7280']
 
 function formatMetricValue(value, format = 'auto') {
   if (value == null || value === '') return '—'
@@ -58,7 +58,7 @@ function BlockShell({ title, sourceLabel, icon, children, className = '' }) {
     <div className={`rounded-[24px] p-5 ${className}`} style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{sourceLabel || 'Source'}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>{sourceLabel || 'Source'}</p>
           <h3 className="text-lg font-semibold mt-1" style={{ color: 'var(--text-1)' }}>{title}</h3>
         </div>
         <div className="rounded-2xl p-3" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
@@ -71,15 +71,13 @@ function BlockShell({ title, sourceLabel, icon, children, className = '' }) {
 }
 
 export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], sourceRowsByKey = {} }) {
-  const chart = useChartColors()
-  const DONUT_COLORS = [...chart.series, chart.muted]
   if (!blocks.length) return null
 
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Custom boards</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Custom boards</p>
           <h2 className="text-xl font-semibold mt-1" style={{ color: 'var(--text-1)' }}>Your own metrics and views</h2>
         </div>
         <div className="text-xs" style={{ color: 'var(--text-3)' }}>{blocks.length} active block{blocks.length === 1 ? '' : 's'}</div>
@@ -101,7 +99,7 @@ export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], s
                 icon={<TrendingUp size={18} />}
                 className={spanClass(block.span)}
               >
-                <p className="text-[2rem] font-semibold mt-5 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+                <p className="text-[2rem] font-semibold mt-5 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.04em' }}>
                   {formatMetricValue(total, block.valueFormat || (block.formulaMode === 'formula' && block.formulaOp === 'ratio_percent' ? 'percent' : 'auto'))}
                 </p>
                 <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
@@ -242,7 +240,7 @@ export default function CustomInsightBlocks({ blocks = [], sourceOptions = [], s
                   <thead style={{ background: 'var(--bg-input)' }}>
                     <tr>
                       {columns.map((column) => (
-                        <th key={column.key} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+                        <th key={column.key} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
                           {column.label}
                         </th>
                       ))}

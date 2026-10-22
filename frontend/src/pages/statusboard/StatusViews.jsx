@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clientColor, fmtDate, fmtShortDate, hexToRgba, parseAttachments, statusStyle } from './utils'
 import { useDialog } from '../../hooks/useDialog'
-import { tint } from '../../utils/color'
 
 export function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus }) {
   const total = records.length
@@ -22,13 +21,13 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
         onClick={() => onFilterStatus('')}
         className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
         style={{
-          background: !filterStatus ? 'var(--accent-btn)' : 'transparent',
-          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--card-border)',
-          color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-2)',
-          boxShadow: 'none',
+          background: !filterStatus ? 'linear-gradient(135deg, rgba(125,149,255,0.24), rgba(125,149,255,0.12))' : 'rgba(255,255,255,0.03)',
+          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid rgba(255,255,255,0.08)',
+          color: !filterStatus ? '#fff' : 'var(--text-2)',
+          boxShadow: !filterStatus ? '0 14px 30px rgba(77,116,255,0.18)' : 'none',
         }}
       >
-        <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-1)' }}>{total}</span>
+        <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? '#fff' : 'var(--text-1)' }}>{total}</span>
         <span className="text-xs font-semibold">All Projects</span>
       </button>
 
@@ -42,8 +41,8 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
             onClick={() => onFilterStatus(active ? '' : s)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
             style={{
-              background: active ? sc.bg : 'var(--bg-input)',
-              border: active ? `1.5px solid ${sc.border}` : '1px solid var(--card-border)',
+              background: active ? sc.bg : 'rgba(255,255,255,0.03)',
+              border: active ? `1.5px solid ${sc.border}` : '1px solid rgba(255,255,255,0.08)',
               boxShadow: active ? `0 12px 24px ${sc.bg}` : 'none',
             }}
           >
@@ -96,7 +95,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'var(--scrim)' }}
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}>
       <div {...dialog.panelProps}
         className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] shadow-2xl"
@@ -104,7 +103,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5"
-          style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border)' }}>
+          style={{ background: `linear-gradient(135deg, ${hexToRgba(clrHex, 0.14)}, var(--card-bg))`, borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold mb-3"
@@ -123,7 +122,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                 {attachments.length > 0 && (
                   <span
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                    style={{ background: 'color-mix(in srgb, var(--chart-2) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 22%, transparent)', color: 'var(--chart-2)' }}
+                    style={{ background: 'rgba(14,165,233,0.10)', border: '1px solid rgba(14,165,233,0.22)', color: '#0ea5e9' }}
                   >
                     <Paperclip size={11} />
                     {attachments.length} attachment{attachments.length === 1 ? '' : 's'}
@@ -138,9 +137,9 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                     <Pencil size={15} />
                   </button>
                   <button onClick={onDelete} className="btn-icon p-2" title="Delete"
-                    style={{ color: 'color-mix(in srgb, var(--fin-negative) 70%, transparent)' }}
-                    onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 70%, transparent)'}>
+                    style={{ color: 'rgba(239,68,68,0.7)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.7)'}>
                     <Trash size={15} />
                   </button>
                 </>
@@ -157,7 +156,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           {/* ── Status ─────────────────────────────────────────────────── */}
           {status && (
             <div className="rounded-2xl p-4" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: sc.color }}>Current Status</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: sc.color }}>Current Status</p>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold"
                 style={{ background: 'var(--card-bg)', color: sc.color, border: `1px solid ${sc.border}` }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: sc.dot }} />
@@ -169,12 +168,12 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           <div className="grid grid-cols-1 lg:grid-cols-[0.9fr,1.1fr] gap-5">
             <div className="space-y-5">
               <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Status Headline</p>
                 <p className="text-sm font-semibold leading-relaxed" style={{ color: 'var(--text-1)' }}>{short || 'No headline added yet.'}</p>
               </div>
 
               <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--text-3)' }}>Portfolio Context</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>Portfolio Context</p>
                 <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Client</p>
@@ -194,7 +193,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
             </div>
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>Detailed Update</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>Detailed Update</p>
               <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
                 {detail?.trim() || short?.trim() || 'No detailed update added yet.'}
               </div>
@@ -204,7 +203,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
           {/* Attachments — still previewable below, but surfaced in the header above */}
           {attachments.length > 0 && (
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
                 Attachments <span className="font-normal normal-case" style={{ color: 'var(--text-3)' }}>· click to preview</span>
               </p>
               <AttachmentList
@@ -293,9 +292,9 @@ export function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selec
                 </button>
                 <button onClick={e => { e.stopPropagation(); onDelete() }}
                   className="btn-icon p-1"
-                  style={{ color: 'color-mix(in srgb, var(--fin-negative) 40%, transparent)' }}
-                  onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 40%, transparent)'}
+                  style={{ color: 'rgba(239,68,68,0.4)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.4)'}
                   title="Delete">
                   <Trash2 size={11} />
                 </button>
@@ -318,7 +317,7 @@ export function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selec
             {attachments.length > 0 && (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                style={{ background: 'color-mix(in srgb, var(--chart-2) 10%, transparent)', color: 'var(--chart-2)', border: '1px solid color-mix(in srgb, var(--chart-2) 22%, transparent)' }}
+                style={{ background: 'rgba(14,165,233,0.10)', color: '#0ea5e9', border: '1px solid rgba(14,165,233,0.22)' }}
               >
                 <Paperclip size={10} />
                 {attachments.length}
@@ -440,7 +439,7 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
             <button
               onClick={e => { e.stopPropagation(); onDetail(record) }}
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-all hover:opacity-80"
-              style={{ background: first.bg, border: `1px solid ${tint(first.color, 0.2)}` }}
+              style={{ background: first.bg, border: `1px solid ${first.color}33` }}
               title="Click to preview files">
               <first.Icon size={10} style={{ color: first.color }} />
               <span className="text-[11px] font-semibold" style={{ color: first.color }}>
@@ -469,9 +468,9 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
               <Pencil size={12} />
             </button>
             <button onClick={onDelete} className="btn-icon p-1"
-              style={{ color: 'color-mix(in srgb, var(--fin-negative) 50%, transparent)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 50%, transparent)'}
+              style={{ color: 'rgba(239,68,68,0.5)' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.5)'}
               title="Delete">
               <Trash2 size={12} />
             </button>
@@ -562,7 +561,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
 
 export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true, motionFor }) {
   const [dragOver, setDragOver] = useState(false)
-  const sc = draggable ? statusStyle(statusLabel) : { color: 'var(--text-2)', bg: 'color-mix(in srgb, var(--text-3) 10%, transparent)', border: 'color-mix(in srgb, var(--text-3) 24%, transparent)', dot: 'var(--text-3)' }
+  const sc = draggable ? statusStyle(statusLabel) : { color: '#475569', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8' }
 
   function handleDragOver(e) {
     if (!draggable || !isEditor) return
@@ -577,7 +576,7 @@ export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit
       style={{
         background: dragOver ? sc.bg : 'var(--bg-input)',
         border: dragOver ? `2px dashed ${sc.border}` : '1px solid var(--border)',
-        boxShadow: 'none',
+        boxShadow: dragOver ? `0 0 16px ${sc.bg}` : 'none',
       }}
       onDragOver={handleDragOver}
       onDragLeave={() => setDragOver(false)}
@@ -591,7 +590,7 @@ export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit
           <span className="text-xs font-bold" style={{ color: sc.color }}>{statusLabel}</span>
         </div>
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-          style={{ background: sc.color, color: 'var(--card-bg)' }}>{records.length}</span>
+          style={{ background: sc.color, color: '#fff' }}>{records.length}</span>
       </div>
 
       {/* Cards */}

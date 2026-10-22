@@ -2,7 +2,7 @@
 import Drawer from '../../components/Drawer'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../services/api'
-import { AlertTriangle, CheckCircle2, Loader2, Mail, RotateCcw, Save, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, Mail, RotateCcw, Save, Sparkles, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AttachmentUploadField, Field, SelectInput, SuggestInput } from './ui'
 import { EMPTY_FORM, INVOICE_PARSE_FIELD_LABELS, STATUSES, buildInvoiceScalarPayload, isRetainerCategory, normalizeInvoiceFormForCompare } from './utils'
@@ -199,14 +199,14 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
       }
       setForm(next)
       setParseApplied(applied)
-      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''}. Please review and correct`)
+      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review and correct`)
     } catch (e) {
       const status = e.status
       const msg = status === 400 ? e.message               // our explicit error (bad file, unreadable PDF, etc.)
                : status === 413 ? 'File too large (max 10 MB)'
                : status === 403 ? 'Not authorized to use this feature'
                : e.message && !e.message.startsWith('[') ? e.message
-               : 'AI parse failed. Try a clearer image or a text-based PDF'
+               : 'AI parse failed — try a clearer image or a text-based PDF'
       setParseError(msg)
     } finally {
       setParsing(false)
@@ -272,6 +272,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
                 onClick={() => parseFileRef.current?.click()}
                 className="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl border-2 border-dashed transition-all hover:opacity-90 active:scale-[0.98]"
                 style={{ borderColor: 'var(--accent-soft)', background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                <Sparkles size={14} />
                 <span className="text-xs font-semibold">Scan Invoice with AI</span>
                 <Upload size={12} className="opacity-60" />
                 <span className="text-[11px] opacity-60">PDF · PNG · JPG</span>
@@ -279,7 +280,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
             )}
             {parseNote && !parsing && (
               <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
-                style={{ background: 'color-mix(in srgb, var(--fin-positive) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)', color: 'var(--fin-positive)' }}>
+                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
                 <CheckCircle2 size={12} className="flex-shrink-0" />
                 {parseNote}
               </div>
@@ -303,7 +304,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
             )}
             {parseError && !parsing && (
               <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
-                style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
+                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
                 <AlertTriangle size={12} className="flex-shrink-0" />
                 {parseError}
               </div>
@@ -312,7 +313,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
 
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
-              style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
+              style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
               <AlertTriangle size={13} />{error}
             </div>
           )}
@@ -467,7 +468,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
           {retainerSelected && (
             <div className="rounded-xl p-3 text-xs"
               style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', color: 'var(--text-2)' }}>
-              Retainer mode. Put the retainer/client name in Project. The latest retainer row becomes the monthly template; invoice number can be filled later.
+              Retainer mode — put the retainer/client name in Project. The latest retainer row becomes the monthly template; invoice number can be filled later.
             </div>
           )}
         </div>

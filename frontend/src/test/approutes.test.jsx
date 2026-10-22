@@ -95,7 +95,7 @@ describe('App routing, signed out', () => {
   // module is added — which tells you nothing about routing.
   it('serves the features page publicly', async () => {
     at('/features')
-    expect(await screen.findByRole('navigation', { name: /modules on this page/i }, LAZY_ROUTE)).toBeInTheDocument()
+    expect(await screen.findByRole('tablist', { name: /modules/i }, LAZY_ROUTE)).toBeInTheDocument()
   })
 
   it('serves the security page publicly', async () => {

@@ -2,7 +2,7 @@
 import Drawer from '../../components/Drawer'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../services/api'
-import { AlertTriangle, CheckCircle2, Loader2, Mail, Save, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, Mail, Save, Sparkles, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AttachmentUploadField, FieldRow, PicklistSelect, SelectInput } from './ui'
 import { EMPTY_FORM, STATUSES, buildWebInvoiceScalarPayload, currencySymbol, getProjectCategoryOption, getRetainerCategoryOption, isRetainerCategory, normalizeWebInvoiceScalarForm } from './utils'
@@ -215,11 +215,11 @@ export function InvoiceDrawer({
       }
       setForm(next)
       setParseApplied(applied)
-      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''}. Please review`)
+      setParseNote(`AI filled ${filled} field${filled !== 1 ? 's' : ''} — please review`)
     } catch (e) {
       const msg = e.status === 400 ? e.message
                 : e.status === 413 ? 'File too large (max 10 MB)'
-                : e.message || 'AI parse failed. Try a clearer image or PDF'
+                : e.message || 'AI parse failed — try a clearer image or PDF'
       setParseError(msg)
     } finally {
       setParsing(false)
@@ -277,7 +277,7 @@ export function InvoiceDrawer({
       <div className="p-5 space-y-3.5">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
-              style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
+              style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
               <AlertTriangle size={13} />{error}
             </div>
           )}
@@ -382,8 +382,8 @@ export function InvoiceDrawer({
 
           {paidSelected && (
             <div className="rounded-xl p-3 text-xs flex items-start gap-2"
-              style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warning)', color: 'var(--fin-warning)' }}>
-              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--fin-warning)' }} />
+              style={{ background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e' }}>
+              <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
               <span>Paid invoices must include <strong>Amount Received</strong> and <strong>Cleared Date</strong>. Attach a payment reference screenshot before closing the entry.</span>
             </div>
           )}
@@ -400,6 +400,7 @@ export function InvoiceDrawer({
             <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-layer)', border: '1px solid var(--border)' }}>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
+                  <Sparkles size={13} style={{ color: 'var(--accent)' }} />
                   <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>AI autofill from PDF / image</span>
                 </div>
                 <label className={`btn-ghost cursor-pointer ${parsing ? 'opacity-50 pointer-events-none' : ''}`} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}>

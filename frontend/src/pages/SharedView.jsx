@@ -10,7 +10,6 @@ import { useDialog } from '../hooks/useDialog'
 import SkeletonList from '../components/SkeletonList'
 import { hexToRgba } from '../utils/color'
 import { fmtDate, fmtDateTime, isExpired } from '../utils/dates'
-import { plainLabel } from '../utils/plainLabel'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -19,6 +18,7 @@ const THEME_PRESETS = {
   rose: { accent: '#e11d48', accentDim: 'rgba(225,29,72,0.12)', accentSoft: 'rgba(225,29,72,0.24)' },
   slate: { accent: '#475569', accentDim: 'rgba(71,85,105,0.12)', accentSoft: 'rgba(71,85,105,0.24)' },
 }
+const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316']
 const STATUS_CFG = {
   Completed:     { bg: 'rgba(16,185,129,0.12)',  border: 'rgba(16,185,129,0.35)',  dot: '#10b981', text: '#059669' },
   'In progress': { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  dot: '#3b82f6', text: '#2563eb' },
@@ -29,6 +29,7 @@ const STATUS_CFG = {
   Pending:       { bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.35)',  dot: '#f59e0b', text: '#d97706' },
   Cancelled:     { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.30)',   dot: '#ef4444', text: '#dc2626' },
 }
+const _clientMap = {}
 const DEFAULT_BOARD_ORDER = ['In progress', 'Input Pending', 'On Hold', 'Not started', 'Completed']
 
 const RESOURCE_META = {
@@ -103,9 +104,9 @@ const BOARD_GROUP_OPTIONS = {
 }
 
 function resolveTheme(themeId) { return THEME_PRESETS[themeId] || THEME_PRESETS.cobalt }
-// One neutral ink for every client; colour is kept for status.
-function clientColor() {
-  return 'var(--text-2)'
+function clientColor(name) {
+  if (!_clientMap[name]) _clientMap[name] = PALETTE[Object.keys(_clientMap).length % PALETTE.length]
+  return _clientMap[name]
 }
 function fmtInr(value) {
   const num = Number(value || 0)
@@ -186,7 +187,7 @@ function recordAttachmentSummary(resourceType, fields = {}) {
 // appear only when the link shares that column: profit is the agency's own.
 function projectFigures(f, isShared) {
   return [
-    ['Health', plainLabel(safeStr(f['Health'])) || '—'],
+    ['Health', safeStr(f['Health']) || '—'],
     isShared('Amount Billed So far') ? ['Billed', fmtInr(f['Amount Billed So far'])] : null,
     isShared('Actual Profit') ? ['Profit', fmtInr(f['Actual Profit'])] : null,
     isShared('Profit percentage') ? ['Margin', f['Profit percentage'] ? `${Number(f['Profit percentage']).toFixed(1)}%` : '—'] : null,
@@ -228,7 +229,7 @@ function StatusBadge({ value }) {
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold"
       style={{ background: st.bg, border: `1px solid ${st.border}`, color: st.text }}>
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
-      {plainLabel(value)}
+      {value}
     </span>
   )
 }
@@ -243,12 +244,12 @@ function SnapshotSummary({ viewConfig, accessMode }) {
     viewConfig?.monthFilter ? `Raised month: ${viewConfig.monthFilter}` : null,
     viewConfig?.agingBandFilter ? `Aging: ${viewConfig.agingBandFilter}` : null,
     viewConfig?.dateFieldFilter && (viewConfig?.dateFrom || viewConfig?.dateTo)
-      ? `${viewConfig.dateFieldFilter}: ${viewConfig.dateFrom || '…'} to ${viewConfig.dateTo || '…'}`
+      ? `${viewConfig.dateFieldFilter}: ${viewConfig.dateFrom || '…'} → ${viewConfig.dateTo || '…'}`
       : null,
     viewConfig?.billingFilter && viewConfig.billingFilter !== 'all' ? `Scope: ${viewConfig.billingFilter}` : null,
     viewConfig?.invoiceScope && viewConfig.invoiceScope !== 'tax' ? `Invoice scope: ${viewConfig.invoiceScope}` : null,
     viewConfig?.periodLabel ? `Period: ${viewConfig.periodLabel}` : null,
-    viewConfig?.periodFrom || viewConfig?.periodTo ? `Date: ${viewConfig.periodFrom || '…'} to ${viewConfig.periodTo || '…'}` : null,
+    viewConfig?.periodFrom || viewConfig?.periodTo ? `Date: ${viewConfig.periodFrom || '…'} → ${viewConfig.periodTo || '…'}` : null,
     viewConfig?.overdueOnly ? 'Outstanding only' : null,
     viewConfig?.hasDocsOnly ? 'With docs only' : null,
     viewConfig?.followupDueOnly ? 'Follow-up due' : null,
@@ -356,7 +357,7 @@ function TaxLedgerDashboard({ records, filterStatus, onFilterStatus, theme }) {
             background: index === 1 ? 'rgba(16,185,129,0.08)' : index === 2 ? 'rgba(245,158,11,0.08)' : '#fff',
             border: '1px solid #e5e7eb',
           }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-gray-400">{label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
             <p className="text-lg sm:text-xl font-black tabular-nums mt-1" style={{ color: index === 1 ? '#059669' : index === 2 ? '#d97706' : '#111827' }}>{value}</p>
             <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
           </div>
@@ -436,7 +437,7 @@ function ResourceCard({ record, resourceType, canEdit, onEdit, onDetail, compact
                   onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
                   className="mt-1 text-[11px] font-semibold flex items-center gap-0.5"
                   style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                  {expanded ? 'Show less' : 'Show more'}
+                  {expanded ? '↑ Show less' : '↓ Show more'}
                 </button>
               </div>
             )}
@@ -793,7 +794,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                 style={highlighted.has(col)
                   ? {
                       color: '#1d4ed8',
-                      background: 'rgba(59,130,246,0.12)',
+                      background: 'linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.10))',
                       borderTop: '1px solid rgba(59,130,246,0.24)',
                       borderBottom: '1px solid rgba(59,130,246,0.24)',
                       borderLeft: '1px solid rgba(59,130,246,0.24)',
@@ -806,7 +807,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                 {COL_LABELS[col] || col}
               </div>
             ))}
-            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-gray-400 text-right">–</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">–</div>
           </div>
 
           {/* Data rows */}
@@ -835,7 +836,7 @@ function ListView({ records, columns, resourceType, canEdit, onEdit, onDetail, s
                     className="min-w-0 px-3 py-2 transition-colors"
                     style={highlighted.has(col)
                       ? {
-                          background: 'rgba(59,130,246,0.09)',
+                          background: 'linear-gradient(180deg, rgba(59,130,246,0.12), rgba(59,130,246,0.07))',
                           borderLeft: '1px solid rgba(59,130,246,0.18)',
                           borderRight: '1px solid rgba(59,130,246,0.18)',
                         }
@@ -1019,7 +1020,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'rgba(15,23,42,0.55)' }}
+      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(10px)' }}
       onClick={onClose}>
       <div {...dialog.panelProps} className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col rounded-[24px] shadow-2xl"
         style={{ background: '#fff', border: '1px solid #e5e7eb' }}
@@ -1027,7 +1028,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="px-6 pt-6 pb-5 flex-shrink-0"
-          style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }}>
+          style={{ borderBottom: '1px solid #f1f5f9', background: `linear-gradient(135deg, ${hexToRgba(accent, 0.07)} 0%, #fff 70%)` }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold mb-2"
@@ -1060,13 +1061,13 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
             <>
               {f['Short Status'] && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1.5">Summary</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Summary</p>
                   <p className="text-[14px] font-semibold text-slate-800 leading-relaxed">{safeStr(f['Short Status'])}</p>
                 </div>
               )}
               {f['Current Status (Detailed)'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-2">Detailed Status</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-2">Detailed Status</p>
                   <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">{safeStr(f['Current Status (Detailed)'])}</p>
                 </div>
               )}
@@ -1074,7 +1075,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
                 const files = parseAttachments(f['Attachments'])
                 return (
                   <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-3">
                       Attachments <span className="font-normal normal-case text-slate-400">· {files.length} file{files.length !== 1 ? 's' : ''} · click to preview</span>
                     </p>
                     <AttachmentList
@@ -1100,7 +1101,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {projectFigures(f, isShared).map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-sm font-bold text-slate-800">{value}</p>
                   </div>
                 ))}
@@ -1120,7 +1121,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
                   ['Outstanding', fmtInr(f['Outstanding Amount']), 'Outstanding Amount'],
                 ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-2xl px-3 py-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-sm font-bold text-slate-800">{value}</p>
                   </div>
                 ))}
@@ -1133,7 +1134,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
                   ['Aging', effectiveAging(f) > 0 ? `${effectiveAging(f)} days` : '—', 'Agening (Days)'],
                 ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-1">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700">{value}</p>
                   </div>
                 ))}
@@ -1149,7 +1150,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
                   ['Reference', safeStr(f['Reference']) || '—', 'Reference'],
                 ].filter(([, , field]) => isShared(field)).map(([label, value]) => (
                   <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-0.5">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">{label}</p>
                     <p className="text-[13px] font-semibold text-slate-700 break-words">{value}</p>
                   </div>
                 ))}
@@ -1157,14 +1158,14 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
               {/* Description */}
               {f['Description'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1.5">Description</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Description</p>
                   <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Description'])}</p>
                 </div>
               )}
               {/* Remark */}
               {f['Remark'] && (
                 <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-1.5">Remark</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-1.5">Remark</p>
                   <p className="text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap">{safeStr(f['Remark'])}</p>
                 </div>
               )}
@@ -1178,7 +1179,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
                 if (!allFiles.length) return null
                 return (
                   <div className="rounded-2xl p-4" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 mb-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 mb-3">
                       Files <span className="font-normal normal-case">· {allFiles.length} file{allFiles.length !== 1 ? 's' : ''} · click to preview</span>
                     </p>
                     <AttachmentList
@@ -1251,7 +1252,7 @@ function EditModal({ resourceType, record, statusOptions, saving, error = '', on
   if (!record) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.6)' }}>
+      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh' }}>
         {/* sticky header */}

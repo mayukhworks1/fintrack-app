@@ -4,85 +4,29 @@ import { Loader2, ShieldCheck } from 'lucide-react'
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import Dashboard from './pages/Dashboard'  // eager — landing route
 import Login from './pages/Login'          // eager — auth gate
-import { prefersReducedMotion } from './hooks/useReducedMotion'
-// The dashboard is the first screen after sign-in, not the first screen of a
-// visit: most cold loads are the public pages and the sign-in form, and they
-// were all paying for it in the entry bundle. It is warmed on idle wherever
-// signing in is the likely next step (see the effect in App).
-const Dashboard = lazyWithReload(() => import('./pages/Dashboard'))
-const loadDashboard = () => import('./pages/Dashboard')
+const Landing  = lazy(() => import('./pages/Landing'))   // public — not in the app bundle
+const Features = lazy(() => import('./pages/Features'))
+const Security = lazy(() => import('./pages/Security'))
+const HowItWorks = lazy(() => import('./pages/public/HowItWorks'))
+const Customise = lazy(() => import('./pages/public/Customise'))
+const Faq = lazy(() => import('./pages/public/Faq'))
+const Terms = lazy(() => import('./pages/public/Terms'))
+const Privacy = lazy(() => import('./pages/public/Privacy'))
 
 // Public marketing routes. Anything not listed here still goes straight to the
 // sign-in form, because a deep link into the app is someone reaching for a
-// screen, not for marketing. None of them is in the app bundle.
-const PUBLIC_IMPORTERS = {
-  '/': () => import('./pages/Landing'),
-  '/features': () => import('./pages/Features'),
-  '/security': () => import('./pages/Security'),
-  '/how-it-works': () => import('./pages/public/HowItWorks'),
-  '/customise': () => import('./pages/public/Customise'),
-  '/faq': () => import('./pages/public/Faq'),
-  '/terms': () => import('./pages/public/Terms'),
-  '/privacy': () => import('./pages/public/Privacy'),
-}
-const PUBLIC_ROUTES = Object.fromEntries(
-  Object.entries(PUBLIC_IMPORTERS).map(([path, load]) => [path, lazy(load)]),
-)
-// The public shell (header, menu, footer) is rendered once, here, around
-// whichever public page is current, so it persists from page to page.
-const PublicLayout = lazy(() => import('./components/PublicLayout'))
-
-// The shell and the page are separate lazy components, and the page only
-// renders once the shell has. Starting the page's import alongside the
-// shell's keeps the two downloads parallel instead of one after the other.
-const warmed = new Set()
-function warmPublic(path) {
-  if (warmed.has(path) || !PUBLIC_IMPORTERS[path]) return
-  warmed.add(path)
-  PUBLIC_IMPORTERS[path]().catch(() => warmed.delete(path))
-}
-
-/** Run `fn` when the browser is idle; returns a cancel function. */
-function whenIdle(fn, timeout = 1200) {
-  if (typeof window === 'undefined') return () => {}
-  if ('requestIdleCallback' in window) {
-    const id = window.requestIdleCallback(fn, { timeout })
-    return () => window.cancelIdleCallback?.(id)
-  }
-  const t = window.setTimeout(fn, 600)
-  return () => window.clearTimeout(t)
-}
-/**
- * Run `fn` once: on the first key press or pointer press anywhere, or once the
- * page has loaded and `delay` ms more have passed and the browser is idle.
- * Returns a cancel function.
- */
-function afterLoadOrIntent(fn, delay = 3000) {
-  if (typeof window === 'undefined') return () => {}
-  let done = false
-  let timer = 0
-  let cancelIdle = () => {}
-  const INTENT = ['keydown', 'pointerdown']
-  const stop = () => {
-    window.removeEventListener('load', onLoad)
-    INTENT.forEach(t => window.removeEventListener(t, run, true))
-    window.clearTimeout(timer)
-    cancelIdle()
-  }
-  function run() {
-    if (done) return
-    done = true
-    stop()
-    fn()
-  }
-  function onLoad() {
-    timer = window.setTimeout(() => { cancelIdle = whenIdle(run) }, delay)
-  }
-  INTENT.forEach(t => window.addEventListener(t, run, { capture: true, passive: true }))
-  if (document.readyState === 'complete') onLoad()
-  else window.addEventListener('load', onLoad, { once: true })
-  return () => { done = true; stop() }
+// screen, not for marketing.
+const PUBLIC_ROUTES = {
+  '/': Landing,
+  '/features': Features,
+  '/security': Security,
+  '/how-it-works': HowItWorks,
+  '/customise': Customise,
+  '/faq': Faq,
+  '/terms': Terms,
+  '/privacy': Privacy,
 }
 const AdminDashboard = lazyWithReload(() => import('./pages/AdminDashboard'))
 import { useAuth } from './context/AuthContext'
@@ -105,7 +49,8 @@ function ImpersonationBanner() {
     <div style={{
       position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 99999,
       height: BANNER_H,
-      background: 'rgba(146,64,14,0.92)', color: '#fff',
+      background: 'rgba(180, 83, 9, 0.82)', color: '#fff',
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 16px', fontSize: 13, fontWeight: 600,
       boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
@@ -121,7 +66,7 @@ function ImpersonationBanner() {
       </div>
       <button onClick={handleExit}
         style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '4px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-        Exit impersonation
+        ✕ Exit impersonation
       </button>
     </div>
   )
@@ -172,7 +117,6 @@ const Profile       = lazyWithReload(() => import('./pages/Profile'))
 // (incl. the ~382KB recharts chunk pulled by Analytics/AIAssistant) would
 // be pure wasted bandwidth for them — especially on mobile.
 const WARM_IMPORTERS_MAIN = [
-  loadDashboard,
   () => import('./pages/Projects'),
   () => import('./pages/Invoices'),
   () => import('./pages/StatusBoard'),
@@ -221,27 +165,16 @@ export default function App() {
   useEffect(() => {
     if (status !== 'authed' || isAdmin) return
     const importers = (isWeb || isAll) ? WARM_IMPORTERS_WEB : WARM_IMPORTERS_MAIN
-    return whenIdle(() => {
+    const runner = () => {
       for (const load of importers) load().catch(() => {})
-    })
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(runner, { timeout: 1200 })
+      return () => window.cancelIdleCallback?.(id)
+    }
+    const t = window.setTimeout(runner, 600)
+    return () => window.clearTimeout(t)
   }, [status, isAdmin, isWeb, isAll])
-
-  // Warm the dashboard while a stored session is being verified: it is the
-  // next thing shown, so it starts at the first idle moment.
-  useEffect(() => {
-    if (status !== 'loading') return
-    return whenIdle(() => { loadDashboard().catch(() => {}) })
-  }, [status])
-
-  // On the sign-in form it is warmed too, but never in competition with the
-  // form's own first paint: on the visitor's first keystroke or press, or a
-  // few seconds after the page has finished loading, whichever comes first.
-  const onSignIn = status !== 'authed' && status !== 'loading' && !isPublicRoute
-    && !PUBLIC_IMPORTERS[location.pathname]
-  useEffect(() => {
-    if (!onSignIn) return
-    return afterLoadOrIntent(() => { loadDashboard().catch(() => {}) })
-  }, [onSignIn])
 
   // Signing in leaves the browser on /login, which is not a route once authed —
   // without this the first thing a successful login shows is Not Found.
@@ -253,10 +186,6 @@ export default function App() {
 
   // Scroll window to top whenever the route pathname changes, ensuring
   // clicking links/buttons never drops the user at the bottom of the next page.
-  //
-  // A public page's own #anchor is landed on by the public shell once the
-  // (lazy) page has mounted; this handles the hash changing on a page that
-  // is already showing.
   useEffect(() => {
     if (!location.hash) {
       window.scrollTo(0, 0)
@@ -265,10 +194,9 @@ export default function App() {
         document.body.scrollTop = 0
       }
     } else {
-      let target = null
-      try { target = document.getElementById(decodeURIComponent(location.hash.replace(/^#/, ''))) } catch {}
+      const target = document.getElementById(location.hash.replace(/^#/, ''))
       if (target) {
-        target.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+        target.scrollIntoView({ behavior: 'smooth' })
       }
     }
   }, [location.pathname, location.hash])
@@ -314,18 +242,16 @@ export default function App() {
   if (status !== 'authed') {
     const PublicPage = PUBLIC_ROUTES[location.pathname]
     if (PublicPage) {
-      warmPublic(location.pathname)
       return (
         <ErrorBoundary>
-          {/* One shell for every public page. It keeps the header and footer
-              mounted across navigation, holds the page in its own Suspense
-              boundary inside <main>, and plays the page enter on client-side
-              navigations only. A page's own <PublicLayout> renders just its
-              children when it is inside this one. */}
-          <Suspense fallback={<div className="main-app-theme login-bg min-h-screen" aria-busy="true" />}>
-            <PublicLayout>
+          {/* Keyed on the path so React remounts on navigation and the
+              entrance animation plays. Without the key the six public pages
+              swap their contents in place and the site reads as six reloads
+              rather than one thing moving. */}
+          <Suspense fallback={<RouteFallback />}>
+            <div key={location.pathname} className="ft-route">
               <PublicPage />
-            </PublicLayout>
+            </div>
           </Suspense>
           <VercelAnalytics />
         </ErrorBoundary>
@@ -398,6 +324,7 @@ export default function App() {
 function ViewerGuard() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <p className="text-5xl mb-4">🔒</p>
       <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Access restricted</p>
       <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>You don't have permission to view this page.</p>
       <Link to="/" className="btn-primary">Go to dashboard</Link>
@@ -408,7 +335,7 @@ function ViewerGuard() {
 function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <p className="text-7xl font-bold mb-3 tabular-nums" style={{ color: 'var(--text-3)', letterSpacing: '-0.02em' }}>404</p>
+      <p className="text-7xl font-bold mb-3 tabular-nums" style={{ color: 'var(--text-3)', letterSpacing: '-0.04em' }}>404</p>
       <p className="text-lg font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Page not found</p>
       <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>This route doesn't exist.</p>
       <Link to="/" className="btn-primary">Go to dashboard</Link>

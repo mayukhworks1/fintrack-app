@@ -41,7 +41,7 @@ describe('AgentInterviewCard', () => {
     fireEvent.click(screen.getByText('Pricing cards'))
 
     // Submit
-    fireEvent.click(screen.getByText('Generate with preferences'))
+    fireEvent.click(screen.getByText('✨ Generate with preferences'))
 
     expect(handleSubmit).toHaveBeenCalledTimes(1)
     expect(handleSubmit).toHaveBeenCalledWith({
@@ -60,7 +60,7 @@ describe('AgentInterviewCard', () => {
     fireEvent.click(screen.getByText('Hero banner'))
 
     // Submit
-    fireEvent.click(screen.getByText('Generate with preferences'))
+    fireEvent.click(screen.getByText('✨ Generate with preferences'))
 
     expect(handleSubmit).toHaveBeenCalledWith({
       theme: '',
@@ -72,7 +72,7 @@ describe('AgentInterviewCard', () => {
     const handleSkip = vi.fn()
     render(<AgentInterviewCard questions={sampleQuestions} onSkip={handleSkip} onSubmit={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('Skip and use the prompt as-is'))
+    fireEvent.click(screen.getByText('Skip — use prompt as-is'))
     expect(handleSkip).toHaveBeenCalledTimes(1)
   })
 
@@ -83,7 +83,7 @@ describe('AgentInterviewCard', () => {
     fireEvent.change(screen.getByPlaceholderText(/Use emerald primary color/), {
       target: { value: 'Include monthly discount calculator' },
     })
-    fireEvent.click(screen.getByText('Generate with preferences'))
+    fireEvent.click(screen.getByText('✨ Generate with preferences'))
 
     expect(handleSubmit).toHaveBeenCalledWith({
       theme: '',

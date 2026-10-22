@@ -136,7 +136,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
       {/* Header + presets */}
       <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Cash Flow</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Cash Flow</p>
           <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Monthly raised (bars) vs collected (line)</h2>
         </div>
         <div className="flex items-center gap-1 flex-wrap">
@@ -146,8 +146,8 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
               onClick={() => setPreset(p.key)}
               style={{
                 fontSize: '0.7rem', padding: '0.25rem 0.6rem', borderRadius: 6,
-                background: preset === p.key ? 'var(--accent-btn)' : 'transparent',
-                color: preset === p.key ? 'var(--accent-fg)' : 'var(--text-3)',
+                background: preset === p.key ? 'var(--accent)' : 'transparent',
+                color: preset === p.key ? '#fff' : 'var(--text-3)',
                 border: preset === p.key ? 'none' : '1px solid var(--border)',
                 fontWeight: preset === p.key ? 600 : 400,
                 cursor: 'pointer',
@@ -162,7 +162,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
                 onChange={e => setCustomFrom(e.target.value + '-01')}
                 style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)' }}
               />
-              <span style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>to</span>
+              <span style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>→</span>
               <input
                 type="month"
                 value={customTo.slice(0, 7)}
@@ -174,11 +174,11 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
           {pctChange !== null && (
             <span style={{
               marginLeft: 4, fontSize: '0.68rem', padding: '0.2rem 0.55rem', borderRadius: 20,
-              background: pctChange >= 0 ? 'color-mix(in srgb, var(--fin-positive) 12%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 12%, transparent)',
-              color: pctChange >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)',
+              background: pctChange >= 0 ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+              color: pctChange >= 0 ? '#16a34a' : '#dc2626',
               fontWeight: 600,
             }}>
-              {pctChange >= 0 ? '+' : '−'}{Math.abs(pctChange).toFixed(0)}% vs last month
+              {pctChange >= 0 ? '↗' : '↘'} {Math.abs(pctChange).toFixed(0)}% vs last month
             </span>
           )}
         </div>
@@ -196,12 +196,12 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
           >
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity="0.9" />
-                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity="0.5" />
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#818cf8" stopOpacity="0.5" />
               </linearGradient>
               <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--fin-positive)" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="var(--fin-positive)" stopOpacity="0" />
+                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
               </linearGradient>
             </defs>
 
@@ -248,7 +248,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
 
             {/* Collected line */}
             {linePts.length > 1 && (
-              <path d={smoothPath(linePts)} fill="none" stroke="var(--fin-positive)" strokeWidth={2.5} strokeLinejoin="round" />
+              <path d={smoothPath(linePts)} fill="none" stroke="#22c55e" strokeWidth={2.5} strokeLinejoin="round" />
             )}
 
             {/* Line dots */}
@@ -258,8 +258,8 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
                 cx={pt.x}
                 cy={pt.y}
                 r={hoverIdx === i ? 5 : 3.5}
-                fill="var(--fin-positive)"
-                stroke="var(--card-bg)"
+                fill="#22c55e"
+                stroke="#fff"
                 strokeWidth={1.5}
                 style={{ transition: 'r 0.1s' }}
                 onMouseEnter={e => { setHoverIdx(i); setTooltipXY({ x: e.clientX, y: e.clientY }) }}
@@ -291,14 +291,14 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
           return (
             <div style={{
               position: 'fixed', left: tooltipXY.x + 14, top: tooltipXY.y - 10,
-              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              background: 'var(--surface-2, #1e293b)', border: '1px solid var(--border)',
               borderRadius: 10, padding: '8px 12px', pointerEvents: 'none', zIndex: 9999,
               fontSize: '0.75rem', minWidth: 140,
-              boxShadow: 'var(--shadow-popover)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
             }}>
               <p style={{ fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{m.label}</p>
-              <p style={{ color: 'var(--accent)' }}>Raised: <strong>{fmtL(m.raised)}</strong></p>
-              <p style={{ color: 'var(--fin-positive)' }}>Received: <strong>{fmtL(m.received)}</strong></p>
+              <p style={{ color: '#818cf8' }}>Raised: <strong>{fmtL(m.raised)}</strong></p>
+              <p style={{ color: '#22c55e' }}>Received: <strong>{fmtL(m.received)}</strong></p>
               <p style={{ color: 'var(--text-3)', marginTop: 2 }}>{m.count} invoice{m.count !== 1 ? 's' : ''} · {cr.toFixed(0)}% collected</p>
             </div>
           )
@@ -308,11 +308,11 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, fontSize: '0.72rem', color: 'var(--text-3)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 14, height: 10, borderRadius: 2, background: 'var(--chart-1)', display: 'inline-block' }} />
+          <span style={{ width: 14, height: 10, borderRadius: 2, background: 'linear-gradient(135deg,#6366f1,#818cf8)', display: 'inline-block' }} />
           Raised
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--fin-positive)" strokeWidth="2.5" /><circle cx="9" cy="5" r="3" fill="var(--fin-positive)" /></svg>
+          <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="#22c55e" strokeWidth="2.5" /><circle cx="9" cy="5" r="3" fill="#22c55e" /></svg>
           Collected
         </span>
       </div>

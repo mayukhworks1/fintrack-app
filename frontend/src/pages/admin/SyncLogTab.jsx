@@ -48,7 +48,7 @@ export function SyncLogTab() {
     setTrig(true); setTrigMsg(null)
     try {
       await api.admin.triggerSync()
-      setTrigMsg({ ok: true, text: 'Full sync triggered. Results appear in a few seconds' })
+      setTrigMsg({ ok: true, text: 'Full sync triggered — results appear in a few seconds' })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
@@ -61,7 +61,7 @@ export function SyncLogTab() {
     setAgingRefreshing(true); setTrigMsg(null)
     try {
       await api.admin.triggerAgingRefresh()
-      setTrigMsg({ ok: true, text: 'Invoice aging refresh started. Numeric aging values will appear in Teable shortly' })
+      setTrigMsg({ ok: true, text: 'Invoice aging refresh started — numeric aging values will appear in Teable shortly' })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Aging refresh failed' })
@@ -78,9 +78,9 @@ export function SyncLogTab() {
         setTrigMsg({ ok: false, text: `Error: ${res.error} (updated ${res.updated}/${res.total}, ${res.duration_ms}ms)` })
       } else {
         const skipDetail = res.skip_reasons?.length
-          ? '. Skips: ' + res.skip_reasons.map(s => `${s.project}: ${s.reason}`).join('; ')
+          ? ' — skips: ' + res.skip_reasons.map(s => `${s.project}: ${s.reason}`).join('; ')
           : ''
-        setTrigMsg({ ok: true, text: `Done. Updated ${res.updated}/${res.total} projects, skipped ${res.skipped}, errors ${res.errors} (${res.duration_ms}ms)${skipDetail}` })
+        setTrigMsg({ ok: true, text: `Done — updated ${res.updated}/${res.total} projects, skipped ${res.skipped}, errors ${res.errors} (${res.duration_ms}ms)${skipDetail}` })
       }
       setTimeout(() => { load(); setTrigMsg(null) }, 6000)
     } catch (e) {
@@ -107,7 +107,7 @@ export function SyncLogTab() {
     try {
       const res = await api.admin.watchdog()
       const restarted = res.restarted?.join(', ') || 'none'
-      setTrigMsg({ ok: true, text: `Watchdog OK. Restarted: ${restarted} · sync ${res.sync_running ? 'running' : 'stopped'} · aging ${res.aging_running ? 'running' : 'stopped'}` })
+      setTrigMsg({ ok: true, text: `Watchdog OK — restarted: ${restarted} | sync=${res.sync_running ? '✓' : '✗'} aging=${res.aging_running ? '✓' : '✗'}` })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Watchdog failed' })
@@ -149,9 +149,9 @@ export function SyncLogTab() {
         <button onClick={triggerSync} disabled={triggering}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
-            background: triggering ? 'var(--bg-input)' : 'color-mix(in srgb, var(--accent) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
-            color: triggering ? 'var(--text-3)' : 'var(--accent)',
+            background: triggering ? 'var(--bg-input)' : 'rgba(37,99,235,0.08)',
+            border: '1px solid rgba(37,99,235,0.25)',
+            color: triggering ? 'var(--text-3)' : '#2563eb',
             opacity: triggering ? 0.6 : 1,
           }}>
           <Play size={11} /> {triggering ? 'Triggering…' : 'Trigger Full Sync Now'}
@@ -159,9 +159,9 @@ export function SyncLogTab() {
         <button onClick={triggerAgingRefresh} disabled={agingRefreshing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
-            background: agingRefreshing ? 'var(--bg-input)' : 'color-mix(in srgb, var(--fin-positive) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)',
-            color: agingRefreshing ? 'var(--text-3)' : 'var(--fin-positive)',
+            background: agingRefreshing ? 'var(--bg-input)' : 'rgba(5,150,105,0.08)',
+            border: '1px solid rgba(5,150,105,0.25)',
+            color: agingRefreshing ? 'var(--text-3)' : '#059669',
             opacity: agingRefreshing ? 0.6 : 1,
           }}>
           <RefreshCw size={11} /> {agingRefreshing ? 'Refreshing…' : 'Refresh Aging'}
@@ -169,9 +169,9 @@ export function SyncLogTab() {
         <button onClick={triggerDurationRefresh} disabled={durationRefreshing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
-            background: durationRefreshing ? 'var(--bg-input)' : 'color-mix(in srgb, var(--chart-3) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--chart-3) 25%, transparent)',
-            color: durationRefreshing ? 'var(--text-3)' : 'var(--chart-3)',
+            background: durationRefreshing ? 'var(--bg-input)' : 'rgba(124,58,237,0.08)',
+            border: '1px solid rgba(124,58,237,0.25)',
+            color: durationRefreshing ? 'var(--text-3)' : '#7c3aed',
             opacity: durationRefreshing ? 0.6 : 1,
           }}>
           <RefreshCw size={11} /> {durationRefreshing ? 'Refreshing…' : 'Refresh Project Duration'}
@@ -179,32 +179,32 @@ export function SyncLogTab() {
         <button onClick={diagnoseSync} disabled={diagnosing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
-            background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)',
-            color: 'var(--fin-warning)',
+            background: 'rgba(234,179,8,0.08)',
+            border: '1px solid rgba(234,179,8,0.3)',
+            color: '#b45309',
             opacity: diagnosing ? 0.6 : 1,
           }}>
-          {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
+          🔍 {diagnosing ? 'Testing…' : 'Diagnose Tokens'}
         </button>
         <button onClick={triggerWatchdog} disabled={watchdogging}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           title="Check if background workers are alive and restart any dead ones"
           style={{
-            background: watchdogging ? 'var(--bg-input)' : 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--fin-negative) 25%, transparent)',
-            color: watchdogging ? 'var(--text-3)' : 'var(--fin-negative)',
+            background: watchdogging ? 'var(--bg-input)' : 'rgba(220,38,38,0.08)',
+            border: '1px solid rgba(220,38,38,0.25)',
+            color: watchdogging ? 'var(--text-3)' : '#dc2626',
             opacity: watchdogging ? 0.6 : 1,
           }}>
-          {watchdogging ? 'Checking…' : 'Watchdog'}
+          🐕 {watchdogging ? 'Checking…' : 'Watchdog'}
         </button>
       </div>
 
       {/* Diagnose results panel */}
       {diagResult && !diagResult.error && (
         <div className="rounded-xl border p-3 space-y-2 text-xs"
-          style={{ borderColor: 'color-mix(in srgb, var(--fin-warning) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-warning) 4%, transparent)' }}>
-          <div className="font-semibold" style={{ color: 'var(--fin-warning)' }}>
-            Token/Table connectivity: {diagResult.configured_tokens} token(s) configured
+          style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.04)' }}>
+          <div className="font-semibold" style={{ color: '#b45309' }}>
+            Token/Table connectivity — {diagResult.configured_tokens} token(s) configured
           </div>
           {Object.entries(diagResult.tables || {}).map(([tname, info]) => (
             <div key={tname} className="rounded-lg p-2 border" style={{ borderColor: 'var(--border)', background: 'var(--bg-layer)' }}>
@@ -221,12 +221,12 @@ export function SyncLogTab() {
               {Object.entries(info.token_results || {}).map(([tok, res]) => (
                 <div key={tok} className="flex items-center gap-2 pl-2 py-0.5">
                   <span className={res.status === 'ok' ? 'text-green-500' : 'text-red-500'}>
-                    {res.status === 'ok' ? 'OK' : 'Failed'}
+                    {res.status === 'ok' ? '✓' : '✕'}
                   </span>
                   <span style={{ color: 'var(--text-2)' }}>{tok}</span>
                   {res.status === 'ok'
                     ? <span style={{ color: 'var(--text-3)' }}>HTTP {res.http} · {res.total_records} records in Teable</span>
-                    : <span className="text-red-400">HTTP {res.http}: {res.detail}</span>}
+                    : <span className="text-red-400">HTTP {res.http} — {res.detail}</span>}
                 </div>
               ))}
             </div>
@@ -235,25 +235,25 @@ export function SyncLogTab() {
       )}
       {diagResult?.error && (
         <div className="text-xs px-3 py-2 rounded-lg text-red-500"
-          style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)' }}>
-          Diagnose failed: {diagResult.error}
+          style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
+          ✕ Diagnose failed: {diagResult.error}
         </div>
       )}
 
       {trigMsg && (
         <div className="text-xs px-3 py-2 rounded-lg"
           style={{
-            background: trigMsg.ok ? 'color-mix(in srgb, var(--fin-positive) 8%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',
-            color: trigMsg.ok ? 'var(--fin-positive)' : 'var(--fin-negative)',
-            border: `1px solid ${trigMsg.ok ? 'color-mix(in srgb, var(--fin-positive) 20%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 20%, transparent)'}`,
+            background: trigMsg.ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
+            color: trigMsg.ok ? '#16a34a' : '#dc2626',
+            border: `1px solid ${trigMsg.ok ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
           }}>
-          {trigMsg.text}
+          {trigMsg.ok ? '✓' : '✕'} {trigMsg.text}
         </div>
       )}
       {loading ? <Skeleton rows={6} /> : error ? <Err msg={error} onRetry={load} /> : (
         <>
           {(data?.rows || []).length === 0
-            ? <Empty label="No sync runs yet. Check TEABLE_API_TOKEN is set" />
+            ? <Empty label="No sync runs yet — check TEABLE_API_TOKEN is set" />
             : (
               <>
                 {/* Mobile cards */}
@@ -264,16 +264,16 @@ export function SyncLogTab() {
                         <div className="flex items-center gap-2">
                           <Badge color={sourceColor[row.source] || 'default'}>{row.source}</Badge>
                           {row.error
-                            ? <span className="text-[11px]" style={{ color: 'var(--fin-negative)' }}>Error</span>
-                            : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>OK</span>}
+                            ? <span className="text-[11px] text-red-500">✕ Error</span>
+                            : <span className="text-[11px]" style={{ color: '#16a34a' }}>✓ OK</span>}
                         </div>
                         <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{ts(row.synced_at)}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                         <span style={{ color: 'var(--text-3)' }}>Total: <b style={{ color: 'var(--text-1)' }}>{fmt(row.total)}</b></span>
                         <span style={{ color: 'var(--text-3)' }}>Duration: <b style={{ color: 'var(--text-1)' }}>{row.duration_ms != null ? `${row.duration_ms}ms` : '—'}</b></span>
-                        <span style={{ color: row.created > 0 ? 'var(--fin-positive)' : 'var(--text-3)' }}>+{fmt(row.created)} new</span>
-                        <span style={{ color: row.updated > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>~{fmt(row.updated)} updated</span>
+                        <span style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>+{fmt(row.created)} new</span>
+                        <span style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>~{fmt(row.updated)} updated</span>
                         <span style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)} unchanged</span>
                       </div>
                       {Array.isArray(row.details?.updated_records) && row.details.updated_records.length > 0 && (
@@ -287,7 +287,7 @@ export function SyncLogTab() {
                         </p>
                       )}
                       {row.details?.errors > 0 && (
-                        <p className="text-[11px] mt-1" style={{ color: 'var(--fin-negative)' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
+                        <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
                       )}
                       {row.error && <p className="text-[11px] text-red-500 mt-1.5 line-clamp-2">{row.error}</p>}
                     </div>
@@ -325,20 +325,20 @@ export function SyncLogTab() {
                               </p>
                             )}
                             {row.details?.errors > 0 && (
-                              <p className="text-[11px] mt-1" style={{ color: 'var(--fin-negative)' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
+                              <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>{row.details.errors} patch error{row.details.errors > 1 ? 's' : ''}</p>
                             )}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-right">{fmt(row.total)}</td>
-                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.created > 0 ? 'var(--fin-positive)' : 'var(--text-3)' }}>{fmt(row.created)}</td>
-                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.updated > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{fmt(row.updated)}</td>
+                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.created > 0 ? '#16a34a' : 'var(--text-3)' }}>{fmt(row.created)}</td>
+                          <td className="px-3 py-2 tabular-nums text-right font-semibold" style={{ color: row.updated > 0 ? '#d97706' : 'var(--text-3)' }}>{fmt(row.updated)}</td>
                           <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-3)' }}>{fmt(row.unchanged)}</td>
                           <td className="px-3 py-2 tabular-nums" style={{ color: 'var(--text-2)' }}>
                             {row.duration_ms != null ? row.duration_ms : '—'}
                           </td>
                           <td className="px-3 py-2">
                             {row.error
-                              ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>{row.error}</span>
-                              : <span className="text-[11px]" style={{ color: 'var(--fin-positive)' }}>OK</span>}
+                              ? <span className="text-[11px] text-red-500 truncate max-w-[160px] block" title={row.error}>✕ {row.error}</span>
+                              : <span className="text-[11px]" style={{ color: '#16a34a' }}>✓ OK</span>}
                           </td>
                         </tr>
                       ))}

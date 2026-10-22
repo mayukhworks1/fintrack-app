@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Send, Bot, User, Trash2, Database,
+  Send, Bot, User, Sparkles, Trash2, Database,
   AlertCircle, ChevronDown, Copy, Check, Square, Download, ShieldCheck, ShieldQuestion,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -10,7 +10,6 @@ import { escapeHtml } from '../utils/sanitize'
 import { useToast } from '../context/ToastContext'
 import clsx from 'clsx'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts'
-import useChartColors from '../hooks/useChartColors'
 
 /* ───────── Inline text formatting (bold, strip stray markdown) ───────── */
 function formatInline(text) {
@@ -85,7 +84,7 @@ function AiText({ text }) {
       const rest = line.slice(colonIdx + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
             {label}
           </span>
           {rest && (
@@ -108,6 +107,7 @@ function AiText({ text }) {
   return <div className="space-y-1.5">{elements}</div>
 }
 
+const DASHBOARD_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#f97316', '#94a3b8', '#ec4899']
 
 function downloadText(filename, content, type = 'text/plain;charset=utf-8') {
   downloadBlob(new Blob([content], { type }), filename)
@@ -141,10 +141,10 @@ function VerificationBadge({ verification }) {
   const tone = unverified
     ? { bg: 'var(--bg-input)', border: 'var(--border)', text: 'var(--text-3)' }
     : confidence === 'high'
-      ? { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', border: 'color-mix(in srgb, var(--fin-positive) 22%, transparent)', text: 'var(--fin-positive)' }
+      ? { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.22)', text: 'var(--fin-positive)' }
       : confidence === 'low'
-        ? { bg: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', border: 'color-mix(in srgb, var(--fin-negative) 20%, transparent)', text: 'var(--fin-negative)' }
-        : { bg: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', border: 'color-mix(in srgb, var(--fin-warning) 22%, transparent)', text: 'var(--fin-warning)' }
+        ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.2)', text: 'var(--fin-negative)' }
+        : { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.22)', text: 'var(--fin-warning)' }
   const Icon = unverified ? ShieldQuestion : ShieldCheck
   return (
     <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
@@ -208,7 +208,7 @@ function ArtifactCard({ artifact }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
           {artifact.artifactType === 'report' ? 'Report Artifact' : 'Artifact'}
         </p>
         <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
@@ -261,7 +261,7 @@ function PlannerBadge({ planner }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-      style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)' }}
+      style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.16)', color: 'var(--accent)' }}
       title={`${planner.label || planner.task_type} · ${planner.source || 'unknown source'}`}
     >
       <Database size={10} />
@@ -271,14 +271,13 @@ function PlannerBadge({ planner }) {
 }
 
 function DashboardCard({ dashboard }) {
-  const DASHBOARD_COLORS = useChartColors().series
   const data = Array.isArray(dashboard?.series) ? dashboard.series : []
   const total = Number(dashboard?.total || data.reduce((sum, item) => sum + Number(item.value || 0), 0))
   if (!data.length) return null
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
           {dashboard?.eyebrow || 'Dashboard'}
         </p>
         <h3 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>
@@ -295,7 +294,7 @@ function DashboardCard({ dashboard }) {
             <ResponsiveContainer>
               {dashboard?.chartType === 'bar' ? (
                 <BarChart data={data} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
-                  <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                  <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
                   <XAxis dataKey="name" hide />
                   <YAxis allowDecimals={false} stroke="var(--text-3)" fontSize={11} />
                   <RechartsTooltip formatter={(value) => [`${value}`, 'Value']} />
@@ -345,7 +344,7 @@ function DashboardCard({ dashboard }) {
             ))}
           </div>
           {dashboard?.insight && (
-            <div className="rounded-2xl p-3" style={{ background: 'color-mix(in srgb, var(--accent) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
+            <div className="rounded-2xl p-3" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)' }}>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{dashboard.insight}</p>
             </div>
           )}
@@ -458,7 +457,7 @@ function Message({ msg }) {
       <div
         className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
         style={isUser
-          ? { background: 'var(--accent-btn)' }
+          ? { background: 'var(--accent-btn)', boxShadow: '0 0 12px rgba(37,99,235,0.25)' }
           : { background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }
         }
         aria-hidden="true"
@@ -498,6 +497,7 @@ function Message({ msg }) {
           <div className="flex items-center gap-2 mt-1 px-1">
             {msg.model && (
               <span className="text-[10px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                <Sparkles size={9} style={{ color: 'var(--accent)' }} />
                 {msg.model}
               </span>
             )}
@@ -710,7 +710,7 @@ export default function AIAssistant() {
         let errMsg = ''
 
         if (e.status === 403) {
-          errMsg = 'Access restricted. This feature requires full account access. Contact your admin to upgrade your account.'
+          errMsg = 'Access Restricted — This feature requires full account access. Contact your admin to upgrade your account.'
         } else if (/switched off by the administrator|AI limit .*has been reached|No AI provider is available|quota exceeded/i.test(raw)) {
           errMsg = raw
         } else {
@@ -761,6 +761,16 @@ export default function AIAssistant() {
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'var(--accent-dim)',
+              border: '1px solid var(--accent-soft)',
+              boxShadow: '0 0 16px var(--accent-glow)',
+            }}>
+            <Sparkles size={15} style={{ color: 'var(--accent)' }} />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+              style={{ background: 'var(--fin-positive)', borderColor: 'var(--bg-base)', boxShadow: '0 0 5px rgba(74,222,128,0.6)' }} />
+          </div>
           <div className="min-w-0">
             <h1 className="font-bold text-sm truncate" style={{ color: 'var(--text-1)' }}>FinTrack AI</h1>
             <div className="flex items-center gap-1.5">
@@ -807,7 +817,7 @@ export default function AIAssistant() {
                 onClick={() => setQualityProfile(profile.id)}
                 className="rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
                 style={active
-                  ? { background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 22%, transparent)' }
+                  ? { background: 'rgba(16,185,129,0.12)', color: 'var(--fin-positive)', border: '1px solid rgba(16,185,129,0.22)' }
                   : { background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}
                 title={profile.note}
               >
@@ -820,7 +830,7 @@ export default function AIAssistant() {
         {showSuggestions && !loading && (
           <div className="mt-2">
             <p className="text-xs mb-3 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-              Try asking:
+              <Sparkles size={11} style={{ color: 'var(--accent)' }} /> Try asking:
             </p>
             <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested questions">
               {TASK_CHIPS.map((s) => (
@@ -879,8 +889,8 @@ export default function AIAssistant() {
               onClick={stopGeneration}
               className="px-3 sm:px-4 rounded-xl flex items-center justify-center font-semibold transition-all flex-shrink-0"
               style={{
-                background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)',
+                background: 'rgba(239,68,68,0.15)',
+                border: '1px solid rgba(239,68,68,0.3)',
                 color: 'var(--fin-negative)',
               }}
               aria-label="Stop generating"
@@ -895,8 +905,8 @@ export default function AIAssistant() {
               className="px-3 sm:px-4 rounded-xl flex items-center justify-center font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
               style={{
                 background: !input.trim() ? 'var(--accent-soft)' : 'var(--accent-btn)',
-                color: 'var(--accent-fg)',
-                boxShadow: !input.trim() ? 'none' : '0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent)',
+                color: 'white',
+                boxShadow: !input.trim() ? 'none' : '0 2px 6px rgba(37,99,235,0.3)',
               }}
               aria-label="Send message"
             >

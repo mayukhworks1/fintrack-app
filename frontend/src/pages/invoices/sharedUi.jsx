@@ -75,9 +75,9 @@ export function AttachThumb({ a, size = 28, onPreview }) {
   const inner = isImage(a) && !err
     ? <img src={a.thumb || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => thumbFallback(e, a, setErr)} />
     : isPdf(a)
-      ? <FileText size={Math.round(size * 0.45)} style={{ color: 'var(--fin-negative)' }} />
+      ? <FileText size={Math.round(size * 0.45)} style={{ color: '#f87171' }} />
       : <ImageIcon size={Math.round(size * 0.45)} style={{ color: 'var(--text-3)' }} />
-  const sharedStyle = { width: size, height: size, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'color-mix(in srgb, var(--fin-negative) 8%, transparent)' : 'var(--glass-bg)' }
+  const sharedStyle = { width: size, height: size, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.08)' : 'var(--glass-bg)' }
   const sharedClass = 'flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center border transition-opacity hover:opacity-75'
   if (onPreview) {
     return (
@@ -102,11 +102,11 @@ export function AttachCard({ a, onPreview }) {
   const [err, setErr] = useState(false)
   const thumb = (
     <div className="rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
-      style={{ width: 44, height: 44, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'color-mix(in srgb, var(--fin-negative) 10%, transparent)' : 'var(--bg-input)' }}>
+      style={{ width: 44, height: 44, border: '1px solid var(--glass-border)', background: isPdf(a) ? 'rgba(248,113,113,0.10)' : 'var(--bg-input)' }}>
       {isImage(a) && !err
         ? <img src={a.thumb || a.url} alt={a.name} loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => thumbFallback(e, a, setErr)} />
         : isPdf(a)
-          ? <FileText size={20} style={{ color: 'var(--fin-negative)' }} />
+          ? <FileText size={20} style={{ color: '#f87171' }} />
           : <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />}
     </div>
   )
@@ -188,9 +188,9 @@ export function AttachmentUploadField({ label, fieldKey, value, onChange, record
               <div key={i} className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
                 style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
                 {isPdf(norm)
-                  ? <FileText size={13} className="flex-shrink-0" style={{ color: 'var(--fin-negative)' }} />
+                  ? <FileText size={13} className="flex-shrink-0" style={{ color: '#f87171' }} />
                   : isImage(norm)
-                    ? <ImageIcon size={13} className="flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                    ? <ImageIcon size={13} className="flex-shrink-0" style={{ color: '#60a5fa' }} />
                     : <Paperclip size={13} className="flex-shrink-0" style={{ color: 'var(--text-3)' }} />}
                 <span className="flex-1 truncate text-xs" style={{ color: 'var(--text-2)' }}>{norm.name}</span>
                 {norm.url && (
@@ -220,7 +220,7 @@ export function AttachmentUploadField({ label, fieldKey, value, onChange, record
         className="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed cursor-pointer transition-all py-4 select-none"
         style={{
           borderColor: dragOver ? 'var(--accent)' : 'var(--glass-border)',
-          background: dragOver ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'var(--glass-bg)',
+          background: dragOver ? 'rgba(99,102,241,0.06)' : 'var(--glass-bg)',
           opacity: uploading ? 0.7 : 1,
         }}
         aria-label={`Upload ${label}`}>
@@ -238,7 +238,7 @@ export function AttachmentUploadField({ label, fieldKey, value, onChange, record
       </div>
 
       {uploadErr && (
-        <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: 'var(--fin-negative)' }}>
+        <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#f87171' }}>
           <AlertTriangle size={10} />{uploadErr}
         </p>
       )}

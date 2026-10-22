@@ -1,197 +1,328 @@
-/**
- * The permission model, small enough to fit in a card.
- *
- * Three sample people, each on a role the database seeds
- * (backend/app/db/postgres.py: auth_roles and auth_role_permissions), and the
- * eleven permission modules those seeds are written against, each shown by
- * its entry permission. A role's defaults are exactly the seed; a switch
- * flipped here is the per-person override the admin panel offers, and is
- * marked as one.
- *
- * Underneath, the two things a grant actually changes:
- *
- *   - whether the invoice list answers at all. Without module.invoices.view
- *     the API refuses with "Missing permission: module.invoices.view"
- *     (require_permission in routers/deps.py);
- *   - which rows it answers with. Roles outside Super Admin, Admin, Manager,
- *     Finance and Web Invoice Admin are scoped to the invoices they raised
- *     (owner_scope_email), which the list query applies as
- *     fields->>'Raised By' = $1 (services/invoice.py).
- *
- * The people, their emails and who raised which invoice are invented; the
- * invoices are three rows of the sandbox ledger.
- */
 import { useState } from 'react'
 import {
-  LayoutDashboard, Receipt, FolderKanban, Landmark, BarChart3, FileText, Sparkles,
-  Activity, Share2, FileSearch, ShieldCheck, RotateCcw, Lock,
+  Receipt, FolderKanban, BarChart3, Landmark, FileSearch, Sparkles,
+  FileText, Globe, Activity, Share2, ShieldCheck, RotateCcw, Check,
+  Lock, Layers, Sliders
 } from 'lucide-react'
 import { useReveal } from '../hooks/useReveal'
-import { useInk } from '../hooks/useInk'
-import RollNumber from './motion/RollNumber'
-import { INVOICES, inr } from './demoData'
+import { inr } from './demoData'
+import LoopVideo from './LoopVideo'
 
-/* [module key, label, entry permission, icon] — the eleven module_keys of the
-   seeded permissions, leaving out `system` (sync and role management). */
-export const MODULES = [
-  ['dashboard', 'Dashboard', 'module.dashboard.view', LayoutDashboard],
-  ['invoices', 'Invoices', 'module.invoices.view', Receipt],
-  ['projects', 'Projects', 'module.projects.view', FolderKanban],
-  ['tax', 'Tax ledger', 'module.tax.view', Landmark],
-  ['analytics', 'Analytics', 'module.analytics.view', BarChart3],
-  ['reports', 'Reports', 'module.reports.create', FileText],
-  ['ai', 'AI analyst', 'module.ai.use', Sparkles],
-  ['status', 'Status board', 'module.status.view', Activity],
-  ['shared', 'Shared views', 'module.shared.manage', Share2],
-  ['studio', 'Studio', 'module.studio.view', FileSearch],
-  ['admin', 'Admin panel', 'module.admin.view', ShieldCheck],
+const MODULES = [
+  { key: 'receivables', label: 'Invoices', icon: Receipt },
+  { key: 'projects',    label: 'Projects',    icon: FolderKanban },
+  { key: 'analytics',   label: 'Analytics',   icon: BarChart3 },
+  { key: 'tax',         label: 'Tax ledger',  icon: Landmark },
+  { key: 'documents',   label: 'Documents',   icon: FileSearch },
+  { key: 'analyst',     label: 'AI analyst',  icon: Sparkles },
+  { key: 'reports',     label: 'Reports',     icon: FileText },
+  { key: 'pages',       label: 'Pages',       icon: Globe },
+  { key: 'status',      label: 'Status board', icon: Activity },
+  { key: 'shared',      label: 'Shared links', icon: Share2 },
+  { key: 'admin',       label: 'Admin & audit', icon: ShieldCheck },
 ]
 
-/* Seeded defaults, per role, by module key. */
-export const PEOPLE = [
+const ROLES = [
   {
-    id: 'rhea', name: 'Rhea', email: 'rhea@example.com', role: 'Viewer',
-    note: 'Read-only scoped access.', scoped: true,
-    grants: ['dashboard', 'invoices', 'projects', 'tax', 'analytics', 'status'],
+    id: 'viewer', person: 'Rhea', title: 'Client services',
+    description: 'Read-only access to customer receivables and project status.',
+    grants: ['receivables', 'projects', 'status', 'shared'],
+    maskCost: true,
   },
   {
-    id: 'dev', name: 'Dev', email: 'dev@example.com', role: 'Finance',
-    note: 'Invoice, tax ledger, reports and payment operations.', scoped: false,
-    grants: ['dashboard', 'invoices', 'tax', 'reports'],
+    id: 'analyst', person: 'Dev', title: 'Finance analyst',
+    description: 'Full query access to ledger, tax compliance and period reports.',
+    grants: ['receivables', 'projects', 'analytics', 'tax', 'documents', 'analyst', 'reports', 'status', 'shared'],
+    maskCost: false,
   },
   {
-    id: 'priya', name: 'Priya', email: 'priya@example.com', role: 'Admin',
-    note: 'Business administration and operational control.', scoped: false,
-    grants: ['dashboard', 'invoices', 'projects', 'tax', 'analytics', 'reports', 'ai', 'status', 'shared', 'studio', 'admin'],
+    id: 'admin', person: 'Priya', title: 'Administrator',
+    description: 'Complete workspace authority and user permission management.',
+    grants: MODULES.map(m => m.key),
+    maskCost: false,
   },
 ]
 
-/* Three rows of the sandbox ledger, and an invented "Raised By" for each. */
-const RAISED_BY = { 'INV-2296': 'priya@example.com', 'INV-2271': 'rhea@example.com', 'INV-2327': 'dev@example.com' }
-const ROWS = Object.keys(RAISED_BY).map(id => INVOICES.find(i => i.id === id)).filter(Boolean)
-
-const whole = (n) => String(Math.round(n))
+const SAMPLE_DATA = [
+  { id: 'INV-2296', client: 'Meridian Labs', project: 'Site rebuild', amount: 610000, cost: 439000, status: 'Overdue' },
+  { id: 'INV-2271', client: 'Ravensbourne Studio', project: 'Brand system', amount: 480000, cost: 278000, status: 'Overdue' },
+  { id: 'INV-2322', client: 'Bellwether Foods', project: 'Campaign films', amount: 390000, cost: 352000, status: 'Paid' },
+]
 
 export default function PermissionPlayground() {
   const ref = useReveal({ threshold: 0.15 })
-  const [pid, setPid] = useState('rhea')
+  const [roleId, setRoleId] = useState('viewer')
   const [overrides, setOverrides] = useState({})
-  const at = PEOPLE.findIndex(p => p.id === pid)
-  const person = PEOPLE[at]
-  const ink = useInk(at, { axis: 'y' })
-  const mine = overrides[pid] ?? {}
+  const [activeMedia, setActiveMedia] = useState('matrix') // 'matrix' | 'blueprint'
 
-  const allowed = (key) => (key in mine ? mine[key] : person.grants.includes(key))
-  const isOverride = (key) => key in mine && mine[key] !== person.grants.includes(key)
-  const toggle = (key) => setOverrides(o => ({ ...o, [pid]: { ...(o[pid] ?? {}), [key]: !allowed(key) } }))
-  const reset = () => setOverrides(o => ({ ...o, [pid]: {} }))
+  const role = ROLES.find(r => r.id === roleId)
+  const roleOverrides = overrides[roleId] ?? {}
 
-  const granted = MODULES.filter(([k]) => allowed(k)).length
-  const changed = MODULES.filter(([k]) => isOverride(k)).length
-  const canInvoices = allowed('invoices')
-  const rows = person.scoped ? ROWS.filter(r => RAISED_BY[r.id] === person.email) : ROWS
+  const allowed = (key) =>
+    key in roleOverrides ? roleOverrides[key] : role.grants.includes(key)
+  const isOverride = (key) =>
+    key in roleOverrides && roleOverrides[key] !== role.grants.includes(key)
+
+  const toggle = (key) =>
+    setOverrides(o => ({ ...o, [roleId]: { ...(o[roleId] ?? {}), [key]: !allowed(key) } }))
+
+  const reset = () => setOverrides(o => ({ ...o, [roleId]: {} }))
+
+  const visibleCount = MODULES.filter(m => allowed(m.key)).length
+  const overrideCount = MODULES.filter(m => isOverride(m.key)).length
 
   return (
-    <div ref={ref} className="ft-reveal ft-s-perm">
-      <div className="ft-s-perm-bar">
-        <span className="ft-s-perm-title"><ShieldCheck size={16} aria-hidden="true" /> Roles, and one person who differs</span>
-        <span className="ft-s-perm-sample">Sample people · seeded role defaults</span>
-      </div>
-
-      <div className="ft-s-perm-body">
-        <div className="ft-s-perm-left">
-          <p className="ft-s-perm-label" id="ft-s-people">1. Pick a person</p>
-          <div ref={ink} className="ft-m-ink ft-s-people" role="group" aria-labelledby="ft-s-people">
-            {PEOPLE.map(p => (
-              <button key={p.id} type="button" aria-pressed={p.id === pid} onClick={() => setPid(p.id)}>
-                <span className="ft-s-avatar" aria-hidden="true">{p.name[0]}</span>
-                <span className="ft-s-person">
-                  <b>{p.name}</b> <span className="ft-s-role">{p.role}</span>
-                  <span className="ft-s-person-note">{p.note}</span>
-                </span>
-              </button>
-            ))}
-            <span className="ft-m-ink-bar ft-m-ink-pill" aria-hidden="true" />
-          </div>
-
-          <p className="ft-s-perm-label">What {person.name}&rsquo;s invoice list runs</p>
-          <pre className="ft-s-perm-sql"><code>
-            {canInvoices ? (
-              <>
-                <span>SELECT invoice_number, project, amount_raised</span>
-                <span>  FROM invoices_mirror</span>
-                <span> WHERE deleted_at IS NULL</span>
-                {person.scoped && (
-                  <span key={pid} className="ft-s-hl">{`   AND fields->>'Raised By' = $1  -- ${person.email}`}</span>
-                )}
-                <span> ORDER BY raised_date DESC</span>
-              </>
-            ) : (
-              <span key="403" className="ft-s-hl">403  Missing permission: module.invoices.view</span>
-            )}
-          </code></pre>
-          <p className="ft-s-perm-foot">
-            {person.scoped
-              ? `${person.role} is not a privileged role, so the list is scoped to invoices ${person.name} raised.`
-              : `${person.role} is a privileged role, so no owner filter is added.`}
-          </p>
+    <div ref={ref} className="ft-reveal rounded-xl overflow-hidden border transition-all"
+         style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', boxShadow: 'var(--card-shadow)' }}>
+      {/* Header Bar */}
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap border-b"
+           style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={16} className="text-[var(--accent)]" />
+          <span className="font-bold text-xs sm:text-sm" style={{ color: 'var(--text-1)' }}>
+            Cryptographic RBAC & Query-Level Scoping Sandbox
+          </span>
         </div>
 
-        <div className="ft-s-perm-right">
-          <div className="ft-s-perm-row">
-            <p className="ft-s-perm-label">
-              2. Change what {person.name} reaches{' '}
-              <span className="ft-s-perm-n"><RollNumber value={granted} format={whole} align="end" /> of {MODULES.length} granted</span>
-            </p>
-            {changed > 0 && (
-              <button type="button" onClick={reset} className="ft-s-perm-reset">
-                <RotateCcw size={12} aria-hidden="true" /> Back to {person.role} defaults
-              </button>
-            )}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex p-1 rounded-xl"
+               style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+            <button
+              onClick={() => setActiveMedia('matrix')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              style={{
+                background: activeMedia === 'matrix' ? 'var(--accent-dim)' : 'transparent',
+                color: activeMedia === 'matrix' ? 'var(--accent)' : 'var(--text-3)',
+                boxShadow: activeMedia === 'matrix' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <Sliders size={12} />
+              RBAC Matrix
+            </button>
+            <button
+              onClick={() => setActiveMedia('blueprint')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              style={{
+                background: activeMedia === 'blueprint' ? 'var(--accent-dim)' : 'transparent',
+                color: activeMedia === 'blueprint' ? 'var(--accent)' : 'var(--text-3)',
+                boxShadow: activeMedia === 'blueprint' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <Layers size={12} />
+              3D Security Flow
+            </button>
           </div>
 
-          <ul className="ft-s-mods">
-            {MODULES.map(([key, label, perm, Icon]) => {
-              const on = allowed(key)
-              const over = isOverride(key)
-              return (
-                <li key={key}>
-                  <button type="button" role="switch" aria-checked={on} onClick={() => toggle(key)}
-                          className="ft-s-mod" data-on={on ? '' : undefined} data-override={over ? '' : undefined}
-                          title={perm}>
-                    <Icon size={14} aria-hidden="true" />
-                    <span className="ft-s-mod-label">{label}</span>
-                    {over && <span className="ft-s-mod-over ft-m-pop">override</span>}
-                    <span className="ft-s-switch" aria-hidden="true"><i /></span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+          {overrideCount > 0 && activeMedia === 'matrix' && (
+            <button onClick={reset}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold cursor-pointer"
+                    style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', color: 'var(--text-2)' }}>
+              <RotateCcw size={11} />
+              Reset defaults
+            </button>
+          )}
+        </div>
+      </div>
 
-          <div className="ft-s-perm-table">
-            <div className="ft-s-perm-row">
-              <p className="ft-s-perm-label">Invoices, as {person.name} sees them</p>
-              <span className="ft-s-perm-sample">Sample data</span>
+      {activeMedia === 'matrix' ? (
+        <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Role Selector */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+              1. Select Assigned Role
+            </label>
+            <div className="flex flex-col gap-2">
+              {ROLES.map(r => {
+                const on = r.id === roleId
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setRoleId(r.id)}
+                    className="flex items-start gap-3 p-3.5 rounded-2xl text-left transition-all cursor-pointer"
+                    style={{
+                      background: on ? 'var(--accent-dim)' : 'var(--bg-input)',
+                      border: `1px solid ${on ? 'var(--accent)' : 'var(--card-border)'}`,
+                    }}
+                  >
+                    <span className="flex items-center justify-center rounded-xl font-extrabold text-xs w-8 h-8 shrink-0 mt-0.5"
+                          style={{
+                            background: on ? 'var(--accent)' : 'var(--card-bg)',
+                            color: on ? '#fff' : 'var(--text-2)',
+                            border: `1px solid ${on ? 'var(--accent)' : 'var(--card-border)'}`,
+                          }}>
+                      {r.person[0]}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs sm:text-sm" style={{ color: on ? 'var(--accent)' : 'var(--text-1)' }}>
+                          {r.person}
+                        </span>
+                        <span className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
+                          {r.title}
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] mt-1 leading-snug" style={{ color: 'var(--text-2)' }}>
+                        {r.description}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-            {canInvoices ? (
-              <ul className="ft-s-rows">
-                {rows.map(r => (
-                  <li key={r.id} className="ft-s-row">
-                    <span><b>{r.client}</b> <small>{r.id}</small></span>
-                    <span className="ft-s-raised">raised by {RAISED_BY[r.id].split('@')[0]}</span>
-                    <b className="tabular-nums">{inr(r.amount)}</b>
+
+            {/* Cryptographic Query Enforcement Info */}
+            <div className="rounded-2xl p-4 border mt-2"
+                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+              <span className="block text-[10.5px] font-extrabold uppercase tracking-wider text-[var(--accent)] mb-1">
+                Active SQL Scoping Predicate
+              </span>
+              <pre className="text-[10px] font-mono leading-relaxed p-2.5 rounded-lg bg-slate-950 text-slate-200 overflow-x-auto m-0">
+                {`SELECT * FROM invoices_mirror\nWHERE workspace_id = $1\n  AND (role_scope <= '${roleId}' OR user_id = $2);`}
+              </pre>
+            </div>
+          </div>
+
+          {/* Right Column: Interactive Permission Checkbox Matrix & Live Masked Data */}
+          <div className="lg:col-span-7 flex flex-col gap-5">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                  2. Granular Module Overrides ({visibleCount} of {MODULES.length} Granted)
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {MODULES.map(m => {
+                  const Icon = m.icon
+                  const hasAccess = allowed(m.key)
+                  const overridden = isOverride(m.key)
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => toggle(m.key)}
+                      className="flex items-center justify-between p-2.5 rounded-xl border text-left transition-all cursor-pointer"
+                      style={{
+                        background: hasAccess ? 'var(--card-bg)' : 'var(--bg-input)',
+                        borderColor: overridden ? 'var(--warn)' : hasAccess ? 'var(--accent-soft)' : 'var(--card-border)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Icon size={14} className={hasAccess ? 'text-[var(--accent)]' : 'text-[var(--text-3)]'} />
+                        <span className="text-xs font-semibold truncate" style={{ color: hasAccess ? 'var(--text-1)' : 'var(--text-3)' }}>
+                          {m.label}
+                        </span>
+                      </div>
+                      <span className={`w-2 h-2 rounded-full ${hasAccess ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Live Data Visibility Preview */}
+            <div className="rounded-2xl p-4 border"
+                 style={{ background: 'var(--bg-input)', borderColor: 'var(--card-border)' }}>
+              <div className="flex justify-between items-center mb-2.5">
+                <span className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>
+                  Live Mock Table View as {role.person} ({role.title})
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded font-bold"
+                      style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                  {allowed('receivables') ? 'Table Accessible' : 'Access Restricted'}
+                </span>
+              </div>
+
+              {allowed('receivables') ? (
+                <div className="space-y-1.5">
+                  {SAMPLE_DATA.map(r => (
+                    <div key={r.id} className="flex items-center justify-between p-2 rounded-lg text-xs"
+                         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                      <div>
+                        <span className="font-bold text-[var(--text-1)]">{r.client}</span>
+                        <span className="text-[11px] text-[var(--text-3)] ml-2">{r.id}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold tabular-nums text-[var(--text-1)]">{inr(r.amount)}</span>
+                        {allowed('projects') && !role.maskCost ? (
+                          <span className="text-[10px] text-emerald-500 font-semibold tabular-nums">Margin {Math.round(((r.amount - r.cost)/r.amount)*100)}%</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[10px] text-[var(--text-3)] bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            <Lock size={9} /> Cost Masked
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-xs font-medium text-[var(--text-3)] bg-slate-100 dark:bg-slate-900 rounded-xl">
+                  <Lock size={20} className="mx-auto mb-2 opacity-50" />
+                  Access to financial ledger is locked for this role.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* 3D Security Architecture Presentation */
+        <div className="p-5 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Column: Security Specs */}
+          <div className="lg:col-span-6 flex flex-col justify-between">
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2.5"
+                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--card-border)' }}>
+                <ShieldCheck size={12} />
+                Cryptographic Access Security
+              </div>
+              <h4 className="ft-display text-xl sm:text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
+                Row-level database scoping & deterministic role enforcement
+              </h4>
+              <p className="text-xs sm:text-sm leading-relaxed mb-4" style={{ color: 'var(--text-2)' }}>
+                Every API call and AI query compiles session-scoped WHERE predicates directly into the SQL query before database execution.
+              </p>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5 p-0 list-none">
+                {[
+                  'Eight pre-built role hierarchies',
+                  'Per-person granular module overrides',
+                  'Zero-leakage SQL query compilation',
+                  'Server-side session hash validation',
+                ].map(h => (
+                  <li key={h} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                    <Check size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" />
+                    <span>{h}</span>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="ft-s-locked"><Lock size={16} aria-hidden="true" />
-                Invoices are not in {person.name}&rsquo;s sidebar, and the API refuses the list.
-              </p>
-            )}
+
+              <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">RBAC Latency</span>
+                  <span className="font-extrabold text-sm text-[var(--accent)]">&lt; 1ms</span>
+                </div>
+                <div className="rounded-xl px-3.5 py-1.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  <span className="block text-[10px] text-[var(--text-3)] font-medium">Scoping Engine</span>
+                  <span className="font-extrabold text-sm text-emerald-500">Parameterized AST</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Framed 3D Render Loop */}
+          <div className="lg:col-span-6 flex items-center justify-center">
+            <div className="w-full max-w-[380px] sm:max-w-[420px] rounded-2xl overflow-hidden p-3 transition-all duration-300 relative"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   boxShadow: '0 12px 35px rgba(37,99,235,0.15)',
+                 }}>
+              <div className="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center aspect-[4/3]">
+                <LoopVideo src="/media/pomelli_photoshoot-7.mp4" className="w-full h-full object-cover rounded-lg" />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

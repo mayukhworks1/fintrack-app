@@ -51,7 +51,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Requests */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           API Traffic
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -61,7 +61,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
             sub={`${fmt(data.audit_24h)} last 24h`} />
           <StatBox label="Unique IPs (24h)"  value={data.unique_ips_24h} />
           <StatBox label="Error Rate (24h)"  value={`${errRate}%`}
-            color={parseFloat(errRate) > 5 ? 'var(--fin-negative)' : 'var(--fin-positive)'}
+            color={parseFloat(errRate) > 5 ? '#dc2626' : '#16a34a'}
             sub={`${err4xx} client · ${err5xx} server errors`} />
         </div>
       </section>
@@ -69,7 +69,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       {/* Top error paths */}
       {data.top_error_paths?.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
             Top Error Paths (24h)
           </h3>
           <div className="card overflow-hidden p-0">
@@ -87,8 +87,8 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
                 {data.top_error_paths.map((r, i) => (
                   <tr key={i} style={{ borderBottom: i < data.top_error_paths.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <td className="px-3 py-2 font-mono truncate max-w-[220px]" style={{ color: 'var(--text-1)' }} title={r.path}>{r.path}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: r.client_errors > 0 ? 'var(--fin-warning)' : 'var(--text-3)' }}>{r.client_errors}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: r.server_errors > 0 ? 'var(--fin-negative)' : 'var(--text-3)' }}>{r.server_errors}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: r.client_errors > 0 ? '#d97706' : 'var(--text-3)' }}>{r.client_errors}</td>
+                    <td className="px-3 py-2 text-right" style={{ color: r.server_errors > 0 ? '#dc2626' : 'var(--text-3)' }}>{r.server_errors}</td>
                     <td className="px-3 py-2 text-right font-semibold" style={{ color: 'var(--text-1)' }}>{r.total}</td>
                     <td className="px-3 py-2 text-right" style={{ color: 'var(--text-3)' }}>{r.avg_ms ?? '—'}</td>
                   </tr>
@@ -102,7 +102,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       {/* Top slow paths */}
       {data.top_slow_paths?.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
             Slow Paths (24h · avg &gt;800ms · ≥2 requests)
           </h3>
           <div className="card overflow-hidden p-0">
@@ -120,7 +120,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
                   <tr key={i} style={{ borderBottom: i < data.top_slow_paths.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <td className="px-3 py-2 font-mono truncate max-w-[260px]" style={{ color: 'var(--text-1)' }} title={r.path}>{r.path}</td>
                     <td className="px-3 py-2 text-right font-semibold"
-                      style={{ color: r.avg_ms > 3000 ? 'var(--fin-negative)' : r.avg_ms > 1500 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>
+                      style={{ color: r.avg_ms > 3000 ? '#dc2626' : r.avg_ms > 1500 ? '#d97706' : '#16a34a' }}>
                       {r.avg_ms?.toLocaleString()}
                     </td>
                     <td className="px-3 py-2 text-right" style={{ color: 'var(--text-3)' }}>{r.max_ms?.toLocaleString()}</td>
@@ -135,26 +135,26 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Requests by role */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           Requests by Role
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          <StatBox label="Editor"   value={data.audit_editor} />
-          <StatBox label="Web"      value={data.audit_web} />
-          <StatBox label="All"      value={data.audit_all} />
-          <StatBox label="Viewer"   value={data.audit_viewer} />
-          <StatBox label="Admin"    value={data.audit_admin} />
-          <StatBox label="Anonymous" value={data.audit_anon} />
+          <StatBox label="Editor"   value={data.audit_editor} color="#2563eb" accent="#2563eb" />
+          <StatBox label="Web"      value={data.audit_web}    color="#7c3aed" accent="#7c3aed" />
+          <StatBox label="All"      value={data.audit_all}    color="#db2777" accent="#db2777" />
+          <StatBox label="Viewer"   value={data.audit_viewer} color="#6366f1" accent="#6366f1" />
+          <StatBox label="Admin"    value={data.audit_admin}  color="#dc2626" accent="#dc2626" />
+          <StatBox label="Anonymous" value={data.audit_anon}  color="var(--text-3)" />
         </div>
       </section>
 
       {/* Sessions */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           Login Sessions
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <StatBox label="Active Sessions"  value={data.sessions_active} color="var(--fin-positive)" accent="var(--fin-positive)"
+          <StatBox label="Active Sessions"  value={data.sessions_active} color="#16a34a" accent="#16a34a"
             sub={data.sessions_last_active ? `Last: ${relTime(data.sessions_last_active)}` : 'None active'} />
           <StatBox label="Total Sessions"   value={data.sessions_total} />
           <StatBox label="AI Chat Sessions" value={data.chat_sessions_total}
@@ -164,7 +164,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       {/* Mirror */}
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           Teable Mirror (PostgreSQL)
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -181,12 +181,12 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
           <div className="card flex flex-col gap-1 col-span-2 sm:col-span-1">
             <p className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Last Sync Run</p>
             <p className="text-sm font-semibold"
-              style={{ color: data.last_sync_error ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>
+              style={{ color: data.last_sync_error ? '#dc2626' : '#16a34a' }}>
               {data.last_sync_at ? relTime(data.last_sync_at) : 'Never'}
             </p>
             {data.last_sync_error
-              ? <p className="text-[11px] truncate" style={{ color: 'var(--fin-negative)' }} title={data.last_sync_error}>
-                  {data.last_sync_error}
+              ? <p className="text-[11px] truncate" style={{ color: '#dc2626' }} title={data.last_sync_error}>
+                  ✕ {data.last_sync_error}
                 </p>
               : data.last_sync_source
                 ? <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -199,7 +199,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           Truth Contract
         </h3>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -212,18 +212,18 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
               Primary operational state should always match Teable. Any discrepancy should be treated as a sync defect, not a product state.
             </p>
           </div>
-          <div className="card space-y-2" style={{ borderLeft: '3px solid var(--fin-positive)' }}>
+          <div className="card space-y-2" style={{ borderLeft: '3px solid #16a34a' }}>
             <div className="flex items-center gap-2">
-              <Database size={14} style={{ color: 'var(--fin-positive)' }} />
+              <Database size={14} style={{ color: '#16a34a' }} />
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>PostgreSQL is mirror and history</p>
             </div>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
               PG exists for analytics, audit trails, report history, and faster app reads. Mirror freshness is tracked here, not assumed.
             </p>
           </div>
-          <div className="card space-y-2" style={{ borderLeft: '3px solid var(--fin-warning)' }}>
+          <div className="card space-y-2" style={{ borderLeft: '3px solid #d97706' }}>
             <div className="flex items-center gap-2">
-              <Zap size={14} style={{ color: 'var(--fin-warning)' }} />
+              <Zap size={14} style={{ color: '#d97706' }} />
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Valkey is cache only</p>
             </div>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
@@ -235,7 +235,7 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
 
       <section>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
             Mirror Sanity
           </h3>
           <button
@@ -283,15 +283,15 @@ export function OverviewTab({ onOpenHistoryDrilldown }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.06em] mb-3" style={{ color: 'var(--text-3)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
           Shared Link Activity
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatBox label="Links Total" value={data.shared_links_total} />
-          <StatBox label="Links Active" value={data.shared_links_active} color="var(--fin-positive)" accent="var(--fin-positive)" />
-          <StatBox label="Editable Links" value={data.shared_links_edit} color="var(--fin-warning)" accent="var(--fin-warning)" />
+          <StatBox label="Links Active" value={data.shared_links_active} color="#16a34a" accent="#16a34a" />
+          <StatBox label="Editable Links" value={data.shared_links_edit} color="#d97706" accent="#d97706" />
           <StatBox label="Opens (24h)" value={data.shared_link_accesses_24h} sub="All shared modules" />
-          <StatBox label="Edits (24h)" value={data.shared_link_edits_24h} sub="Public link mutations" color="var(--accent)" accent="var(--accent)" />
+          <StatBox label="Edits (24h)" value={data.shared_link_edits_24h} sub="Public link mutations" color="#2563eb" accent="#2563eb" />
         </div>
       </section>
     </div>

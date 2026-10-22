@@ -26,7 +26,6 @@ import { InvoiceDrawer } from './invoices/InvoiceDrawer'
 import { OverdueAlert } from './invoices/OverdueAlert'
 import { AgingBadge, AttachThumb, MonthStatusPill, RaisedByBadge, ResizableHead, SkeletonRow, StatusPill } from './invoices/ui'
 import { DEFAULT_INVOICE_COLUMN_VISIBILITY, DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_COLUMNS, INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, normalizeColumnVisibility, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, buildRetainerGroups, classifyAgingBand, currentMonthKey, dateOnlyValue, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel } from './invoices/utils'
-import { tint } from '../utils/color'
 
 /* ── RaisedByBadge ──────────────────────────────────────────────────────── */
 export default function Invoices() {
@@ -797,7 +796,7 @@ export default function Invoices() {
     return (
       <button onClick={() => handleSort(col)}
         className="inline-flex items-center gap-1 cursor-pointer select-none section-title whitespace-nowrap group/sort"
-        aria-label={active ? (asc ? 'Sorted ascending. Click for descending' : 'Sorted descending. Click for ascending') : `Sort by ${col}`}
+        aria-label={active ? (asc ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending') : `Sort by ${col}`}
         style={{ color: active ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 'none', padding: 0 }}>
         {children}
         <ArrowUpDown size={10} style={{
@@ -814,9 +813,9 @@ export default function Invoices() {
     <ExecutiveShell className="invoice-workspace">
 
       <ExecutiveHero
-        eyebrow="Receivables"
+        eyebrow="Receivables Command Deck"
         title="Invoices"
-        description="Collections, aging, retainer billing and the project behind each invoice."
+        description="Operate collections, aging, retainer billing, and project context from a denser finance workspace."
         icon={Receipt}
         meta={
           <div className="flex flex-wrap items-center gap-2">
@@ -869,9 +868,9 @@ export default function Invoices() {
         {/* Stale data banner — shown when Teable is unreachable and PG mirror is served */}
         {isStaleData && (
           <div className="flex items-center gap-2 mt-4 px-4 py-2.5 rounded-xl text-sm"
-            style={{ background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)', color: 'var(--fin-warning)' }}>
-            <AlertTriangle size={14} style={{ color: 'var(--fin-warning)', flexShrink: 0 }} />
-            <span><strong>Live data unavailable.</strong> Showing cached data from the local mirror. Figures may be a few minutes behind. <button onClick={refresh} className="underline font-medium ml-1" style={{ color: 'var(--fin-warning)' }}>Try refreshing</button></span>
+            style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#92400e' }}>
+            <AlertTriangle size={14} style={{ color: '#ca8a04', flexShrink: 0 }} />
+            <span><strong>Live data unavailable.</strong> Showing cached data from the local mirror — figures may be a few minutes behind. <button onClick={refresh} className="underline font-medium ml-1" style={{ color: '#92400e' }}>Try refreshing</button></span>
           </div>
         )}
 
@@ -905,7 +904,7 @@ export default function Invoices() {
         const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
         const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
         const labelText = chartPreset === 'custom' && chartFrom
-          ? `${chartFrom}${chartTo ? ' to ' + chartTo : ''}`
+          ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
           : `last ${activePreset.label}`
         return (
           <div className="card overflow-hidden" style={{ padding: 0 }}>
@@ -917,9 +916,9 @@ export default function Invoices() {
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
                   Cumulative billing · bar height = amount ·&nbsp;
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-positive)' }} />paid&nbsp;
-                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-negative)' }} />overdue&nbsp;
-                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--text-3)' }} />pending
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid&nbsp;
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#fb7185' }} />overdue&nbsp;
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />pending
                   </span>
                 </p>
               </div>
@@ -944,7 +943,7 @@ export default function Invoices() {
                     <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
                       className="text-[11px] px-2 py-1 rounded-md"
                       style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
-                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>to</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
                     <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
                       className="text-[11px] px-2 py-1 rounded-md"
                       style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none' }} />
@@ -1041,7 +1040,7 @@ export default function Invoices() {
           </div>
         </ExecutivePanel>
 
-        <ExecutivePanel title="Aging buckets" subtitle="Pending invoice exposure by age. Click to filter.">
+        <ExecutivePanel title="Aging buckets" subtitle="Pending invoice exposure by age — click to filter.">
           <div className="space-y-2">
             {Object.entries(agingBuckets).map(([label, { count, amount }]) => {
               const active = agingBandFilter === label
@@ -1054,13 +1053,13 @@ export default function Invoices() {
                 : 'var(--text-2)'
               const bg = active
                 ? 'var(--accent-dim)'
-                : isDanger  ? 'color-mix(in srgb, var(--fin-negative) 6%, transparent)'
-                : isWarning ? 'color-mix(in srgb, var(--fin-warning) 6%, transparent)'
+                : isDanger  ? 'rgba(216,95,88,0.06)'
+                : isWarning ? 'rgba(202,127,20,0.06)'
                 : 'var(--bg-input)'
               const border = active
                 ? 'var(--accent)'
-                : isDanger  ? 'color-mix(in srgb, var(--fin-negative) 20%, transparent)'
-                : isWarning ? 'color-mix(in srgb, var(--fin-warning) 20%, transparent)'
+                : isDanger  ? 'rgba(216,95,88,0.20)'
+                : isWarning ? 'rgba(202,127,20,0.20)'
                 : 'var(--card-border)'
               return (
                 <button
@@ -1270,10 +1269,15 @@ export default function Invoices() {
                 className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
                 style={{
                   borderColor: active ? m.color : 'var(--card-border)',
-                  background: active ? `${tint(m.color, 0.06)}` : 'var(--card-bg)',
-                  boxShadow: active ? `0 0 0 2px ${tint(m.color, 0.19)}, var(--card-shadow)` : 'var(--card-shadow)',
+                  background: active ? `${m.color}10` : 'var(--card-bg)',
+                  boxShadow: active ? `0 0 0 2px ${m.color}30, var(--card-shadow)` : 'var(--card-shadow)',
                 }}
                 aria-pressed={active}>
+                {/* Icon tile */}
+                <div className="kpi-icon flex-shrink-0"
+                  style={{ background: `${m.color}18` }}>
+                  {Icon && <Icon size={18} style={{ color: m.color }} />}
+                </div>
                 {/* Text */}
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-3)' }}>{status}</p>
@@ -1336,7 +1340,7 @@ export default function Invoices() {
                     style={{
                       background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
                       border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
-                      boxShadow: selectedRetainer === group.project ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'none',
+                      boxShadow: selectedRetainer === group.project ? '0 0 0 2px rgba(37,99,235,0.10)' : 'none',
                     }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1414,7 +1418,7 @@ export default function Invoices() {
                             style={{
                               background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
                               border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
-                              boxShadow: item.active ? '0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent)' : 'none',
+                              boxShadow: item.active ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
                             }}>
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
@@ -1551,7 +1555,7 @@ export default function Invoices() {
                   style={{
                     background: active ? 'var(--accent-dim)' : 'var(--bg-layer)',
                     border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
-                    boxShadow: active ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--shadow-sm)',
+                    boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--shadow-sm)',
                   }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1799,30 +1803,30 @@ export default function Invoices() {
       {/* ── Error ── */}
       {(errorStatus === 403 || errorStatus === 401) ? (
         <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-2xl text-center"
-          style={{ background: 'color-mix(in srgb, var(--fin-negative) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 15%, transparent)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <AlertTriangle size={22} style={{ color: 'var(--fin-negative)' }} />
+          style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.15)' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(248,113,113,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <AlertTriangle size={22} style={{ color: '#f87171' }} />
           </div>
           <div>
-            <div className="font-semibold text-sm mb-1" style={{ color: 'var(--fin-negative)' }}>Access Restricted</div>
+            <div className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Access Restricted</div>
             <div className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>
               You don't have permission to view invoices.<br />
               Please contact your administrator to request access.
             </div>
             <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)', border: 'none', cursor: 'pointer', transition: 'background-color 150ms' }}
-              onMouseEnter={e => e.target.style.background = 'color-mix(in srgb, var(--fin-negative) 22%, transparent)'}
-              onMouseLeave={e => e.target.style.background = 'color-mix(in srgb, var(--fin-negative) 15%, transparent)'}>
+              style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: 'none', cursor: 'pointer', transition: 'background-color 150ms' }}
+              onMouseEnter={e => e.target.style.background = 'rgba(248,113,113,0.22)'}
+              onMouseLeave={e => e.target.style.background = 'rgba(248,113,113,0.15)'}>
               Refresh
             </button>
           </div>
         </div>
       ) : error && (
         <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs"
-          style={{ background: 'color-mix(in srgb, var(--fin-negative) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)', color: 'var(--fin-negative)' }}>
+          style={{ background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.18)', color: '#f87171' }}>
           <AlertTriangle size={13} className="shrink-0" />
           {error}
-          {/not found/i.test(error) && <span style={{ color: 'var(--text-3)' }}>The backend is deploying; retrying automatically.</span>}
+          {/not found/i.test(error) && <span style={{ color: 'var(--text-3)' }}>— backend is deploying, auto-retrying</span>}
           <button onClick={refresh} className="underline ml-1">retry</button>
         </div>
       )}
@@ -1895,7 +1899,7 @@ export default function Invoices() {
                     {/* Top: invoice # + status */}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--text-3)' }}>
                           Invoice
                         </p>
                         <p className="font-mono text-[13px] font-bold truncate mt-1" style={{ color: 'var(--text-1)' }}>
@@ -1918,13 +1922,13 @@ export default function Invoices() {
                     {/* Middle: amounts */}
                     <div className="invoice-mobile-summary my-3">
                       <div>
-                        <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Amount</p>
+                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Amount</p>
                         <p className="font-bold tabular-nums text-base mt-1" style={{ color: 'var(--text-1)' }}>
                           {fmt(f['Amount Raised'])}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Outstanding</p>
+                        <p className="text-[10px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Outstanding</p>
                         <p className="font-bold tabular-nums text-sm mt-1" style={{ color: outstanding > 0 ? 'var(--fin-warning)' : 'var(--text-2)' }}>
                           {outstanding > 0 ? fmt(outstanding) : 'Clear'}
                         </p>
@@ -2353,7 +2357,7 @@ export default function Invoices() {
                                 <button
                                   onClick={() => openRecordPayment(r)}
                                   className="btn-ghost flex items-center gap-1.5"
-                                  style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--fin-positive)', borderColor: 'color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}
+                                  style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.3)' }}
                                   aria-label={`Record payment for ${f['Invoice Number']}`}>
                                   <CheckCircle2 size={12} />
                                   <span className="text-[11px] font-semibold">Pay</span>
@@ -2362,7 +2366,7 @@ export default function Invoices() {
                               <button
                                 onClick={() => openView(r)}
                                 className="btn-ghost flex items-center gap-1.5"
-                                style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)' }}
+                                style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}
                                 aria-label={`View ${f['Invoice Number']}`}>
                                 <Eye size={12} />
                                 <span className="text-[11px] font-semibold">View</span>
@@ -2400,7 +2404,7 @@ export default function Invoices() {
                                   display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                                   padding: '10px 20px 10px 18px',
                                   borderBottom: '1px solid var(--glass-border)',
-                                  background: 'transparent',
+                                  background: `linear-gradient(90deg, ${accentColor}08 0%, transparent 60%)`,
                                 }}>
                                   <StatusPill status={f['Payment Status']} />
                                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 2 }}>
@@ -2523,7 +2527,7 @@ export default function Invoices() {
                                       <button
                                         onClick={() => openRecordPayment(r)}
                                         className="btn-ghost flex items-center gap-1.5"
-                                        style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--fin-positive)', borderColor: 'color-mix(in srgb, var(--fin-positive) 35%, transparent)' }}>
+                                        style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.35)' }}>
                                         <CheckCircle2 size={11} />
                                         <span style={{ fontSize: 11, fontWeight: 600 }}>Record Payment</span>
                                       </button>
@@ -2540,7 +2544,7 @@ export default function Invoices() {
                                     <button
                                       onClick={() => openView(r)}
                                       className="btn-ghost flex items-center gap-1.5"
-                                      style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)' }}>
+                                      style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.35)' }}>
                                       <Eye size={11} />
                                       <span style={{ fontSize: 11, fontWeight: 600 }}>View Details</span>
                                     </button>
@@ -2661,8 +2665,8 @@ export default function Invoices() {
               <div className="flex flex-wrap gap-4">
                 <span>Raised <strong style={{ color: 'var(--text-1)' }}>{fmt(totalRaised)}</strong></span>
                 <span>Incl. GST <strong style={{ color: 'var(--text-1)' }}>{fmt(totalWithTax)}</strong></span>
-                <span>Collected <strong style={{ color: 'var(--fin-positive)' }}>{fmt(totalReceived)}</strong></span>
-                <span>Outstanding <strong style={{ color: totalOutstanding > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)' }}>{fmt(totalOutstanding)}</strong></span>
+                <span>Collected <strong style={{ color: 'var(--fin-positive, #16a34a)' }}>{fmt(totalReceived)}</strong></span>
+                <span>Outstanding <strong style={{ color: totalOutstanding > 0 ? 'var(--fin-warning, #ca8a04)' : 'var(--fin-positive, #16a34a)' }}>{fmt(totalOutstanding)}</strong></span>
               </div>
             </div>
           )

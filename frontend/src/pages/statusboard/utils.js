@@ -11,7 +11,7 @@ export const THEME_PRESETS = {
     accent: '#2563eb',
     accentDim: 'rgba(37,99,235,0.12)',
     accentSoft: 'rgba(37,99,235,0.24)',
-    accentGradient: '#2563eb',
+    accentGradient: 'linear-gradient(135deg,#2563eb,#1d4ed8)',
   },
   emerald: {
     id: 'emerald',
@@ -19,7 +19,7 @@ export const THEME_PRESETS = {
     accent: '#059669',
     accentDim: 'rgba(5,150,105,0.12)',
     accentSoft: 'rgba(5,150,105,0.24)',
-    accentGradient: '#059669',
+    accentGradient: 'linear-gradient(135deg,#059669,#047857)',
   },
   amber: {
     id: 'amber',
@@ -27,7 +27,7 @@ export const THEME_PRESETS = {
     accent: '#d97706',
     accentDim: 'rgba(217,119,6,0.12)',
     accentSoft: 'rgba(217,119,6,0.24)',
-    accentGradient: '#f59e0b',
+    accentGradient: 'linear-gradient(135deg,#f59e0b,#d97706)',
   },
   rose: {
     id: 'rose',
@@ -35,7 +35,7 @@ export const THEME_PRESETS = {
     accent: '#e11d48',
     accentDim: 'rgba(225,29,72,0.12)',
     accentSoft: 'rgba(225,29,72,0.24)',
-    accentGradient: '#f43f5e',
+    accentGradient: 'linear-gradient(135deg,#f43f5e,#e11d48)',
   },
   slate: {
     id: 'slate',
@@ -43,22 +43,20 @@ export const THEME_PRESETS = {
     accent: '#475569',
     accentDim: 'rgba(71,85,105,0.12)',
     accentSoft: 'rgba(71,85,105,0.24)',
-    accentGradient: '#64748b',
+    accentGradient: 'linear-gradient(135deg,#64748b,#475569)',
   },
 }
 
-// Status tones map onto the palette's semantic tokens, so the chips keep AA
-// contrast and follow the palette in both modes.
 const STATUS_CONFIG = {
-  'Completed':     { color: 'var(--fin-positive)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', dot: 'var(--fin-positive)', light: 'var(--fin-pos-bg)' },
-  'In progress':   { color: 'var(--accent-ink)', bg: 'var(--accent-dim)', border: 'var(--accent-soft)', dot: 'var(--accent)', light: 'var(--accent-dim)' },
-  'On Hold':       { color: 'var(--fin-warning)', bg: 'var(--fin-warn-bg)', border: 'var(--fin-warn-border)', dot: 'var(--fin-warning)', light: 'var(--fin-warn-bg)' },
-  'Input Pending': { color: 'color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative))', bg: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 12%, transparent)', border: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 35%, transparent)', dot: 'color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative))', light: 'color-mix(in srgb, color-mix(in srgb, var(--fin-warning) 60%, var(--fin-negative)) 12%, transparent)' },
-  'Not started':   { color: 'var(--text-3)', bg: 'color-mix(in srgb, var(--text-3) 10%, transparent)', border: 'color-mix(in srgb, var(--text-3) 30%, transparent)', dot: 'var(--text-3)', light: 'var(--bg-2)' },
+  'Completed':     { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', dot: '#10b981', light: '#dcfce7' },
+  'In progress':   { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.35)', dot: '#3b82f6', light: '#dbeafe' },
+  'On Hold':       { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)', dot: '#f59e0b', light: '#fef3c7' },
+  'Input Pending': { color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.35)', dot: '#f97316', light: '#ffedd5' },
+  'Not started':   { color: '#94a3b8', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.30)', dot: '#94a3b8', light: '#f1f5f9' },
 }
 
 export function statusStyle(s) {
-  return STATUS_CONFIG[s] || { color: 'var(--text-3)', bg: 'color-mix(in srgb, var(--text-3) 8%, transparent)', border: 'color-mix(in srgb, var(--text-3) 20%, transparent)', dot: 'var(--text-3)', light: 'var(--bg-2)' }
+  return STATUS_CONFIG[s] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)', dot: '#94a3b8', light: '#f1f5f9' }
 }
 
 // ── List view columns ─────────────────────────────────────────────────────────
@@ -97,10 +95,13 @@ export function getListLayout(columns, isEditor) {
 
 // ── Client colour palette ─────────────────────────────────────────────────────
 
-// Clients are told apart by name, not by hue: one neutral ink for every
-// client keeps colour free to mean status (paid, overdue, at risk).
-export function clientColor() {
-  return 'var(--text-2)'
+const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#ec4899','#0ea5e9','#eab308','#14b8a6','#f97316','#6366f1','#84cc16']
+
+const _clientMap = {}
+
+export function clientColor(name) {
+  if (!_clientMap[name]) { _clientMap[name] = PALETTE[Object.keys(_clientMap).length % PALETTE.length] }
+  return _clientMap[name]
 }
 
 export function parseAttachments(value) {
@@ -163,6 +164,34 @@ export const CARD_RECORD_SORT_OPTIONS = [
   { value: 'modified-asc', label: 'Oldest updated' },
   { value: 'status-asc', label: 'Status A-Z' },
 ]
+
+export const EXECUTIVE_VARS_DARK = {
+  '--bg-base': '#090b10',
+  '--bg-layer': '#0e1118',
+  '--card-bg': '#141820',
+  '--card-border': 'rgba(255,255,255,0.08)',
+  '--card-shadow': '0 24px 60px rgba(0,0,0,0.32)',
+  '--card-shadow-hover': '0 28px 70px rgba(0,0,0,0.4)',
+  '--bg-input': '#10141d',
+  '--text-1': '#f4f7fb',
+  '--text-2': '#c0c8d6',
+  '--text-3': '#7f8a9c',
+  '--border': 'rgba(255,255,255,0.08)',
+}
+
+export const EXECUTIVE_VARS_LIGHT = {
+  '--bg-base': '#f5f7fb',
+  '--bg-layer': '#fbfcff',
+  '--card-bg': '#ffffff',
+  '--card-border': 'rgba(15,23,42,0.08)',
+  '--card-shadow': '0 24px 60px rgba(15,23,42,0.08)',
+  '--card-shadow-hover': '0 28px 70px rgba(15,23,42,0.12)',
+  '--bg-input': '#f5f7fb',
+  '--text-1': '#152033',
+  '--text-2': '#536175',
+  '--text-3': '#8b97aa',
+  '--border': 'rgba(15,23,42,0.08)',
+}
 
 export function fmtDate(iso) {
   if (!iso) return ''

@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area,
@@ -7,7 +7,7 @@ import {
 import {
   RefreshCw, AlertCircle, TrendingUp, TrendingDown, IndianRupee,
   Wallet, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
-  Target, Hourglass, Users, Zap, ArrowRight,
+  Target, Sparkles, Hourglass, Users, Zap, ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import CustomInsightBlocks from '../components/CustomInsightBlocks'
@@ -16,10 +16,9 @@ import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct, formatInt } from '../utils/format'
-import useChartColors from '../hooks/useChartColors'
+import { EXECUTIVE_VARS_DARK as BASE_EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT as BASE_EXECUTIVE_VARS_LIGHT } from '../utils/executiveVars'
 import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
-import { tint } from '../utils/color'
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const axisInr = (v) => {
@@ -57,6 +56,22 @@ const PERIODS = [
   { id: 'ytd',  label: 'YTD',      days: 'ytd' },
 ]
 
+// Analytics also sets the status border colours; Dashboard keeps the ones
+// from index.css, which differ.
+const EXECUTIVE_VARS_DARK = {
+  ...BASE_EXECUTIVE_VARS_DARK,
+  '--fin-pos-border': 'rgba(132,226,84,0.18)',
+  '--fin-warn-border': 'rgba(243,180,93,0.18)',
+  '--fin-neg-border': 'rgba(255,125,128,0.18)',
+}
+
+const EXECUTIVE_VARS_LIGHT = {
+  ...BASE_EXECUTIVE_VARS_LIGHT,
+  '--fin-pos-border': 'rgba(22,145,95,0.14)',
+  '--fin-warn-border': 'rgba(202,127,20,0.14)',
+  '--fin-neg-border': 'rgba(216,95,88,0.14)',
+}
+
 const ANALYTICS_WIDGET_CATALOG = [
   { id: 'kpi_strip', label: 'Analytics KPIs', description: 'Revenue, collections, outstanding, DSO, and margin at the top.' },
   { id: 'insights', label: 'AI-style insights', description: 'Concentration, overdue, forecast, and strongest signal cards.' },
@@ -66,35 +81,41 @@ const ANALYTICS_WIDGET_CATALOG = [
   { id: 'status_breakdown', label: 'Invoice status mix', description: 'Status distribution by amount raised.' },
   { id: 'client_concentration', label: 'Client concentration', description: 'Revenue distribution across clients.' },
   { id: 'project_profitability', label: 'Project profitability', description: 'Project-level revenue, cost, profit, and outstanding exposure.' },
-  { id: 'pipeline', label: 'Revenue pipeline', description: 'Funnel from raised to collected, outstanding and overdue.' },
+  { id: 'pipeline', label: 'Revenue pipeline', description: 'Funnel from raised → collected → outstanding → overdue.' },
   { id: 'dso_trend', label: 'Payment speed trend', description: 'Month-by-month average days to collect.' },
 ]
 
 const ANALYTICS_DEFAULT_WIDGET_IDS = ANALYTICS_WIDGET_CATALOG.map((widget) => widget.id)
 
 /* ── Components ──────────────────────────────────────────────────────── */
+const TILE_PALETTE = [
+  { bg: '#dbeafe', fg: '#2563eb' },
+  { bg: '#dcfce7', fg: '#16a34a' },
+  { bg: '#fef3c7', fg: '#d97706' },
+  { bg: '#fce7f3', fg: '#db2777' },
+  { bg: '#ede9fe', fg: '#7c3aed' },
+]
 
 /* Mini sparkline — area chart, no axes */
-function Sparkline({ data, color = 'var(--accent)', height = 26 }) {
-  // The colour may be a token, so it cannot double as the gradient id.
-  const gid = `sg-${useId().replace(/:/g, '')}`
+function Sparkline({ data, color = '#2563eb', height = 26 }) {
   if (!data || data.length === 0) return null
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 1, right: 0, bottom: 1, left: 0 }}>
         <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`sg-${color}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%"   stopColor={color} stopOpacity={0.35} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#${gid})`} dot={false} />
+        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#sg-${color})`} dot={false} />
       </AreaChart>
     </ResponsiveContainer>
   )
 }
 
 function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark, sparkColor }) {
+  const palette = TILE_PALETTE[tone % TILE_PALETTE.length]
   const accentColor =
     accent === 'positive' ? 'var(--fin-positive)' :
     accent === 'warning'  ? 'var(--fin-warning)'  :
@@ -102,6 +123,12 @@ function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark
   return (
     <div className="card flex flex-col gap-2">
       <div className="flex items-center gap-3">
+        {Icon && (
+          <div className="rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
+            <Icon size={18} aria-hidden="true" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="display-num tabular-nums break-words leading-tight"
             style={{ color: accentColor, fontSize: 'clamp(0.95rem, 2.4vw, 1.35rem)', wordBreak: 'break-word' }}>
@@ -125,7 +152,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent, tone = 0, trend, spark
       </div>
       {spark && spark.length > 1 && (
         <div className="-mx-1">
-          <Sparkline data={spark} color={sparkColor || 'var(--accent)'} />
+          <Sparkline data={spark} color={sparkColor || palette.fg} />
         </div>
       )}
     </div>
@@ -159,7 +186,7 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
     <div className="rounded-xl p-3 flex items-start gap-2.5"
       style={{ background: m.bg, border: `1px solid ${m.border}` }}>
       <div className="rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ width: 32, height: 32, background: 'color-mix(in srgb, var(--card-bg) 55%, transparent)', color: m.fg }}>
+        style={{ width: 32, height: 32, background: 'rgba(255,255,255,0.55)', color: m.fg }}>
         <Icon size={15} />
       </div>
       <div className="min-w-0">
@@ -174,27 +201,27 @@ function InsightCard({ icon: Icon, tone = 'positive', title, body }) {
 function PipelineFunnel({ data, dark }) {
   if (!data) return null
   const stages = [
-    { label: 'Total Raised', value: data.raised, color: 'var(--accent)', pct: 100 },
-    { label: 'Collected', value: data.received, color: 'var(--fin-positive)', pct: data.raised > 0 ? (data.received / data.raised) * 100 : 0 },
-    { label: 'Outstanding', value: data.outstanding, color: 'var(--fin-warning)', pct: data.raised > 0 ? (data.outstanding / data.raised) * 100 : 0 },
-    { label: 'Overdue (>30d)', value: data.overdue, color: 'var(--fin-negative)', pct: data.raised > 0 ? (data.overdue / data.raised) * 100 : 0 },
+    { label: 'Total Raised', value: data.raised, color: '#7d95ff', pct: 100 },
+    { label: 'Collected', value: data.received, color: '#84e254', pct: data.raised > 0 ? (data.received / data.raised) * 100 : 0 },
+    { label: 'Outstanding', value: data.outstanding, color: '#f3b45d', pct: data.raised > 0 ? (data.outstanding / data.raised) * 100 : 0 },
+    { label: 'Overdue (>30d)', value: data.overdue, color: '#ff7d80', pct: data.raised > 0 ? (data.overdue / data.raised) * 100 : 0 },
   ]
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {stages.map((s, i) => (
-        <div key={s.label} className="relative overflow-hidden rounded-2xl p-4"
-          style={{ background: 'var(--bg-input)', border: `1px solid ${tint(s.color, 0.13)}` }}>
+        <div key={s.label} className="relative overflow-hidden rounded-2xl p-4 transition-transform duration-200 hover:scale-[1.02]"
+          style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: `1px solid ${s.color}22` }}>
           {/* Background fill bar */}
           <div className="absolute inset-x-0 bottom-0 rounded-b-2xl transition-all duration-700"
-            style={{ height: `${s.pct}%`, background: `${tint(s.color, 0.07)}` }} />
+            style={{ height: `${s.pct}%`, background: `${s.color}11` }} />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
                 {String(i + 1).padStart(2, '0')}
               </span>
               {i > 0 && (
                 <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded"
-                  style={{ color: s.color, background: `${tint(s.color, 0.09)}` }}>
+                  style={{ color: s.color, background: `${s.color}18` }}>
                   {s.pct.toFixed(1)}%
                 </span>
               )}
@@ -493,7 +520,7 @@ export default function Analytics() {
     const sorted = [...projMatrix].filter(p => p.billed > 0).sort((a, b) => b.margin - a.margin)
     if (sorted[0]) {
       out.push({
-        icon: TrendingUp, tone: 'positive',
+        icon: Sparkles, tone: 'positive',
         title: `Top performer: ${sorted[0].name}`,
         body: `${formatPct(sorted[0].margin, 2)} margin on ${inr(sorted[0].billed)} billed.`,
       })
@@ -505,7 +532,7 @@ export default function Analytics() {
         icon: Users,
         tone: clientConc[0].pct >= 85 ? 'warning' : 'info',
         title: `${formatPct(clientConc[0].pct, 1)} from ${clientConc[0].name}`,
-        body: `Concentration risk. Diversify revenue sources to reduce exposure.`,
+        body: `Concentration risk — diversify revenue sources to reduce exposure.`,
       })
     }
 
@@ -516,7 +543,7 @@ export default function Analytics() {
         icon: Hourglass,
         tone: dso <= 14 ? 'positive' : dso <= 30 ? 'info' : 'warning',
         title: `${dso.toFixed(0)} day avg payment time`,
-        body: dso <= 14 ? 'Excellent collection speed.' : dso <= 30 ? 'Healthy collection cycle.' : 'Slow: invoices taking >30 days to clear.',
+        body: dso <= 14 ? 'Excellent collection speed.' : dso <= 30 ? 'Healthy collection cycle.' : 'Slow — invoices taking >30 days to clear.',
       })
     }
 
@@ -537,7 +564,7 @@ export default function Analytics() {
       out.push({
         icon: AlertTriangle, tone: 'negative',
         title: `${overdueCount} overdue invoice${overdueCount === 1 ? '' : 's'}`,
-        body: `${inr(overdueAmount)} pending more than 30 days. Needs follow-up.`,
+        body: `${inr(overdueAmount)} pending more than 30 days — needs follow-up.`,
       })
     }
 
@@ -559,7 +586,7 @@ export default function Analytics() {
     ? ((collectedThisMonth - collectedLastMonth) / collectedLastMonth) * 100 : null
   // Flag incomplete months (before the 20th) so we don't show -100% as alarming
   const isEarlyMonth = new Date().getDate() < 20
-  const chart = useChartColors()
+  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
 
   const visibleWidgets = useMemo(
     () => new Set(activeWidgetIds.length ? activeWidgetIds : ANALYTICS_DEFAULT_WIDGET_IDS),
@@ -802,22 +829,25 @@ export default function Analytics() {
     <div
       className="p-4 sm:p-6 space-y-5 animate-fade-in rounded-[28px]"
       style={{
-        background: 'var(--hero-wash)',
+        ...executiveVars,
+        background: dark
+          ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 18%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)'
+          : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 18%), radial-gradient(circle at top right, rgba(22,145,95,0.06), transparent 18%), linear-gradient(180deg, #f8faff 0%, #f4f7fb 100%)',
       }}
     >
 
       {/* Header */}
-      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
+      <div className="rounded-[30px] p-5 sm:p-7" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--accent)' }}>
-              Analytics
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>
+              Finance command center
             </p>
-            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em', lineHeight: 1.05 }}>
-              Cash, collections and margin
+            <h1 className="text-3xl sm:text-4xl font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.04em', lineHeight: 1.05 }}>
+              Analytics that feel board-room ready
             </h1>
             <p className="text-sm sm:text-base max-w-3xl" style={{ color: 'var(--text-3)' }}>
-              Cashflow, collections, client concentration and project profitability for the period you pick.
+              Deep dive into cashflow, collections, concentration, and project profitability without losing the existing operational depth.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -835,13 +865,13 @@ export default function Analytics() {
                 setCustomSourceRows(rowsByKey || {})
               }}
             />
-            <div className="inline-flex items-center p-1 rounded-2xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+            <div className="inline-flex items-center p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {PERIODS.map(p => (
                 <button key={p.id}
                   onClick={() => setPeriod(p.id)}
                   className="text-xs font-medium px-3 py-1.5 rounded-xl transition-colors"
                   style={period === p.id
-                    ? { background: 'var(--card-bg)', color: 'var(--text-1)', boxShadow: 'var(--shadow-sm)' }
+                    ? { background: 'rgba(255,255,255,0.08)', color: 'var(--text-1)' }
                     : { color: 'var(--text-3)' }}>
                   {p.label}
                 </button>
@@ -852,7 +882,7 @@ export default function Analytics() {
               disabled={loading}
               aria-label="Refresh"
               className="inline-flex items-center gap-2 rounded-2xl px-3.5 py-2 text-sm font-medium"
-              style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-2)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
               <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
               Refresh
@@ -861,19 +891,19 @@ export default function Analytics() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 xl:grid-cols-[1.9fr_1fr] gap-4">
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Cash position</p>
-                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Cash position</p>
+                <h2 className="text-4xl sm:text-5xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
                   <LiveValue value={filtered.received} format={inr} />
                 </h2>
                 <p className="text-sm mt-2" style={{ color: 'var(--text-3)' }}>
                   Collected in the selected period, against <LiveValue value={filtered.raised} format={inr} /> raised and <LiveValue value={filtered.outstanding} format={inr} /> still open.
                 </p>
               </div>
-              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Collection rate</p>
+              <div className="rounded-3xl px-4 py-3 min-w-[170px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Collection rate</p>
                 <p className="text-2xl font-semibold mt-1 tabular-nums" style={{ color: 'var(--fin-positive)' }}>
                   <LiveValue value={filtered.collectionRate} format={v => formatPct(v, 1)} />
                 </p>
@@ -889,8 +919,8 @@ export default function Analytics() {
                 { label: 'Period invoices', value: <LiveValue value={invoices.length} format={v => String(Math.round(v))} />, tone: 'var(--text-1)' },
                 { label: isEarlyMonth ? 'MTD vs last' : 'Month delta', value: monthDelta != null ? formatPct(monthDelta, 1) : '—', tone: monthDelta == null ? 'var(--text-1)' : (isEarlyMonth && monthDelta < 0) ? 'var(--text-3)' : monthDelta >= 0 ? 'var(--fin-positive)' : 'var(--fin-negative)', sub: isEarlyMonth && monthDelta != null && monthDelta < 0 ? 'month in progress' : undefined },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
+                <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                  <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>{item.value}</p>
                   {item.sub && <p className="text-[10px] mt-1 italic" style={{ color: 'var(--text-3)' }}>{item.sub}</p>}
                 </div>
@@ -898,19 +928,19 @@ export default function Analytics() {
             </div>
           </div>
 
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Live context</p>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Live context</p>
             <h2 className="text-2xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>Signals worth noticing</h2>
             <div className="mt-5 space-y-3">
-              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Sync state</p>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync state</p>
                 <p className="text-sm mt-2 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
                   <LiveDot changeCount={changeCount} loading={syncing && !data} />
-                  {changedAt ? `Figures changed ${changedLabel}` : 'Live. Nothing has moved yet'}
+                  {changedAt ? `Figures changed ${changedLabel}` : 'Live — nothing has moved yet'}
                 </p>
               </div>
-              <div className="rounded-2xl p-4" style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Overdue pressure</p>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Overdue pressure</p>
                 <p className="text-base font-semibold mt-2" style={{ color: (is?.overdue_invoices?.length || 0) > 0 ? 'var(--fin-negative)' : 'var(--text-1)' }}>
                   {is?.overdue_invoices?.length ? `${is.overdue_invoices.length} overdue invoice${is.overdue_invoices.length === 1 ? '' : 's'}` : 'No overdue invoices'}
                 </p>
@@ -941,13 +971,13 @@ export default function Analytics() {
           label="Revenue (period)"
           value={<LiveValue value={filtered.raised} format={inr} />}
           sub={`${invoices.length} invoice${invoices.length === 1 ? '' : 's'}`}
-          spark={sparks.raised} sparkColor="var(--accent)" />
+          spark={sparks.raised} sparkColor="#2563eb" />
         <KpiCard tone={1} icon={Wallet}
           label="Collected"
           value={<LiveValue value={filtered.received} format={inr} />}
           accent="positive"
           sub={`${formatPct(filtered.collectionRate, 1)} collection rate`}
-          spark={sparks.collected} sparkColor="var(--fin-positive)" />
+          spark={sparks.collected} sparkColor="#16a34a" />
         <KpiCard tone={2} icon={Clock}
           label="Outstanding"
           value={<LiveValue value={filtered.outstanding} format={inr} />}
@@ -975,7 +1005,7 @@ export default function Analytics() {
 
       {/* ── Revenue pipeline funnel ── */}
       {visibleWidgets.has('pipeline') && pipeline && (
-        <ChartCard title="Revenue Pipeline" sub="Lifecycle: raised, collected, outstanding, overdue">
+        <ChartCard title="Revenue Pipeline" sub="Lifecycle from raised → collected → outstanding → overdue">
           <PipelineFunnel data={pipeline} dark={dark} />
         </ChartCard>
       )}
@@ -984,7 +1014,7 @@ export default function Analytics() {
       {visibleWidgets.has('cashflow') && (
       <ChartCard
         title="Cash Flow"
-        sub="Monthly raised (bars) vs collected (line), last 12 months"
+        sub="Monthly raised (bars) vs collected (line) — last 12 months"
         action={monthDelta != null && (
           <span className="text-[11px] font-semibold tabular-nums px-2 py-1 rounded-md flex items-center gap-1"
             style={{
@@ -1004,15 +1034,15 @@ export default function Analytics() {
               style={{ cursor: 'crosshair' }}>
               <defs>
                 <linearGradient id="raisedBarG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={chart.series[0]} stopOpacity={0.85} />
-                  <stop offset="100%" stopColor={chart.series[0]} stopOpacity={0.45} />
+                  <stop offset="0%" stopColor={dark ? '#7d95ff' : '#2563eb'} stopOpacity={0.85} />
+                  <stop offset="100%" stopColor={dark ? '#7d95ff' : '#2563eb'} stopOpacity={0.45} />
                 </linearGradient>
                 <linearGradient id="collectedLineG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={'var(--fin-positive)'} stopOpacity={0.4} />
-                  <stop offset="100%" stopColor={'var(--fin-positive)'} stopOpacity={0} />
+                  <stop offset="0%" stopColor={dark ? '#84e254' : '#16a34a'} stopOpacity={0.4} />
+                  <stop offset="100%" stopColor={dark ? '#84e254' : '#16a34a'} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} axisLine={false} tickLine={false} width={52} />
               <Tooltip
@@ -1028,15 +1058,15 @@ export default function Analytics() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
                           <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 2, background: chart.series[0], display: 'inline-block' }} />Raised
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: dark ? '#7d95ff' : '#2563eb', display: 'inline-block' }} />Raised
                           </span>
                           <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{inr(raised)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
                           <span style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--fin-positive)', display: 'inline-block' }} />Collected
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: dark ? '#84e254' : '#16a34a', display: 'inline-block' }} />Collected
                           </span>
-                          <span style={{ color: 'var(--fin-positive)', fontWeight: 600 }}>{inr(collected)}</span>
+                          <span style={{ color: dark ? '#84e254' : '#16a34a', fontWeight: 600 }}>{inr(collected)}</span>
                         </div>
                         {gap > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
@@ -1057,8 +1087,8 @@ export default function Analytics() {
               <Bar dataKey="raised" name="Raised" fill="url(#raisedBarG)" radius={[4, 4, 0, 0]}
                 animationBegin={0} animationDuration={800} />
               <Area type="monotone" dataKey="collected" name="Collected"
-                stroke={'var(--fin-positive)'} strokeWidth={2.5}
-                fill="url(#collectedLineG)" dot={{ r: 3.5, fill: 'var(--fin-positive)', strokeWidth: 0 }}
+                stroke={dark ? '#84e254' : '#16a34a'} strokeWidth={2.5}
+                fill="url(#collectedLineG)" dot={{ r: 3.5, fill: dark ? '#84e254' : '#16a34a', strokeWidth: 0 }}
                 activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--card-bg)' }}
                 animationBegin={200} animationDuration={900} />
             </ComposedChart>
@@ -1069,16 +1099,16 @@ export default function Analytics() {
 
       {/* ── DSO trend chart ── */}
       {visibleWidgets.has('dso_trend') && dsoTrend.length > 1 && (
-        <ChartCard title="Payment Speed" sub="Average days to collect per month. Lower is better">
+        <ChartCard title="Payment Speed" sub="Average days to collect per month — lower is better">
           <ResponsiveContainer width="100%" height={220}>
             <ComposedChart data={dsoTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="dsoLineG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--fin-warning)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--fin-warning)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#f3b45d" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#f3b45d" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `${v}d`} axisLine={false} tickLine={false} width={36} />
               <ReferenceLine y={14} stroke="var(--fin-positive)" strokeDasharray="4 3" label={{ value: '14d target', position: 'insideTopRight', fontSize: 9, fill: 'var(--fin-positive)' }} />
@@ -1104,11 +1134,11 @@ export default function Analytics() {
                 }}
               />
               <Area type="monotone" dataKey="dso" name="DSO (days)"
-                stroke="var(--fin-warning)" strokeWidth={2.5}
+                stroke="#f3b45d" strokeWidth={2.5}
                 fill="url(#dsoLineG)"
                 dot={(props) => {
                   const { cx, cy, payload } = props
-                  const color = payload.dso <= 14 ? ('var(--fin-positive)') : payload.dso <= 30 ? 'var(--fin-warning)' : ('var(--fin-negative)')
+                  const color = payload.dso <= 14 ? (dark ? '#84e254' : '#16a34a') : payload.dso <= 30 ? '#f3b45d' : (dark ? '#ff7d80' : '#d85f58')
                   return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={4} fill={color} stroke="var(--card-bg)" strokeWidth={2} />
                 }}
                 activeDot={{ r: 6, strokeWidth: 2, stroke: 'var(--card-bg)' }}
@@ -1126,13 +1156,13 @@ export default function Analytics() {
         <ChartCard title="Receivables Aging" sub="Pending invoice value by age bucket (overall)">
           {aging.every(a => a.amount === 0) ? (
             <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>
-              No pending invoices. All caught up.
+              No pending invoices — all caught up 🎉
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={aging} layout="vertical" margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
                 barCategoryGap="28%">
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" horizontal={false} />
                 <XAxis type="number" tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={axisInr} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="range" tick={{ fill: 'var(--text-2)', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} width={54} tickFormatter={v => `${v}d`} />
                 <Tooltip
@@ -1157,10 +1187,10 @@ export default function Analytics() {
                 <Bar dataKey="amount" name="Outstanding" radius={[0, 6, 6, 0]} animationBegin={0} animationDuration={800}>
                   {aging.map((entry) => {
                     const fill = entry.range === '0-30'
-                      ? ('var(--fin-positive)')
+                      ? (dark ? '#84e254' : '#16a34a')
                       : entry.range === '31-60'
-                        ? 'var(--fin-warning)'
-                        : ('var(--fin-negative)')
+                        ? '#f3b45d'
+                        : (dark ? '#ff7d80' : '#d85f58')
                     return <Cell key={entry.range} fill={fill} />
                   })}
                 </Bar>
@@ -1173,7 +1203,7 @@ export default function Analytics() {
         {visibleWidgets.has('top_pending') && (
         <ChartCard
           title="Top Pending Invoices"
-          sub="Oldest first, needing follow-up"
+          sub="Oldest first — needs follow-up"
           action={topPending.length > 0 && (
             <Link to="/invoices?status=Pending"
               className="text-[11px] font-medium flex items-center gap-1 transition-opacity hover:opacity-70"
@@ -1222,14 +1252,14 @@ export default function Analytics() {
           const totalAmt = statusBreakdown.reduce((s, x) => s + x.amount, 0)
           const totalCnt = statusBreakdown.reduce((s, x) => s + x.count, 0)
           const STATUS_COLOR = (name) =>
-            name === 'Paid'      ? ('var(--fin-positive)') :
-            name === 'Pending'   ? 'var(--fin-warning)' :
-            name === 'Cancelled' ? ('var(--fin-negative)') : 'var(--text-3)'
+            name === 'Paid'      ? (dark ? '#84e254' : '#16a34a') :
+            name === 'Pending'   ? '#f3b45d' :
+            name === 'Cancelled' ? (dark ? '#ff7d80' : '#dc2626') : '#9ca3af'
           const STATUS_BG = (name) =>
-            name === 'Paid'      ? ('var(--fin-pos-bg)') :
-            name === 'Pending'   ? 'color-mix(in srgb, var(--fin-warning) 10%, transparent)' :
-            name === 'Cancelled' ? ('var(--fin-neg-bg)') :
-            'var(--bg-2)'
+            name === 'Paid'      ? (dark ? 'rgba(132,226,84,0.1)' : 'rgba(22,145,95,0.08)') :
+            name === 'Pending'   ? 'rgba(243,180,93,0.1)' :
+            name === 'Cancelled' ? (dark ? 'rgba(255,125,128,0.1)' : 'rgba(220,38,38,0.08)') :
+            'rgba(156,163,175,0.1)'
           return (
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
               {/* Left: donut + center label */}
@@ -1282,15 +1312,15 @@ export default function Analytics() {
                   const color = STATUS_COLOR(s.name)
                   const bg = STATUS_BG(s.name)
                   return (
-                    <div key={s.name} className="rounded-2xl p-3.5"
-                      style={{ background: bg, border: `1px solid ${tint(color, 0.13)}` }}>
+                    <div key={s.name} className="rounded-2xl p-3.5 transition-transform duration-200 hover:scale-[1.01]"
+                      style={{ background: bg, border: `1px solid ${color}22` }}>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
                           <span className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>{s.name}</span>
                         </div>
                         <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded"
-                          style={{ color, background: `${tint(color, 0.09)}` }}>
+                          style={{ color, background: `${color}18` }}>
                           {pct.toFixed(1)}%
                         </span>
                       </div>
@@ -1300,7 +1330,7 @@ export default function Analytics() {
                         <p className="text-[10px] tabular-nums" style={{ color: 'var(--text-3)' }}>{cntPct.toFixed(0)}% by count</p>
                       </div>
                       {/* Amount share bar */}
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${tint(color, 0.13)}` }}>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
                         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
                       </div>
                     </div>
@@ -1309,7 +1339,7 @@ export default function Analytics() {
 
                 {/* Summary stat row */}
                 <div className="rounded-2xl p-3.5 sm:col-span-2"
-                  style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+                  style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: '1px solid var(--card-border)' }}>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     {[
                       { label: 'Collection rate', value: totalAmt > 0 ? `${((statusBreakdown.find(s => s.name === 'Paid')?.amount || 0) / totalAmt * 100).toFixed(1)}%` : '—', color: 'var(--fin-positive)' },
@@ -1334,7 +1364,7 @@ export default function Analytics() {
       {visibleWidgets.has('client_concentration') && clientConc.length > 0 && (
         <ChartCard
           title="Client Concentration"
-          sub="Revenue distribution and diversification risk"
+          sub="Revenue distribution — diversification risk check"
           action={clientConc[0]?.pct >= 70 && (
             <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded"
               style={{ background: 'var(--fin-warn-bg)', color: 'var(--fin-warning)' }}>
@@ -1344,7 +1374,7 @@ export default function Analytics() {
         >
           <ResponsiveContainer width="100%" height={Math.max(160, clientConc.length * 44)}>
             <BarChart data={clientConc} layout="vertical" margin={{ top: 4, right: 60, left: 0, bottom: 4 }} barCategoryGap="28%">
-              <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" horizontal={false} />
               <XAxis type="number" tick={{ fill: 'var(--text-3)', fontSize: 10 }} tickFormatter={v => `${v.toFixed(0)}%`} domain={[0, 100]} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
               <Tooltip
@@ -1370,7 +1400,7 @@ export default function Analytics() {
                 label={{ position: 'right', formatter: (v) => `${v.toFixed(1)}%`, fontSize: 10, fill: 'var(--text-3)', dy: 1 }}>
                 {clientConc.map((entry, i) => (
                   <Cell key={entry.name}
-                    fill={i === 0 && entry.pct >= 70 ? chart.warning : chart.series[0]}
+                    fill={i === 0 && entry.pct >= 70 ? '#f3b45d' : (dark ? '#7d95ff' : '#2563eb')}
                     opacity={0.85 - i * 0.06}
                   />
                 ))}

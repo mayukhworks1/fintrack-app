@@ -16,8 +16,9 @@ import { api } from '../services/api'
 import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct } from '../utils/format'
+import { EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT } from '../utils/executiveVars'
+import { useTheme } from '../context/ThemeContext'
 import clsx from 'clsx'
-import { plainLabel } from '../utils/plainLabel'
 
 /* Count projects whose health does NOT contain 🔴 */
 const countHealthy = (byHealth = {}) =>
@@ -33,9 +34,20 @@ function SkeletonCard() {
   )
 }
 
-/* ── KPI card: figure, label, trend. No icon tile. ── */
+/* ── KPI card — horizontal layout, colored icon tile on left ──
+   Matches reference: $32,350.00 / Total Revenue style with a tinted square tile.
+   Each card auto-picks an icon tile color from a palette so the row pops. */
+const TILE_PALETTE = [
+  { bg: '#fef3c7', fg: '#d97706' },   // amber
+  { bg: '#dbeafe', fg: '#2563eb' },   // blue
+  { bg: '#dcfce7', fg: '#16a34a' },   // green
+  { bg: '#fce7f3', fg: '#db2777' },   // pink
+  { bg: '#ede9fe', fg: '#7c3aed' },   // violet
+  { bg: '#cffafe', fg: '#0891b2' },   // cyan
+]
 
 function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
+  const palette = TILE_PALETTE[tone % TILE_PALETTE.length]
   const accentColor =
     accent === 'positive' ? 'var(--fin-positive)'
     : accent === 'warning' ? 'var(--fin-warning)'
@@ -43,6 +55,13 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend, tone = 0 }) {
     : 'var(--text-1)'
   return (
     <div className="card flex items-center gap-3">
+      {/* Colored icon tile */}
+      {Icon && (
+        <div className="rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ width: 40, height: 40, background: palette.bg, color: palette.fg }}>
+          <Icon size={18} aria-hidden="true" />
+        </div>
+      )}
       {/* Number + label + trend — full digits, wraps if needed */}
       <div className="min-w-0 flex-1">
         <p className="display-num tabular-nums break-words leading-tight"
@@ -79,7 +98,7 @@ function RiskRow({ project }) {
     <div className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
       <div className="min-w-0 flex-1 pr-2">
         <p className="text-sm font-medium truncate" style={{ color: 'var(--text-1)' }}>{project.name}</p>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{plainLabel(project.status || project.health)}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{project.status || project.health}</p>
       </div>
       <span className="text-sm font-bold tabular-nums flex-shrink-0"
         style={{ color: isNeg ? 'var(--fin-negative)' : 'var(--fin-warning)' }}>
@@ -97,7 +116,7 @@ function ClientBar({ client, billed, profit, maxBilled, rank }) {
   const marginColor = margin >= 20 ? 'var(--fin-positive)' : margin >= 0 ? 'var(--fin-warning)' : 'var(--fin-negative)'
   const marginBg    = margin >= 20 ? 'var(--fin-pos-bg)' : margin >= 0 ? 'var(--fin-warn-bg)' : 'var(--fin-neg-bg)'
   // bar gradient: anchor at accent, lighter at edges
-  const barGrad = 'var(--accent)'
+  const barGrad = `linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 75%, transparent) 100%)`
   const initials = client.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')
 
   return (
@@ -167,6 +186,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
   const { isEditor } = useAuth()
+  const { dark } = useTheme()
   const [activeWidgetIds, setActiveWidgetIds] = useState(DASHBOARD_DEFAULT_WIDGET_IDS)
   const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
   const [customSourceRows, setCustomSourceRows] = useState({})
@@ -321,21 +341,28 @@ export default function Dashboard() {
     ]
   }, [recent, s, statusEntries])
 
+  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
+
   return (
     <div
       className="p-4 sm:p-5 space-y-5 animate-fade-in rounded-[28px]"
-      style={{ background: 'var(--hero-wash)' }}
+      style={{
+        ...executiveVars,
+        background: dark
+          ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 22%), radial-gradient(circle at top right, rgba(132,226,84,0.08), transparent 18%), linear-gradient(180deg, #0a0d12 0%, #090b10 100%)'
+          : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 20%), radial-gradient(circle at top right, rgba(22,145,95,0.06), transparent 18%), linear-gradient(180deg, #f8faff 0%, #f4f7fb 100%)',
+      }}
     >
 
       {/* Header */}
-      <div className="rounded-[28px] p-4 sm:p-5" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
+      <div className="rounded-[28px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold tabular-nums tracking-[0.06em] uppercase"
+            <p className="text-[11px] font-semibold tabular-nums tracking-[0.22em] uppercase"
               style={{ color: 'var(--accent)' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
-            <h1 className="text-[2rem] sm:text-[2.5rem] font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+            <h1 className="text-[2rem] sm:text-[2.5rem] font-semibold" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em', lineHeight: 1 }}>
               {greeting}, Mayukh
             </h1>
             <p className="text-sm max-w-xl" style={{ color: 'var(--text-3)' }}>
@@ -364,7 +391,7 @@ export default function Dashboard() {
               disabled={loading}
               aria-label="Refresh"
               className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium"
-              style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-2)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
               <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
               Refresh
@@ -373,7 +400,7 @@ export default function Dashboard() {
               <button
                 onClick={() => navigate('/projects/new')}
                 className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold"
-                style={{ background: 'var(--accent-gradient)', color: 'var(--accent-fg)', boxShadow: 'var(--btn-shadow)' }}
+                style={{ background: 'linear-gradient(135deg, #4d74ff 0%, #6f8fff 100%)', color: '#fff', boxShadow: '0 12px 28px rgba(77,116,255,0.28)' }}
               >
                 <Plus size={14} aria-hidden="true" />
                 New Project
@@ -384,19 +411,19 @@ export default function Dashboard() {
 
         <div className={clsx('mt-4 grid gap-4', visibleWidgets.has('portfolio_balance') && visibleWidgets.has('command_center') ? 'grid-cols-1 xl:grid-cols-[1.9fr_0.95fr]' : 'grid-cols-1')}>
           {visibleWidgets.has('portfolio_balance') && (
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.96) 100%)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
-                <h2 className="text-[2.35rem] sm:text-[3rem] font-semibold mt-2 tabular-nums leading-none" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Portfolio balance</p>
+                <h2 className="text-[2.35rem] sm:text-[3rem] font-semibold mt-2 tabular-nums leading-none" style={{ color: 'var(--text-1)', letterSpacing: '-0.05em' }}>
                   <LiveValue value={s?.total_profit} format={inr} />
                 </h2>
                 <p className="text-sm mt-2 max-w-xl" style={{ color: 'var(--text-3)' }}>
                   Net profit from <LiveValue value={s?.total_billed} format={inr} style={{ color: 'var(--text-2)' }} /> billed across {s?.total_projects ?? 0} active portfolio entries.
                 </p>
               </div>
-              <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
+              <div className="rounded-3xl px-4 py-3 min-w-[160px]" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Healthy projects</p>
                 <p className="text-[1.9rem] font-semibold mt-1 tabular-nums leading-none" style={{ color: 'var(--fin-positive)' }}>
                   {healthOk}/{s?.total_projects ?? 0}
                 </p>
@@ -411,8 +438,8 @@ export default function Dashboard() {
                 { label: 'Cost load', value: costRatio, format: v => formatPct(v, 1), tone: 'var(--fin-warning)' },
                 { label: 'At risk', value: atRisk.length, format: v => String(Math.round(v)), tone: atRisk.length ? 'var(--fin-negative)' : 'var(--text-1)' },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
+                <div key={item.label} className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                  <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-3)' }}>{item.label}</p>
                   <p className="text-lg sm:text-xl font-semibold mt-2 tabular-nums" style={{ color: item.tone }}>
                     <LiveValue value={item.value} format={item.format} />
                   </p>
@@ -423,15 +450,15 @@ export default function Dashboard() {
           )}
 
           {visibleWidgets.has('command_center') && (
-          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
+          <div className="rounded-[28px] p-5 sm:p-6" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Command center</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Command center</p>
                 <h2 className="text-xl font-semibold mt-2" style={{ color: 'var(--text-1)' }}>What needs action</h2>
               </div>
               {lastUpdated && (
                 <div className="text-right">
-                  <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Sync</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Sync</p>
                   <p className="text-xs mt-1 flex items-center gap-1.5 justify-end" style={{ color: 'var(--text-2)' }}>
                     <LiveDot changeCount={changeCount} loading={syncing && !data} />
                     {changedAt ? `changed ${changedLabel}` : 'up to date'}
@@ -441,8 +468,8 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-5 space-y-3">
-              <div className="rounded-2xl p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(245,247,251,0.76)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Top signal</p>
                 <p className="text-base font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {leadRecord ? `${leadRecord.fields?.['Client'] || 'Unknown'} / ${leadRecord.fields?.['Project Name'] || 'Project'}` : 'No project performance signal yet'}
                 </p>
@@ -454,8 +481,8 @@ export default function Dashboard() {
                     : 'As project financials settle in, this space will surface the strongest performer.'}
                 </p>
               </div>
-              <div className="rounded-2xl p-4" style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
+              <div className="rounded-2xl p-4" style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.08)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Attention load</p>
                 <p className="text-base font-semibold mt-2" style={{ color: blockedRecent ? 'var(--fin-negative)' : 'var(--text-1)' }}>
                   {blockedRecent
                     ? `${blockedRecent} project${blockedRecent === 1 ? '' : 's'} need review`
@@ -477,7 +504,7 @@ export default function Dashboard() {
       {error && (
         <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
           style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
-          <AlertTriangle size={15} aria-hidden="true" /> {error}.
+          <AlertTriangle size={15} aria-hidden="true" /> {error} —
           <button onClick={refresh} className="underline">retry</button>
         </div>
       )}
@@ -500,7 +527,7 @@ export default function Dashboard() {
       {visibleWidgets.has('kpi_strip') && (
       <section aria-label="Key metrics">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <p className="text-[11px] uppercase tracking-[0.06em] font-semibold" style={{ color: 'var(--text-3)' }}>Filter by date</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] font-semibold" style={{ color: 'var(--text-3)' }}>Filter by date</p>
           <input
             type="date" value={kpiFrom} onChange={e => setKpiFrom(e.target.value)}
             className="input text-xs px-2 py-2 rounded-lg"
@@ -576,10 +603,10 @@ export default function Dashboard() {
         const overdueCount = retainerSummary.overdue_count || 0
         const healthy      = retainerSummary.healthy || 0
         return (
-          <div className="rounded-[20px] p-4 sm:p-5" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
+          <div className="rounded-[20px] p-4 sm:p-5" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.82)', border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.06)' }}>
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Retainer health</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>Retainer health</p>
                 <p className="text-base font-semibold mt-1" style={{ color: 'var(--text-1)' }}>
                   {overdueCount ? `${overdueCount} retainer${overdueCount > 1 ? 's' : ''} with outstanding balance` : 'All retainers cleared'}
                 </p>
@@ -602,7 +629,7 @@ export default function Dashboard() {
                   const outstanding = Number(f['Outstanding Amount'] || 0)
                   return (
                     <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
-                      style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
+                      style={{ background: dark ? 'rgba(255,125,128,0.06)' : 'rgba(216,95,88,0.06)', border: dark ? '1px solid rgba(255,125,128,0.12)' : '1px solid rgba(216,95,88,0.10)' }}>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{f['Client Name'] || f['Client'] || '—'}</p>
                         <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>{f['Project'] || f['Invoice Number'] || ''}{f['Raised Date'] ? ` · ${f['Raised Date'].slice(0, 7)}` : ''}</p>
@@ -632,7 +659,7 @@ export default function Dashboard() {
         const chartToProp   = chartPreset === 'custom' ? chartTo   : undefined
         const chartDaysProp = chartPreset === 'custom' ? 60 : (activePreset.days || 60)
         const labelText = chartPreset === 'custom' && chartFrom
-          ? `${chartFrom}${chartTo ? ' to ' + chartTo : ''}`
+          ? `${chartFrom}${chartTo ? ' → ' + chartTo : ''}`
           : `last ${activePreset.label}`
         return (
           <section aria-label="Invoice activity timeline">
@@ -645,9 +672,9 @@ export default function Dashboard() {
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
                     Cumulative billing · bar height = amount ·
                     <span className="inline-flex items-center gap-1 ml-1">
-                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-positive)' }} />paid
-                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: 'var(--fin-negative)' }} />overdue
-                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: 'var(--text-3)' }} />pending
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#fb7185' }} />overdue
+                      <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ background: '#94a3b8' }} />pending
                     </span>
                   </p>
                 </div>
@@ -670,7 +697,7 @@ export default function Dashboard() {
                       <input type="date" value={chartFrom} onChange={e => setChartFrom(e.target.value)}
                         className="text-[11px] px-2 py-1.5 rounded-md"
                         style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none', minHeight: 36 }} />
-                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>to</span>
+                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>→</span>
                       <input type="date" value={chartTo} onChange={e => setChartTo(e.target.value)}
                         className="text-[11px] px-2 py-1.5 rounded-md"
                         style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', color: 'var(--text-1)', outline: 'none', minHeight: 36 }} />
@@ -701,22 +728,23 @@ export default function Dashboard() {
                   {agingBuckets.total_pending} pending invoice{agingBuckets.total_pending !== 1 ? 's' : ''} · ₹{Number(agingBuckets.total_outstanding).toLocaleString('en-IN')} outstanding
                 </p>
               </div>
-              <a href="/invoices?status=Pending" className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>View all</a>
+              <a href="/invoices?status=Pending" className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>View all →</a>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(agingBuckets.buckets || []).map((b, i) => {
-                const colors = ['var(--fin-positive)', 'var(--fin-warning)', 'color-mix(in srgb, var(--fin-warning) 50%, var(--fin-negative))', 'var(--fin-negative)']
-                const color = colors[i] || 'var(--text-3)'
-                const light = `color-mix(in srgb, ${color} 9%, var(--card-bg))`
+                const colors = ['#22c55e','#eab308','#f97316','#ef4444']
+                const lightColors = ['#dcfce7','#fef9c3','#ffedd5','#fee2e2']
+                const color = colors[i] || '#6b7280'
+                const light = lightColors[i] || '#f3f4f6'
                 const pct = agingBuckets.total_outstanding > 0 ? (b.amount / agingBuckets.total_outstanding * 100) : 0
                 return (
-                  <div key={b.label} className="rounded-xl p-3" style={{ background: light, border: `1px solid color-mix(in srgb, ${color} 19%, transparent)` }}>
+                  <div key={b.label} className="rounded-xl p-3" style={{ background: light, border: `1px solid ${color}30` }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color }}>{b.label}</p>
                     <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>
                       ₹{Number(b.amount).toLocaleString('en-IN')}
                     </p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{b.count} invoice{b.count !== 1 ? 's' : ''}</p>
-                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
+                    <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: `${color}25` }}>
                       <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 9999 }} />
                     </div>
                   </div>
@@ -789,7 +817,7 @@ export default function Dashboard() {
             {loading && !data ? <SkeletonCard /> :
               s?.best_project?.name
                 ? <div className="rounded-xl p-3"
-                    style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
+                    style={{ background: 'var(--accent-dim)', border: '1px solid rgba(37,99,235,0.20)' }}>
                     <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>
                       {s.best_project.name}
                     </p>
@@ -808,7 +836,7 @@ export default function Dashboard() {
             {loading && !data ? <SkeletonCard /> :
               s?.worst_project?.name
                 ? <div className="rounded-xl p-3"
-                    style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)' }}>
+                    style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)' }}>
                     <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-1)' }}>
                       {s.worst_project.name}
                     </p>
@@ -832,13 +860,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3">
             {statusEntries.map(([status, count]) => {
               const accent = status.includes('Active')    ? 'var(--fin-positive)'
-                           : status.includes('Completed') ? 'var(--accent)'
+                           : status.includes('Completed') ? '#60a5fa'
                            : status.includes('Hold')      ? 'var(--fin-warning)'
                            : 'var(--fin-negative)'
               return (
                 <button key={status}
                   onClick={() => navigate(`/projects?status=${encodeURIComponent(status)}`)}
-                  className="card text-center transition-colors active:scale-[0.99] p-3 sm:p-5"
+                  className="card text-center transition-all hover:scale-[1.02] active:scale-[0.99] p-3 sm:p-5"
                   aria-label={`${count} ${status} projects`}>
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: accent }} />
@@ -858,7 +886,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="section-title">Top Projects by Revenue</h2>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Sorted by total billed. Click any card to open the project detail.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Sorted by total billed — click any card to open the project detail.</p>
           </div>
           <button onClick={() => navigate('/projects')}
             className="text-xs font-medium flex items-center gap-1 transition-opacity hover:opacity-70"

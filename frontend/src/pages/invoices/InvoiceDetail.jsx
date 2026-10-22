@@ -202,10 +202,10 @@ export function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment,
     {reminderModalOpen && createPortal(
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
         onClick={e => { if (e.target === e.currentTarget) { setReminderModalOpen(false); setReminderEmail('') } }}>
-        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '28px 28px 24px', width: 380, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
-          <h3 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-1)' }}>Send Payment Reminder</h3>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '28px 28px 24px', width: 380, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>Send Payment Reminder</h3>
           <p style={{ margin: '0 0 18px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Invoice <strong>{f['Invoice Number']}</strong> · {f['Client Name'] || f['Project'] || ''}
+            Invoice <strong>{f['Invoice Number']}</strong> — {f['Client Name'] || f['Project'] || ''}
           </p>
           <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>Recipient email address</label>
           <input
@@ -216,7 +216,7 @@ export function InvoiceDetail({ open, invoice, onClose, onEdit, onRecordPayment,
             onChange={e => setReminderEmail(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && reminderEmail.trim()) handleSendReminder() }}
             placeholder="client@example.com"
-            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-1)', fontSize: '0.875rem', outline: 'none' }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '0.875rem', outline: 'none' }}
           />
           <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
             <button className="btn-ghost" style={{ fontSize: '0.8rem', padding: '6px 16px' }}

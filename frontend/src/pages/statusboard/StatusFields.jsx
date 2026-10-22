@@ -69,7 +69,7 @@ export function StatusAttachmentField({ value, onChange, recordId }) {
                   </a>
                 )}
                 <button type="button" onClick={() => removeAt(index)}
-                  className="btn-icon p-1" style={{ color: 'var(--fin-negative)', opacity: 0.6 }}
+                  className="btn-icon p-1" style={{ color: '#ef4444', opacity: 0.6 }}
                   aria-label="Remove attachment" title="Remove">
                   <X size={11} />
                 </button>
@@ -88,8 +88,8 @@ export function StatusAttachmentField({ value, onChange, recordId }) {
           disabled={disabled || uploading}
           className="w-full rounded-xl border border-dashed px-3 py-4 flex items-center justify-center gap-2 text-sm font-medium transition-all"
           style={{
-            borderColor: dragOver ? 'color-mix(in srgb, var(--accent) 60%, transparent)' : (disabled ? 'var(--border)' : 'color-mix(in srgb, var(--accent) 28%, transparent)'),
-            background: dragOver ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : (disabled ? 'var(--bg-input)' : 'color-mix(in srgb, var(--accent) 4%, transparent)'),
+            borderColor: dragOver ? 'rgba(59,130,246,0.6)' : (disabled ? 'var(--border)' : 'rgba(59,130,246,0.28)'),
+            background: dragOver ? 'rgba(59,130,246,0.08)' : (disabled ? 'var(--bg-input)' : 'rgba(59,130,246,0.04)'),
             color: disabled ? 'var(--text-3)' : 'var(--text-2)',
             opacity: disabled ? 0.8 : 1,
             transform: dragOver ? 'scale(1.01)' : 'scale(1)',
@@ -105,7 +105,7 @@ export function StatusAttachmentField({ value, onChange, recordId }) {
         multiple
         onChange={e => processFiles(Array.from(e.target.files || []))}
       />
-      {uploadErr && <p className="mt-1.5 text-xs" style={{ color: 'var(--fin-negative)' }}>{uploadErr}</p>}
+      {uploadErr && <p className="mt-1.5 text-xs" style={{ color: '#ef4444' }}>{uploadErr}</p>}
     </div>
   )
 }
@@ -153,7 +153,7 @@ export function ComboBox({ value, onChange, options, placeholder, required, id }
       </div>
       {open && filtered.length > 0 && (
         <div className="absolute z-50 mt-1 w-full rounded-xl shadow-xl overflow-y-auto"
-          style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: 220, boxShadow: 'var(--shadow-popover)' }}>
+          style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: 220, boxShadow: '0 8px 32px rgba(0,0,0,0.22)' }}>
           {filtered.map(opt => (
             <button key={opt} type="button"
               className="w-full text-left px-3 py-2 text-sm transition-colors"

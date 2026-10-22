@@ -27,8 +27,8 @@ export default class ErrorBoundary extends Component {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)' }}>
-          <AlertTriangle size={28} style={{ color: 'var(--fin-negative)' }} />
+          style={{ background: 'rgba(239,68,68,0.1)', boxShadow: '0 0 24px rgba(239,68,68,0.15)' }}>
+          <AlertTriangle size={28} style={{ color: '#f87171' }} />
         </div>
         <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-1)' }}>
           Something went wrong
@@ -40,8 +40,8 @@ export default class ErrorBoundary extends Component {
         </p>
         <p className="text-xs mb-6" style={{ color: 'var(--text-3)' }}>
           {isStaleChunk
-            ? 'Reload to pick it up. Nothing you were doing has been lost.'
-            : 'The rest of the app is still working. This section failed to render.'}
+            ? 'Reload to pick it up — nothing you were doing has been lost.'
+            : 'The rest of the app is still working — this section failed to render.'}
         </p>
         <button
           onClick={() => {
@@ -49,7 +49,7 @@ export default class ErrorBoundary extends Component {
             else this.setState({ hasError: false, error: null })
           }}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-          style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}
+          style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}
         >
           <RefreshCw size={14} /> {isStaleChunk ? 'Reload' : 'Try again'}
         </button>

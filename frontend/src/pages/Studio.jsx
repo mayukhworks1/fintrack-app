@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  FileText, Upload, Trash2, ChevronDown, ChevronRight,
+  Sparkles, FileText, Upload, Trash2, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Loader2, Quote, History, BarChart3,
 } from 'lucide-react'
 import { api } from '../services/api'
@@ -72,7 +72,7 @@ function DocRow({ doc, selected, onToggle, onDelete }) {
           {doc.status === 'ready' && (
             <span>{doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.chunk_count} searchable sections</span>
           )}
-          {failed && <span style={{ color: 'var(--fin-negative)' }}>{doc.error || 'Could not be read'}</span>}
+          {failed && <span style={{ color: '#ef4444' }}>{doc.error || 'Could not be read'}</span>}
           <span>{fmtBytes(doc.byte_size)}</span>
         </div>
         {busy && (
@@ -135,8 +135,8 @@ function Answer({ turn }) {
               title={`${src.title}${src.page ? `, page ${src.page}` : ''}`}
               style={{
                 display: 'inline-flex', alignItems: 'center', verticalAlign: 'baseline',
-                background: openSource === n ? 'var(--accent-btn)' : 'var(--bg-base)',
-                color: openSource === n ? 'var(--accent-fg)' : 'var(--accent)',
+                background: openSource === n ? 'var(--accent)' : 'var(--bg-base)',
+                color: openSource === n ? '#fff' : 'var(--accent)',
                 border: '1px solid var(--accent)', borderRadius: 4,
                 fontSize: 11, fontWeight: 700, padding: '0 5px', margin: '0 2px',
                 cursor: 'pointer', lineHeight: 1.5,
@@ -171,17 +171,17 @@ function Answer({ turn }) {
         fontSize: 11, color: 'var(--text-2)', borderTop: '1px solid var(--border)', paddingTop: 10,
       }}>
         {turn.verdict === 'pass' && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--fin-positive)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16a34a' }}>
             <CheckCircle2 size={12} aria-hidden="true" /> Checked against sources
           </span>
         )}
         {turn.verdict === 'soft-fail' && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--fin-warning)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b45309' }}>
             <AlertTriangle size={12} aria-hidden="true" /> Corrected during checking
           </span>
         )}
         {turn.verdict === 'no-sources' && (
-          <span style={{ color: 'var(--fin-warning)' }}>No matching passages found</span>
+          <span style={{ color: '#b45309' }}>No matching passages found</span>
         )}
         {sources.length > 0 && <span>{sources.length} sources</span>}
         {turn.model && <span>{turn.model}</span>}
@@ -488,6 +488,7 @@ export default function Studio() {
           letterSpacing: '-0.025em', color: 'var(--text-1)',
           display: 'flex', alignItems: 'center', gap: 9,
         }}>
+          <Sparkles size={22} aria-hidden="true" style={{ color: 'var(--accent)' }} />
           Studio
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 14, color: 'var(--text-2)', lineHeight: 1.5 }}>
@@ -518,8 +519,8 @@ export default function Studio() {
                 padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
                 cursor: 'pointer',
                 border: `1px solid ${mode === key ? 'var(--accent)' : 'var(--border)'}`,
-                background: mode === key ? 'var(--accent-btn)' : 'var(--bg-base)',
-                color: mode === key ? 'var(--accent-fg)' : 'var(--text-2)',
+                background: mode === key ? 'var(--accent)' : 'var(--bg-base)',
+                color: mode === key ? '#fff' : 'var(--text-2)',
               }}
             >
               <Icon size={13} aria-hidden="true" />
@@ -565,8 +566,8 @@ export default function Studio() {
               // Previously keyed off the document count in both modes, so in
               // data mode — where documents are irrelevant — the button read as
               // disabled while still being clickable.
-              background: canAsk ? 'var(--accent-btn)' : 'var(--border)',
-              color: canAsk ? 'var(--accent-fg)' : 'var(--text-2)',
+              background: canAsk ? 'var(--accent)' : 'var(--border)',
+              color: canAsk ? '#fff' : 'var(--text-2)',
               fontSize: 14, fontWeight: 600,
               cursor: canAsk ? 'pointer' : 'default',
             }}
@@ -601,7 +602,7 @@ export default function Studio() {
 
         {/* Nothing to query is a permission fact, not a failure — say which. */}
         {mode === 'data' && datasets?.length === 0 && (
-          <div style={{ fontSize: 12, color: 'var(--fin-warning)', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: '#b45309', lineHeight: 1.5 }}>
             Your account cannot view any of the finance tables the analyst reads,
             so there is nothing here to ask about yet.
           </div>
@@ -612,14 +613,14 @@ export default function Studio() {
         {mode === 'documents' && health && ready.length > 0 && (
           <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5 }}>
             {health.semantic
-              ? `Keyword and meaning-based search: ${health.reason}.`
+              ? `Keyword and meaning-based search — ${health.reason}.`
               : health.text_search
                 ? `Keyword search over ${health.chunks.toLocaleString()} passages. Meaning-based search is off: ${health.reason}.`
-                : 'Full-text search is not available on this database. Answers fall back to plain keyword matching.'}
+                : 'Full-text search is not available on this database — answers fall back to plain keyword matching.'}
           </div>
         )}
 
-        {error && <div style={{ fontSize: 12, color: 'var(--fin-negative)' }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: '#ef4444' }}>{error}</div>}
       </div>
 
       {/* Answers, newest first */}
@@ -751,7 +752,7 @@ export default function Studio() {
                     flex: 1, minWidth: 0, fontWeight: 600, color: 'var(--text-1)',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>{up.name}</span>
-                  <span style={{ fontSize: 11, color: up.state === 'failed' ? 'var(--fin-negative)' : 'var(--text-2)', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, color: up.state === 'failed' ? '#ef4444' : 'var(--text-2)', flexShrink: 0 }}>
                     {up.state === 'failed' ? 'Failed' : up.state === 'done' ? 'Uploaded' : `${up.pct}%`}
                   </span>
                 </div>
@@ -763,7 +764,7 @@ export default function Studio() {
                     }} />
                   </div>
                 )}
-                {up.error && <div style={{ fontSize: 11, color: 'var(--fin-negative)', marginTop: 5 }}>{up.error}</div>}
+                {up.error && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 5 }}>{up.error}</div>}
               </div>
             ))}
             {docs.map(doc => (
@@ -813,7 +814,7 @@ export default function Studio() {
               </button>
               <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.5 }}>
                 Drop files here, or choose them above.<br />
-                PDF, text, Markdown, CSV or JSON, up to 15 MB each. Scanned PDFs
+                PDF, text, Markdown, CSV or JSON — up to 15 MB each. Scanned PDFs
                 need OCR before they can be read.
               </div>
             </div>
@@ -827,7 +828,7 @@ export default function Studio() {
       {quota && quota.metered && quota.limit > 0 && (
         <div style={{
           marginTop: 12, fontSize: 11, textAlign: 'right',
-          color: quota.remaining <= 10 ? 'var(--fin-warning)' : 'var(--text-2)',
+          color: quota.remaining <= 10 ? '#b45309' : 'var(--text-2)',
         }}>
           {quota.used} of {quota.limit} AI calls used in the last 24 hours
           {quota.remaining <= 10 && ` · ${quota.remaining} left`}

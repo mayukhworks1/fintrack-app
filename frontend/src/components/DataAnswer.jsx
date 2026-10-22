@@ -12,10 +12,10 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { ChevronDown, ChevronRight, Table2 } from 'lucide-react'
-import useChartColors from '../hooks/useChartColors'
 
 // Categorical series. Distinct in hue rather than lightness so they stay
 // separable on both themes and for the most common colour-vision deficiencies.
+const SERIES = ['#2563eb', '#0d9488', '#a16207', '#7c3aed', '#be185d', '#4d7c0f']
 
 function fmt(value, unit) {
   const n = Number(value)
@@ -40,7 +40,6 @@ function compact(value, unit) {
 }
 
 export default function DataAnswer({ turn }) {
-  const SERIES = useChartColors().series
   const [showSql, setShowSql] = useState(false)
   const rows = turn.rows || []
   const dimKey = (turn.columns || []).find(c => c !== 'value')
@@ -169,7 +168,7 @@ export default function DataAnswer({ turn }) {
         <span>{rows.length} row{rows.length === 1 ? '' : 's'}</span>
         {/* Named explicitly: a scoped user should know the figure is theirs
             alone, not the company's, before they quote it to anyone. */}
-        {turn.scoped && <span style={{ color: 'var(--fin-warning)' }}>your records only</span>}
+        {turn.scoped && <span style={{ color: '#b45309' }}>your records only</span>}
         {turn.model && <span>{turn.model}</span>}
         {turn.latency_ms != null && <span>{(turn.latency_ms / 1000).toFixed(1)}s</span>}
         {turn.sql && (

@@ -78,7 +78,7 @@ export function ProjectsMirrorTab() {
                         <div>
                           <p style={{ color: 'var(--text-3)' }}>Profit</p>
                           <p className="font-semibold tabular-nums"
-                            style={{ color: row.actual_profit > 0 ? 'var(--fin-positive)' : row.actual_profit < 0 ? 'var(--fin-negative)' : 'var(--text-2)' }}>
+                            style={{ color: row.actual_profit > 0 ? '#16a34a' : row.actual_profit < 0 ? '#dc2626' : 'var(--text-2)' }}>
                             {row.actual_profit != null ? `₹${Number(row.actual_profit).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
                           </p>
                         </div>
@@ -115,7 +115,7 @@ export function ProjectsMirrorTab() {
                           <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>
                             {row.amount_billed != null ? Number(row.amount_billed).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
                           </td>
-                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: row.actual_profit > 0 ? 'var(--fin-positive)' : row.actual_profit < 0 ? 'var(--fin-negative)' : 'var(--text-2)' }}>
+                          <td className="px-3 py-2 tabular-nums text-right" style={{ color: row.actual_profit > 0 ? '#16a34a' : row.actual_profit < 0 ? '#dc2626' : 'var(--text-2)' }}>
                             {row.actual_profit != null ? Number(row.actual_profit).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-right" style={{ color: 'var(--text-2)' }}>

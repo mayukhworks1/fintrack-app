@@ -51,8 +51,8 @@ export function ChatsTab() {
           <div className="space-y-2">
             {(msgs?.messages || []).map(m => (
               <div key={m.id} className={`rounded-xl p-3 ${m.role === 'user' ? 'ml-4 sm:ml-8' : 'mr-4 sm:mr-8'}`}
-                style={{ background: m.role === 'user' ? 'var(--bg-input)' : 'color-mix(in srgb, var(--accent) 6%, transparent)',
-                  border: `1px solid ${m.role === 'user' ? 'var(--border)' : 'color-mix(in srgb, var(--accent) 15%, transparent)'}` }}>
+                style={{ background: m.role === 'user' ? 'var(--bg-input)' : 'rgba(37,99,235,0.06)',
+                  border: `1px solid ${m.role === 'user' ? 'var(--border)' : 'rgba(37,99,235,0.15)'}` }}>
                 <div className="flex items-center justify-between mb-1">
                   {roleBadge(m.role)}
                   <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -104,7 +104,7 @@ export function ChatsTab() {
                         <div className="flex flex-wrap gap-1 items-center">
                           {roleBadge(row.role)}
                           <span className="text-xs font-bold tabular-nums px-2 py-0.5 rounded-full"
-                            style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>
+                            style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}>
                             {row.msg_count} msg{row.msg_count !== 1 ? 's' : ''}
                           </span>
                         </div>

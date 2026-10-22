@@ -199,7 +199,7 @@ describe('task settings', () => {
     fireEvent.click(d.getByRole('button', { name: 'Add step' }))
     fireEvent.change(d.getByLabelText('Provider for step 3'), { target: { value: 'groq' } })
     fireEvent.change(d.getByLabelText('Model for step 3'), { target: { value: 'gpt-made-up' } })
-    expect(d.getByText('Not offered by Groq. Calls to it will fail')).toBeInTheDocument()
+    expect(d.getByText('Not offered by Groq — calls to it will fail')).toBeInTheDocument()
     fireEvent.change(d.getByLabelText('Model for step 3'), { target: { value: ' openai/gpt-oss-20b ' } })
 
     fireEvent.click(d.getByRole('button', { name: 'Move step 3 up' }))
@@ -321,7 +321,7 @@ describe('providers', () => {
     expect(screen.getByText('0 of 100 requests · 0 tokens')).toBeInTheDocument()
     expect(screen.getByText('used by AI assistant chat, Build and revise pages')).toBeInTheDocument()
     // The stored Groq list lacks the judge's model; OpenRouter has no list yet, so nothing is flagged there.
-    expect(screen.getAllByText(/Calls to it will fail/)).toHaveLength(1)
+    expect(screen.getAllByText(/calls to it will fail/)).toHaveLength(1)
     expect(screen.getByText('All offered models (2)')).toBeInTheDocument()
   })
 

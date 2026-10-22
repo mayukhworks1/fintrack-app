@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
-import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
+import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Sparkles, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -26,7 +26,7 @@ import EmptyState from '../components/EmptyState'
 import { AIUpdateModal, AppearancePanel, ColumnSelector, ConfirmModal, ManageSharesModal, SavedViewsMenu, ShareModal, StatusModal } from './statusboard/StatusModals'
 import { DetailPanel, KanbanColumn, ListViewRow, StatusCard, StatusDashboard } from './statusboard/StatusViews'
 import { useRecordMotion } from '../hooks/useRecordMotion'
-import { BOARD_GROUP_OPTIONS, CARD_GROUP_OPTIONS, CARD_GROUP_SORT_OPTIONS, CARD_RECORD_SORT_OPTIONS, DEFAULT_COLUMNS, LIST_COLUMN_META, STATUS_FILTER_FIELDS, STATUS_OPTIONS_FALLBACK, clientColor, encodeViewConfig, getListLayout, getViewConfigFromUrl, hexToRgba, resolveTheme, sanitizeAttachmentsForSave, statusStyle } from './statusboard/utils'
+import { BOARD_GROUP_OPTIONS, CARD_GROUP_OPTIONS, CARD_GROUP_SORT_OPTIONS, CARD_RECORD_SORT_OPTIONS, DEFAULT_COLUMNS, EXECUTIVE_VARS_DARK, EXECUTIVE_VARS_LIGHT, LIST_COLUMN_META, STATUS_FILTER_FIELDS, STATUS_OPTIONS_FALLBACK, clientColor, encodeViewConfig, getListLayout, getViewConfigFromUrl, hexToRgba, resolveTheme, sanitizeAttachmentsForSave, statusStyle } from './statusboard/utils'
 import SkeletonList from '../components/SkeletonList'
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -319,14 +319,13 @@ export default function StatusBoard() {
     if (!activeCounts.length) return null
     return [...activeCounts].sort((a, b) => b.count - a.count)[0]
   }, [statusCounts])
-  // The default board theme follows the app palette; the other presets are a
-  // per-board accent the owner picked, so they override it.
-  const boardVars = useMemo(() => (theme.id === 'cobalt' ? {} : {
+  const executiveVars = dark ? EXECUTIVE_VARS_DARK : EXECUTIVE_VARS_LIGHT
+  const boardVars = useMemo(() => ({
+    ...executiveVars,
     '--accent': theme.accent,
-    '--accent-ink': theme.accent,
     '--accent-dim': theme.accentDim,
     '--accent-soft': theme.accentSoft,
-  }), [theme])
+  }), [theme, executiveVars])
 
   function toggleSelect(id) {
     setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -489,22 +488,24 @@ export default function StatusBoard() {
         <div
           className="rounded-[30px] border p-4 sm:p-5 space-y-5"
           style={{
-            background: 'var(--card-bg)',
-            borderColor: 'var(--border)',
-            boxShadow: 'var(--card-shadow)',
+            background: dark
+              ? 'radial-gradient(circle at top left, rgba(125,149,255,0.14), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)'
+              : 'radial-gradient(circle at top left, rgba(75,103,255,0.10), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,255,0.94) 100%)',
+            borderColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)',
+            boxShadow: dark ? '0 24px 60px rgba(0,0,0,0.26)' : '0 24px 60px rgba(15,23,42,0.08)',
           }}
         >
           <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-12 h-12 rounded-[18px] flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)', boxShadow: 'var(--shadow-sm)' }}>
+                style={{ background: dark ? 'rgba(125,149,255,0.16)' : 'rgba(75,103,255,0.10)', border: dark ? '1px solid rgba(125,149,255,0.24)' : '1px solid rgba(75,103,255,0.14)', boxShadow: dark ? 'inset 0 1px 0 rgba(255,255,255,0.06)' : 'inset 0 1px 0 rgba(255,255,255,0.8)' }}>
                 <Activity size={19} style={{ color: 'var(--accent)' }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: 'var(--accent)' }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] mb-2" style={{ color: 'var(--accent)' }}>
                   Portfolio command board
                 </p>
-                <h1 className="text-[32px] sm:text-[36px] font-semibold leading-[0.95] tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>
+                <h1 className="text-[32px] sm:text-[36px] font-semibold leading-[0.95] tracking-[-0.04em]" style={{ color: 'var(--text-1)' }}>
                   Status Board
                 </h1>
                 <p className="text-sm mt-3 leading-6 max-w-2xl" style={{ color: 'var(--text-3)' }}>
@@ -581,7 +582,7 @@ export default function StatusBoard() {
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 w-full xl:w-auto">
                   {viewType === 'board' && (
                     <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Group by</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group by</span>
                       <select
                         className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                         value={boardGroupBy}
@@ -598,7 +599,7 @@ export default function StatusBoard() {
                   {viewType === 'card' && (
                     <>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[180px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Group</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Group</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardGroupBy}
@@ -611,7 +612,7 @@ export default function StatusBoard() {
                         </select>
                       </label>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[210px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Order</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Order</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardGroupSort}
@@ -624,7 +625,7 @@ export default function StatusBoard() {
                         </select>
                       </label>
                       <label className="rounded-2xl px-3 py-2 flex items-center gap-2 min-w-[190px]" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] shrink-0" style={{ color: 'var(--text-3)' }}>Cards</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] shrink-0" style={{ color: 'var(--text-3)' }}>Cards</span>
                         <select
                           className="bg-transparent text-sm font-semibold min-w-0 flex-1 outline-none"
                           value={cardRecordSort}
@@ -643,7 +644,7 @@ export default function StatusBoard() {
                         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
                         title={allExpanded ? 'Collapse all cards' : 'Expand all cards'}
                       >
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>
                           Details
                         </span>
                         <span className="flex items-center gap-1.5 text-sm font-semibold">
@@ -684,23 +685,23 @@ export default function StatusBoard() {
 
           {!loading && !error && records.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>All tracked</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{records.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{allClients.length} distinct clients</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Visible now</p>
                 <p className="text-2xl font-semibold mt-2 tabular-nums" style={{ color: 'var(--text-1)' }}>{filtered.length}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{advancedConditions.length ? `${advancedConditions.length} advanced rule${advancedConditions.length !== 1 ? 's' : ''}` : 'No advanced rules'}</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'var(--fin-pos-bg)', border: '1px solid var(--fin-pos-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(132,226,84,0.08)' : 'rgba(22,145,95,0.08)', border: dark ? '1px solid rgba(132,226,84,0.12)' : '1px solid rgba(22,145,95,0.12)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Main signal</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--fin-positive)' }}>{topStatusSignal?.status || 'No active statuses'}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{topStatusSignal ? `${topStatusSignal.count} project${topStatusSignal.count === 1 ? '' : 's'} currently in this state` : 'Waiting for live status records'}</p>
               </div>
-              <div className="rounded-[24px] p-4" style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
-                <p className="text-[11px] uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
+              <div className="rounded-[24px] p-4" style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(245,247,251,0.86)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
+                <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--text-3)' }}>Board mode</p>
                 <p className="text-lg font-semibold mt-2" style={{ color: 'var(--text-1)' }}>
                   {viewType === 'card' ? 'Client cards' : viewType === 'list' ? 'Operational list' : 'Kanban board'}
                 </p>
@@ -722,7 +723,7 @@ export default function StatusBoard() {
         )}
 
         {/* ── Filter bar ── */}
-        <div className="rounded-[24px] p-3 sm:p-4" style={{ background: 'var(--glass-bg)', border: '1px solid var(--card-border)' }}>
+        <div className="rounded-[24px] p-3 sm:p-4" style={{ background: dark ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.78)', border: dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
@@ -747,8 +748,8 @@ export default function StatusBoard() {
               onClick={hasSelection && selectedIds.size === filtered.length ? clearSelection : selectAll}
               className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5 whitespace-nowrap">
               <div className="w-3.5 h-3.5 rounded flex items-center justify-center"
-                style={{ background: hasSelection && selectedIds.size === filtered.length ? 'var(--accent-btn)' : 'var(--bg-input)', border: `1.5px solid ${hasSelection && selectedIds.size === filtered.length ? 'var(--accent-btn)' : 'var(--border)'}` }}>
-                {hasSelection && selectedIds.size === filtered.length && <Check size={9} color="var(--accent-fg)" strokeWidth={3} />}
+                style={{ background: hasSelection && selectedIds.size === filtered.length ? 'var(--accent)' : 'var(--bg-input)', border: `1.5px solid ${hasSelection && selectedIds.size === filtered.length ? 'var(--accent)' : 'var(--border)'}` }}>
+                {hasSelection && selectedIds.size === filtered.length && <Check size={9} color="#fff" strokeWidth={3} />}
               </div>
               {hasSelection && selectedIds.size === filtered.length ? 'Deselect all' : 'Select all'}
             </button>
@@ -831,10 +832,10 @@ export default function StatusBoard() {
         {/* ── Error ── */}
         {!loading && error && (
           <div className="flex items-start gap-3 p-4 rounded-xl"
-            style={{ background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)' }}>
-            <AlertCircle size={16} style={{ color: 'var(--fin-negative)', flexShrink: 0, marginTop: 1 }} />
+            style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)' }}>
+            <AlertCircle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--fin-negative)' }}>Failed to load</p>
+              <p className="text-sm font-medium" style={{ color: '#ef4444' }}>Failed to load</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{error}</p>
               <button onClick={load} className="text-xs font-semibold mt-2" style={{ color: 'var(--accent)' }}>Retry</button>
             </div>
@@ -932,11 +933,11 @@ export default function StatusBoard() {
 
         {/* ══ LIST VIEW ══ */}
         {!loading && !error && filtered.length > 0 && viewType === 'list' && (
-          <div className="rounded-[24px] overflow-hidden" style={{ border: '1px solid var(--card-border)', background: 'var(--glass-bg)', boxShadow: 'var(--card-shadow)' }}>
+          <div className="rounded-[24px] overflow-hidden" style={{ border: dark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)', background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.94)', boxShadow: dark ? '0 18px 40px rgba(0,0,0,0.24)' : '0 18px 40px rgba(15,23,42,0.08)' }}>
             <div className="overflow-x-auto">
               <div className="min-w-full">
-                <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.06em]"
-                  style={{ gridTemplateColumns: listLayout.gridTemplateColumns, minWidth: listLayout.minWidth, background: 'var(--bg-2)', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
+                <div className="grid gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em]"
+                  style={{ gridTemplateColumns: listLayout.gridTemplateColumns, minWidth: listLayout.minWidth, background: 'linear-gradient(180deg, rgba(248,250,252,0.98), rgba(241,245,249,0.98))', color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>
                   <span />
                   {listLayout.active.map(col => (
                     <span key={col} className="min-w-0 truncate">{LIST_COLUMN_META[col]?.label || col}</span>
@@ -978,9 +979,9 @@ export default function StatusBoard() {
           <div>
             {isEditor && !boardIsDraggable && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3 text-xs font-medium"
-                style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)', color: 'var(--fin-warning)' }}>
+                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#d97706' }}>
                 <GripVertical size={12} />
-                Grouped by <strong>{boardGroupBy}</strong>. Drag &amp; drop is disabled. Switch "Group by" to <strong>Status</strong> to move cards between columns.
+                Grouped by <strong>{boardGroupBy}</strong> — drag &amp; drop is disabled. Switch "Group by" to <strong>Status</strong> to move cards between columns.
               </div>
             )}
             {isEditor && boardIsDraggable && (
@@ -1029,7 +1030,7 @@ export default function StatusBoard() {
             style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(15,23,42,0.2), 0 0 0 1px rgba(255,255,255,0.05)' }}>
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-xl flex items-center justify-center"
-                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)', fontSize: '11px', fontWeight: 700 }}>
+                style={{ background: 'var(--accent)', color: '#fff', fontSize: '11px', fontWeight: 700 }}>
                 {selectedIds.size}
               </div>
               <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
@@ -1039,12 +1040,12 @@ export default function StatusBoard() {
             <div className="flex items-center gap-2">
               <button onClick={() => setAiModal(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl transition-all"
-                style={{ background: 'var(--accent-dim)', color: 'var(--accent-ink)', border: '1px solid var(--accent-soft)' }}>
-                <span>Draft update</span>
+                style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.25)' }}>
+                <Sparkles size={13} /> <span className="hidden sm:inline">AI Update</span>
               </button>
               <button onClick={() => setShareModal(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl transition-all"
-                style={{ background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--card-border)' }}>
+                style={{ background: 'rgba(14,165,233,0.12)', color: '#0ea5e9', border: '1px solid rgba(14,165,233,0.25)' }}>
                 <Share2 size={13} /> <span className="hidden sm:inline">Share</span>
               </button>
               <button aria-label="Clear selection" onClick={clearSelection} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}>

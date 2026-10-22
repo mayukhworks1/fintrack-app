@@ -59,7 +59,7 @@ export default function StreamingDraft({ content = '', label = 'Writing the page
               <span key={`${s}-${i}`} style={{
                 padding: '1px 7px', borderRadius: 99, fontSize: 10, fontWeight: 600,
                 background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                color: 'var(--accent-ink, var(--accent))',
+                color: 'var(--accent)',
               }}>{s}</span>
             ))}
           </span>

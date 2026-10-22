@@ -71,7 +71,7 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-          A few questions before drafting the page
+          🎯 A few questions to craft the perfect page
         </span>
       </div>
 
@@ -101,12 +101,12 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
                     padding: '5px 12px',
                     borderRadius: 99,
                     border: isSelected
-                      ? '1.5px solid var(--accent)'
+                      ? '1.5px solid var(--accent, #3b82f6)'
                       : '1px solid var(--border)',
                     background: isSelected
-                      ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
+                      ? 'color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent)'
                       : 'var(--bg-base, #f8fafc)',
-                    color: isSelected ? 'var(--accent)' : 'var(--text-2)',
+                    color: isSelected ? 'var(--accent, #3b82f6)' : 'var(--text-2)',
                     cursor: disabled ? 'default' : 'pointer',
                     fontWeight: isSelected ? 600 : 400,
                     transition: 'all .15s ease',
@@ -164,7 +164,7 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
             cursor: disabled ? 'default' : 'pointer',
           }}
         >
-          Skip and use the prompt as-is
+          Skip — use prompt as-is
         </button>
         <button
           type="button"
@@ -176,13 +176,13 @@ export default function AgentInterviewCard({ questions: raw = [], onSubmit, onSk
             padding: '6px 16px',
             borderRadius: 'var(--radius, 8px)',
             border: 'none',
-            background: 'var(--accent)',
-            color: 'var(--accent-fg)',
+            background: 'var(--accent, #3b82f6)',
+            color: '#fff',
             cursor: disabled ? 'default' : 'pointer',
             opacity: disabled ? 0.6 : 1,
           }}
         >
-          Generate with preferences
+          ✨ Generate with preferences
         </button>
       </div>
     </div>

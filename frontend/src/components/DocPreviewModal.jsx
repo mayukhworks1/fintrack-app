@@ -19,7 +19,6 @@ import {
   ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight,
   File, FileSpreadsheet, Presentation,
 } from 'lucide-react'
-import { tint } from '../utils/color'
 
 /* ── file-type detection ─────────────────────────────────────────────────── */
 
@@ -49,12 +48,12 @@ function isOffice(a){ return isWord(a) || isExcel(a) || isPpt(a) }
 function isGdocsViewable(a) { return isPdf(a) || isOffice(a) }
 
 export function fileTypeInfo(a) {
-  if (isImage(a))  return { color: 'var(--accent)', bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  label: 'Image',  Icon: ImageIcon }
-  if (isPdf(a))    return { color: 'var(--fin-negative)', bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)',   label: 'PDF',    Icon: FileText }
-  if (isWord(a))   return { color: 'var(--accent)', bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',   label: 'Word',   Icon: FileText }
-  if (isExcel(a))  return { color: 'var(--fin-positive)', bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)',   label: 'Excel',  Icon: FileSpreadsheet }
-  if (isPpt(a))    return { color: 'var(--fin-warning)', bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',   label: 'PPT',    Icon: Presentation }
-  return            { color: 'var(--text-3)', bg: 'rgba(100,116,139,0.12)', label: extOf(a).toUpperCase() || 'File', Icon: File }
+  if (isImage(a))  return { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  label: 'Image',  Icon: ImageIcon }
+  if (isPdf(a))    return { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   label: 'PDF',    Icon: FileText }
+  if (isWord(a))   return { color: '#2563eb', bg: 'rgba(37,99,235,0.12)',   label: 'Word',   Icon: FileText }
+  if (isExcel(a))  return { color: '#16a34a', bg: 'rgba(22,163,74,0.12)',   label: 'Excel',  Icon: FileSpreadsheet }
+  if (isPpt(a))    return { color: '#d97706', bg: 'rgba(217,119,6,0.12)',   label: 'PPT',    Icon: Presentation }
+  return            { color: '#64748b', bg: 'rgba(100,116,139,0.12)', label: extOf(a).toUpperCase() || 'File', Icon: File }
 }
 
 /* ── Google Docs Viewer URL ───────────────────────────────────────────────── */
@@ -84,7 +83,7 @@ function PreviewBody({ doc }) {
       <div className="flex-1 overflow-auto flex items-center justify-center min-h-0 relative"
         style={{ background: 'var(--bg-base)', padding: '1.5rem' }}>
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg z-10"
-          style={{ background: 'rgba(0,0,0,0.55)' }}>
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
           <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}
             className="w-7 h-7 flex items-center justify-center rounded opacity-80 hover:opacity-100" style={{ color: '#fff' }} title="Zoom out">
             <ZoomOut size={13} />
@@ -222,7 +221,7 @@ function ThumbnailStrip({ docs, idx, onSelect }) {
               gap: 5,
               maxWidth: 140,
               background: active ? info.bg : 'transparent',
-              border: `1px solid ${active ? tint(info.color, 0.27) : 'var(--card-border)'}`,
+              border: `1px solid ${active ? info.color + '44' : 'var(--card-border)'}`,
               color: active ? info.color : 'var(--text-3)',
               transition: 'all 0.15s',
             }}>
@@ -267,7 +266,7 @@ export function DocPreviewModal({ state, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-stretch overlay-safe" role="dialog" aria-modal="true" aria-label={`Preview: ${doc?.name}`}>
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)' }} onClick={onClose} />
       <div className="relative flex flex-col w-full m-3 sm:m-6 rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', zIndex: 1 }}>
 
@@ -350,7 +349,7 @@ export function AttachmentList({ attachments, onPreview, compact = false }) {
               border: '1px solid var(--border)',
             }}
             onClick={() => onPreview && onPreview(index)}
-            onMouseEnter={e => e.currentTarget.style.borderColor = tint(info.color, 0.33)}
+            onMouseEnter={e => e.currentTarget.style.borderColor = info.color + '55'}
             onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
             <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
               style={{ background: info.bg }}>

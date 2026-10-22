@@ -11,7 +11,6 @@ import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLink
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import { formatInr, formatPct } from '../utils/format'
-import { plainLabel } from '../utils/plainLabel'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -307,14 +306,14 @@ export default function Projects() {
             className="flex items-center justify-center gap-1.5 px-3 rounded-xl text-sm transition-all min-h-[42px]"
             style={{
               background: showFilters || activeFilters.length ? 'var(--accent-dim)' : 'var(--bg-input)',
-              border: `1px solid ${showFilters || activeFilters.length ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'var(--border)'}`,
+              border: `1px solid ${showFilters || activeFilters.length ? 'rgba(37,99,235,0.25)' : 'var(--border)'}`,
               color: showFilters || activeFilters.length ? 'var(--fin-positive)' : 'var(--text-2)',
             }}>
             <SlidersHorizontal size={14} aria-hidden="true" />
             <span className="hidden sm:inline">Filters</span>
             {activeFilters.length > 0 && (
               <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>{activeFilters.length}</span>
+                style={{ background: 'var(--accent)', color: '#fff' }}>{activeFilters.length}</span>
             )}
           </button>
             </ExecutiveFilterBar>
@@ -324,7 +323,7 @@ export default function Projects() {
           <div className="project-filter-grid filter-expanded-panel animate-slide-up">
             <SelectFilter value={status} onChange={v => setFilter('status', v)} label="Filter by status">
               <option value="">All statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{plainLabel(s)}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </SelectFilter>
 
             <SelectFilter value={client} onChange={v => setFilter('client', v)} label="Filter by client">
@@ -370,7 +369,7 @@ export default function Projects() {
                     <ExecutiveChip accent>Review</ExecutiveChip>
                   </div>
                   <p className="signal-list-copy">
-                    {plainLabel(row.fields?.['Health']) || 'Review project health, margin, and delivery status'}
+                    {row.fields?.['Health'] || 'Review project health, margin, and delivery status'}
                   </p>
                 </button>
               ))}
@@ -380,7 +379,7 @@ export default function Projects() {
           )}
           {topClients.length > 0 && (
             <div className="mt-4 space-y-2 rounded-2xl p-3" style={{ background: 'var(--fin-warn-bg)', border: '1px solid var(--fin-warn-border)' }}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--fin-warning)' }}>Client concentration</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'var(--fin-warning)' }}>Client concentration</p>
               {topClients.map(([name, count]) => (
                 <button
                   key={name}

@@ -107,7 +107,7 @@ describe('the sandbox', () => {
     const { container } = render(<DemoWorkspace />)
     TABS.forEach((tab, i) => {
       fireEvent.keyDown(frame(container), { key: String(i + 1) })
-      expect(screen.getByText(new RegExp(`Sample workspace / ${tab.label}`)))
+      expect(screen.getByText(new RegExp(`fintrack — ${tab.label.toLowerCase()}`)))
         .toBeInTheDocument()
     })
   })
@@ -118,7 +118,7 @@ describe('the sandbox', () => {
     const { container } = render(<DemoWorkspace />)
     const search = screen.getByLabelText(/Search the sample invoices/)
     fireEvent.keyDown(search, { key: '4' })
-    expect(screen.getByText(new RegExp(`Sample workspace / ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`fintrack — ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
   })
 
   it('filters, and the footer total is the rows that survived', () => {
@@ -165,7 +165,7 @@ describe('the sandbox', () => {
     fireEvent.click(rail.getByRole('button', { name: 'Ageing' }))
     fireEvent.click(screen.getByRole('button', { name: /61–90 days/ }))
     // It should land on the invoice list, filtered, with something in it.
-    expect(screen.getByText(new RegExp(`Sample workspace / ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`fintrack — ${labelFor('receivables')}`, 'i'))).toBeInTheDocument()
     expect(screen.getByText(/Ageing: 61–90 days/)).toBeInTheDocument()
     expect(rows(container).length).toBeGreaterThan(0)
   })

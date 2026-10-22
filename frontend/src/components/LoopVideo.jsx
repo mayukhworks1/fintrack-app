@@ -1,49 +1,50 @@
 import { forwardRef } from 'react'
-import InViewVideo from './motion/InViewVideo'
-import { videoForSrc } from './motion/media'
 
 /**
- * A decorative motion loop: a thin wrapper over InViewVideo.
+ * A decorative motion loop.
  *
- * It used to be a bare <video autoPlay loop>, so every loop on the public
- * pages started downloading on load, played under reduced motion and kept
- * playing off screen and in a background tab, with nothing to stop it. Now
- * it is InViewVideo in decorative mode, which means:
+ * Every ambient loop on the public pages goes through here, for three reasons
+ * that were previously repeated — or forgotten — at nine separate call sites.
  *
- *   - preload="none" and a poster: no video bytes until it is on screen;
- *   - it plays only while at least half of it is visible and the tab is
- *     showing, and never by itself under reduced motion or Save-Data;
- *   - a pause button (these loops run 8 seconds), visible on hover, focus
- *     and touch, and whenever the loop is paused;
- *   - WebM first, the mp4 as the fallback, chosen at first play.
+ * It reads as an animation, not as a video player: no controls, no
+ * picture-in-picture, no download entry in the context menu, and the context
+ * menu itself suppressed. None of that secures the file. The URL is in the
+ * page and anyone who opens devtools has it; this only stops the asset being
+ * lifted by an accidental right-click, which is what was actually asked for.
  *
- * It still reads as an animation rather than a player: no native controls,
- * no picture-in-picture, no download entry, the context menu suppressed, and
- * aria-hidden, because a decorative loop carries nothing a screen reader
- * needs. None of that secures the file; it only stops an accidental
- * right-click lifting it.
+ * It serves WebM first. These autoplay on load, so their weight is paid by
+ * every visitor whether or not they look: 7.0MB of H.264 against 2.1MB of
+ * VP9 across the three clips. The mp4 stays as the fallback because Safari
+ * does not decode VP9 on every version still in use.
  *
- * Callers name the mp4 (`src`); the WebM sits beside it under the same stem,
- * and the poster and size come from the media registry when the file is
- * registered there. `poster` overrides it. The ref still reaches the <video>
- * element, so a caller that restarts the loop keeps working.
+ * It is aria-hidden. These carry no information a screen reader needs, and
+ * announcing a decorative loop is noise.
  */
-const LoopVideo = forwardRef(function LoopVideo({ src, poster, className = '', style }, ref) {
-  const known = videoForSrc(src)
+/* Forwards its ref: ProductMediaShowcase restarts the loop from the top when
+   its tab changes, so the new subject is not joined halfway through the last
+   one's motion. Without forwarding, that ref silently points at nothing and the
+   restart quietly stops happening — no error, just a behaviour that is gone. */
+const LoopVideo = forwardRef(function LoopVideo({ src, className = '', style }, ref) {
+  // Callers name the mp4; the WebM sits beside it under the same stem.
+  const webm = src.replace(/\.mp4$/, '.webm')
   return (
-    <InViewVideo
+    <video
       ref={ref}
-      decorative
-      reserve={false}
-      mp4={src}
-      webm={known?.webm ?? src.replace(/\.mp4$/, '.webm')}
-      poster={poster ?? known?.poster}
-      width={known?.w}
-      height={known?.h}
+      autoPlay
+      loop
+      muted
+      playsInline
+      controls={false}
+      controlsList="nodownload noplaybackrate noremoteplayback"
+      disablePictureInPicture
+      onContextMenu={e => e.preventDefault()}
+      aria-hidden="true"
       className={className}
-      videoClassName={className}
       style={style}
-    />
+    >
+      <source src={webm} type="video/webm" />
+      <source src={src} type="video/mp4" />
+    </video>
   )
 })
 

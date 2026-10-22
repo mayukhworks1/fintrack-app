@@ -45,7 +45,7 @@ export function AiGatewayTasks({ tasks, providers, labels, readOnly, onChanged }
         </div>
         {groups.map(([module, list]) => (
           <div key={module} className="px-4 pb-1">
-            <p className="pt-3 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--text-3)' }}>{module}</p>
+            <p className="pt-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{module}</p>
             <ul>
               {list.map((task, i) => (
                 <TaskRow key={task.key} task={task} labels={labels} first={i === 0}

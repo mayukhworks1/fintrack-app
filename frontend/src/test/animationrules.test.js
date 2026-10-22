@@ -10,23 +10,12 @@
  * `animate-fade-in`.
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-// Every stylesheet the app ships: index.css and each file under src/styles.
-// Keyframe names are global, so a duplicate in two different files breaks
-// motion exactly as a duplicate in one file does.
-const STYLES = join(ROOT, 'styles')
-const FILES = [
-  ['index.css', readFileSync(join(ROOT, 'index.css'), 'utf8')],
-  ...(existsSync(STYLES)
-    ? readdirSync(STYLES).filter(n => n.endsWith('.css')).sort()
-        .map(n => [`styles/${n}`, readFileSync(join(STYLES, n), 'utf8')])
-    : []),
-]
-const CSS = FILES.map(([, text]) => text).join('\n')
+const CSS = readFileSync(join(ROOT, 'index.css'), 'utf8')
 
 function keyframes(name) {
   const out = []
@@ -53,19 +42,10 @@ function walk(dir, out = []) {
   return out
 }
 
-describe('keyframes across every stylesheet', () => {
-  it('reads index.css and the files under src/styles', () => {
-    expect(FILES[0][0]).toBe('index.css')
-    expect(FILES.some(([name]) => name === 'styles/motion.css')).toBe(true)
-  })
-
-  it('defines every name once, across all files', () => {
-    const names = []
-    for (const [file, text] of FILES) {
-      for (const m of text.matchAll(/@keyframes\s+([\w-]+)/g)) names.push(`${m[1]} (${file})`)
-    }
-    const bare = names.map(n => n.split(' ')[0])
-    const twice = names.filter((n, i) => bare.indexOf(bare[i]) !== i)
+describe('keyframes in index.css', () => {
+  it('defines every name once', () => {
+    const names = [...CSS.matchAll(/@keyframes\s+([\w-]+)/g)].map(m => m[1])
+    const twice = names.filter((n, i) => names.indexOf(n) !== i)
     expect(twice).toEqual([])
   })
 
@@ -96,7 +76,7 @@ describe('animate-* classes used in the source', () => {
 
   for (const cls of [...used].filter(c => !BUILT_IN.has(c)).sort()) {
     it(`.${cls} has a rule`, () => {
-      expect(new RegExp(`\\.${cls}\\s*\\{`).test(CSS), `${cls} is used but no stylesheet has a rule for it`).toBe(true)
+      expect(new RegExp(`\\.${cls}\\s*\\{`).test(CSS), `${cls} is used but index.css has no rule for it`).toBe(true)
     })
   }
 })

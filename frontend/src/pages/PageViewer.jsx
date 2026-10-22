@@ -41,9 +41,10 @@ function BrandMark({ size = 22 }) {
 function BrandScreen({ icon, title, message, docTitle, children }) {
   usePageMeta({ title: docTitle || title })
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', background: 'var(--pv-bg)', fontFamily: 'var(--font-sans)' }}>
-      <div style={{ width: '100%', maxWidth: 420, background: 'var(--pv-card)', border: '1px solid var(--pv-line)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 1px 2px rgba(15,23,42,0.06)' }}>
-                <div style={{ padding: '36px 32px 32px', textAlign: 'center' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', background: 'radial-gradient(1200px 600px at 50% -10%, var(--pv-accent-soft), var(--pv-bg) 60%)', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ width: '100%', maxWidth: 420, background: 'var(--pv-card)', border: '1px solid var(--pv-line)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 20px 60px rgba(15,23,42,0.12)' }}>
+        <div style={{ height: 4, background: 'linear-gradient(90deg,#2563eb,#7c3aed)' }} />
+        <div style={{ padding: '36px 32px 32px', textAlign: 'center' }}>
           <div aria-hidden="true" style={{ width: 56, height: 56, margin: '0 auto 18px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--pv-accent-soft)', color: '#2563eb' }}>
             {icon}
           </div>
@@ -216,7 +217,7 @@ function ReadingProgress() {
   }, [])
   return (
     <div style={{ position:'fixed', top:0, left:0, right:0, height:3, zIndex:9999, background:'var(--pv-line)' }}>
-      <div style={{ height:'100%', background:'#2563eb', width:`${pct}%`, transition:'width .1s' }} />
+      <div style={{ height:'100%', background:'linear-gradient(90deg,#2563eb,#7c3aed)', width:`${pct}%`, transition:'width .1s' }} />
     </div>
   )
 }
@@ -300,7 +301,7 @@ function PasswordPrompt({ title, onSubmit, error, loading }) {
         </div>
         {error && <div id="pv-pw-err" role="alert" style={{ color: '#ef4444', fontSize: 13, marginTop: 8 }}>{error}</div>}
         <button type="submit" disabled={loading || !pw}
-          style={{ width: '100%', marginTop: 14, padding: '12px 0', background: '#2563eb', opacity: loading || !pw ? 0.6 : 1, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading || !pw ? 'default' : 'pointer' }}>
+          style={{ width: '100%', marginTop: 14, padding: '12px 0', background: 'linear-gradient(90deg,#2563eb,#4f46e5)', opacity: loading || !pw ? 0.6 : 1, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading || !pw ? 'default' : 'pointer' }}>
           {loading ? 'Checking…' : 'Open page'}
         </button>
       </form>
@@ -349,8 +350,8 @@ function FloatingShare() {
   return (
     <>
       <button onClick={copy} title="Share this page"
-        style={{ position:'fixed', bottom:24, right:24, zIndex:999, background:'#2563eb', color:'#fff', border:'none', borderRadius:50, padding:'11px 18px', fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 1px 2px rgba(15,23,42,0.2)', display:'flex', alignItems:'center', gap:6 }}>
-        Share
+        style={{ position:'fixed', bottom:24, right:24, zIndex:999, background:'#2563eb', color:'#fff', border:'none', borderRadius:50, padding:'11px 18px', fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 16px rgba(37,99,235,0.4)', display:'flex', alignItems:'center', gap:6 }}>
+        ↗ Share
       </button>
       {toast && (
         <div style={{ position:'fixed', bottom:76, right:24, zIndex:1000, background:'var(--pv-ink)', color:'var(--pv-subtle)', padding:'8px 14px', borderRadius:8, fontSize:13, fontWeight:500, boxShadow:'0 4px 12px rgba(0,0,0,0.25)' }}>
@@ -381,7 +382,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   // no business advertising the tool that published it.
   usePageMeta({
     title: title ? (isHtml ? title : `${title} — FinTrack Pages`) : undefined,
-    description: title ? (description || `${title}, shared via FinTrack Pages`) : undefined,
+    description: title ? (description || `${title} — shared via FinTrack Pages`) : undefined,
   })
 
   // og:url and og:type are specific to a published page and have no equivalent
@@ -431,7 +432,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
             <span style={{ fontSize: 12, color: 'var(--pv-mute)' }}>Powered by FinTrack Pages</span>
             <button onClick={()=>window.scrollTo({top:0,behavior:'smooth'})}
               style={{ fontSize:12, color:'var(--pv-mute)', background:'none', border:'1px solid var(--pv-line)', borderRadius:6, padding:'4px 10px', cursor:'pointer' }}>
-              Back to top
+              ↑ Back to top
             </button>
           </footer>
         </div>

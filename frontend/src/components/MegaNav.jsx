@@ -28,7 +28,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { usePresence } from '../hooks/usePresence'
+import {
+  GlyphOneRecord, GlyphModules, GlyphLayers,
+  GlyphPermissions, GlyphSwitches, GlyphQA,
+} from './Glyphs'
 
 /* Each entry names a page that exists and says what is on it. A menu that
    promises something the page does not deliver is worse than no menu. */
@@ -40,17 +43,17 @@ export const NAV = [
     items: [
       {
         to: '/', label: 'Overview',
-        blurb: 'Delivery and the money for it, with a sample workspace you can use.',
+        blurb: 'Delivery and the money for it — and a working copy you can drive.',
         visual: 'oneRecord',
       },
       {
         to: '/features', label: 'Features',
-        blurb: 'Eleven modules, from receivables and GST to audit, each on a real screen.',
+        blurb: 'Eleven modules — delivery, receivables, tax, audit — one at a time.',
         visual: 'modules',
       },
       {
         to: '/how-it-works', label: 'How it works',
-        blurb: 'Your records stay where they are, and every answer shows its query.',
+        blurb: 'Nothing to migrate, and why an answer here can be checked.',
         visual: 'layers',
       },
     ],
@@ -82,35 +85,38 @@ export const NAV = [
 /** Every page in the nav, flattened — the mobile sheet and the footer use it. */
 export const ALL_PAGES = NAV.flatMap(g => g.items)
 
-/**
- * What shipped most recently, under the Product items and at the top of the
- * phone menu. Deliberately not an entry in NAV: it points into a page, not
- * at one, and NAV holds only whole routes.
- */
-export function NewStrip({ onClick }) {
-  return (
-    <Link to="/features#shipped" className="ft-m-new" onClick={onClick}>
-      <span className="ft-m-new-badge">New</span>
-      <span className="flex-1">Pages: spreadsheets, link previews and view counts</span>
-    </Link>
-  )
+/* Keyed by subject, not by shape. The previous map had four entries for six
+   destinations, so two of them were always showing another page's picture. */
+const VISUALS = {
+  oneRecord: <GlyphOneRecord />,
+  modules: <GlyphModules />,
+  layers: <GlyphLayers />,
+  permissions: <GlyphPermissions />,
+  switches: <GlyphSwitches />,
+  qa: <GlyphQA />,
 }
 
 /**
- * The dropdown itself. It stays mounted through its exit, so closing is the
- * opening run backwards, and pointing back in mid-close turns it round from
- * where it is (usePresence, and transitions in index.css).
+ * The panel's right half: a glance at the page being pointed at.
+ *
+ * The caption is gone. It printed the page name, which is already set in bold
+ * in the row the pointer is resting on — the same word twice in one panel,
+ * and a rule drawn under a picture to hold it. If the drawing needs a label
+ * naming the thing it is next to, the drawing is not doing its job; the fix
+ * was to make the drawing say something, not to caption it.
  */
-function MegaPanel({ open, fine, onEnter, onLeave, children }) {
-  const ref = useRef(null)
-  const [mounted, state] = usePresence(open, ref)
-  if (!mounted) return null
+function Preview({ item }) {
   return (
-    <div ref={ref} className="ft-mega" data-state={state}
-         inert={state === 'closed' ? '' : undefined}
-         onMouseEnter={fine ? onEnter : undefined}
-         onMouseLeave={fine ? onLeave : undefined}>
-      {children}
+    <div key={item.to} className="hidden lg:flex items-center justify-center rounded-xl p-5"
+         style={{
+           width: 244, flexShrink: 0,
+           background: 'var(--bg-input)', border: '1px solid var(--card-border)',
+           animation: 'ft-fade-in 220ms ease both',
+         }}>
+      <div aria-hidden="true" className="w-full flex items-center justify-center"
+           style={{ minHeight: 116 }}>
+        {VISUALS[item.visual]}
+      </div>
     </div>
   )
 }
@@ -165,13 +171,11 @@ export default function MegaNav() {
       {NAV.map(group => {
         const isOpen = open === group.id
         const active = groupActive(group)
+        const current = group.items.find(i => i.to === (hovered[group.id] ?? group.items[0].to))
+          ?? group.items[0]
 
         return (
-          // Focus leaving the open group (tabbing on to the next trigger or
-          // into the page) closes its panel; otherwise it would stay open over
-          // the header and the heading while the visitor tabs on.
           <div key={group.id} className="relative"
-               onBlur={(e) => { if (isOpen && !e.currentTarget.contains(e.relatedTarget)) close() }}
                onMouseEnter={fine ? () => { cancelClose(); setOpen(group.id) } : undefined}
                onMouseLeave={fine ? scheduleClose : undefined}>
             <button
@@ -179,23 +183,29 @@ export default function MegaNav() {
               aria-expanded={isOpen}
               aria-haspopup="true"
               onClick={() => setOpen(isOpen ? null : group.id)}
-              className="ft-m-press flex items-center gap-1.5 rounded-lg text-sm font-medium"
+              className="flex items-center gap-1.5 rounded-lg text-sm font-medium"
               style={{
                 minHeight: 40, padding: '0 12px', cursor: 'pointer',
-                background: isOpen ? 'var(--row-hover, var(--bg-2))' : 'transparent',
+                background: isOpen || active ? 'var(--accent-dim)' : 'transparent',
                 border: 0,
-                color: active ? 'var(--text-1)' : 'var(--text-2)',
+                color: isOpen || active ? 'var(--accent)' : 'var(--text-2)',
+                transition: 'background 180ms ease, color 180ms ease',
               }}
             >
               {group.label}
-              <ChevronDown size={14} aria-hidden="true" className="ft-mega-chev"
-                           style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'none' }} />
+              <ChevronDown size={14} aria-hidden="true"
+                           style={{ transition: 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
+                                    transform: isOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
 
-            <MegaPanel open={isOpen} fine={fine} onEnter={cancelClose} onLeave={scheduleClose}>
-              <div className="flex gap-3">
-                <div style={{ minWidth: 268, maxWidth: 300 }}>
-                  <ul className="flex flex-col gap-0.5 m-0 p-0" style={{ listStyle: 'none' }}>
+            {isOpen && (
+              <div
+                className="ft-mega"
+                onMouseEnter={fine ? cancelClose : undefined}
+                onMouseLeave={fine ? scheduleClose : undefined}
+              >
+                <div className="flex gap-3">
+                  <ul className="flex flex-col gap-0.5 m-0 p-0" style={{ listStyle: 'none', minWidth: 268 }}>
                     {group.items.map(item => {
                       const here = item.to === pathname
                       return (
@@ -209,7 +219,7 @@ export default function MegaNav() {
                             style={{ textDecoration: 'none' }}
                           >
                             <span className="block font-bold"
-                                  style={{ fontSize: 13.5, color: here ? 'var(--accent-ink, var(--accent))' : 'var(--text-1)' }}>
+                                  style={{ fontSize: 13.5, color: here ? 'var(--accent)' : 'var(--text-1)' }}>
                               {item.label}
                             </span>
                             <span className="block" style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--text-3)' }}>
@@ -220,10 +230,10 @@ export default function MegaNav() {
                       )
                     })}
                   </ul>
-                  {group.id === 'product' && <NewStrip onClick={() => close()} />}
+                  <Preview item={current} />
                 </div>
               </div>
-            </MegaPanel>
+            )}
           </div>
         )
       })}

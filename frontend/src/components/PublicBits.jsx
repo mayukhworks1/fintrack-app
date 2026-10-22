@@ -1,192 +1,165 @@
 /**
- * The parts every public page is built from.
+ * The furniture every public page is built from.
  *
- * The site is set like a printed report: a twelve-column grid with a margin
- * column for running heads, Fraunces for display type, the system face for
- * reading, hairline rules, and real screens as numbered plates. One set of
- * parts keeps nine pages on one rhythm. Styles: styles/public-site.css.
+ * Six pages need to look like one site, and the way that fails is by each
+ * page growing its own heading sizes and its own reveal timings until the
+ * rhythm is different on every route. One set of parts, imported everywhere.
  */
-import { Link } from 'react-router-dom'
 import { useReveal } from '../hooks/useReveal'
-import { screen as shotOf } from './motion/media'
+import { Grain } from './LandingVisuals'
 
-/** Fades a block in the first time it is reached. The site's one entrance. */
-export function Reveal({ children, delay = 0, className = '', as: Tag = 'div', style, ...rest }) {
+/** Wraps a block so it animates in the first time it is scrolled to. */
+export function Reveal({ children, delay = 0, className = '', ...rest }) {
   const ref = useReveal()
   return (
-    <Tag ref={ref} className={`ft-reveal ${className}`.trim()}
-         style={delay ? { transitionDelay: `${delay}ms`, ...style } : style} {...rest}>
+    <div ref={ref} className={`ft-reveal ${className}`}
+         style={{ transitionDelay: `${delay}ms` }} {...rest}>
       {children}
-    </Tag>
-  )
-}
-
-/** Kept for pages that mark a block as reached without moving it. */
-export function Rising({ children, ...rest }) {
-  const ref = useReveal({ threshold: 0.02 })
-  return <div ref={ref} {...rest}>{children}</div>
-}
-
-export function Stagger({ as: Tag = 'div', children, className = '', ...rest }) {
-  return <Tag className={className} {...rest}>{children}</Tag>
-}
-
-/** A plain hairline. */
-export function Rule({ className = '', style }) {
-  return <hr className={className} style={{ border: 0, borderTop: '1px solid var(--card-border)', margin: 0, ...style }} />
-}
-
-/**
- * A page opening. `eyebrow` is the running head in the margin column,
- * `lines` the headline (pre-split where the author wants it to break),
- * `children` the lede, `actions` an optional row of buttons.
- * Visible in the first frame: the opening never waits on an animation.
- */
-export function PageHead({ eyebrow, lines, children, actions, aside }) {
-  return (
-    <div className="pb-wrap pb-open">
-      <div className="pb-row">
-        <div className="pb-margin"><p className="pb-label">{eyebrow}</p></div>
-        <div className="pb-main">
-          <h1 className="pb-display">
-            {lines.map((line, i) => (
-              <span key={i}>{line}{i < lines.length - 1 ? ' ' : ''}</span>
-            ))}
-          </h1>
-          {children && <p className="pb-lede">{children}</p>}
-          {actions && <div className="pb-actions">{actions}</div>}
-          {aside && <div style={{ marginTop: 40 }}>{aside}</div>}
-        </div>
-      </div>
     </div>
   )
 }
 
 /**
- * A section: running head in the margin, headline and lede in the main
- * column, then the body. `n` numbers the section in the running head.
+ * A block that carries [data-shown] without a transform of its own, for
+ * headlines whose lines rise out of their own masks. A block sliding up while
+ * the lines inside it also slide up is two motions over the same pixels.
  */
-export function Section({ n, eyebrow, title, lede, children, id, flush = false, wide = false, className = '' }) {
+export function Rising({ children, ...rest }) {
+  const ref = useReveal({ threshold: 0.02 })
+  return <div ref={ref} {...rest}>{children}</div>
+}
+
+/**
+ * Children rise in sequence as the block is reached. The wrapper carries no
+ * motion of its own, so a card is never lifted twice over the same pixels.
+ * `as` keeps list semantics where the children are list items.
+ */
+export function Stagger({ as: Tag = 'div', children, className = '', ...rest }) {
+  const ref = useReveal({ threshold: 0.08 })
+  return <Tag ref={ref} className={`ft-stagger ${className}`} {...rest}>{children}</Tag>
+}
+
+/** A section break that draws itself when reached. */
+export function Rule({ className = '', fromLeft = false, style }) {
+  const ref = useReveal({ threshold: 0.5 })
   return (
-    <section id={id} className={`pb-section${flush ? ' pb-flush' : ''} ${className}`.trim()}>
-      <div className="pb-wrap">
-        <div className="pb-row">
-          <div className="pb-margin">
-            {(n || eyebrow) && (
-              <p className="pb-label">{n && <span className="pb-n">{n}</span>}{eyebrow}</p>
-            )}
-          </div>
-          <div className="pb-main">
-            {title && (
-              <Reveal style={{ maxWidth: '40em' }}>
-                <h2 className="pb-h2">{title}</h2>
-                {lede && <p className="pb-lede" style={{ marginTop: 18 }}>{lede}</p>}
-              </Reveal>
-            )}
-            {!wide && children && <div style={{ marginTop: title ? 'clamp(32px, 4vw, 56px)' : 0 }}>{children}</div>}
-          </div>
-          {wide && children && <div style={{ marginTop: 'clamp(32px, 4vw, 56px)' }}>{children}</div>}
-        </div>
-      </div>
-    </section>
+    <div ref={ref} className={className} style={style}>
+      <hr className={`ft-rule ft-rule-grow${fromLeft ? ' from-left' : ''}`} />
+    </div>
   )
 }
 
-/** A section heading on its own, for pages that lay out their own body. */
+/**
+ * A page opening: eyebrow, serif headline that rises line by line, lede.
+ *
+ * `lines` takes the headline pre-split, because only the author knows where
+ * it should break — an automatic split lands mid-clause and reads worse than
+ * no split at all.
+ */
+export function PageHead({ eyebrow, lines, children, size = 'clamp(2rem, 5.6vw, 3.2rem)' }) {
+  return (
+    <Rising className="relative mx-auto px-4 sm:px-6 pt-10 pb-8 sm:pt-14"
+            style={{ maxWidth: 1120, zIndex: 1 }}>
+      <p className="ft-eyebrow ft-up mb-3">{eyebrow}</p>
+      <h1 className="ft-display mb-4" style={{ fontSize: size, lineHeight: 1.08 }}>
+        {lines.map((line, i) => (
+          <span key={i} className="ft-rise">
+            <span style={{ transitionDelay: `${i * 110}ms` }}>{line}</span>
+          </span>
+        ))}
+      </h1>
+      {children && <p className="ft-lede ft-up" style={{ '--d': '260ms' }}>{children}</p>}
+    </Rising>
+  )
+}
+
+/**
+ * A section opening. The numeral hangs in the left margin above 1024px, the
+ * way a chapter opening carries one, and falls inline beside the eyebrow
+ * below that, where there is no margin to hang anything in.
+ */
 export function Head({ n, eyebrow, title, children, className = '' }) {
   return (
-    <Reveal className={className} style={{ maxWidth: '40em', marginBottom: 'clamp(28px, 4vw, 48px)' }}>
-      {(n || eyebrow) && <p className="pb-label">{n && <span className="pb-n">{n}</span>}{eyebrow}</p>}
-      <h2 className="pb-h2">{title}</h2>
-      {children && <p className="pb-lede" style={{ marginTop: 18 }}>{children}</p>}
+    <Reveal className={`relative mb-9 ${className}`} style={{ maxWidth: 700 }}>
+      <div className="ft-marginal mb-3">
+        {n && <span className="n" aria-hidden="true">{n}</span>}
+        <p className="ft-eyebrow">{eyebrow}</p>
+      </div>
+      <h2 className="ft-display mb-4"
+          style={{ fontSize: 'clamp(1.7rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
+        {title}
+      </h2>
+      {children && <p className="ft-lede">{children}</p>}
     </Reveal>
   )
 }
 
-/** One item in a ruled list: a title and a paragraph. No box, no icon. */
-export function Card({ kicker, title, body, children }) {
+/** A card in a row of them. One shape, so a grid of three reads as a set. */
+export function Card({ icon: Icon, kicker, title, body, delay = 0, visual: Visual, children }) {
   return (
-    <li>
-      {kicker && <p className="pb-label" style={{ marginBottom: 6 }}>{kicker}</p>}
-      <h3 className="pb-h3">{title}</h3>
-      {body && <p className="pb-body" style={{ marginTop: 6 }}>{body}</p>}
-      {children}
-    </li>
-  )
-}
-
-/** Items in columns, each under a hairline. */
-export function Grid({ children, className = '', ...rest }) {
-  return <ul className={`pb-list pb-cols ${className}`.trim()} {...rest}>{children}</ul>
-}
-
-/**
- * A real capture of the product, cropped to the part that matters, with
- * numbered marks on the screen and the notes that go with them below.
- * `crop` is [x, y, width, height] in the capture's pixels.
- */
-export function Plate({ id, crop, alt, caption, fig, notes = [], eager = false, sizes = '(min-width: 1200px) 900px, 92vw' }) {
-  const s = shotOf(id)
-  const [x, y, w, h] = crop || [0, 0, s.w, s.h]
-  const k = s.w / w
-  const scaled = sizes.replace(/(\d+(?:\.\d+)?)(px|vw)/g, (_, v, u) => `${Math.round(Number(v) * k)}${u}`)
-  const marks = notes
-    .map((n, i) => ({ ...n, i, left: (n.x - x) / w, top: (n.y - y) / h }))
-    .filter(n => n.x == null || (n.left > 0.02 && n.left < 0.98 && n.top > 0.02 && n.top < 0.98))
-  return (
-    <figure className="pb-plate">
-      <div className="pb-plate-frame" style={{ aspectRatio: `${w} / ${h}` }}>
-        <img src={s.srcSm} srcSet={`${s.srcSm} ${s.smW}w, ${s.src} ${s.w}w`} sizes={scaled}
-             width={s.w} height={s.h} alt={alt}
-             loading={eager ? 'eager' : 'lazy'} decoding="async"
-             style={{ width: `${k * 100}%`, left: `${(-x / w) * 100}%`, top: `${(-y / h) * 100}%` }} />
-        {marks.filter(m => m.x != null).map((m, j) => (
-          <span key={m.i} className="pb-mark" aria-hidden="true"
-                style={{ left: `${m.left * 100}%`, top: `${m.top * 100}%` }}>{j + 1}</span>
-        ))}
-      </div>
-      {marks.length > 0 && (
-        <ol className="pb-notes" aria-label="Notes on this screen">
-          {marks.map((m, j) => (
-            <li key={m.i}>
-              <span aria-hidden="true">{j + 1}</span>
-              <span><b>{m.label}.</b> {m.body}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-      {caption && <figcaption className="pb-cap">{fig && <b>Fig. {fig}</b>}{caption}</figcaption>}
-    </figure>
-  )
-}
-
-/** The primary and the quiet button, as links. */
-export function Btn({ to, href, children, quiet = false, small = false, ...rest }) {
-  const cls = `pb-btn ${quiet ? 'pb-btn-quiet' : 'pb-btn-primary'}${small ? ' pb-btn-sm' : ''}`
-  if (href) return <a href={href} className={cls} {...rest}>{children}</a>
-  return <Link to={to} className={cls} {...rest}>{children}</Link>
-}
-
-/**
- * The close of every page: a plain statement, the way in, and the next page.
- * `cta` and `next` may be elements; if omitted, sign-in is the action.
- */
-export function Closing({ title, children, cta, next }) {
-  return (
-    <section className="pb-section">
-      <div className="pb-wrap">
-        <div className="pb-row">
-          <div className="pb-margin"><p className="pb-label">Next</p></div>
-          <Reveal className="pb-main">
-            <h2 className="pb-h2" style={{ maxWidth: '18em' }}>{title}</h2>
-            {children && <p className="pb-lede" style={{ marginTop: 16 }}>{children}</p>}
-            <div className="pb-actions" style={{ marginTop: 28 }}>
-              {cta || <Btn to="/login">Sign in</Btn>}
-              {next}
-            </div>
-          </Reveal>
+    <Reveal delay={delay} className="ft-lift rounded-xl p-5 sm:p-6 h-full flex flex-col"
+            style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+      {/* The drawing goes above the words, not below them. A card whose
+          picture is at the bottom is a card whose picture nobody sees. */}
+      {Visual && <Visual />}
+      {(Icon || kicker) && (
+        <div className="flex items-center gap-2.5 mb-2.5">
+          {Icon && <Icon size={18} aria-hidden="true" className="ft-ico" style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+          {kicker && <span className="ft-eyebrow" style={{ fontSize: '0.62rem' }}>{kicker}</span>}
         </div>
-      </div>
+      )}
+      <h3 className="ft-display mb-2" style={{ fontSize: '1.14rem', color: 'var(--text-1)' }}>
+        {title}
+      </h3>
+      {body && <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>}
+      {children}
+    </Reveal>
+  )
+}
+
+/** Auto-fitting grid. `min` is the narrowest a cell may get before it wraps. */
+export function Grid({ min = 300, children, className = '', ...rest }) {
+  return (
+    <div className={`grid gap-5 sm:gap-6 ${className}`}
+         style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))` }}
+         {...rest}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The closing call to action, and the way on to the next page.
+ *
+ * Every public page ends with one. Splitting a long page into six only helps
+ * if each one hands you somewhere to go next; six pages that all dead-end are
+ * six bounces rather than one.
+ */
+export function Closing({ title, children, cta, to, next }) {
+  return (
+    <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
+      {/* It was a flat blue rectangle. A slab that size is the last thing on
+          every page, so it is worth more than one colour: a drifting mesh
+          behind it, the mark's hairline along the top, and grain over the
+          whole thing to stop the gradient banding. */}
+      <Reveal className="ft-closing ft-shine relative overflow-hidden rounded-xl
+                         px-6 py-14 sm:px-12 sm:py-16 text-center">
+        <span className="ft-closing-mesh" aria-hidden="true" />
+        <Grain opacity={0.05} />
+        <h2 className="relative ft-display mb-3"
+            style={{ zIndex: 1, fontSize: 'clamp(1.6rem, 4.4vw, 2.6rem)', lineHeight: 1.14 }}>
+          {title}
+        </h2>
+        <p className="relative mx-auto mb-8"
+           style={{ zIndex: 1, fontSize: '1.02rem', lineHeight: 1.65, opacity: 0.94, maxWidth: 500 }}>
+          {children}
+        </p>
+        <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3"
+             style={{ zIndex: 1 }}>
+          {cta}
+          {next}
+        </div>
+      </Reveal>
     </section>
   )
 }

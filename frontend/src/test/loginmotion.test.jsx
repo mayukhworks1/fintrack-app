@@ -41,11 +41,10 @@ describe('scorePassword', () => {
 })
 
 describe('Login motion', () => {
-  it('the column enters in order and the card holds still', () => {
+  it('the column enters in order and the card tilts', () => {
     const { container } = wrap(<Login />)
-    expect(container.querySelector('.tilt, .tilt-sheen')).toBeNull()
     expect(container.querySelector('.ft-login-enter')).not.toBeNull()
-    expect(container.querySelector('.ft-login-card')).not.toBeNull()
+    expect(container.querySelector('.tilt.tilt-sheen')).not.toBeNull()
     expect(container.querySelector('form.ft-stagger-in')).not.toBeNull()
     expect(screen.getByText(/back to overview/i).closest('a').getAttribute('href')).toBe('/')
   })
@@ -57,7 +56,7 @@ describe('Login motion', () => {
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'LongEnoughPw1!' } })
     fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: 'different' } })
     fireEvent.submit(container.querySelector('form'))
-    const card = container.querySelector('.ft-login-card')
+    const card = container.querySelector('.tilt.tilt-sheen')
     expect(screen.getByRole('alert')).toHaveTextContent(/do not match/i)
     expect(card.classList.contains('ft-shake')).toBe(true)
     act(() => { fireEvent.animationEnd(card, { animationName: 'ft-shake' }) })
