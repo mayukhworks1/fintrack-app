@@ -78,9 +78,9 @@ export function InvoicesTab({ drilldown = null }) {
           <button key={s} onClick={() => setSource(s)}
             className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
             style={{
-              background: source === s ? 'rgba(37,99,235,0.08)' : 'var(--bg-input)',
-              borderColor: source === s ? 'rgba(37,99,235,0.3)' : 'var(--border)',
-              color: source === s ? '#2563eb' : 'var(--text-2)',
+              background: source === s ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--bg-input)',
+              borderColor: source === s ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)',
+              color: source === s ? 'var(--accent)' : 'var(--text-2)',
             }}>
             {s === 'all' ? 'All invoices' : s === 'main' ? 'Main (Teable)' : 'Web invoices'}
           </button>
@@ -154,7 +154,7 @@ export function InvoicesTab({ drilldown = null }) {
                         <div>
                           <p style={{ color: 'var(--text-3)' }}>Received</p>
                           <p className="font-semibold tabular-nums"
-                            style={{ color: row.amount_received > 0 ? '#16a34a' : 'var(--text-3)' }}>
+                            style={{ color: row.amount_received > 0 ? 'var(--fin-positive)' : 'var(--text-3)' }}>
                             {row.amount_received != null ? `₹${Number(row.amount_received).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
                           </p>
                         </div>
@@ -207,7 +207,7 @@ export function InvoicesTab({ drilldown = null }) {
                             {row.amount_with_tax != null ? Number(row.amount_with_tax).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-right"
-                            style={{ color: row.amount_received > 0 ? '#16a34a' : 'var(--text-3)' }}>
+                            style={{ color: row.amount_received > 0 ? 'var(--fin-positive)' : 'var(--text-3)' }}>
                             {row.amount_received != null ? Number(row.amount_received).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-3)', fontSize: 11 }}>

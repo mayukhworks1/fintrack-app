@@ -4,27 +4,29 @@ import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react'
 const ToastCtx = createContext(null)
 
 let _id = 0
+// How long a dismissed toast stays mounted while it fades out (--motion-exit).
+const EXIT_MS = 180
 
 const CONFIGS = {
   success: {
     icon: CheckCircle2,
-    accent: '#22c55e',
-    border: 'rgba(34,197,94,0.35)',
+    accent: 'var(--fin-positive)',
+    border: 'color-mix(in srgb, var(--fin-positive) 35%, transparent)',
   },
   error: {
     icon: XCircle,
-    accent: '#ef4444',
-    border: 'rgba(239,68,68,0.35)',
+    accent: 'var(--fin-negative)',
+    border: 'color-mix(in srgb, var(--fin-negative) 35%, transparent)',
   },
   warning: {
     icon: AlertTriangle,
-    accent: '#f59e0b',
-    border: 'rgba(245,158,11,0.35)',
+    accent: 'var(--fin-warning)',
+    border: 'color-mix(in srgb, var(--fin-warning) 35%, transparent)',
   },
   info: {
     icon: Info,
-    accent: '#3b82f6',
-    border: 'rgba(59,130,246,0.35)',
+    accent: 'var(--accent)',
+    border: 'color-mix(in srgb, var(--accent) 35%, transparent)',
   },
 }
 
@@ -36,7 +38,8 @@ function ToastItem({ toast, dismiss }) {
     <div
       role="alert"
       aria-live="assertive"
-      className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm min-w-[260px] max-w-sm animate-slide-in"
+      className="app-toast flex items-start gap-3 px-4 py-3 rounded-xl text-sm min-w-[260px] max-w-sm"
+      data-state={toast.leaving ? 'closed' : 'open'}
       style={{
         // Solid opaque background — never transparent
         background: 'var(--card-bg)',
@@ -89,7 +92,9 @@ export function ToastProvider({ children }) {
   const dismiss = useCallback((id) => {
     clearTimeout(timers.current[id])
     delete timers.current[id]
-    setToasts(prev => prev.filter(t => t.id !== id))
+    // Mark it leaving so the exit transition runs, then remove it.
+    setToasts(prev => prev.map(t => (t.id === id ? { ...t, leaving: true } : t)))
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), EXIT_MS)
   }, [])
 
   const toast = useCallback((message, type = 'info', duration = 4000) => {

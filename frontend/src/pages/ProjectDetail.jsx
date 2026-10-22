@@ -15,21 +15,21 @@ import { useToast } from '../context/ToastContext'
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function clientColor(name = '') {
-  const PALETTE = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#6366f1','#14b8a6','#f97316']
+  const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)']
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
   return PALETTE[h % PALETTE.length]
 }
 
 const STATUS_COLORS = {
-  'Active':      { bg: 'rgba(16,185,129,0.12)', color: '#10b981', dot: '#10b981' },
-  'Completed':   { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8', dot: '#6366f1' },
-  'On Hold':     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b', dot: '#f59e0b' },
-  'Cancelled':   { bg: 'rgba(239,68,68,0.12)',   color: '#f87171', dot: '#ef4444' },
-  'In Progress': { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', dot: '#3b82f6' },
+  'Active':      { bg: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', dot: 'var(--fin-positive)' },
+  'Completed':   { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  color: 'var(--accent)', dot: 'var(--accent)' },
+  'On Hold':     { bg: 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',  color: 'var(--fin-warning)', dot: 'var(--fin-warning)' },
+  'Cancelled':   { bg: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)',   color: 'var(--fin-negative)', dot: 'var(--fin-negative)' },
+  'In Progress': { bg: 'color-mix(in srgb, var(--accent) 12%, transparent)',  color: 'var(--accent)', dot: 'var(--accent)' },
 }
 function statusStyle(s) {
-  return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: '#94a3b8' }
+  return STATUS_COLORS[s] || { bg: 'var(--bg-input)', color: 'var(--text-3)', dot: 'var(--text-3)' }
 }
 
 // ── AI text renderer ───────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ function AiText({ text }) {
           {items.map((item, j) => (
             <li key={j} className="flex gap-2.5 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
               <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
-                style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>{j + 1}</span>
+                style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)' }}>{j + 1}</span>
               <span dangerouslySetInnerHTML={{ __html: mdInline(item) }} />
             </li>
           ))}
@@ -79,7 +79,7 @@ function AiText({ text }) {
       const rest  = line.slice(ci + 1).trim()
       elements.push(
         <div key={i} className="mt-3 mb-1">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#22c55e' }}>{label}</span>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--fin-positive)' }}>{label}</span>
           {rest && <span className="text-sm ml-2 leading-relaxed" style={{ color: 'var(--text-2)' }}
             dangerouslySetInnerHTML={{ __html: mdInline(rest) }} />}
         </div>
@@ -326,7 +326,7 @@ export default function ProjectDetail() {
             </button>
             <button onClick={handleAnalyze} disabled={analyzing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-              style={{ color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>
+              style={{ color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 6%, transparent)' }}>
               {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {analyzing ? 'Analysing…' : 'AI Analyze'}
             </button>
@@ -341,7 +341,7 @@ export default function ProjectDetail() {
                   <div className="flex gap-1 items-center">
                     <button onClick={handleDelete} disabled={deleting}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                      style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)', color: 'var(--fin-negative)' }}>
                       {deleting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                       Confirm delete
                     </button>
@@ -354,7 +354,7 @@ export default function ProjectDetail() {
                 ) : (
                   <button onClick={() => setDeleteConfirm(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                    style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', background: 'var(--card-bg)' }}>
+                    style={{ color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', background: 'var(--card-bg)' }}>
                     <Trash2 size={12} /> Delete
                   </button>
                 )}
@@ -440,10 +440,10 @@ export default function ProjectDetail() {
 
         {/* ── Key metrics ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard icon={DollarSign}  label="Billed so far"  value={f['Amount Billed So far'] ? formatInr(f['Amount Billed So far']) : null} accent="#3b82f6" />
-          <StatCard icon={TrendingUp}  label="Actual profit"  value={f['Actual Profit'] ? formatInr(f['Actual Profit']) : null} accent={profitPct > 0 ? '#22c55e' : '#ef4444'} />
-          <StatCard icon={BarChart2}   label="Profit %"       value={profitPct ? formatPct(profitPct, 1) : null} accent={profitPct > 20 ? '#22c55e' : profitPct > 0 ? '#f59e0b' : '#ef4444'} />
-          <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="#8b5cf6" />
+          <StatCard icon={DollarSign}  label="Billed so far"  value={f['Amount Billed So far'] ? formatInr(f['Amount Billed So far']) : null} accent="var(--accent)" />
+          <StatCard icon={TrendingUp}  label="Actual profit"  value={f['Actual Profit'] ? formatInr(f['Actual Profit']) : null} accent={profitPct > 0 ? 'var(--fin-positive)' : 'var(--fin-negative)'} />
+          <StatCard icon={BarChart2}   label="Profit %"       value={profitPct ? formatPct(profitPct, 1) : null} accent={profitPct > 20 ? 'var(--fin-positive)' : profitPct > 0 ? 'var(--fin-warning)' : 'var(--fin-negative)'} />
+          <StatCard icon={DollarSign}  label="Target revenue" value={f['Target Revenue'] ? formatInr(f['Target Revenue']) : null} accent="var(--chart-3)" />
         </div>
 
         {/* ── Project details ───────────────────────────────────────────── */}
@@ -472,7 +472,7 @@ export default function ProjectDetail() {
                 <div>
                   <dt className="text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Target Achieved</dt>
                   <dd className="flex items-center gap-1.5 text-sm font-semibold"
-                    style={{ color: f['Target Achieved '] ? '#22c55e' : '#f87171' }}>
+                    style={{ color: f['Target Achieved '] ? 'var(--fin-positive)' : 'var(--fin-negative)' }}>
                     {f['Target Achieved ']
                       ? <><CheckCircle2 size={13} /> Yes</>
                       : <><AlertCircle size={13} /> No</>}
@@ -487,7 +487,7 @@ export default function ProjectDetail() {
         {/* ── AI analysis loading ────────────────────────────────────────── */}
         {analyzing && (
           <div className="rounded-2xl p-4 flex items-center gap-3 text-sm"
-            style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)', color: '#4ade80' }}>
+            style={{ border: '1px solid color-mix(in srgb, var(--fin-positive) 20%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 4%, transparent)', color: 'var(--fin-positive)' }}>
             <Loader2 size={16} className="animate-spin flex-shrink-0" />
             Generating AI analysis for this project…
           </div>
@@ -496,8 +496,8 @@ export default function ProjectDetail() {
         {/* ── AI analysis result ─────────────────────────────────────────── */}
         {analysis && !analyzing && (
           <div className="rounded-2xl p-5 animate-fade-in"
-            style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.04)' }}>
-            <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: '#4ade80' }}>
+            style={{ border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)', background: 'color-mix(in srgb, var(--fin-positive) 4%, transparent)' }}>
+            <h2 className="font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--fin-positive)' }}>
               <Sparkles size={15} /> AI Analysis
             </h2>
             <AiText text={analysis} />

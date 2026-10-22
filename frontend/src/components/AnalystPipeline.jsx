@@ -14,10 +14,12 @@
  * account may not see: scoping is applied when the statement is built, below
  * the point where anything the model said still matters.
  *
- * Motion is one shared 8-second loop — same duration everywhere, different
- * delays — so the four stages cannot drift out of phase. Under reduced motion
- * they simply all sit lit; the sequence is in the order and the numbers, not
- * only in the animation.
+ * Motion runs once, when the diagram is reached: a ring passes from stage 1
+ * to stage 4 at 600ms a stage, a spark crosses each connector as the work is
+ * handed on, and the answer's bars grow when the ring arrives at them. Then
+ * it rests on the answer. A loop here read as a screensaver; one pass reads
+ * as the sequence it is. Under reduced motion the stages simply sit lit; the
+ * sequence is in the order and the numbers, not only in the animation.
  *
  * The figures are from the sandbox's invented ledger, so the answer shown here
  * is the same one the analyst panel above produces for the same question.
@@ -29,6 +31,12 @@ import { ask, inrShort } from './demoData'
 // The same question the sandbox opens on, run through the same function, so
 // the two never disagree about what this ledger says.
 const RESULT = ask({ measure: 'outstanding', groupBy: 'client', limit: 3 })
+// The statement the sandbox prints, with its two-line filter folded to one so
+// it fits a quarter of the row; every other line is as compiled.
+const SQL = RESULT.sql.split('\n')
+  .filter(l => !/^\s+AND /.test(l))
+  .map(l => (/^ WHERE /.test(l) ? ' WHERE …unpaid' : l))
+  .join('\n')
 
 const STAGES = [
   {
@@ -56,7 +64,7 @@ const STAGES = [
           <span key={k} className="flex items-center justify-between rounded-lg px-2.5 py-1.5"
                 style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{k}</span>
-            <span className="font-bold" style={{ fontSize: 11, color: 'var(--accent)' }}>{v}</span>
+            <span className="font-bold" style={{ fontSize: 11, color: 'var(--accent-ink, var(--accent))' }}>{v}</span>
           </span>
         ))}
       </div>
@@ -73,10 +81,7 @@ const STAGES = [
         background: 'var(--bg-base)', border: '1px solid var(--card-border)',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       }}>
-{`SELECT client,
-       SUM(amount_raised)
-  FROM invoices_mirror
- GROUP BY client`}
+{SQL}
       </pre>
     ),
   },
@@ -93,10 +98,10 @@ const STAGES = [
               {r.key.split(' ')[0]}
             </span>
             <span className="flex-1" style={{ height: 6, borderRadius: 3, background: 'var(--bg-input)' }}>
-              <span style={{
+              <span className="ft-s-pipe-bar" style={{
                 display: 'block', height: '100%', borderRadius: 3,
                 width: `${Math.max((r.value / RESULT.peak) * 100, 4)}%`,
-                background: ['#104281', '#256abf', '#3987e5'][i],
+                background: ['color-mix(in srgb, var(--accent) 62%, #000)', 'color-mix(in srgb, var(--accent) 82%, #000)', 'var(--accent)'][i], '--i': i,
               }} />
             </span>
             <span className="tabular-nums font-bold" style={{ fontSize: 10, color: 'var(--text-1)' }}>
@@ -113,20 +118,15 @@ export default function AnalystPipeline() {
   const ref = useReveal({ threshold: 0.15 })
 
   return (
-    <div ref={ref} className="ft-reveal ft-pipe">
+    <div ref={ref} className="ft-reveal ft-pipe ft-s-pipe">
       {STAGES.map((stage, i) => {
         const Icon = stage.icon
         const last = i === STAGES.length - 1
         return (
-          <div key={stage.id} className="ft-pipe-node"
-               data-run=""
-               // One duration, four delays. Independently-timed animations
-               // would look aligned on the first pass and be visibly out of
-               // step a minute later.
-               style={{ animationDelay: `${i * 2}s` }}>
+          <div key={stage.id} className="ft-pipe-node" style={{ '--i': i }}>
             <div className="flex items-center gap-2 mb-2">
               <span className="flex items-center justify-center rounded-md shrink-0"
-                    style={{ width: 24, height: 24, background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                    style={{ width: 24, height: 24, background: 'var(--accent-dim)', color: 'var(--accent-ink, var(--accent))' }}>
                 <Icon size={13} aria-hidden="true" />
               </span>
               <span className="font-bold" style={{ fontSize: 12, color: 'var(--text-1)' }}>
@@ -142,7 +142,7 @@ export default function AnalystPipeline() {
 
             {!last && (
               <span className="ft-pipe-link" aria-hidden="true">
-                <span className="ft-pipe-spark" style={{ animationDelay: `${i * 2 + 0.35}s` }} />
+                <span className="ft-s-spark" />
               </span>
             )}
           </div>

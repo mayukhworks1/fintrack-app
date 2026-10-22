@@ -11,8 +11,11 @@
  * that shows one is aria-hidden, so a screen reader cannot announce an
  * illustration as data.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Pause, Play, RotateCcw } from 'lucide-react'
 import { useReveal } from '../hooks/useReveal'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { useAutoplay } from '../hooks/useAutoplay'
 
 /* ── Texture ──────────────────────────────────────────────────────────────
    Fractal-noise grain. A flat gradient reads as cheap at large sizes; a few
@@ -101,9 +104,15 @@ export function MiniDocs() {
    product's whole claim is "it shows you what it ran", a still screenshot
    would undersell it.
 
-   Restarts on a loop, pauses while off-screen so a background tab is not
-   animating, and is skipped entirely under reduced motion, where the finished
-   state is shown instead. */
+   It runs on useAutoplay: only while a quarter of it is on screen and the tab
+   is showing, at most twice, and then it rests on the finished answer with a
+   Replay button. While it runs, the same button pauses it. Under reduced
+   motion it starts on the finished state and moves only if Replay is pressed.
+
+   Nothing in it changes size as it plays (the query and the answer hold their
+   space and fade in; the bars grow by transform), so it never pushes the page
+   around, and the typing writes straight to the DOM instead of re-rendering
+   the demo for every character. */
 const DEMO_Q = 'Which clients have the most outstanding?'
 const DEMO_SQL = `SELECT client,
        SUM(amount_raised) AS value
@@ -118,74 +127,98 @@ const DEMO_ROWS = [
   { name: 'Meridian Labs', v: 41 },
   { name: 'Orchard & Co', v: 24 },
 ]
+const DEMO_CYCLES = 2
+const DEMO_HOLD_MS = 5200   // the finished answer stays up this long between runs
+const TYPE_MS = 34
 
 export function AnalystDemo() {
-  const [typed, setTyped] = useState('')
-  const [stage, setStage] = useState(0)   // 0 typing · 1 query · 2 answer
-  const hostRef = useRef(null)
-  const reduced = useRef(false)
+  const reduced = useReducedMotion()
+  const auto = useAutoplay({ threshold: 0.25 })
+  const [done, setDone] = useState(reduced)
+  const [stage, setStage] = useState(reduced ? 2 : 0)   // 0 typing · 1 query · 2 answer
+  const [run, setRun] = useState(0)
+  const qRef = useRef(null)
+  const cycles = useRef(0)
+
+  const paintQ = (text) => { if (qRef.current) qRef.current.textContent = text }
+
+  // The finished state: the whole question and the answer.
+  useLayoutEffect(() => {
+    if (done) { paintQ(DEMO_Q); setStage(2) }
+  }, [done])
+
+  // Reduced motion, and nobody asked for a replay: rest on the answer.
+  useEffect(() => {
+    if (reduced && !auto.running) setDone(true)
+  }, [reduced, auto.running])
 
   useEffect(() => {
-    reduced.current = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    // Without an observer there is nothing to start the loop, and constructing
-    // one that does not exist throws during render — which takes the whole
-    // page down, not just this panel. Show the finished state instead.
-    if (reduced.current || typeof IntersectionObserver === 'undefined') {
-      setTyped(DEMO_Q); setStage(2); return
-    }
-
-    let timers = []
-    let running = false
-
+    if (!auto.running || done) return
+    const timers = []
+    const at = (ms, fn) => timers.push(setTimeout(fn, ms))
     const cycle = () => {
-      timers.forEach(clearTimeout); timers = []
-      setTyped(''); setStage(0)
-      // Typing, then a beat on the query, then the answer, then round again.
-      DEMO_Q.split('').forEach((_, i) => {
-        timers.push(setTimeout(() => setTyped(DEMO_Q.slice(0, i + 1)), 34 * i))
+      paintQ(''); setStage(0)
+      for (let i = 0; i < DEMO_Q.length; i++) at(TYPE_MS * i, () => paintQ(DEMO_Q.slice(0, i + 1)))
+      const typed = TYPE_MS * DEMO_Q.length
+      at(typed + 260, () => setStage(1))
+      at(typed + 1250, () => {
+        setStage(2)
+        cycles.current += 1
+        if (cycles.current >= DEMO_CYCLES) { setDone(true); return }
+        at(DEMO_HOLD_MS, cycle)
       })
-      const typeDone = 34 * DEMO_Q.length
-      timers.push(setTimeout(() => setStage(1), typeDone + 260))
-      timers.push(setTimeout(() => setStage(2), typeDone + 1250))
-      timers.push(setTimeout(cycle, typeDone + 7200))
     }
+    cycle()
+    return () => timers.forEach(clearTimeout)
+  }, [auto.running, done, run])
 
-    // Only animate while actually on screen.
-    const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !running) { running = true; cycle() }
-      else if (!e.isIntersecting && running) {
-        running = false
-        timers.forEach(clearTimeout); timers = []
-      }
-    }, { threshold: 0.25 })
-    if (hostRef.current) io.observe(hostRef.current)
+  const replay = () => {
+    cycles.current = 0
+    setDone(false)
+    setRun(r => r + 1)
+    auto.resume()
+  }
 
-    return () => { io.disconnect(); timers.forEach(clearTimeout) }
-  }, [])
+  const typing = !done && stage === 0
+  const btn = {
+    width: 32, height: 32, borderRadius: 8, cursor: 'pointer',
+    display: 'grid', placeItems: 'center', background: 'transparent',
+    border: '1px solid var(--card-border)', color: 'var(--text-2)',
+  }
 
   return (
     <div
-      ref={hostRef}
+      ref={auto.ref}
       className="rounded-2xl overflow-hidden"
       style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}
     >
-      <div className="flex items-center gap-2 px-4"
+      <div className="flex items-center gap-2 pl-4 pr-1.5"
            style={{ height: 40, borderBottom: '1px solid var(--card-border)', background: 'var(--bg-input)' }}>
-        <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent)' }} />
+        <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--accent-btn)' }} />
         <span className="text-[11px] font-bold" style={{ color: 'var(--text-2)' }}>Studio — finance data</span>
+        {done ? (
+          <button type="button" onClick={replay} aria-label="Replay the demo" className="ml-auto" style={btn}>
+            <RotateCcw size={14} aria-hidden="true" />
+          </button>
+        ) : (
+          <button type="button" onClick={auto.toggle} aria-label="Pause the demo"
+                  aria-pressed={!auto.running} className="ml-auto" style={btn}>
+            {auto.running ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
+          </button>
+        )}
       </div>
 
       <div className="p-4 sm:p-5">
         {/* the question */}
         <div className="rounded-xl px-3 py-2.5 mb-3"
-             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)' }}>
+             style={{ background: 'var(--bg-input)', border: '1px solid var(--card-border)', minHeight: 42 }}>
           <span className="text-[13px]" style={{ color: 'var(--text-1)' }}>
-            {typed}
+            <span ref={qRef} />
             <span className="inline-block align-middle"
                   style={{
-                    width: 2, height: 14, marginLeft: 2, background: 'var(--accent)',
-                    animation: 'ft-caret 1s step-end infinite',
-                    opacity: stage === 0 ? 1 : 0,
+                    width: 2, height: 14, marginLeft: 2, background: 'var(--accent-btn)',
+                    animation: typing ? 'ft-caret 1s step-end infinite' : 'none',
+                    opacity: typing ? 1 : 0,
                   }} />
           </span>
         </div>
@@ -194,9 +227,9 @@ export function AnalystDemo() {
         <div
           className="rounded-xl overflow-hidden mb-3"
           style={{
-            maxHeight: stage >= 1 ? 190 : 0,
             opacity: stage >= 1 ? 1 : 0,
-            transition: 'max-height 520ms cubic-bezier(0.22,1,0.36,1), opacity 380ms ease',
+            transform: stage >= 1 ? 'none' : 'translateY(4px)',
+            transition: 'opacity 380ms ease, transform 420ms cubic-bezier(0.22,1,0.36,1)',
           }}
         >
           <div className="flex items-center gap-1.5 px-3 py-1.5"
@@ -222,12 +255,13 @@ export function AnalystDemo() {
               <span className="text-[11px] shrink-0" style={{ width: 92, color: 'var(--text-2)' }}>
                 {r.name}
               </span>
-              <span className="flex-1" style={{ height: 7, borderRadius: 4, background: 'var(--bg-input)' }}>
+              <span className="flex-1 overflow-hidden" style={{ height: 7, borderRadius: 4, background: 'var(--bg-input)' }}>
                 <span style={{
-                  display: 'block', height: '100%', borderRadius: 4,
-                  background: ['#104281', '#256abf', '#3987e5', '#86b6ef'][i],
-                  width: stage >= 2 ? `${r.v}%` : 0,
-                  transition: `width 760ms cubic-bezier(0.22,1,0.36,1) ${180 + i * 90}ms`,
+                  display: 'block', height: '100%', width: '100%', borderRadius: 4,
+                  background: ['color-mix(in srgb, var(--accent) 62%, #000)', 'color-mix(in srgb, var(--accent) 82%, #000)', 'var(--accent)', 'color-mix(in srgb, var(--accent) 52%, #fff)'][i],
+                  transformOrigin: '0 50%',
+                  transform: `scaleX(${stage >= 2 ? r.v / 100 : 0})`,
+                  transition: `transform 760ms cubic-bezier(0.22,1,0.36,1) ${180 + i * 90}ms`,
                 }} />
               </span>
             </div>

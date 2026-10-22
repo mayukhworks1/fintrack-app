@@ -280,7 +280,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
             )}
             {parseNote && !parsing && (
               <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
-                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
+                style={{ background: 'color-mix(in srgb, var(--fin-positive) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-positive) 25%, transparent)', color: 'var(--fin-positive)' }}>
                 <CheckCircle2 size={12} className="flex-shrink-0" />
                 {parseNote}
               </div>
@@ -304,7 +304,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
             )}
             {parseError && !parsing && (
               <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-xs"
-                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
+                style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
                 <AlertTriangle size={12} className="flex-shrink-0" />
                 {parseError}
               </div>
@@ -313,7 +313,7 @@ export function InvoiceDrawer({ open, invoice, prefill, paymentOnly = false, onC
 
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl text-xs"
-              style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.20)', color: '#f87171' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 20%, transparent)', color: 'var(--fin-negative)' }}>
               <AlertTriangle size={13} />{error}
             </div>
           )}

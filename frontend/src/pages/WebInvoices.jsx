@@ -32,6 +32,7 @@ import { AppSidebar, MobileBottomNav, MobileHeader } from './webinvoices/nav'
 import { AgingBadge, AttachThumb, DashboardMetric, DashboardSignal, KpiCard, MonthStatusPill, RaisedByBadge, SkeletonRow, StatusPill } from './webinvoices/ui'
 import { DEFAULT_PICKLISTS, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, STATUS_META, buildRetainerGroups, classifyAgingBand, currencySymbol, currentMonthKey, dateOnlyValue, endOfMonthIso, firstDayIso, fmt, fmtCurrency, fmtDate, getRetainerCategoryOption, invoiceAmountParts, isRetainerCategory, monthKey, monthLabel, parseAttachments, parseIsoDate, shiftMonthKey, shortMonthLabel, sortByRaisedDateDesc } from './webinvoices/utils'
 import { useConfirm } from '../context/ConfirmContext'
+import { tint } from '../utils/color'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
@@ -312,27 +313,17 @@ export default function WebInvoices() {
   }, [retainerGroups, selectedRetainer])
 
   const selectedRetainerGroup = retainerGroups.find(g => g.project === selectedRetainer) || null
-  const dashboardStyles = useMemo(() => (
-    dark
-      ? {
-          shell: 'linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(17,24,39,0.96) 58%, rgba(20,38,33,0.92) 100%)',
-          panel: 'rgba(15,23,42,0.76)',
-          panelSoft: 'rgba(30,41,59,0.68)',
-          accentPanel: 'rgba(15,118,110,0.16)',
-          warnPanel: 'rgba(120,53,15,0.18)',
-          line: 'rgba(148,163,184,0.16)',
-          glow: '0 30px 60px rgba(2,6,23,0.34)',
-        }
-      : {
-          shell: 'linear-gradient(135deg, rgba(238,244,255,0.96) 0%, rgba(255,255,255,0.98) 52%, rgba(237,248,241,0.98) 100%)',
-          panel: 'rgba(255,255,255,0.92)',
-          panelSoft: 'rgba(248,250,252,0.92)',
-          accentPanel: 'rgba(16,185,129,0.08)',
-          warnPanel: 'rgba(245,158,11,0.10)',
-          line: 'rgba(148,163,184,0.18)',
-          glow: '0 28px 60px rgba(15,23,42,0.08)',
-        }
-  ), [dark])
+  // Surfaces for the billing dashboard, drawn from the palette so they follow
+  // both the palette and the mode.
+  const dashboardStyles = useMemo(() => ({
+    shell: 'radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 9%, transparent), transparent 40%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--fin-positive) 6%, transparent), transparent 40%), var(--card-bg)',
+    panel: 'var(--card-bg)',
+    panelSoft: 'var(--bg-input)',
+    accentPanel: 'var(--fin-pos-bg)',
+    warnPanel: 'var(--fin-warn-bg)',
+    line: 'var(--card-border)',
+    glow: 'var(--card-shadow)',
+  }), [])
 
   const visibleClientCount = useMemo(() => (
     new Set(records.map(r => String(r.fields?.['Project'] || '').trim()).filter(Boolean)).size
@@ -747,21 +738,21 @@ export default function WebInvoices() {
                     style={{
                       width: 46,
                       height: 46,
-                      background: dark ? 'rgba(79,70,229,0.16)' : 'rgba(99,102,241,0.12)',
+                      background: 'var(--accent-dim)',
                       border: `1px solid ${dashboardStyles.line}`,
                     }}>
                     <LayoutDashboard size={20} style={{ color: 'var(--accent)' }} />
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em]" style={{ color: dark ? 'rgba(191,219,254,0.78)' : 'var(--accent)' }}>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--accent-ink)' }}>
                       Billing Command Deck
                     </p>
-                    <h1 className="text-[1.9rem] sm:text-[2.2rem] lg:text-[2.45rem] font-bold tracking-tight mt-0.5 leading-none" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                    <h1 className="text-[1.9rem] sm:text-[2.2rem] lg:text-[2.45rem] font-bold tracking-tight mt-0.5 leading-none" style={{ color: 'var(--text-1)' }}>
                       Billing Dashboard
                     </h1>
                   </div>
                 </div>
-                <p className="max-w-xl text-sm leading-relaxed" style={{ color: dark ? 'rgba(226,232,240,0.82)' : 'var(--text-2)' }}>
+                <p className="max-w-xl text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
                   Cash movement, overdue pressure, retainers, and project billing signals in one live Teable-backed workspace.
                 </p>
               </div>
@@ -799,8 +790,8 @@ export default function WebInvoices() {
                     sub={`${allRecords.length} invoices across all workspaces`}
                     icon={null}
                     iconSlot={false}
-                    tone={dark ? 'rgba(30,41,59,0.68)' : 'rgba(255,255,255,0.92)'}
-                    accent={dark ? '#f8fafc' : 'var(--text-1)'}
+                    tone={'var(--glass-bg)'}
+                    accent={'var(--text-1)'}
                   />
                   <DashboardMetric
                     label="Collected"
@@ -829,8 +820,8 @@ export default function WebInvoices() {
                     value={`${retainerGroups.length}`}
                     sub={`${selectedRetainerGroup?.currentMonthRaised ? 'Current month covered' : 'Review current month gaps'}`}
                     icon={Repeat2}
-                    tone={dark ? 'rgba(15,23,42,0.55)' : 'rgba(247,250,255,0.94)'}
-                    accent={dark ? '#c4b5fd' : '#4f46e5'}
+                    tone={'var(--glass-bg)'}
+                    accent={'var(--chart-3)'}
                     compact
                   />
                 </div>
@@ -864,7 +855,7 @@ export default function WebInvoices() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Receivables aging</p>
-                  <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Pending invoice age</h2>
+                  <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Pending invoice age</h2>
                 </div>
                 <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{agingBuckets.total_pending} pending</span>
               </div>
@@ -872,7 +863,7 @@ export default function WebInvoices() {
                 {[
                   { key: '0_30',  label: '0–30 days',  color: 'var(--fin-positive)' },
                   { key: '30_60', label: '30–60 days', color: 'var(--fin-warning)' },
-                  { key: '60_90', label: '60–90 days', color: '#f97316' },
+                  { key: '60_90', label: '60–90 days', color: 'var(--fin-warning)' },
                   { key: '90+',   label: '90+ days',   color: 'var(--fin-negative)' },
                 ].map(({ key, label, color }) => {
                   const b = agingBuckets.buckets.find(x => x.label.replace('–','-') === label.replace('–','-')) || agingBuckets.buckets.find((_, i) => ['0_30','30_60','60_90','90+'][i] === key) || { count: 0, amount: 0 }
@@ -880,7 +871,7 @@ export default function WebInvoices() {
                   return (
                     <div key={key} className="rounded-2xl p-3" style={{ background: 'var(--bg-layer)', border: `1px solid var(--card-border)` }}>
                       <p className="text-[11px] font-semibold mb-1.5" style={{ color }}>{label}</p>
-                      <p className="text-lg font-bold tabular-nums leading-none mb-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{b.count}</p>
+                      <p className="text-lg font-bold tabular-nums leading-none mb-1" style={{ color: 'var(--text-1)' }}>{b.count}</p>
                       <p className="text-[11px] tabular-nums" style={{ color: 'var(--text-3)' }}>₹{(b.amount/100000).toFixed(1)}L</p>
                       <div className="mt-2 h-1 rounded-full" style={{ background: 'var(--border)' }}>
                         <div className="h-1 rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
@@ -914,13 +905,13 @@ export default function WebInvoices() {
                   <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-2">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Invoice activity</p>
-                      <h2 className="text-lg font-bold mt-0.5" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Billing activity · {labelText}</h2>
+                      <h2 className="text-lg font-bold mt-0.5" style={{ color: 'var(--text-1)' }}>Billing activity · {labelText}</h2>
                       <p className="text-[11px] mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
                         Bar height = amount ·&nbsp;
                         <span className="inline-flex items-center gap-1">
-                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />paid&nbsp;
-                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#fb7185' }} />overdue&nbsp;
-                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />pending
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-positive)' }} />paid&nbsp;
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--fin-negative)' }} />overdue&nbsp;
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--text-3)' }} />pending
                         </span>
                       </p>
                     </div>
@@ -973,7 +964,7 @@ export default function WebInvoices() {
               <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                 <div className="flex items-center justify-between gap-2 mb-4 flex-shrink-0">
                   <div>
-                    <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
+                    <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>Last {balanceMonths} Months</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Receivables at a glance</p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -989,16 +980,16 @@ export default function WebInvoices() {
                     const collPct = entry.gross > 0 ? Math.min(100, (entry.received / entry.gross) * 100) : 0
                     const barH = maxMonthlyBalanceMagnitude > 0 ? Math.max(0.1, entry.gross / maxMonthlyBalanceMagnitude) : 0.1
                     const barColor = collPct >= 80
-                      ? 'linear-gradient(180deg,#4ade80,#16a34a)'
+                      ? 'linear-gradient(180deg,var(--fin-positive),var(--fin-positive))'
                       : collPct >= 50
-                      ? 'linear-gradient(180deg,#fbbf24,#d97706)'
-                      : 'linear-gradient(180deg,#f87171,#dc2626)'
+                      ? 'linear-gradient(180deg,var(--fin-warning),var(--fin-warning))'
+                      : 'linear-gradient(180deg,var(--fin-negative),var(--fin-negative))'
                     const badgeLabel = entry.change !== null
                       ? (entry.change >= 0 ? `up ${entry.change.toFixed(0)}%` : `down ${Math.abs(entry.change).toFixed(0)}%`)
                       : `${collPct.toFixed(0)}% collected`
                     const badgeColor = entry.change !== null
-                      ? (entry.change >= 0 ? { bg: 'rgba(34,197,94,0.18)', text: '#4ade80' } : { bg: 'rgba(239,68,68,0.2)', text: '#f87171' })
-                      : { bg: 'rgba(100,100,120,0.22)', text: dark ? '#94a3b8' : '#64748b' }
+                      ? (entry.change >= 0 ? { bg: 'color-mix(in srgb, var(--fin-positive) 18%, transparent)', text: 'var(--fin-positive)' } : { bg: 'color-mix(in srgb, var(--fin-negative) 20%, transparent)', text: 'var(--fin-negative)' })
+                      : { bg: 'color-mix(in srgb, var(--text-3) 22%, transparent)', text: 'var(--text-3)' }
                     const fmtAmt = (v) => v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${Math.round(v)}`
                     return (
                       <button
@@ -1013,15 +1004,15 @@ export default function WebInvoices() {
                             width: '60%', height: `${barH * 100}%`, minHeight: 18,
                             background: barColor, borderRadius: 32,
                             transition: 'height 0.4s ease',
-                            boxShadow: `0 3px 14px ${collPct >= 80 ? 'rgba(74,222,128,0.28)' : collPct >= 50 ? 'rgba(251,191,36,0.28)' : 'rgba(248,113,113,0.28)'}`,
+                            boxShadow: `0 3px 14px ${collPct >= 80 ? 'color-mix(in srgb, var(--fin-positive) 28%, transparent)' : collPct >= 50 ? 'color-mix(in srgb, var(--fin-warning) 28%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 28%, transparent)'}`,
                           }} />
                         </div>
                         <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', margin: '7px 0 3px' }}>{entry.label}</p>
-                        <p style={{ fontSize: '1rem', fontWeight: 700, color: dark ? '#f8fafc' : 'var(--text-1)', marginBottom: 2 }}>{fmtAmt(entry.gross)}</p>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-1)', marginBottom: 2 }}>{fmtAmt(entry.gross)}</p>
                         <p style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginBottom: 6 }}>{fmtAmt(entry.received)} rcvd</p>
                         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-3)' }}>
-                            <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? '#f87171' : '#4ade80' }}>{fmtAmt(entry.outstanding)}</span>
+                            <span>Open</span><span style={{ fontWeight: 600, color: entry.outstanding > 0 ? 'var(--fin-negative)' : 'var(--fin-positive)' }}>{fmtAmt(entry.outstanding)}</span>
                           </div>
                         </div>
                         <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.22rem 0.6rem', borderRadius: 999, background: badgeColor.bg, color: badgeColor.text }}>{badgeLabel}</span>
@@ -1035,7 +1026,7 @@ export default function WebInvoices() {
               {projectSummaryCards.length > 0 && (
                 <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
                   <div className="mb-4">
-                    <h2 className="text-base font-bold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Recent Projects</h2>
+                    <h2 className="text-base font-bold" style={{ color: 'var(--text-1)' }}>Recent Projects</h2>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>Active invoice pressure</p>
                   </div>
                   <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 360 }}>
@@ -1051,7 +1042,7 @@ export default function WebInvoices() {
                           type="button"
                           onClick={() => { setProjectFilter(project); switchWorkspace('invoices') }}
                           className="w-full text-left rounded-2xl px-4 py-3 transition-all"
-                          style={{ background: dark ? 'rgba(15,23,42,0.5)' : 'rgba(248,250,252,0.9)', border: `1px solid ${dashboardStyles.line}`, cursor: 'pointer' }}
+                          style={{ background: 'var(--glass-bg)', border: `1px solid ${dashboardStyles.line}`, cursor: 'pointer' }}
                         >
                           <div className="flex items-center justify-between gap-3 mb-2">
                             <div className="flex items-center gap-2 min-w-0">
@@ -1059,18 +1050,18 @@ export default function WebInvoices() {
                                 style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                                 {project[0]?.toUpperCase()}
                               </span>
-                              <span className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{project}</span>
+                              <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project}</span>
                             </div>
-                            <span className="text-xs font-bold tabular-nums" style={{ color: dark ? '#f8fafc' : 'var(--text-1)', flexShrink: 0 }}>{fmtAmt(raised)}</span>
+                            <span className="text-xs font-bold tabular-nums" style={{ color: 'var(--text-1)', flexShrink: 0 }}>{fmtAmt(raised)}</span>
                           </div>
                           <div className="flex items-center gap-1 mb-2">
-                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
-                              <div className="h-full rounded-full" style={{ width: `${collPct}%`, background: collPct >= 80 ? '#4ade80' : collPct >= 50 ? '#fbbf24' : '#f87171' }} />
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${collPct}%`, background: collPct >= 80 ? 'var(--fin-positive)' : collPct >= 50 ? 'var(--fin-warning)' : 'var(--fin-negative)' }} />
                             </div>
-                            <span className="text-[11px] font-semibold tabular-nums flex-shrink-0" style={{ color: collPct >= 80 ? '#4ade80' : collPct >= 50 ? '#d97706' : '#f87171' }}>{collPct.toFixed(0)}%</span>
+                            <span className="text-[11px] font-semibold tabular-nums flex-shrink-0" style={{ color: collPct >= 80 ? 'var(--fin-positive)' : collPct >= 50 ? 'var(--fin-warning)' : 'var(--fin-negative)' }}>{collPct.toFixed(0)}%</span>
                           </div>
                           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                            {metrics?.count || 0} invoices · <span style={{ color: '#f87171' }}>₹{(open/1000).toFixed(0)}k open</span>
+                            {metrics?.count || 0} invoices · <span style={{ color: 'var(--fin-negative)' }}>₹{(open/1000).toFixed(0)}k open</span>
                           </p>
                         </button>
                       )
@@ -1095,7 +1086,7 @@ export default function WebInvoices() {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Raised timeline</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Raised by month-year</h2>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Raised by month-year</h2>
                   </div>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Click to filter</span>
                 </div>
@@ -1108,10 +1099,10 @@ export default function WebInvoices() {
                       type="button"
                       onClick={() => applyDashboardMonthDrilldown('Raised Date', entry.key)}
                       className="rounded-2xl p-3 text-left transition-all"
-                      style={{ background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)', border: `1px solid ${dashboardStyles.line}` }}
+                      style={{ background: 'var(--glass-bg)', border: `1px solid ${dashboardStyles.line}` }}
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
-                      <p className="text-sm font-semibold tabular-nums mt-2" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{fmt(entry.amount)}</p>
+                      <p className="text-sm font-semibold tabular-nums mt-2" style={{ color: 'var(--text-1)' }}>{fmt(entry.amount)}</p>
                       <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{entry.count} raised invoice{entry.count !== 1 ? 's' : ''}</p>
                     </button>
                   ))}
@@ -1124,7 +1115,7 @@ export default function WebInvoices() {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Cleared timeline</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Cleared by month-year</h2>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Cleared by month-year</h2>
                   </div>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Click to filter</span>
                 </div>
@@ -1137,7 +1128,7 @@ export default function WebInvoices() {
                       type="button"
                       onClick={() => applyDashboardMonthDrilldown('Cleared Date', entry.key)}
                       className="rounded-2xl p-3 text-left transition-all"
-                      style={{ background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)', border: `1px solid ${dashboardStyles.line}` }}
+                      style={{ background: 'var(--glass-bg)', border: `1px solid ${dashboardStyles.line}` }}
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-3)' }}>{monthLabel(entry.key)}</p>
                       <p className="text-sm font-semibold tabular-nums mt-2" style={{ color: 'var(--fin-positive)' }}>{fmt(entry.amount)}</p>
@@ -1165,7 +1156,7 @@ export default function WebInvoices() {
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Status distribution</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Collection pulse</h2>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Collection pulse</h2>
                   </div>
                   <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}>
                     Open invoice table <ArrowRight size={12} />
@@ -1177,13 +1168,13 @@ export default function WebInvoices() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                          <span className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{row.status}</span>
+                          <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{row.status}</span>
                         </div>
                         <span className="text-xs font-semibold tabular-nums" style={{ color: 'var(--text-3)' }}>
                           {row.count} · {row.pct}%
                         </span>
                       </div>
-                      <div className="h-2 rounded-full overflow-hidden" style={{ background: dark ? 'rgba(51,65,85,0.85)' : 'rgba(226,232,240,0.85)' }}>
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-2)' }}>
                         <div className="h-full rounded-full transition-all" style={{ width: `${row.pct}%`, background: row.color }} />
                       </div>
                     </div>
@@ -1206,15 +1197,15 @@ export default function WebInvoices() {
                           onClick={() => { setProjectFilter(project); switchWorkspace('invoices') }}
                           className="rounded-2xl p-4 text-left transition-all"
                           style={{
-                            background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.85)',
+                            background: 'var(--glass-bg)',
                             border: `1px solid ${dashboardStyles.line}`,
                           }}>
-                          <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{project}</p>
+                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{project}</p>
                           <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{metrics?.count || 0} invoices · click to filter</p>
                           <div className="grid grid-cols-3 gap-2 mt-3">
                             <div>
                               <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Raised</p>
-                              <p className="text-xs font-semibold tabular-nums mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                              <p className="text-xs font-semibold tabular-nums mt-1" style={{ color: 'var(--text-1)' }}>
                                 {fmt(Object.values(metrics?.by_currency || {}).reduce((sum, cur) => sum + Number(cur?.raised || 0), 0))}
                               </p>
                             </div>
@@ -1245,7 +1236,7 @@ export default function WebInvoices() {
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Attention queue</p>
-                      <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Upcoming follow-ups</h2>
+                      <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Upcoming follow-ups</h2>
                     </div>
                     <ShieldAlert size={18} style={{ color: 'var(--fin-warning)' }} />
                   </div>
@@ -1261,12 +1252,12 @@ export default function WebInvoices() {
                               onClick={() => { switchWorkspace('invoices'); openView(record) }}
                               className="w-full text-left rounded-2xl p-3 transition-all"
                               style={{
-                                background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                                background: 'var(--glass-bg)',
                                 border: `1px solid ${dashboardStyles.line}`,
                               }}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
                                     {f['Project'] || 'Unnamed project'}
                                   </p>
                                   <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
@@ -1289,7 +1280,7 @@ export default function WebInvoices() {
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Retainer desk</p>
-                      <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Coverage snapshot</h2>
+                      <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Coverage snapshot</h2>
                     </div>
                     <button onClick={() => switchWorkspace('retainers')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
                       Open retainers
@@ -1303,12 +1294,12 @@ export default function WebInvoices() {
                         onClick={() => { setSelectedRetainer(group.project); switchWorkspace('retainers') }}
                         className="w-full rounded-2xl p-3 text-left"
                         style={{
-                          background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                          background: 'var(--glass-bg)',
                           border: `1px solid ${dashboardStyles.line}`,
                         }}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{group.project}</p>
+                            <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
                             <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
                               {fmt(group.amount)} · next due {monthLabel(group.nextDueMonth)}
                             </p>
@@ -1332,7 +1323,7 @@ export default function WebInvoices() {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Latest movement</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>Newest invoices</h2>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>Newest invoices</h2>
                   </div>
                   <button onClick={() => switchWorkspace('invoices')} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
                     Open all
@@ -1349,12 +1340,12 @@ export default function WebInvoices() {
                         onClick={() => { switchWorkspace('invoices'); openView(record) }}
                         className="w-full rounded-2xl p-3 text-left transition-all"
                         style={{
-                          background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                          background: 'var(--glass-bg)',
                           border: `1px solid ${dashboardStyles.line}`,
                         }}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>
+                            <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
                               {f['Project'] || 'Unnamed project'}
                             </p>
                             <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
@@ -1362,7 +1353,7 @@ export default function WebInvoices() {
                             </p>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <p className="text-sm font-semibold tabular-nums" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{fmtCurrency(f['Amount Raised'], cur)}</p>
+                            <p className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{fmtCurrency(f['Amount Raised'], cur)}</p>
                             <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{fmtDate(f['Raised Date'])}</p>
                           </div>
                         </div>
@@ -1381,7 +1372,7 @@ export default function WebInvoices() {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--text-3)' }}>Operating notes</p>
-                    <h2 className="text-lg font-bold mt-1" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>How to use this desk</h2>
+                    <h2 className="text-lg font-bold mt-1" style={{ color: 'var(--text-1)' }}>How to use this desk</h2>
                   </div>
                   <BookOpen size={18} style={{ color: 'var(--accent)' }} />
                 </div>
@@ -1395,10 +1386,10 @@ export default function WebInvoices() {
                       key={title}
                       className="rounded-2xl p-3"
                       style={{
-                        background: dark ? 'rgba(15,23,42,0.52)' : 'rgba(255,255,255,0.86)',
+                        background: 'var(--glass-bg)',
                         border: `1px solid ${dashboardStyles.line}`,
                       }}>
-                      <p className="text-sm font-semibold" style={{ color: dark ? '#f8fafc' : 'var(--text-1)' }}>{title}</p>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</p>
                       <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
                     </div>
                   ))}
@@ -1466,7 +1457,7 @@ export default function WebInvoices() {
             </div>
           </div>
           {isStaleData && (
-            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--fin-warning)' }}>
+            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)', color: 'var(--fin-warning)' }}>
               <WifiOff size={14} />
               <span>Live data unavailable — showing cached records. Some changes may not appear.</span>
             </div>
@@ -1518,7 +1509,7 @@ export default function WebInvoices() {
                     className="rounded-2xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3"
                     style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-soft)' }}>
                     <div className="col-span-full flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-btn)', color: '#fff' }}>{cur}</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>{cur}</span>
                       <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{cur} Invoices — {data.count} total</span>
                     </div>
                     {[
@@ -1554,11 +1545,11 @@ export default function WebInvoices() {
                         className="card flex items-center gap-4 p-4 cursor-pointer text-left transition-all"
                         style={{
                           borderColor: active ? m.color : 'var(--card-border)',
-                          background: active ? `${m.color}10` : 'var(--card-bg)',
-                          boxShadow: active ? `0 0 0 2px ${m.color}30, var(--card-shadow)` : 'var(--card-shadow)',
+                          background: active ? `${tint(m.color, 0.06)}` : 'var(--card-bg)',
+                          boxShadow: active ? `0 0 0 2px ${tint(m.color, 0.19)}, var(--card-shadow)` : 'var(--card-shadow)',
                         }}
                         aria-pressed={active}>
-                        <div className="kpi-icon flex-shrink-0" style={{ background: `${m.color}18` }}>
+                        <div className="kpi-icon flex-shrink-0" style={{ background: `${tint(m.color, 0.09)}` }}>
                           {Icon && <Icon size={18} style={{ color: m.color }} />}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -1578,17 +1569,17 @@ export default function WebInvoices() {
               {/* ── Overdue alert (currency-aware amounts) ── */}
               {overdue.length > 0 && (
                 <section className="rounded-2xl p-4 animate-slide-down"
-                  style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.16)' }}>
+                  style={{ background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 16%, transparent)' }}>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertOctagon size={14} style={{ color: '#f87171' }} />
-                    <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
+                    <AlertOctagon size={14} style={{ color: 'var(--fin-negative)' }} />
+                    <p className="text-sm font-semibold" style={{ color: 'var(--fin-negative)' }}>
                       {overdue.length} Overdue — pending more than 30 days
                     </p>
                   </div>
                   <div className="space-y-1.5">
                     {overdue.map((inv, i) => (
                       <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg flex-wrap"
-                        style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.10)' }}>
+                        style={{ background: 'color-mix(in srgb, var(--fin-negative) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 10%, transparent)' }}>
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="font-mono text-xs font-semibold shrink-0" style={{ color: 'var(--text-1)' }}>{inv.invoice_no}</span>
                           <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{inv.project}</span>
@@ -1662,7 +1653,7 @@ export default function WebInvoices() {
                       style={{
                         background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
                         border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
-                        boxShadow: selectedRetainer === group.project ? '0 0 0 2px rgba(37,99,235,0.10)' : 'none',
+                        boxShadow: selectedRetainer === group.project ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'none',
                       }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1747,7 +1738,7 @@ export default function WebInvoices() {
                               style={{
                                 background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
                                 border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
-                                boxShadow: item.active ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
+                                boxShadow: item.active ? '0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent)' : 'none',
                               }}>
                               <div className="flex items-center justify-between gap-2 mb-2">
                                 <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
@@ -1900,7 +1891,7 @@ export default function WebInvoices() {
                       style={{
                         background: active ? 'var(--accent-dim)' : 'var(--bg-layer)',
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--card-border)'}`,
-                        boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--shadow-sm)',
+                        boxShadow: active ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--shadow-sm)',
                       }}>
                       {/* Header */}
                       <div className="flex items-start justify-between gap-2">
@@ -2153,27 +2144,27 @@ export default function WebInvoices() {
           {/* Error */}
           {(errorStatus === 403 || errorStatus === 401) ? (
             <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-10 rounded-2xl text-center"
-              style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.15)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(248,113,113,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertTriangle size={22} style={{ color: '#f87171' }} />
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 15%, transparent)' }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'color-mix(in srgb, var(--fin-negative) 12%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={22} style={{ color: 'var(--fin-negative)' }} />
               </div>
               <div>
-                <div className="font-semibold text-sm mb-1" style={{ color: '#f87171' }}>Access Restricted</div>
+                <div className="font-semibold text-sm mb-1" style={{ color: 'var(--fin-negative)' }}>Access Restricted</div>
                 <div className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>
                   You don't have permission to view web invoices.<br />
                   Please contact your administrator to request access.
                 </div>
                 <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg"
-                  style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: 'none', cursor: 'pointer', transition: 'background-color 150ms' }}
-                  onMouseEnter={e => e.target.style.background = 'rgba(248,113,113,0.22)'}
-                  onMouseLeave={e => e.target.style.background = 'rgba(248,113,113,0.15)'}>
+                  style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)', border: 'none', cursor: 'pointer', transition: 'background-color 150ms' }}
+                  onMouseEnter={e => e.target.style.background = 'color-mix(in srgb, var(--fin-negative) 22%, transparent)'}
+                  onMouseLeave={e => e.target.style.background = 'color-mix(in srgb, var(--fin-negative) 15%, transparent)'}>
                   Refresh
                 </button>
               </div>
             </div>
           ) : error && (
             <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs"
-              style={{ background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.18)', color: '#f87171' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)', color: 'var(--fin-negative)' }}>
               <AlertTriangle size={13} className="shrink-0" />{error}
               <button onClick={refresh} className="underline ml-1">retry</button>
             </div>
@@ -2447,7 +2438,7 @@ export default function WebInvoices() {
                                   )}
                                   <button onClick={() => openView(r)}
                                     className="btn-ghost flex items-center gap-1.5"
-                                    style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.3)' }}>
+                                    style={{ fontSize: '0.6875rem', padding: '0.3rem 0.65rem', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)' }}>
                                     <Eye size={12} /><span className="text-[11px] font-semibold">View</span>
                                   </button>
                                 </div>
@@ -2482,7 +2473,7 @@ export default function WebInvoices() {
                                       display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                                       padding: '10px 20px 10px 18px',
                                       borderBottom: '1px solid var(--glass-border)',
-                                      background: `linear-gradient(90deg, ${accentColor}08 0%, transparent 60%)`,
+                                      background: `linear-gradient(90deg, ${tint(accentColor, 0.03)} 0%, transparent 60%)`,
                                     }}>
                                       <StatusPill status={f['Payment Status']} />
                                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 2 }}>
@@ -2607,7 +2598,7 @@ export default function WebInvoices() {
                                           <button
                                             onClick={() => openRecordPayment(r)}
                                             className="btn-ghost flex items-center gap-1.5"
-                                            style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--fin-positive)', borderColor: 'rgba(34,197,94,0.35)' }}>
+                                            style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--fin-positive)', borderColor: 'color-mix(in srgb, var(--fin-positive) 35%, transparent)' }}>
                                             <CheckCircle2 size={11} />
                                             <span style={{ fontSize: 11, fontWeight: 600 }}>Record Payment</span>
                                           </button>
@@ -2615,7 +2606,7 @@ export default function WebInvoices() {
                                         <button
                                           onClick={() => openView(r)}
                                           className="btn-ghost flex items-center gap-1.5"
-                                          style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--accent)', borderColor: 'rgba(79,70,229,0.35)' }}>
+                                          style={{ fontSize: '0.6875rem', padding: '0.25rem 0.7rem', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)' }}>
                                           <Eye size={11} />
                                           <span style={{ fontSize: 11, fontWeight: 600 }}>View Details</span>
                                         </button>

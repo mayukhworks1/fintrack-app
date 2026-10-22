@@ -403,7 +403,7 @@ export default function Report() {
               className="card text-left transition-all"
               style={{
                 borderColor: active ? 'var(--accent)' : 'var(--card-border)',
-                boxShadow: active ? '0 0 0 2px rgba(37,99,235,0.10)' : 'var(--card-shadow)',
+                boxShadow: active ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--card-shadow)',
                 background: active ? 'var(--accent-dim)' : 'var(--card-bg)',
               }}
             >

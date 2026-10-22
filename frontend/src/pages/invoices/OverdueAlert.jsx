@@ -28,25 +28,25 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
 
   return (
     <section className="rounded-2xl animate-slide-down overflow-hidden"
-      style={{ border: '1px solid rgba(248,113,113,0.22)', background: 'rgba(248,113,113,0.04)' }}>
+      style={{ border: '1px solid color-mix(in srgb, var(--fin-negative) 22%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 4%, transparent)' }}>
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap"
-        style={{ borderBottom: '1px solid rgba(248,113,113,0.14)', background: 'rgba(248,113,113,0.07)' }}>
+        style={{ borderBottom: '1px solid color-mix(in srgb, var(--fin-negative) 14%, transparent)', background: 'color-mix(in srgb, var(--fin-negative) 7%, transparent)' }}>
         <div className="flex items-center gap-2 flex-wrap">
-          <AlertOctagon size={14} style={{ color: '#f87171', flexShrink: 0 }} />
-          <span className="text-sm font-bold" style={{ color: '#f87171' }}>
+          <AlertOctagon size={14} style={{ color: 'var(--fin-negative)', flexShrink: 0 }} />
+          <span className="text-sm font-bold" style={{ color: 'var(--fin-negative)' }}>
             {overdue.length} Invoice{overdue.length !== 1 ? 's' : ''} Awaiting Collection
           </span>
           {critical > 0 && (
             <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(239,68,68,0.18)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-negative) 18%, transparent)', color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 25%, transparent)' }}>
               {critical} critical 60d+
             </span>
           )}
           {urgent > 0 && (
             <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.25)' }}>
+              style={{ background: 'color-mix(in srgb, var(--fin-warning) 15%, transparent)', color: 'var(--fin-warning)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)' }}>
               {urgent} urgent 30–60d
             </span>
           )}
@@ -54,13 +54,13 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
         <div className="flex items-center gap-4 shrink-0">
           <div className="text-right">
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>Total outstanding</p>
-            <p className="text-sm font-bold tabular-nums" style={{ color: '#f87171' }}>{formatInr(totalOutstanding)}</p>
+            <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--fin-negative)' }}>{formatInr(totalOutstanding)}</p>
           </div>
           <button type="button" onClick={onViewAll}
             className="text-xs font-semibold px-3 py-1.5 rounded-lg"
-            style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.28)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(248,113,113,0.15)'}>
+            style={{ background: 'color-mix(in srgb, var(--fin-negative) 15%, transparent)', color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 30%, transparent)', cursor: 'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 28%, transparent)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 15%, transparent)'}>
             View all →
           </button>
         </div>
@@ -68,17 +68,17 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
 
       {/* ── Invoice rows ── */}
       {enriched.map((inv, i) => {
-        const accent = inv.aging >= 60 ? '#ef4444' : inv.aging >= 30 ? '#f97316' : '#f59e0b'
+        const accent = inv.aging >= 60 ? 'var(--fin-negative)' : inv.aging >= 30 ? 'var(--fin-warning)' : 'var(--fin-warning)'
         const urgencyLabel = inv.aging >= 60 ? 'Critical' : inv.aging >= 30 ? 'Urgent' : 'Pending'
         return (
           <button key={i} type="button" onClick={() => onOpenInvoice(inv.invoice_no)}
             style={{
               display: 'block', width: '100%', textAlign: 'left',
               background: 'transparent', border: 'none', cursor: 'pointer',
-              borderBottom: i < enriched.length - 1 ? '1px solid rgba(248,113,113,0.08)' : 'none',
+              borderBottom: i < enriched.length - 1 ? '1px solid color-mix(in srgb, var(--fin-negative) 8%, transparent)' : 'none',
               transition: 'background 0.12s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.07)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--fin-negative) 7%, transparent)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '12px 16px' }}>
@@ -113,11 +113,11 @@ export function OverdueAlert({ overdue, allRecords, onViewAll, onOpenInvoice }) 
                       </span>
                     )}
                     {inv.followup ? (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#34d399', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--fin-positive)', display: 'flex', alignItems: 'center', gap: 3 }}>
                         <span>↻</span> Follow-up <span style={{ textDecoration: 'underline dotted' }}>{String(inv.followup).slice(0,10)}</span>
                       </span>
                     ) : (
-                      <span style={{ fontSize: 11, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <span style={{ fontSize: 11, color: 'var(--fin-warning)', display: 'flex', alignItems: 'center', gap: 3 }}>
                         <span>⚠</span> No follow-up scheduled
                       </span>
                     )}

@@ -63,25 +63,25 @@ export const LAYERS = [
     id: 'base',
     title: 'Your records',
     body: 'The base your team already works in stays the system of record.',
-    top: '#0f2f5c', side: '#0a2244', front: '#0d2a51',
+    top: 'color-mix(in srgb, var(--accent) 35%, #000)', side: 'color-mix(in srgb, var(--accent) 26%, #000)', front: 'color-mix(in srgb, var(--accent) 31%, #000)',
   },
   {
     id: 'mirror',
     title: 'Postgres mirror',
     body: 'Kept current by webhooks, a 30-second pass and a full reconciliation.',
-    top: '#1d5aa8', side: '#154480', front: '#1a5096',
+    top: 'color-mix(in srgb, var(--accent) 72%, #000)', side: 'color-mix(in srgb, var(--accent) 55%, #000)', front: 'color-mix(in srgb, var(--accent) 64%, #000)',
   },
   {
     id: 'modules',
     title: 'Eleven modules',
     body: 'Invoices, projects, tax, analytics, documents, reports, audit.',
-    top: '#3987e5', side: '#2a6cbd', front: '#317ad1',
+    top: 'var(--accent)', side: 'color-mix(in srgb, var(--accent) 84%, #000)', front: 'color-mix(in srgb, var(--accent) 92%, #000)',
   },
   {
     id: 'analyst',
     title: 'The analyst',
     body: 'Picks a measure and a grouping. The code compiles the SQL and shows it.',
-    top: '#86b6ef', side: '#6b9bd6', front: '#79a9e4',
+    top: 'color-mix(in srgb, var(--accent) 55%, #fff)', side: 'color-mix(in srgb, var(--accent) 66%, #fff)', front: 'color-mix(in srgb, var(--accent) 60%, #fff)',
   },
 ]
 
@@ -105,8 +105,8 @@ export function StackDrawing({ active = null, className = '' }) {
          style={{ width: '100%', maxWidth: 420, display: 'block', overflow: 'visible' }}>
       <defs>
         <linearGradient id="ft-spine-2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#4ADE80" />
-          <stop offset="100%" stopColor="#4F86FF" />
+          <stop offset="0%" stopColor="var(--fin-positive)" />
+          <stop offset="100%" stopColor="var(--accent)" />
         </linearGradient>
       </defs>
       {[...LAYERS].reverse().map((layer, ri) => {

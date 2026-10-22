@@ -306,14 +306,14 @@ export default function Projects() {
             className="flex items-center justify-center gap-1.5 px-3 rounded-xl text-sm transition-all min-h-[42px]"
             style={{
               background: showFilters || activeFilters.length ? 'var(--accent-dim)' : 'var(--bg-input)',
-              border: `1px solid ${showFilters || activeFilters.length ? 'rgba(37,99,235,0.25)' : 'var(--border)'}`,
+              border: `1px solid ${showFilters || activeFilters.length ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'var(--border)'}`,
               color: showFilters || activeFilters.length ? 'var(--fin-positive)' : 'var(--text-2)',
             }}>
             <SlidersHorizontal size={14} aria-hidden="true" />
             <span className="hidden sm:inline">Filters</span>
             {activeFilters.length > 0 && (
               <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{ background: 'var(--accent)', color: '#fff' }}>{activeFilters.length}</span>
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>{activeFilters.length}</span>
             )}
           </button>
             </ExecutiveFilterBar>

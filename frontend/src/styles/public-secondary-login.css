@@ -1,0 +1,54 @@
+/* Sign in (/login). Login is imported eagerly, so this file is part of the
+   entry stylesheet: it carries only what the sign-in screen draws. */
+@keyframes ft-s-kb { from { transform: none } to { transform: scale(1.03) } }
+@keyframes ft-s-wipe { from { opacity: 0; clip-path: inset(0 100% 100% 0 round 10px) } 30% { opacity: 1 } to { opacity: 1; clip-path: inset(0 round 10px) } }
+@keyframes ft-s-dim { from { opacity: 0 } to { opacity: 1 } }
+@keyframes ft-s-tick-draw { to { stroke-dashoffset: 0 } }
+
+.ft-s-theme {
+  position: absolute; top: 16px; right: 16px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 12px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-2); cursor: pointer;
+  transition: color var(--m-t-micro) ease, border-color var(--m-t-micro) ease;
+}
+.ft-s-theme:hover { color: var(--accent-ink, var(--accent)); border-color: var(--accent-soft); }
+.ft-s-theme:focus-visible { color: var(--accent-ink, var(--accent)); border-color: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: 2px; }
+.ft-s-theme:focus-visible { box-shadow: 0 0 0 3px var(--accent-glow); }
+
+/* The providers' space, held while they are asked for. */
+.ft-s-skel { display: block; height: 44px; border-radius: 12px; border: 1px solid var(--card-border); background: color-mix(in srgb, var(--text-3) 8%, var(--card-bg)); }
+
+.ft-s-links { display: grid; gap: 4px; }
+.ft-s-links button { min-height: 32px; }
+.ft-s-legacy { justify-self: center; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.ft-s-legacy:hover, .ft-s-legacy:focus-visible { color: var(--accent-btn); }
+
+.ft-s-tick path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── The showcase ── */
+.ft-s-slide { overflow: hidden; }
+.ft-s-slide img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.ft-s-ring, .ft-s-dimmer { position: absolute; z-index: 1; border-radius: 10px; pointer-events: none; }
+.ft-s-ring { border: 2px solid var(--accent-bright); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-bright) 28%, transparent); }
+.ft-s-dimmer { box-shadow: 0 0 0 999px rgba(11, 18, 36, 0.2); }
+.ft-s-show-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; min-height: 40px; }
+.ft-s-show-cap { margin: 0; min-width: 0; font-size: 12.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.72); }
+.ft-s-show-cap b { margin-right: 4px; color: #fff; }
+.ft-s-show-cap span { opacity: 0.7; white-space: nowrap; }
+.ft-s-show-ctl { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
+.ft-s-show-ctl > button {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: rgba(255, 255, 255, 0.78); transition: background-color var(--m-t-micro) ease, color var(--m-t-micro) ease;
+}
+.ft-s-show-ctl > button:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.ft-s-show-ctl > button:focus-visible, .ft-s-dot:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent-bright) 55%, #fff); outline-offset: 1px; }
+.ft-s-dots { display: flex; align-items: center; }
+.ft-s-dot { display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 2px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .ft-s-tick path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ft-s-tick-draw 300ms var(--m-ease-out) 80ms forwards; }
+  .ft-s-ring { animation: ft-s-wipe 900ms var(--m-ease-out) 350ms both; }
+  .ft-s-dimmer { animation: ft-s-dim 600ms ease 350ms both; }
+  .ft-showcase[data-running] .ft-s-slide[data-on] img { animation: ft-s-kb 5s linear both; }
+}
+/* Paused means everything in the panel holds still, its glow included. */
+.ft-showcase:not([data-running]) .ft-showcase-glow { animation-play-state: paused; }

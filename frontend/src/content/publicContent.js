@@ -17,12 +17,15 @@ import {
   GitBranch, ScrollText, SlidersHorizontal, Server, Blocks, Code2,
 } from 'lucide-react'
 
+/** The one line that says what FinTrack is: the footer and the home page badge share it. */
+export const TAGLINE = 'FinTrack — project delivery and finance on one set of records'
+
 export const MODULES = [
   {
     icon: Receipt, visual: 'ledger',
     title: 'Invoices',
-    body: 'Track invoices across aging bands, collection rates, and average days to collect. GST and TDS are segregated automatically to prevent collection overstatement.',
-    points: ['Aging bands: 0-30, 31-60, 61-90, 90+ days', 'Real-time collection velocity and follow-up queues', 'Automated recurring retainer schedules'],
+    body: 'Track invoices across ageing bands, collection rates, and average days to collect. GST and TDS are segregated automatically to prevent collection overstatement.',
+    points: ['Ageing bands: 0-30, 31-60, 61-90, 90+ days', 'Real-time collection velocity and follow-up queues', 'Automated recurring retainer schedules'],
   },
   {
     icon: FolderKanban, visual: 'margin',
@@ -62,9 +65,9 @@ export const MODULES = [
   },
   {
     icon: Globe, visual: 'pages',
-    title: 'Web studio',
-    body: 'Generate and publish financial dashboards, reports, and client portals with version control, access protection, and custom domains.',
-    points: ['Real-time streaming generation', 'In-place surgical section editing', 'Password protection and custom domain routing'],
+    title: 'Pages',
+    body: 'Write pages or edit a spreadsheet, then publish on a link with an optional password, protection code and expiry (IST). Link previews in chat apps, and views per day, device and country.',
+    points: ['Pages and spreadsheets in folders, with formulas and ₹ formats', 'Publish on a link with a password, protection code or expiry (IST)', 'Link previews in chat apps; views per day, device and country'],
   },
   {
     icon: Activity, visual: 'board',
@@ -82,7 +85,7 @@ export const MODULES = [
     icon: ShieldCheck, visual: 'audit',
     title: 'Admin & audit',
     body: 'Account approval, a permission matrix down to the individual action, live sessions, and a full request trail written asynchronously so it never slows the page it is recording.',
-    points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health'],
+    points: ['Permissions granted or revoked per person', 'Every request and every field change', 'Sync log, AI runs, deployment health', 'AI gateway: provider routes, daily caps, versioned prompts, every call logged'],
   },
 ]
 
@@ -114,8 +117,8 @@ export const PROBLEMS = [
   },
   {
     icon: Code2,
-    title: 'Unverified estimates introduce regulatory risk.',
-    body: 'Standard conversational assistants approximate totals without executing verified queries. On financial ledgers, unverified figures introduce compliance liabilities.',
+    title: 'An answer with no query behind it cannot be checked.',
+    body: 'A chat assistant asked for a total writes a number; nothing ran that you can read, so nobody can say where it came from. Here the model only picks a measure and a grouping, the application writes and runs the SQL, and the statement is shown beside the figure.',
   },
 ]
 
@@ -250,6 +253,16 @@ export const FAQ = [
     q: 'Is anything deliberately not configurable?',
     group: 'Data & AI',
     a: 'One thing: the set of measures the AI analyst is allowed to use. It picks a measure and a grouping from a closed list and the application compiles the SQL, which is the entire reason an answer here can be checked rather than trusted. Opening that set up at question time would make the analyst more flexible and its answers worth less. New measures are added to it deliberately and reviewed, the same way a new module is: never inferred in the moment someone asks.',
+  },
+  {
+    q: 'Can I publish a spreadsheet to a client?',
+    group: 'The product',
+    a: 'Yes. Pages keeps pages and spreadsheets in folders, and its spreadsheet editor has formulas and ₹ number formats. Publish a page or a sheet on a link, optionally with a password, a protection code and an expiry date and time in IST. The link unfurls as a preview card in chat apps, and each page shows its views per day, device and country.',
+  },
+  {
+    q: 'Which AI providers does it use, and where are the keys?',
+    group: 'Data & AI',
+    a: 'Groq and OpenRouter, behind one gateway. Each AI task has an ordered route of provider and model steps, a daily cap and a versioned prompt, and every call is logged. Provider keys are stored encrypted on the server. A superadmin switches each task on or off, and the day behind every daily cap starts at midnight IST.',
   },
   {
     q: 'Who can see what?',

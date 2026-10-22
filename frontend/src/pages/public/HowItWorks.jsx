@@ -6,27 +6,61 @@
  * everyone else skips, which is exactly the argument for giving it a route:
  * the people who want it can be sent straight here, and the people who do not
  * are no longer scrolling past it to reach the price of admission.
+ *
+ * Every moving part here moves once and shows a step being taken: the sync
+ * cadence draws itself, the three steps join up, a sample record crosses into
+ * the mirror, the stack lights the layer being read, and the analyst's work is
+ * handed from stage to stage. Nothing loops.
  */
-import { useState } from 'react'
+import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, X } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { usePageMeta } from '../../hooks/usePageMeta'
+import { useReveal } from '../../hooks/useReveal'
 import PublicLayout from '../../components/PublicLayout'
+import LazyMount from '../../components/motion/LazyMount'
 import AnalystPipeline from '../../components/AnalystPipeline'
 import StackStory from '../../components/StackStory'
-import SyncPipelineSimulator from '../../components/SyncPipelineSimulator'
+import SyncCadence from '../../components/secondary/SyncCadence'
 import { Grain } from '../../components/LandingVisuals'
 import { StaysPut } from '../../components/SceneDiagrams'
-import { Head, PageHead, Closing, Reveal, Stagger, Rule } from '../../components/PublicBits'
+import { Head, PageHead, Closing, Reveal, Rule } from '../../components/PublicBits'
 import ScrollLit from '../../components/ScrollLit'
 import { STEPS, APP_LD, crumbs, graph } from '../../content/publicContent'
-import LoopVideo from '../../components/LoopVideo'
+import '../../styles/public-secondary.css'
+import '../../styles/public-secondary-hiw.css'
+
+// Below the fold and the heaviest code on the page: fetched as they approach.
+const SyncPipelineSimulator = lazy(() => import('../../components/SyncPipelineSimulator'))
 
 const LD = graph(APP_LD, crumbs([{ name: 'How it works', path: '/how-it-works' }]))
 
-export default function HowItWorks() {
-  const [lightboxOpen, setLightboxOpen] = useState(false)
+/* The three steps, joined by a line that draws from the first badge to the
+   last once the row is reached; the numbers pop in the order they are read. */
+function Steps() {
+  const ref = useReveal({ threshold: 0.2 })
+  return (
+    <div ref={ref} className="ft-s-steps" data-hold="">
+      <span className="ft-s-steps-line" aria-hidden="true" />
+      <ol className="ft-m-seq">
+        {STEPS.map(({ icon: Icon, title, body }, i) => (
+          <li key={title} style={{ '--i': i }}>
+            <div className="ft-lift ft-s-step">
+              <span className="ft-s-badge ft-m-pop" style={{ '--d': `${200 + i * 380}ms` }} aria-hidden="true">{i + 1}</span>
+              <h3 className="ft-display">
+                <Icon size={17} aria-hidden="true" />
+                {title}
+              </h3>
+              <p>{body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
 
+export default function HowItWorks() {
   usePageMeta({
     title: 'How FinTrack works — nothing to migrate, and every answer checkable',
     description:
@@ -40,7 +74,8 @@ export default function HowItWorks() {
       <section className="relative overflow-hidden">
         <Grain />
         <PageHead eyebrow="How it works"
-                  lines={['Nothing to migrate,', <em key="e">and nothing to take on faith</em>]}>
+                  lines={['Nothing to migrate,', <em key="e">and nothing to take on faith</em>]}
+                  aside={<SyncCadence />}>
           The fastest way to lose a finance team is to ask them to move their
           records somewhere new on day one. FinTrack sits on top of what they
           already keep — and shows its working on everything it derives from it.
@@ -48,29 +83,16 @@ export default function HowItWorks() {
       </section>
 
       <section className="mx-auto px-4 sm:px-6 pb-16 sm:pb-20" style={{ maxWidth: 1120 }}>
-        <Head n="01" eyebrow="The shape of it" title="Three steps, and one set of rows underneath">
+        {/* Spaced off the opening the way every other section is off the
+            one before it. */}
+        <Head n="01" eyebrow="The shape of it" title="Three steps, and one set of rows underneath"
+              className="mt-12 sm:mt-20">
           Records stay where they are, a mirror makes them fast, and questions
           are compiled rather than guessed. Everything else in the product is a
           consequence of those three.
         </Head>
 
-        <Stagger as="ol" className="ft-steps relative grid gap-4 sm:gap-5 m-0 p-0 mb-14"
-                 style={{ listStyle: 'none',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
-          {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className="ft-lift relative rounded-xl p-5 sm:p-6"
-                style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="ft-badge flex items-center justify-center rounded-lg font-bold text-sm"
-                      style={{ width: 30, height: 30, background: 'var(--accent-dim)', color: 'var(--accent)' }}
-                      aria-hidden="true">{i + 1}</span>
-                <Icon size={17} aria-hidden="true" style={{ color: 'var(--text-3)' }} />
-              </div>
-              <h3 className="ft-display text-lg mb-2" style={{ color: 'var(--text-1)' }}>{title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>{body}</p>
-            </li>
-          ))}
-        </Stagger>
+        <Steps />
 
         <Reveal className="grid gap-8 lg:gap-12 items-center mb-14"
                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
@@ -89,47 +111,21 @@ export default function HowItWorks() {
           </div>
         </Reveal>
 
-        {/* ── Realtime Ingest & Database Pipeline Simulator ─────────────── */}
-        <Reveal className="mb-14">
-          <SyncPipelineSimulator />
-        </Reveal>
+        {/* The simulator mounts as it approaches, in space held for it, so
+            the first render on a phone is the opening and the steps. */}
+        <LazyMount className="ft-s-sim-slot mb-14">
+          <Suspense fallback={null}><SyncPipelineSimulator /></Suspense>
+        </LazyMount>
 
         <Rule className="mb-14" />
         <Head n="02" eyebrow="One set of rows" title="Walk up the stack">
           Four layers, bottom to top, in the order the data actually moves.
           Scroll the column and the drawing follows.
         </Head>
+        {/* In the page from the start: its four headings and paragraphs are
+            the section, and the drawing beside them is small. */}
         <StackStory />
       </section>
-
-      {lightboxOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <div
-            className="relative max-w-5xl w-full max-h-[90vh] flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-              <span className="text-xs font-bold text-slate-200">
-                FinTrack Single-Ledger 3D Architecture Blueprint
-              </span>
-              <button
-                onClick={() => setLightboxOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4 overflow-auto flex items-center justify-center">
-              <LoopVideo src="/media/pomelli_photoshoot-6.mp4" className="max-h-[75vh] object-contain rounded-lg" />
-            </div>
-          </div>
-        </div>
-      )}
 
       <section id="trust" className="mx-auto px-4 sm:px-6 pb-16 sm:pb-24" style={{ maxWidth: 1120 }}>
         <Rule className="mb-14" />
@@ -160,18 +156,18 @@ export default function HowItWorks() {
             the cards were the appendix to it. */}
         <p className="mt-10">
           <Link to="/security" className="ft-cta-link inline-flex items-center gap-2 font-bold"
-                style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '1rem' }}>
+                style={{ color: 'var(--accent-ink, var(--accent))', textDecoration: 'none', fontSize: '1rem' }}>
             The four mechanisms behind it, on the security page
             <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </p>
       </section>
 
-      <Closing title="See it on your own numbers"
-               cta={<Link to="/login" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
+      <Closing title="Walk it yourself in the sandbox"
+               cta={<Link to="/#try" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                           style={{ minHeight: 52, padding: '0 30px', background: '#fff',
                                    color: 'var(--accent-btn)', textDecoration: 'none', fontSize: '0.975rem' }}>
-                      Sign in <ArrowRight size={17} aria-hidden="true" />
+                      Open the sandbox <ArrowRight size={17} aria-hidden="true" />
                     </Link>}
                next={<Link to="/customise" className="ft-btn inline-flex items-center justify-center gap-2 rounded-xl font-bold"
                            style={{ minHeight: 52, padding: '0 24px', background: 'rgba(255,255,255,0.14)',
@@ -179,7 +175,8 @@ export default function HowItWorks() {
                                     textDecoration: 'none', fontSize: '0.95rem' }}>
                        Next: what you can change <ArrowRight size={15} aria-hidden="true" />
                      </Link>}>
-        Access is by invitation — an administrator approves each account.
+        The same records, filters and compiled queries, on sample data in your
+        browser. No account needed; signing in is by invitation.
       </Closing>
     </PublicLayout>
   )

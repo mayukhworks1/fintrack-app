@@ -47,14 +47,14 @@ function smoothPath(pts) {
 }
 
 function statusMeta(status, agingDays) {
-  if (status === 'Paid')      return { fill: '#16a34a', light: '#bbf7d0', label: 'Paid',      dot: '#22c55e' }
-  if (status === 'Cancelled') return { fill: '#6b7280', light: '#e5e7eb', label: 'Cancelled', dot: '#9ca3af' }
+  if (status === 'Paid')      return { fill: 'var(--fin-positive)', light: 'var(--fin-pos-border)', label: 'Paid',      dot: 'var(--fin-positive)' }
+  if (status === 'Cancelled') return { fill: 'var(--text-3)', light: 'var(--border)', label: 'Cancelled', dot: 'var(--text-3)' }
   const d = Number(agingDays || 0)
-  if (d > 30) return { fill: '#e11d48', light: '#fecdd3', label: 'Overdue',  dot: '#fb7185' }
-  return       { fill: '#475569', light: '#cbd5e1', label: 'Pending',  dot: '#94a3b8' }
+  if (d > 30) return { fill: 'var(--fin-negative)', light: 'var(--fin-neg-border)', label: 'Overdue',  dot: 'var(--fin-negative)' }
+  return       { fill: 'var(--text-2)', light: 'var(--border-strong)', label: 'Pending',  dot: 'var(--text-3)' }
 }
 
-const AREA_COLOR = '#22c55e'
+const AREA_COLOR = 'var(--fin-positive)'
 const UID = 'iac2'
 
 // Accepts either:
@@ -213,7 +213,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
           return (
             <line key={t}
               x1={PAD_L} y1={y} x2={PAD_L + chartW} y2={y}
-              stroke="var(--card-border, rgba(0,0,0,0.06))"
+              stroke="var(--chart-grid)"
               strokeWidth="1" strokeDasharray="4 6"
             />
           )
@@ -262,7 +262,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
               <rect
                 x={x - barW / 2 + 1} y={top} width={barW - 2} height={Math.min(6, h)}
                 rx={rx - 0.5}
-                fill="white" opacity={isHov ? 0.30 : 0.18}
+                fill="var(--card-bg)" opacity={isHov ? 0.30 : 0.18}
               />
               {/* project badge */}
               {h > 32 && (
@@ -270,12 +270,12 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                   <circle
                     cx={x} cy={top - 13} r={isHov ? 13 : 11}
                     fill={meta.fill}
-                    stroke="white" strokeWidth="1.5"
+                    stroke="var(--card-bg)" strokeWidth="1.5"
                   />
                   <text x={x} y={top - 13}
                     textAnchor="middle" dominantBaseline="central"
                     fontSize={isHov ? "8.5" : "7.5"} fontWeight="700"
-                    fill="white"
+                    fill="var(--card-bg)"
                     fontFamily="Outfit, ui-sans-serif, system-ui"
                   >
                     {initials(day.invoices[0].project || day.invoices[0].client || day.invoices[0].raisedBy)}
@@ -283,10 +283,10 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                   {/* count badge */}
                   {day.invoices.length > 1 && (
                     <g>
-                      <circle cx={x + 9} cy={top - 22} r="7" fill={meta.dot} stroke="white" strokeWidth="1.2" />
+                      <circle cx={x + 9} cy={top - 22} r="7" fill={meta.dot} stroke="var(--card-bg)" strokeWidth="1.2" />
                       <text x={x + 9} y={top - 22}
                         textAnchor="middle" dominantBaseline="central"
-                        fontSize="6.5" fontWeight="800" fill="white"
+                        fontSize="6.5" fontWeight="800" fill="var(--card-bg)"
                         fontFamily="Outfit, ui-sans-serif, system-ui"
                       >{day.invoices.length}</text>
                     </g>
@@ -306,18 +306,18 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
             <g pointerEvents="none">
               {/* vertical guide */}
               <line x1={x} y1={PAD_TOP} x2={x} y2={bot}
-                stroke="var(--accent, #6366f1)" strokeWidth="1"
+                stroke="var(--accent)" strokeWidth="1"
                 strokeDasharray="3 4" opacity="0.5" />
               {/* dot on curve */}
               <circle cx={x} cy={cy} r="5"
-                fill="white" stroke={AREA_COLOR} strokeWidth="2.5" />
+                fill="var(--card-bg)" stroke={AREA_COLOR} strokeWidth="2.5" />
               <circle cx={x} cy={cy} r="2.5" fill={AREA_COLOR} />
               {/* cumulative label */}
               <rect x={x - 38} y={PAD_TOP - 20} width={76} height={16} rx="6"
-                fill="var(--accent, #6366f1)" opacity="0.9" />
+                fill="var(--accent)" opacity="0.9" />
               <text x={x} y={PAD_TOP - 12}
                 textAnchor="middle" dominantBaseline="central"
-                fontSize="9" fontWeight="700" fill="white"
+                fontSize="9" fontWeight="700" fill="var(--card-bg)"
                 fontFamily="Outfit, ui-sans-serif, system-ui"
               >{fmtInr(hoverDay.cum)} total</text>
             </g>
@@ -335,7 +335,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
               <circle
                 cx={x} cy={PAD_TOP + chartH + 9}
                 r={isHov ? 4 : hasInv ? 3.5 : 2}
-                fill={isHov ? 'var(--accent)' : hasInv ? AREA_COLOR : 'var(--card-border, rgba(0,0,0,0.15))'}
+                fill={isHov ? 'var(--accent)' : hasInv ? AREA_COLOR : 'var(--card-border)'}
                 opacity={hasInv || isHov ? 1 : 0.45}
               />
               {(isLabel || isHov) && (
@@ -343,7 +343,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
                   textAnchor="middle"
                   fontSize={isHov ? "9.5" : "9"}
                   fontWeight={isHov ? "700" : "500"}
-                  fill={isHov ? 'var(--accent)' : 'var(--text-3, #9ca3af)'}
+                  fill={isHov ? 'var(--accent)' : 'var(--text-3)'}
                   fontFamily="Outfit, ui-sans-serif, system-ui"
                 >{shortDate(day.date)}</text>
               )}
@@ -365,7 +365,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
             background: 'var(--card-bg)',
             border:     '1px solid var(--card-border)',
             borderRadius: 12,
-            boxShadow:  '0 8px 32px rgba(0,0,0,0.14)',
+            boxShadow:  'var(--shadow-popover)',
             padding:    '10px 12px',
             zIndex:     40,
             pointerEvents: 'auto',

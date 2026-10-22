@@ -209,8 +209,8 @@ export function ShareLinkModal({
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)' }}>
-              <Share2 size={15} style={{ color: '#0ea5e9' }} />
+              style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
+              <Share2 size={15} style={{ color: 'var(--chart-2)' }} />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? 'Share Current View' : 'Link Ready'}</h2>
@@ -260,11 +260,11 @@ export function ShareLinkModal({
                 <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-2)' }}>Link title</label>
                 <div
                   className="rounded-2xl p-2"
-                  style={{ background: 'rgba(37,99,235,0.04)', border: '1px solid rgba(37,99,235,0.16)' }}
+                  style={{ background: 'color-mix(in srgb, var(--accent) 4%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 16%, transparent)' }}
                 >
                   <input type="text" className="input-field w-full text-sm font-medium" value={title}
                     onChange={e => setTitle(e.target.value)} placeholder={`e.g. Shared ${noun} view`} maxLength={200}
-                    style={{ borderColor: 'rgba(37,99,235,0.18)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }} />
+                    style={{ borderColor: 'color-mix(in srgb, var(--accent) 18%, transparent)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }} />
                 </div>
               </div>
               {highlightableColumns.length > 0 && (
@@ -315,8 +315,8 @@ export function ShareLinkModal({
                     <button key={opt.value} type="button" onClick={() => setExpiry(opt.value)}
                       className="py-1.5 rounded-xl text-xs font-semibold transition-all"
                       style={{
-                        background: expiry === opt.value ? 'var(--accent)' : 'var(--bg-input)',
-                        color: expiry === opt.value ? '#fff' : 'var(--text-2)',
+                        background: expiry === opt.value ? 'var(--accent-btn)' : 'var(--bg-input)',
+                        color: expiry === opt.value ? 'var(--accent-fg)' : 'var(--text-2)',
                         border: `1px solid ${expiry === opt.value ? 'var(--accent)' : 'var(--border)'}`,
                       }}>
                       {opt.label}
@@ -343,9 +343,9 @@ export function ShareLinkModal({
                   ))}
                 </div>
               </div>
-              {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>{error}</p>}
-              <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
-                <Shield size={13} style={{ color: '#0ea5e9', marginTop: 1, flexShrink: 0 }} />
+              {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', color: 'var(--fin-negative)' }}>{error}</p>}
+              <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'color-mix(in srgb, var(--chart-2) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 15%, transparent)' }}>
+                <Shield size={13} style={{ color: 'var(--chart-2)', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
                   {enableLiveMode && mode === 'live'
                     ? `This creates a live public view of the current ${noun} filters. It re-fetches matching Teable data automatically, and logs unique viewers and edit events separately.`
@@ -359,15 +359,15 @@ export function ShareLinkModal({
             <>
               <div className="flex flex-col items-center py-2 gap-3">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(16,185,129,0.12)', border: '2px solid rgba(16,185,129,0.3)' }}>
-                  <CheckCheck size={24} style={{ color: '#10b981' }} />
+                  style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', border: '2px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
+                  <CheckCheck size={24} style={{ color: 'var(--fin-positive)' }} />
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
                   {enableLiveMode && mode === 'live' && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                      style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                      style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Live · updates from Teable
                     </span>
@@ -378,7 +378,7 @@ export function ShareLinkModal({
                 <Link2 size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                 <p className="text-xs font-mono flex-1 truncate" style={{ color: 'var(--text-1)' }}>{shareUrl}</p>
                 <button onClick={copyUrl} className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                  style={{ background: copied ? 'rgba(16,185,129,0.12)' : 'var(--card-bg)', color: copied ? '#10b981' : 'var(--accent)', border: '1px solid var(--border)' }}>
+                  style={{ background: copied ? 'color-mix(in srgb, var(--fin-positive) 12%, transparent)' : 'var(--card-bg)', color: copied ? 'var(--fin-positive)' : 'var(--accent)', border: '1px solid var(--border)' }}>
                   {copied ? <CheckCheck size={11} /> : <Copy size={11} />} {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
@@ -489,7 +489,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
               <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Current scope</p>
               <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{currentScope}</p>
             </div>
-            <div className="rounded-xl p-3" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)' }}>
+            <div className="rounded-xl p-3" style={{ background: 'color-mix(in srgb, var(--accent) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 15%, transparent)' }}>
               <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Current visible view</p>
               <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{visibleCount} visible {noun}{visibleCount === 1 ? '' : 's'}</p>
             </div>
@@ -517,12 +517,12 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
               ))}
             </div>
             {snapshotTooLarge && (
-              <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--fin-negative)' }}>
                 Snapshot update is limited to {MAX_SHARED_VIEW_RECORDS} {noun}s. Narrow the current view or use a live scope.
               </p>
             )}
           </div>
-          <div className="rounded-xl p-3" style={{ background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
+          <div className="rounded-xl p-3" style={{ background: 'color-mix(in srgb, var(--chart-2) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 15%, transparent)' }}>
             <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>New scope summary</p>
             <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{newScope}</p>
           </div>
@@ -805,13 +805,13 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)' }}>
-              <Link2 size={15} style={{ color: '#0ea5e9' }} />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)' }}>
+              <Link2 size={15} style={{ color: 'var(--chart-2)' }} />
             </div>
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Manage Share Links</h2>
           </div>
@@ -843,13 +843,13 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
                           {v.title || `${Array.isArray(v.record_ids) ? v.record_ids.length : '?'} records`}
                         </p>
-                        {inactive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>DISABLED</span>}
-                        {expired && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>EXPIRED</span>}
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(148,163,184,0.12)', color: 'var(--text-3)' }}>
+                        {inactive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)' }}>DISABLED</span>}
+                        {expired && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', color: 'var(--fin-warning)' }}>EXPIRED</span>}
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--text-3) 12%, transparent)', color: 'var(--text-3)' }}>
                           {(v.resource_type || resourceType || 'status').toUpperCase()}
                         </span>
-                        {v.is_dynamic && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>LIVE</span>}
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.1)' : 'rgba(148,163,184,0.12)', color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)' }}>
+                        {v.is_dynamic && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>LIVE</span>}
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: v.access_mode === 'edit' ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'color-mix(in srgb, var(--text-3) 12%, transparent)', color: v.access_mode === 'edit' ? 'var(--accent)' : 'var(--text-3)' }}>
                           {v.access_mode === 'edit' ? 'CAN EDIT' : 'READ ONLY'}
                         </span>
                       </div>
@@ -858,12 +858,12 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Unique viewers {v.access_count || 0}</span>
                         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Created {fmtDate(v.created_at)}</span>
                         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{summarizeShareScope(v, resourceType)}</span>
-                        {v.expires_at && <span className="text-[11px] flex items-center gap-0.5" style={{ color: expired ? '#f59e0b' : 'var(--text-3)' }}><Clock size={9} /> {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}</span>}
+                        {v.expires_at && <span className="text-[11px] flex items-center gap-0.5" style={{ color: expired ? 'var(--fin-warning)' : 'var(--text-3)' }}><Clock size={9} /> {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <a href={url} target="_blank" rel="noopener noreferrer" className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><ExternalLink size={12} /></a>
-                      <button onClick={() => toggleActive(v)} disabled={toggling || deleting} className="btn-icon p-1.5" style={{ color: v.is_active ? '#10b981' : 'var(--text-3)', opacity: toggling ? 0.75 : 1 }} title={v.is_active ? 'Disable' : 'Enable'}>
+                      <button onClick={() => toggleActive(v)} disabled={toggling || deleting} className="btn-icon p-1.5" style={{ color: v.is_active ? 'var(--fin-positive)' : 'var(--text-3)', opacity: toggling ? 0.75 : 1 }} title={v.is_active ? 'Disable' : 'Enable'}>
                         {toggling ? <Loader2 size={14} className="animate-spin" /> : (v.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />)}
                       </button>
                       <div className="flex items-center rounded-lg p-0.5" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
@@ -874,7 +874,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                         </button>
                         <button onClick={() => setAccessMode(v, 'edit')} disabled={updatingMode || deleting}
                           className="px-2 py-1 rounded-md text-[10px] font-semibold transition flex items-center gap-1"
-                          style={{ color: v.access_mode === 'edit' ? '#2563eb' : 'var(--text-3)', background: v.access_mode === 'edit' ? 'rgba(59,130,246,0.12)' : 'transparent', opacity: updatingMode ? 0.72 : 1 }}>
+                          style={{ color: v.access_mode === 'edit' ? 'var(--accent)' : 'var(--text-3)', background: v.access_mode === 'edit' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent', opacity: updatingMode ? 0.72 : 1 }}>
                           Edit
                           {updatingMode && <Loader2 size={9} className="animate-spin" />}
                         </button>
@@ -887,7 +887,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                           <RefreshCw size={12} />
                         </button>
                       )}
-                      <button onClick={() => deleteView(v.token)} disabled={deleting} className="btn-icon p-1.5" style={{ color: 'rgba(239,68,68,0.6)', opacity: deleting ? 0.75 : 1 }}>
+                      <button onClick={() => deleteView(v.token)} disabled={deleting} className="btn-icon p-1.5" style={{ color: 'color-mix(in srgb, var(--fin-negative) 60%, transparent)', opacity: deleting ? 0.75 : 1 }}>
                         {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                       </button>
                     </div>
@@ -908,7 +908,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                           </button>
                           <button onClick={() => deleteSelectedAccesses(v.token)} disabled={!selectedIds.length || deletingAccesses}
                             className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg"
-                            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#ef4444', opacity: (!selectedIds.length || deletingAccesses) ? 0.5 : 1 }}>
+                            style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-negative) 18%, transparent)', color: 'var(--fin-negative)', opacity: (!selectedIds.length || deletingAccesses) ? 0.5 : 1 }}>
                             {deletingAccesses ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                             Delete selected
                           </button>
@@ -951,7 +951,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full"
-                                  style={{ background: a.event_type === 'edit' ? 'rgba(59,130,246,0.08)' : 'rgba(16,185,129,0.08)', color: a.event_type === 'edit' ? '#2563eb' : '#059669' }}>
+                                  style={{ background: a.event_type === 'edit' ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'color-mix(in srgb, var(--fin-positive) 8%, transparent)', color: a.event_type === 'edit' ? 'var(--accent)' : 'var(--fin-positive)' }}>
                                   {String(a.event_type || 'view').toUpperCase()}
                                 </span>
                                 <span className="text-[11px] font-mono" style={{ color: 'var(--text-1)' }}>{a.ip || '?'}</span>

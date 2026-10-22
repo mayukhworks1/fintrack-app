@@ -9,7 +9,7 @@ const MODULE_LABELS = {
   analytics:'Analytics', reports:'Reports', ai:'AI', status:'Status Board',
   shared:'Shared Views', admin:'Admin', system:'System',
 }
-const ACTION_COLORS = { view:'#6366f1', create:'#22c55e', edit:'#f59e0b', delete:'#ef4444', payment:'#a855f7' }
+const ACTION_COLORS = { view:'var(--accent)', create:'var(--fin-positive)', edit:'var(--fin-warning)', delete:'var(--fin-negative)', payment:'#a855f7' }
 
 export function PermissionsTab({ searchParams, setSearchParams }) {
   const [matrix, setMatrix] = useState(null)
@@ -167,11 +167,11 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                 <span style={{ color:'var(--text-2)' }}>Role default (granted)</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'#22c55e', flexShrink:0 }} />
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'var(--fin-positive)', flexShrink:0 }} />
                 <span style={{ color:'var(--text-2)' }}>Override: granted</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'#ef4444', flexShrink:0 }} />
+                <span style={{ display:'inline-block', width:28, height:14, borderRadius:7, background:'var(--fin-negative)', flexShrink:0 }} />
                 <span style={{ color:'var(--text-2)' }}>Override: denied</span>
               </span>
               <span className="flex items-center gap-1.5">
@@ -191,7 +191,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
               onClick={() => setSelectedUser(u.id)}
               className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
               style={selectedUser === u.id
-                ? { background: 'var(--accent)', color: '#fff' }
+                ? { background: 'var(--accent-btn)', color: 'var(--accent-fg)' }
                 : { background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
             >
               {u.name || u.email}
@@ -222,16 +222,16 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 text-[10px]">
-              <span style={{ background: 'rgba(34,197,94,0.1)', color: '#16a34a', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+              <span style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
                 {user.effective_permission_ids?.length || 0} permissions effective
               </span>
               {Object.keys(user.overrides || {}).length > 0 && (
-                <span style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+                <span style={{ background: 'color-mix(in srgb, var(--fin-warning) 10%, transparent)', color: 'var(--fin-warning)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
                   {Object.keys(user.overrides).length} override{Object.keys(user.overrides).length !== 1 ? 's' : ''}
                 </span>
               )}
               {user.roles.length === 0 && (
-                <span style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+                <span style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
                   ⚠ No role — all permissions will be inherited from overrides only
                 </span>
               )}
@@ -241,7 +241,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
           {/* Web experience notice */}
           {isWebExperience && (
             <div className="rounded-xl px-4 py-2.5 text-xs flex items-start gap-2"
-              style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: 'var(--text-2)' }}>
+              style={{ background: 'color-mix(in srgb, var(--accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--text-2)' }}>
               <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>ℹ</span>
               <span>
                 This user has a <strong>{userRoleKeys.has('web_admin') ? 'web_admin' : 'web'}</strong> role — they only access the{' '}
@@ -287,10 +287,10 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                     let toggleBg = 'var(--border)'
                     let toggleTitle = 'Click to grant'
                     if (hasOverride && !overrideVal) {
-                      toggleBg = '#ef4444'
+                      toggleBg = 'var(--fin-negative)'
                       toggleTitle = 'Denied by override — click to grant'
                     } else if (hasOverride && overrideVal) {
-                      toggleBg = '#22c55e'
+                      toggleBg = 'var(--fin-positive)'
                       toggleTitle = 'Granted by override — click to deny'
                     } else if (isGranted) {
                       toggleBg = 'var(--accent)'
@@ -308,7 +308,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                         style={{
                           background: 'var(--bg-input)',
                           border: hasOverride
-                            ? `1px solid ${overrideVal ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`
+                            ? `1px solid ${overrideVal ? 'color-mix(in srgb, var(--fin-positive) 35%, transparent)' : 'color-mix(in srgb, var(--fin-negative) 35%, transparent)'}`
                             : '1px solid var(--border)',
                         }}>
                         <div className="min-w-0">
@@ -317,7 +317,7 @@ export function PermissionsTab({ searchParams, setSearchParams }) {
                             {perm.action_key}
                             {sourceLabel && (
                               <span className="ml-1.5 font-semibold" style={{
-                                color: hasOverride && !overrideVal ? '#ef4444' : hasOverride ? '#22c55e' : 'var(--accent)'
+                                color: hasOverride && !overrideVal ? 'var(--fin-negative)' : hasOverride ? 'var(--fin-positive)' : 'var(--accent)'
                               }}>
                                 · {sourceLabel}
                               </span>

@@ -286,15 +286,15 @@ export function AuditLogTab() {
           <button onClick={() => setShowAdv(v => !v)}
             className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
             style={{
-              background: showAdv ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
-              color: showAdv ? '#818cf8' : 'var(--text-2)',
-              border: `1px solid ${showAdv ? '#818cf8' : 'var(--border)'}`,
+              background: showAdv ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-input)',
+              color: showAdv ? 'var(--accent)' : 'var(--text-2)',
+              border: `1px solid ${showAdv ? 'var(--accent)' : 'var(--border)'}`,
             }}>
             <SlidersHorizontal size={12} />
             Filters
             {advCount > 0 && (
               <span className="rounded-full px-1.5 py-0 text-[10px] font-bold"
-                style={{ background: '#6366f1', color: '#fff' }}>
+                style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>
                 {advCount}
               </span>
             )}
@@ -302,7 +302,7 @@ export function AuditLogTab() {
           </button>
           <button onClick={() => setShowPurge(true)}
             className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium"
-            style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.25)' }}>
+            style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)', border: '1px solid color-mix(in srgb, var(--fin-negative) 25%, transparent)' }}>
             <Trash2 size={12} /> Purge
           </button>
           {hasAnyFilter && (
@@ -429,7 +429,7 @@ export function AuditLogTab() {
                           {row.lat != null && row.lon != null && (
                             <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
                               target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                              style={{ color: '#6366f1' }}>
+                              style={{ color: 'var(--accent)' }}>
                               <MapPin size={9} className="inline mr-0.5" />{Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)} ↗
                             </a>
                           )}
@@ -500,7 +500,7 @@ export function AuditLogTab() {
 
                         {/* Duration */}
                         <td className="px-3 py-2 tabular-nums whitespace-nowrap"
-                          style={{ color: row.duration_ms > 5000 ? '#dc2626' : row.duration_ms > 2000 ? '#f59e0b' : 'var(--text-2)' }}>
+                          style={{ color: row.duration_ms > 5000 ? 'var(--fin-negative)' : row.duration_ms > 2000 ? 'var(--fin-warning)' : 'var(--text-2)' }}>
                           {row.duration_ms != null ? `${row.duration_ms}ms` : '—'}
                         </td>
 
@@ -519,7 +519,7 @@ export function AuditLogTab() {
                               target="_blank" rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
                               className="flex items-center gap-0.5 mt-0.5"
-                              style={{ color: '#6366f1', fontSize: 10, textDecoration: 'none' }}>
+                              style={{ color: 'var(--accent)', fontSize: 10, textDecoration: 'none' }}>
                               <MapPin size={9} />
                               {Number(row.lat).toFixed(3)}, {Number(row.lon).toFixed(3)}
                             </a>
@@ -606,7 +606,7 @@ export function AuditLogTab() {
                                   Coordinates:{' '}
                                   <a href={`https://www.google.com/maps?q=${row.lat},${row.lon}`}
                                     target="_blank" rel="noopener noreferrer"
-                                    style={{ color: '#6366f1' }}>
+                                    style={{ color: 'var(--accent)' }}>
                                     {Number(row.lat).toFixed(4)}, {Number(row.lon).toFixed(4)} ↗
                                   </a>
                                 </span>

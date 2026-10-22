@@ -58,6 +58,10 @@ export default function CommandPalette() {
     ...ALL_PAGES.map(p => ({
       id: `page:${p.to}`, group: 'Pages', label: p.label, hint: p.blurb, to: p.to,
     })),
+    { id: 'new:pages', group: 'New', label: 'Pages: spreadsheets and link previews',
+      hint: 'publish a sheet on a link; see views per day, device and country', to: '/features#shipped' },
+    { id: 'new:gateway', group: 'New', label: 'AI gateway',
+      hint: 'provider routes, daily caps and versioned prompts', to: '/features#shipped' },
     ...FAQ.map(f => ({
       id: `faq:${f.q}`, group: 'Questions', label: f.q, hint: f.group, to: '/faq',
     })),
@@ -130,15 +134,12 @@ export default function CommandPalette() {
     listRef.current?.querySelector('[data-cursor]')?.scrollIntoView({ block: 'nearest' })
   }, [cursor, open, results])
 
+  // A destination with an #anchor is navigated to as one URL. The shell
+  // lands on the anchor once the page holding it has mounted, and App
+  // scrolls to it when only the hash changes, so neither case has to guess
+  // how long a lazy page takes to arrive.
   const go = (item) => {
     close()
-    if (item.to.startsWith('/#')) {
-      navigate('/')
-      // After the route has painted, or there is no anchor to scroll to yet.
-      requestAnimationFrame(() =>
-        document.querySelector(item.to.slice(1))?.scrollIntoView({ behavior: 'smooth' }))
-      return
-    }
     navigate(item.to)
   }
 
@@ -203,7 +204,7 @@ export default function CommandPalette() {
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold"
-                          style={{ fontSize: 13.5, color: on ? 'var(--accent)' : 'var(--text-1)' }}>
+                          style={{ fontSize: 13.5, color: on ? 'var(--accent-ink, var(--accent))' : 'var(--text-1)' }}>
                       {item.label}
                     </span>
                     {item.hint && (
@@ -212,7 +213,7 @@ export default function CommandPalette() {
                       </span>
                     )}
                   </span>
-                  {on && <CornerDownLeft size={13} aria-hidden="true" style={{ color: 'var(--accent)' }} />}
+                  {on && <CornerDownLeft size={13} aria-hidden="true" style={{ color: 'var(--accent-ink, var(--accent))' }} />}
                 </div>
               </li>
             )

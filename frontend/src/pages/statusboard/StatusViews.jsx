@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clientColor, fmtDate, fmtShortDate, hexToRgba, parseAttachments, statusStyle } from './utils'
 import { useDialog } from '../../hooks/useDialog'
+import { tint } from '../../utils/color'
 
 export function StatusDashboard({ records, statusOptions, filterStatus, onFilterStatus }) {
   const total = records.length
@@ -21,13 +22,13 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
         onClick={() => onFilterStatus('')}
         className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
         style={{
-          background: !filterStatus ? 'linear-gradient(135deg, rgba(125,149,255,0.24), rgba(125,149,255,0.12))' : 'rgba(255,255,255,0.03)',
-          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid rgba(255,255,255,0.08)',
-          color: !filterStatus ? '#fff' : 'var(--text-2)',
-          boxShadow: !filterStatus ? '0 14px 30px rgba(77,116,255,0.18)' : 'none',
+          background: !filterStatus ? 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, transparent), color-mix(in srgb, var(--accent) 12%, transparent))' : 'rgba(255,255,255,0.03)',
+          border: !filterStatus ? '1.5px solid var(--accent)' : '1px solid var(--card-border)',
+          color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-2)',
+          boxShadow: !filterStatus ? '0 14px 30px color-mix(in srgb, var(--accent) 18%, transparent)' : 'none',
         }}
       >
-        <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? '#fff' : 'var(--text-1)' }}>{total}</span>
+        <span className="text-lg font-bold tabular-nums leading-none" style={{ color: !filterStatus ? 'var(--accent-fg)' : 'var(--text-1)' }}>{total}</span>
         <span className="text-xs font-semibold">All Projects</span>
       </button>
 
@@ -41,8 +42,8 @@ export function StatusDashboard({ records, statusOptions, filterStatus, onFilter
             onClick={() => onFilterStatus(active ? '' : s)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left shrink-0"
             style={{
-              background: active ? sc.bg : 'rgba(255,255,255,0.03)',
-              border: active ? `1.5px solid ${sc.border}` : '1px solid rgba(255,255,255,0.08)',
+              background: active ? sc.bg : 'var(--bg-input)',
+              border: active ? `1.5px solid ${sc.border}` : '1px solid var(--card-border)',
               boxShadow: active ? `0 12px 24px ${sc.bg}` : 'none',
             }}
           >
@@ -95,7 +96,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}>
       <div {...dialog.panelProps}
         className="w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] shadow-2xl"
@@ -122,7 +123,7 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                 {attachments.length > 0 && (
                   <span
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                    style={{ background: 'rgba(14,165,233,0.10)', border: '1px solid rgba(14,165,233,0.22)', color: '#0ea5e9' }}
+                    style={{ background: 'color-mix(in srgb, var(--chart-2) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 22%, transparent)', color: 'var(--chart-2)' }}
                   >
                     <Paperclip size={11} />
                     {attachments.length} attachment{attachments.length === 1 ? '' : 's'}
@@ -137,9 +138,9 @@ export function DetailPanel({ record, onClose, onEdit, onDelete, isEditor }) {
                     <Pencil size={15} />
                   </button>
                   <button onClick={onDelete} className="btn-icon p-2" title="Delete"
-                    style={{ color: 'rgba(239,68,68,0.7)' }}
-                    onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.7)'}>
+                    style={{ color: 'color-mix(in srgb, var(--fin-negative) 70%, transparent)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 70%, transparent)'}>
                     <Trash size={15} />
                   </button>
                 </>
@@ -292,9 +293,9 @@ export function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selec
                 </button>
                 <button onClick={e => { e.stopPropagation(); onDelete() }}
                   className="btn-icon p-1"
-                  style={{ color: 'rgba(239,68,68,0.4)' }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.4)'}
+                  style={{ color: 'color-mix(in srgb, var(--fin-negative) 40%, transparent)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 40%, transparent)'}
                   title="Delete">
                   <Trash2 size={11} />
                 </button>
@@ -317,7 +318,7 @@ export function StatusCard({ record, isEditor, onEdit, onDelete, onDetail, selec
             {attachments.length > 0 && (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                style={{ background: 'rgba(14,165,233,0.10)', color: '#0ea5e9', border: '1px solid rgba(14,165,233,0.22)' }}
+                style={{ background: 'color-mix(in srgb, var(--chart-2) 10%, transparent)', color: 'var(--chart-2)', border: '1px solid color-mix(in srgb, var(--chart-2) 22%, transparent)' }}
               >
                 <Paperclip size={10} />
                 {attachments.length}
@@ -439,7 +440,7 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
             <button
               onClick={e => { e.stopPropagation(); onDetail(record) }}
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-all hover:opacity-80"
-              style={{ background: first.bg, border: `1px solid ${first.color}33` }}
+              style={{ background: first.bg, border: `1px solid ${tint(first.color, 0.2)}` }}
               title="Click to preview files">
               <first.Icon size={10} style={{ color: first.color }} />
               <span className="text-[11px] font-semibold" style={{ color: first.color }}>
@@ -468,9 +469,9 @@ export function ListViewRow({ record, idx, isEditor, onEdit, onDelete, onDetail,
               <Pencil size={12} />
             </button>
             <button onClick={onDelete} className="btn-icon p-1"
-              style={{ color: 'rgba(239,68,68,0.5)' }}
-              onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(239,68,68,0.5)'}
+              style={{ color: 'color-mix(in srgb, var(--fin-negative) 50%, transparent)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--fin-negative)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'color-mix(in srgb, var(--fin-negative) 50%, transparent)'}
               title="Delete">
               <Trash2 size={12} />
             </button>
@@ -561,7 +562,7 @@ function KanbanCard({ record, isEditor, onEdit, onDetail, selected, onSelect, up
 
 export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit, onDetail, selectedIds, onSelect, onDrop, updatingIds, onDragStart, onDragEnd, draggedId, compact = false, showClientAccents = true, draggable = true, motionFor }) {
   const [dragOver, setDragOver] = useState(false)
-  const sc = draggable ? statusStyle(statusLabel) : { color: '#475569', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.24)', dot: '#94a3b8' }
+  const sc = draggable ? statusStyle(statusLabel) : { color: 'var(--text-2)', bg: 'color-mix(in srgb, var(--text-3) 10%, transparent)', border: 'color-mix(in srgb, var(--text-3) 24%, transparent)', dot: 'var(--text-3)' }
 
   function handleDragOver(e) {
     if (!draggable || !isEditor) return
@@ -590,7 +591,7 @@ export function KanbanColumn({ statusKey, statusLabel, records, isEditor, onEdit
           <span className="text-xs font-bold" style={{ color: sc.color }}>{statusLabel}</span>
         </div>
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-          style={{ background: sc.color, color: '#fff' }}>{records.length}</span>
+          style={{ background: sc.color, color: 'var(--card-bg)' }}>{records.length}</span>
       </div>
 
       {/* Cards */}

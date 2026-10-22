@@ -1,100 +1,99 @@
 /**
- * An interactive preview of the receivables aging view.
+ * The receivables aging view, working, on the sandbox ledger.
  *
- * Illustrative, not real: the figures are invented, and the whole block is
- * marked aria-hidden by its caller so a screen reader does not announce them
- * as someone's receivables.
+ * Every figure is read from demoData: the four bands are AGEING, their
+ * values sum to TOTALS.outstanding, and picking a band lists the invoices
+ * that are actually in it. The point of showing it working rather than as a
+ * picture is what the module does: pick a band and the total and the rows
+ * follow.
  *
- * It is interactive rather than a picture because the thing worth showing is
- * what the module *does* — pick a band, the total and the breakdown follow.
- * A screenshot cannot demonstrate that.
+ * Motion: the bars grow from the left the first time the block is reached
+ * (transform only), the total rolls when a band is picked, and the rows
+ * arrive in order. Under reduced motion all of it is simply there.
  */
 import { useState } from 'react'
+import { AGEING, TOTALS, open, inr, shortDate } from './demoData'
+import { useReveal } from '../hooks/useReveal'
+import RollNumber from './motion/RollNumber'
 
-const BANDS = [
-  { label: '0-30d',  amount: 100000, count: 3, tone: '#86b6ef' },
-  { label: '31-60d', amount:  50000, count: 1, tone: '#3987e5' },
-  { label: '61-90d', amount: 250000, count: 2, tone: '#256abf' },
-  { label: '90d+',   amount: 600000, count: 4, tone: '#104281' },
+// Same accent ramp as AgingRunway: fresh → old, light → dark.
+const TONES = [
+  'color-mix(in srgb, var(--accent) 52%, var(--card-bg))',
+  'color-mix(in srgb, var(--accent) 78%, var(--card-bg))',
+  'var(--accent)',
+  'color-mix(in srgb, var(--accent) 62%, #000)',
 ]
-const TOTAL = BANDS.reduce((s, b) => s + b.amount, 0)
-const inr = n => `₹${n.toLocaleString('en-IN')}`
+const PEAK = Math.max(...AGEING.map(b => b.value))
+const OLDEST = [...open].sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, 3)
 
 export default function AgingPreview() {
   const [sel, setSel] = useState(null)
-  const shown = sel === null ? TOTAL : BANDS[sel].amount
-  const peak = Math.max(...BANDS.map(b => b.amount))
+  const ref = useReveal({ threshold: 0.25 })
+  const band = sel === null ? null : AGEING[sel]
+  const shown = band ? band.value : TOTALS.outstanding
 
   return (
-    <div className="p-4 sm:p-5">
-      <div className="flex items-baseline justify-between mb-3">
+    <div ref={ref} className="ft-f-demo ft-f-grow">
+      <div className="flex items-end justify-between gap-3 mb-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--text-3)' }}>
-            {sel === null ? 'Total outstanding' : `Outstanding · ${BANDS[sel].label}`}
-          </p>
-          <p className="font-extrabold tabular-nums"
-             style={{ fontSize: 'clamp(1.4rem, 4vw, 2rem)', letterSpacing: '-0.02em',
-                      color: 'var(--text-1)', transition: 'color 200ms ease' }}>
-            {inr(shown)}
-          </p>
+          <p className="ft-f-kicker">{band ? `Outstanding · ${band.label}` : 'Total outstanding'}</p>
+          <p className="ft-f-big"><RollNumber value={shown} format={inr} align="start" /></p>
         </div>
-        {sel !== null && (
-          <button onClick={() => setSel(null)}
-                  className="text-[11px] font-semibold rounded-lg"
-                  style={{ minHeight: 32, padding: '0 10px', color: 'var(--accent)',
-                           background: 'var(--accent-dim)', border: 'none', cursor: 'pointer' }}>
-            Clear
-          </button>
-        )}
+        <button type="button" onClick={() => setSel(null)} className="ft-f-ghost"
+                style={{ visibility: band ? 'visible' : 'hidden' }} tabIndex={band ? 0 : -1}>
+          Show all bands
+        </button>
       </div>
 
-      <div className="flex flex-col gap-2">
-        {BANDS.map((b, i) => {
+      <div className="flex flex-col gap-1.5" role="group" aria-label="Ageing bands">
+        {AGEING.map((b, i) => {
           const on = sel === i
-          const dim = sel !== null && !on
-          const pct = Math.round((b.amount / TOTAL) * 100)
+          const share = Math.round((b.value / TOTALS.outstanding) * 100)
           return (
             <button
-              key={b.label}
+              key={b.id}
+              type="button"
+              aria-pressed={on}
               onClick={() => setSel(on ? null : i)}
-              className="w-full text-left rounded-lg px-2.5 py-2"
-              style={{
-                background: on ? 'var(--row-selected)' : 'var(--bg-input)',
-                border: `1px solid ${on ? 'var(--accent)' : 'transparent'}`,
-                cursor: 'pointer',
-                opacity: dim ? 0.45 : 1,
-                transition: 'all 200ms ease',
-              }}
+              className="ft-f-band"
+              data-dim={sel !== null && !on ? '' : undefined}
             >
-              <div className="flex items-baseline justify-between mb-1">
-                <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>
-                  {b.label} <span className="font-normal text-[11px]" style={{ color: 'var(--text-3)' }}>({pct}%)</span>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-[12.5px] font-bold" style={{ color: 'var(--text-1)' }}>
+                  {b.label}
+                  <span className="font-medium text-[11px] ml-1.5" style={{ color: 'var(--text-3)' }}>
+                    {b.count} invoice{b.count === 1 ? '' : 's'} · {share}%
+                  </span>
                 </span>
-                <span className="text-[12px] font-bold tabular-nums" style={{ color: on ? 'var(--accent)' : 'var(--text-1)' }}>
-                  {inr(b.amount)}
+                <span className="text-[12.5px] font-bold tabular-nums" style={{ color: on ? 'var(--accent-ink, var(--accent))' : 'var(--text-1)' }}>
+                  {inr(b.value)}
                 </span>
-              </div>
-              <div style={{ height: 8, borderRadius: 4, background: 'var(--card-border)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 4, background: b.tone,
-                  width: `${(b.amount / peak) * 100}%`,
-                  transition: 'width 620ms cubic-bezier(0.22,1,0.36,1), filter 200ms ease',
-                  filter: on ? 'brightness(1.15)' : 'none',
-                }} />
-              </div>
-              <div className="flex items-center justify-between mt-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                <span>{b.count} invoice{b.count === 1 ? '' : 's'}</span>
-                {i === 3 && <span style={{ color: 'var(--bad)', fontWeight: 600 }}>High collection priority</span>}
-                {i === 0 && <span style={{ color: 'var(--ok)', fontWeight: 600 }}>Within normal terms</span>}
-              </div>
+              </span>
+              <span className="ft-f-track">
+                <span className="ft-f-bar" style={{ '--s': b.value / PEAK, '--i': i, background: TONES[i] }} />
+              </span>
             </button>
           )
         })}
       </div>
 
-      <p className="text-[10px] mt-3" style={{ color: 'var(--text-3)' }}>
-        Illustrative figures — click any aging band to isolate its risk profile.
-      </p>
+      <div className="mt-4" aria-live="polite">
+        <p className="ft-f-kicker" style={{ margin: '0 0 4px' }}>{band ? `In ${band.label}` : 'Most overdue'}</p>
+        <ul key={band ? band.id : 'all'} className="ft-f-rowlist">
+          {(band ? band.rows.slice(0, 3) : OLDEST).map((r, i) => (
+            <li key={r.id} style={{ '--i': i }}>
+              <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{r.id}</span>
+              <span className="truncate" style={{ color: 'var(--text-2)' }}>{r.client}</span>
+              <span className="tabular-nums" style={{ color: 'var(--text-3)' }}>
+                {r.daysOverdue ? `${r.daysOverdue}d overdue` : `due ${shortDate(r.dueOn)}`}
+              </span>
+              <span className="font-bold tabular-nums text-right" style={{ color: 'var(--text-1)' }}>{inr(r.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="ft-f-foot">Sample data: the same ledger the sandbox on the overview runs on.</p>
     </div>
   )
 }

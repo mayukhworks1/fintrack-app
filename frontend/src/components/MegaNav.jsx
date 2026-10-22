@@ -27,11 +27,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ArrowRight, ChevronDown } from 'lucide-react'
 import {
   GlyphOneRecord, GlyphModules, GlyphLayers,
   GlyphPermissions, GlyphSwitches, GlyphQA,
 } from './Glyphs'
+import { usePresence } from '../hooks/usePresence'
 
 /* Each entry names a page that exists and says what is on it. A menu that
    promises something the page does not deliver is worse than no menu. */
@@ -85,6 +86,21 @@ export const NAV = [
 /** Every page in the nav, flattened — the mobile sheet and the footer use it. */
 export const ALL_PAGES = NAV.flatMap(g => g.items)
 
+/**
+ * What shipped most recently, under the Product items and at the top of the
+ * phone menu. Deliberately not an entry in NAV: it points into a page, not
+ * at one, and NAV holds only whole routes.
+ */
+export function NewStrip({ onClick }) {
+  return (
+    <Link to="/features#shipped" className="ft-m-new" onClick={onClick}>
+      <span className="ft-m-new-badge">New</span>
+      <span className="flex-1">Pages — spreadsheets, link previews, view insights</span>
+      <ArrowRight size={14} aria-hidden="true" style={{ flexShrink: 0, color: 'var(--accent-ink, var(--accent))' }} />
+    </Link>
+  )
+}
+
 /* Keyed by subject, not by shape. The previous map had four entries for six
    destinations, so two of them were always showing another page's picture. */
 const VISUALS = {
@@ -105,18 +121,44 @@ const VISUALS = {
  * naming the thing it is next to, the drawing is not doing its job; the fix
  * was to make the drawing say something, not to caption it.
  */
-function Preview({ item }) {
+function Preview({ items, current }) {
+  // Every drawing for the group sits in one cell and the one being pointed
+  // at fades up over the others. A cross-fade rather than a remount: moving
+  // quickly down the list re-targets the fade from wherever it is, instead
+  // of restarting a wipe from blank on every row. The wipe (ft-m-clip) plays
+  // once, when the panel opens. Static under reduced motion.
   return (
-    <div key={item.to} className="hidden lg:flex items-center justify-center rounded-xl p-5"
+    <div data-shown="" className="hidden lg:flex items-center justify-center rounded-xl p-5"
          style={{
            width: 244, flexShrink: 0,
            background: 'var(--bg-input)', border: '1px solid var(--card-border)',
-           animation: 'ft-fade-in 220ms ease both',
          }}>
-      <div aria-hidden="true" className="w-full flex items-center justify-center"
-           style={{ minHeight: 116 }}>
-        {VISUALS[item.visual]}
+      <div aria-hidden="true" className="ft-m-clip ft-mega-art w-full" style={{ minHeight: 116 }}>
+        {items.map(item => (
+          <div key={item.to} data-on={item.to === current.to ? '' : undefined}>
+            {VISUALS[item.visual]}
+          </div>
+        ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The dropdown itself. It stays mounted through its exit, so closing is the
+ * opening run backwards, and pointing back in mid-close turns it round from
+ * where it is (usePresence, and transitions in index.css).
+ */
+function MegaPanel({ open, fine, onEnter, onLeave, children }) {
+  const ref = useRef(null)
+  const [mounted, state] = usePresence(open, ref)
+  if (!mounted) return null
+  return (
+    <div ref={ref} className="ft-mega" data-state={state}
+         inert={state === 'closed' ? '' : undefined}
+         onMouseEnter={fine ? onEnter : undefined}
+         onMouseLeave={fine ? onLeave : undefined}>
+      {children}
     </div>
   )
 }
@@ -175,7 +217,11 @@ export default function MegaNav() {
           ?? group.items[0]
 
         return (
+          // Focus leaving the open group (tabbing on to the next trigger or
+          // into the page) closes its panel; otherwise it would stay open over
+          // the header and the heading while the visitor tabs on.
           <div key={group.id} className="relative"
+               onBlur={(e) => { if (isOpen && !e.currentTarget.contains(e.relatedTarget)) close() }}
                onMouseEnter={fine ? () => { cancelClose(); setOpen(group.id) } : undefined}
                onMouseLeave={fine ? scheduleClose : undefined}>
             <button
@@ -183,29 +229,23 @@ export default function MegaNav() {
               aria-expanded={isOpen}
               aria-haspopup="true"
               onClick={() => setOpen(isOpen ? null : group.id)}
-              className="flex items-center gap-1.5 rounded-lg text-sm font-medium"
+              className="ft-m-press flex items-center gap-1.5 rounded-lg text-sm font-medium"
               style={{
                 minHeight: 40, padding: '0 12px', cursor: 'pointer',
                 background: isOpen || active ? 'var(--accent-dim)' : 'transparent',
                 border: 0,
-                color: isOpen || active ? 'var(--accent)' : 'var(--text-2)',
-                transition: 'background 180ms ease, color 180ms ease',
+                color: isOpen || active ? 'var(--accent-ink, var(--accent))' : 'var(--text-2)',
               }}
             >
               {group.label}
-              <ChevronDown size={14} aria-hidden="true"
-                           style={{ transition: 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
-                                    transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+              <ChevronDown size={14} aria-hidden="true" className="ft-mega-chev"
+                           style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
 
-            {isOpen && (
-              <div
-                className="ft-mega"
-                onMouseEnter={fine ? cancelClose : undefined}
-                onMouseLeave={fine ? scheduleClose : undefined}
-              >
-                <div className="flex gap-3">
-                  <ul className="flex flex-col gap-0.5 m-0 p-0" style={{ listStyle: 'none', minWidth: 268 }}>
+            <MegaPanel open={isOpen} fine={fine} onEnter={cancelClose} onLeave={scheduleClose}>
+              <div className="flex gap-3">
+                <div style={{ minWidth: 268, maxWidth: 300 }}>
+                  <ul className="flex flex-col gap-0.5 m-0 p-0" style={{ listStyle: 'none' }}>
                     {group.items.map(item => {
                       const here = item.to === pathname
                       return (
@@ -219,7 +259,7 @@ export default function MegaNav() {
                             style={{ textDecoration: 'none' }}
                           >
                             <span className="block font-bold"
-                                  style={{ fontSize: 13.5, color: here ? 'var(--accent)' : 'var(--text-1)' }}>
+                                  style={{ fontSize: 13.5, color: here ? 'var(--accent-ink, var(--accent))' : 'var(--text-1)' }}>
                               {item.label}
                             </span>
                             <span className="block" style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--text-3)' }}>
@@ -230,10 +270,11 @@ export default function MegaNav() {
                       )
                     })}
                   </ul>
-                  <Preview item={current} />
+                  {group.id === 'product' && <NewStrip onClick={() => close()} />}
                 </div>
+                <Preview items={group.items} current={current} />
               </div>
-            )}
+            </MegaPanel>
           </div>
         )
       })}

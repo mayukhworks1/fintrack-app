@@ -23,6 +23,7 @@ import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
 import SheetView from '../components/sheet/SheetView'
 import SheetEditor from '../components/sheet/SheetEditor'
+import { tint } from '../utils/color'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -166,7 +167,7 @@ function HTMLPreview({ content, height = '100%' }) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [content])
 
-  if (err) return <div style={{ padding:20, fontSize:12, color:'#b45309', textAlign:'center' }}>{err}</div>
+  if (err) return <div style={{ padding:20, fontSize:12, color:'var(--fin-warning)', textAlign:'center' }}>{err}</div>
   if (!url) return <div style={{ padding:20, fontSize:12, color:'var(--text-2)', textAlign:'center' }}>Rendering preview…</div>
   return (
     <iframe
@@ -562,7 +563,7 @@ function AnalyticsDrawer({ page, onClose }) {
             {selected.size>0 && (
               <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
                 <span style={{ fontSize:12, color:'var(--text-2)', fontWeight:600 }}>{selected.size} selected</span>
-                <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:5 }}>
+                <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:5 }}>
                   <Trash2 size={12} strokeWidth={2} />{bulkDeleting?'Deleting…':'Delete selected'}
                 </button>
               </div>
@@ -603,7 +604,7 @@ function AnalyticsDrawer({ page, onClose }) {
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                            <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Del'}</button>
+                            <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Del'}</button>
                             <span style={{ color:'var(--text-2)', fontSize:14 }}>{exp?'▲':'▼'}</span>
                           </div>
                         </div>
@@ -642,7 +643,7 @@ function AnalyticsDrawer({ page, onClose }) {
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{cli.language||'—'}</td>
                             <td style={{ padding:'9px 12px', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.referer}>{fmtRef(v.referer)}</td>
                             <td style={{ padding:'9px 8px' }} onClick={e=>e.stopPropagation()}>
-                              <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Delete'}</button>
+                              <button onClick={e=>handleDeleteView(e,v.id)} disabled={deletingId===v.id} style={{ background:'var(--fin-neg-bg)', color:'var(--fin-negative)', border:'1px solid var(--fin-neg-border)', borderRadius:6, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>{deletingId===v.id?'…':'Delete'}</button>
                             </td>
                           </tr>,
                           exp&&<tr key={`${v.id}-exp`} style={{ background:'var(--card-bg)', borderBottom:'2px solid var(--accent)' }}>
@@ -947,7 +948,7 @@ function AttachmentsBar({ content, onChange }) {
           <span style={{ fontSize:11, color:'var(--text-1)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.name}>{a.name}</span>
           <button type="button" title="Delete attachment" disabled={deleting===a.path}
             onClick={()=>remove(a)}
-            style={{ border:'none', background:'transparent', color:'#ef4444', cursor:'pointer', fontSize:13, lineHeight:1, padding:'0 2px' }}>
+            style={{ border:'none', background:'transparent', color:'var(--fin-negative)', cursor:'pointer', fontSize:13, lineHeight:1, padding:'0 2px' }}>
             {deleting===a.path ? '…' : '✕'}
           </button>
         </div>
@@ -1207,7 +1208,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
       {/* Version list (left) */}
       <div style={{ width:previewVer ? 260 : '100%', minWidth:220, borderRight:'1px solid var(--border)', overflowY:'auto', flexShrink:0 }}>
         {toast && (
-          <div style={{ padding:'10px 16px', background:'#d1fae5', color:'#065f46', fontSize:12, fontWeight:600, borderBottom:'1px solid var(--border)' }}>{toast}</div>
+          <div style={{ padding:'10px 16px', background:'var(--fin-pos-bg)', color:'var(--fin-positive)', fontSize:12, fontWeight:600, borderBottom:'1px solid var(--border)' }}>{toast}</div>
         )}
         <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Version History</span>
@@ -1224,9 +1225,9 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
         ) : (
           <div>
             {/* Current state indicator */}
-            <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'#f0fdf4' }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'#15803d' }}>● Current version</div>
-              <div style={{ fontSize:11, color:'#16a34a', marginTop:2 }}>
+            <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--fin-pos-bg)' }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'var(--fin-positive)' }}>● Current version</div>
+              <div style={{ fontSize:11, color:'var(--fin-positive)', marginTop:2 }}>
                 {currentContent ? `${currentContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words` : '—'}
               </div>
             </div>
@@ -1247,14 +1248,14 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
                   <div style={{ fontSize:11, color:'var(--text-2)' }}>
                     {fmtTime(ver.saved_at)}
                     {ver.word_count > 0 && ` · ${ver.word_count.toLocaleString()} words`}
-                    {ver.note && <span style={{ color:'#7c3aed' }}> · {ver.note}</span>}
+                    {ver.note && <span style={{ color:'var(--chart-3)' }}> · {ver.note}</span>}
                   </div>
                   {ver.saved_by_name && <div style={{ fontSize:10, color:'var(--text-2)', marginTop:2 }}>by {ver.saved_by_name}</div>}
                   {isSelected && (
                     <button
                       onClick={e=>{ e.stopPropagation(); handleRestore(ver) }}
                       disabled={isRestoring}
-                      style={{ marginTop:8, width:'100%', padding:'5px 10px', fontSize:12, fontWeight:600, border:'1px solid var(--accent)', borderRadius:6, background:'var(--accent)', color:'#fff', cursor:'pointer', opacity:isRestoring?0.6:1 }}>
+                      style={{ marginTop:8, width:'100%', padding:'5px 10px', fontSize:12, fontWeight:600, border:'1px solid var(--accent)', borderRadius:6, background:'var(--accent-btn)', color:'var(--accent-fg)', cursor:'pointer', opacity:isRestoring?0.6:1 }}>
                       {isRestoring ? 'Restoring…' : '↩ Restore this version'}
                     </button>
                   )}
@@ -1590,10 +1591,10 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
         {/* Self-healing error banner — visible even when the studio is collapsed */}
         {pageError && (
-          <div style={{ marginTop:4, padding:'6px 10px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
-            <span style={{ color:'#dc2626' }}>⚠ Runtime error: {pageError.message.slice(0, 80)}</span>
+          <div style={{ marginTop:4, padding:'6px 10px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+            <span style={{ color:'var(--fin-negative)' }}>⚠ Runtime error: {pageError.message.slice(0, 80)}</span>
             <button onClick={runFixError} disabled={busy}
-              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'#dc2626', marginLeft:'auto', flexShrink:0 }}>
+              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', marginLeft:'auto', flexShrink:0 }}>
               🔧 Auto-Fix
             </button>
           </div>
@@ -1607,7 +1608,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
         <span style={{ fontSize:12, fontWeight:700 }}>✨ Agent Studio</span>
         {mode === 'streaming' && (
-          <span style={{ fontSize:11, color:'var(--accent, #3b82f6)', fontWeight:600 }}>
+          <span style={{ fontSize:11, color:'var(--accent)', fontWeight:600 }}>
             ● Live streaming
           </span>
         )}
@@ -1616,7 +1617,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
       {/* ── Section Edit Mode ──────────────────────────────────────────── */}
       {mode === 'section-edit' && sectionEdit && (
-        <div style={{ padding:'10px 12px', background:'color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent)', borderRadius:'var(--radius, 8px)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
+        <div style={{ padding:'10px 12px', background:'color-mix(in srgb, var(--accent) 6%, transparent)', borderRadius:'var(--radius, 8px)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
           <span style={{ fontSize:12, fontWeight:600, color:'var(--text-1)' }}>
             ✏️ Editing section: <code style={{ background:'var(--bg-base)', padding:'1px 6px', borderRadius:4, fontSize:11 }}>{sectionEdit.sectionId}</code>
           </span>
@@ -1642,13 +1643,13 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
       {/* ── Self-healing error banner ──────────────────────────────────── */}
       {pageError && mode !== 'section-edit' && (
-        <div style={{ padding:'8px 12px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <span style={{ fontSize:12, color:'#dc2626', flex:1, minWidth:0 }}>
+        <div style={{ padding:'8px 12px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ fontSize:12, color:'var(--fin-negative)', flex:1, minWidth:0 }}>
             ⚠ Script error: {pageError.message.slice(0, 120)}
-            {pageError.lineno > 0 && <span style={{ color:'#9ca3af' }}> (line {pageError.lineno})</span>}
+            {pageError.lineno > 0 && <span style={{ color:'var(--text-3)' }}> (line {pageError.lineno})</span>}
           </span>
           <button onClick={runFixError} disabled={busy}
-            style={{ ...btnPrimary, padding:'4px 12px', fontSize:11, background:'#dc2626', flexShrink:0 }}>
+            style={{ ...btnPrimary, padding:'4px 12px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', flexShrink:0 }}>
             {busy && mode === 'error-fix' ? `Fixing… ${elapsed}s` : '🔧 Auto-Fix with AI'}
           </button>
           <button onClick={() => setPageError(null)}
@@ -1678,7 +1679,7 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
             <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
               <span style={{ fontSize:11, fontWeight:600, color:'var(--text-2)' }}>Sections:</span>
               {plan.sections.map(s => (
-                <span key={s} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent)', color:'var(--accent, #3b82f6)', fontWeight:500 }}>
+                <span key={s} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'color-mix(in srgb, var(--accent) 10%, transparent)', color:'var(--accent)', fontWeight:500 }}>
                   {s}
                 </span>
               ))}
@@ -1690,10 +1691,10 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
                 <div key={i} style={{
                   display:'flex', alignItems:'baseline', gap:8, fontSize:11,
                   padding:'5px 9px', borderRadius:6,
-                  background: e.ok ? 'var(--bg-base)' : 'color-mix(in srgb, #f59e0b 12%, transparent)',
+                  background: e.ok ? 'var(--bg-base)' : 'color-mix(in srgb, var(--fin-warning) 12%, transparent)',
                   border:'1px solid var(--border)',
                 }}>
-                  <span style={{ color: e.ok ? '#16a34a' : '#b45309', fontWeight:700, flexShrink:0 }}>
+                  <span style={{ color: e.ok ? 'var(--fin-positive)' : 'var(--fin-warning)', fontWeight:700, flexShrink:0 }}>
                     {e.ok ? '✓' : '⚠'}
                   </span>
                   <code style={{
@@ -1714,10 +1715,10 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
           )}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, height:3, borderRadius:2, background:'var(--border)', overflow:'hidden' }}>
-              <div style={{ width:'100%', height:'100%', background:'var(--accent, #3b82f6)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
+              <div style={{ width:'100%', height:'100%', background:'var(--accent)', animation:'indeterminate 1.5s infinite linear', transformOrigin:'left' }} />
             </div>
             <span style={{ fontSize:11, color:'var(--text-2)', flexShrink:0 }}>{elapsed}s</span>
-            <button onClick={cancel} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', color:'#ef4444' }}>Cancel</button>
+            <button onClick={cancel} style={{ ...btnGhost, fontSize:11, padding:'2px 8px', color:'var(--fin-negative)' }}>Cancel</button>
           </div>
           <style>{`@keyframes indeterminate { 0% { transform:scaleX(0) translateX(-50%) } 50% { transform:scaleX(0.4) translateX(25%) } 100% { transform:scaleX(0) translateX(150%) } }`}</style>
         </div>
@@ -1776,12 +1777,12 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
         </div>
       )}
 
-      {err && <div style={{ fontSize:12, color:'#ef4444' }}>{err}</div>}
+      {err && <div style={{ fontSize:12, color:'var(--fin-negative)' }}>{err}</div>}
       {note && (
         <div style={{ fontSize:11, color:'var(--text-2)' }}>
           ✓ Generated with {note.model || 'AI'}. Review it in Preview before publishing.
           {note.warnings.length > 0 && (
-            <span style={{ color:'#b45309' }}>
+            <span style={{ color:'var(--fin-warning)' }}>
               {' '}Check {note.warnings.join('; ')}.
             </span>
           )}
@@ -1822,7 +1823,7 @@ function ExpiryField({ value, onChange, isMobile }) {
         </select>
       </div>
       {value && (
-        <div style={{ fontSize:11, marginTop:3, color:expired?'#dc2626':'var(--text-2)' }}>
+        <div style={{ fontSize:11, marginTop:3, color:expired?'var(--fin-negative)':'var(--text-2)' }}>
           {expired ? '⛔ Expired: the link no longer opens' : `⏳ ${formatIst(value)} · ${countdown(value, now)}`}
         </div>
       )}
@@ -2171,14 +2172,14 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               <span style={{ flex:1, minWidth:0, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 /p/{form.slug || '…'}
               </span>
-              {autoSaveStatus === 'saved'  && <span style={{ color:'#10b981', flexShrink:0 }}>✓ Saved</span>}
+              {autoSaveStatus === 'saved'  && <span style={{ color:'var(--fin-positive)', flexShrink:0 }}>✓ Saved</span>}
               {autoSaveStatus === 'saving' && <span style={{ flexShrink:0 }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error'  && <span style={{ color:'#ef4444', flexShrink:0 }} title={autoSaveError}>⚠ Not saved</span>}
+              {autoSaveStatus === 'error'  && <span style={{ color:'var(--fin-negative)', flexShrink:0 }} title={autoSaveError}>⚠ Not saved</span>}
               <span style={{ flexShrink:0, fontWeight:700, color:'var(--accent)' }}>
                 Settings {showSettings ? '▲' : '▼'}
               </span>
             </button>
-            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'#ef4444', flexShrink:0 }}>{error}</div>}
+            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'var(--fin-negative)', flexShrink:0 }}>{error}</div>}
           </>
         ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
@@ -2191,17 +2192,17 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               {stats.label && <span>{stats.label}</span>}
               {stats.readTime !== '—' && <span>· {stats.readTime}</span>}
               {form.content.length > charLimit * 0.8 && (
-                <span style={{ color:form.content.length>charLimit?'#ef4444':'#f59e0b', fontWeight:600 }}>
+                <span style={{ color:form.content.length>charLimit?'var(--fin-negative)':'var(--fin-warning)', fontWeight:600 }}>
                   {form.content.length.toLocaleString()} / {charLimit.toLocaleString()} chars
                 </span>
               )}
-              {autoSaveStatus === 'saved' && <span style={{ color:'#10b981' }}>✓ Saved to cloud</span>}
-              {autoSaveStatus === 'saving' && <span style={{ color:'#94a3b8' }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error' && <span style={{ color:'#ef4444' }} title={autoSaveError}>⚠ Save failed — {autoSaveError || 'kept local backup'}</span>}
+              {autoSaveStatus === 'saved' && <span style={{ color:'var(--fin-positive)' }}>✓ Saved to cloud</span>}
+              {autoSaveStatus === 'saving' && <span style={{ color:'var(--text-3)' }}>☁ Saving…</span>}
+              {autoSaveStatus === 'error' && <span style={{ color:'var(--fin-negative)' }} title={autoSaveError}>⚠ Save failed — {autoSaveError || 'kept local backup'}</span>}
             </div>
           </div>
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-            {error && <span style={{ color:'#ef4444', fontSize:12 }}>{error}</span>}
+            {error && <span style={{ color:'var(--fin-negative)', fontSize:12 }}>{error}</span>}
             <button onClick={()=>setFullscreen(f=>!f)} style={{ ...btnGhost, fontSize:14, padding:'5px 10px' }} title={fullscreen?'Exit fullscreen':'Fullscreen'}>{fullscreen?'⊡':'⊞'}</button>
             <button onClick={flushAndClose} style={btnGhost} disabled={saving}>Close</button>
             <button onClick={()=>handleSave(false)} style={btnSecondary} disabled={saving}>{saving?'Saving…':'Save Draft'}</button>
@@ -2247,7 +2248,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             </div>
             {shareUrl&&<div style={{ fontSize:10, color:'var(--accent)', marginTop:2, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{shareUrl}</div>}
             {slugStatus && !slugStatus.available && (
-              <div style={{ marginTop:4, fontSize:11, color:'#b45309' }}>
+              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-warning)' }}>
                 ⚠ This URL is already taken{slugStatus.suggestions?.length ? ' — try:' : '.'}
                 {slugStatus.suggestions?.length > 0 && (
                   <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:3 }}>
@@ -2260,7 +2261,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               </div>
             )}
             {slugStatus && slugStatus.available && form.slug && (
-              <div style={{ marginTop:4, fontSize:11, color:'#16a34a' }}>✓ URL is available</div>
+              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-positive)' }}>✓ URL is available</div>
             )}
           </div>
           <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
@@ -2352,7 +2353,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
           {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
-            <button key={t} onClick={()=>setTab(t)}
+            <button key={t} onClick={()=>setTab(t)} className="app-press"
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
               {t === 'history' ? '🕐 History' : t}
             </button>
@@ -2434,12 +2435,12 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
     <Overlay>
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onCancel}>
-      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'var(--shadow-popover)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>Confirm</div>
         <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:22 }}>{message}</div>
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
           <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={onConfirm} style={{ ...btnPrimary, background:'#ef4444' }}>Delete</button>
+          <button onClick={onConfirm} style={{ ...btnPrimary, background:'var(--danger-btn)', color:'var(--danger-fg)' }}>Delete</button>
         </div>
       </div>
     </div>
@@ -2569,8 +2570,8 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
   const run = (fn) => () => { setOpen(false); fn(page) }
   const item = (Icon, label, onClick, opts = {}) => (
     <button type="button" role="menuitem" onClick={onClick} disabled={opts.disabled}
-      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:36, padding:'8px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:'pointer', borderRadius:7, color:opts.danger?'#dc2626':'var(--text-1)' }}
-      onMouseEnter={e=>e.currentTarget.style.background=opts.danger?'#fef2f2':'var(--bg-base)'}
+      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:36, padding:'8px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:'pointer', borderRadius:7, color:opts.danger?'var(--fin-negative)':'var(--text-1)' }}
+      onMouseEnter={e=>e.currentTarget.style.background=opts.danger?'var(--fin-neg-bg)':'var(--bg-base)'}
       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
       <Icon size={14} strokeWidth={1.9} style={{ flexShrink:0, opacity:0.8 }} /> {label}
     </button>
@@ -2583,8 +2584,8 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
         <MoreHorizontal size={15} />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} role="menu" aria-label="Page actions"
-          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, background:'var(--card-bg, #fff)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
+        <div ref={menuRef} role="menu" aria-label="Page actions" className="app-menu app-pop"
+          style={{ position:'fixed', left:pos.left, top:pos.top, width:210, zIndex:3000, border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
           {item(page.is_published ? EyeOff : Globe, page.is_published ? 'Unpublish' : 'Publish', run(onPublish))}
           {page.is_published && item(Share2, 'Share…', run(onShare))}
           {item(BarChart2, 'Views & analytics', run(onAnalytics))}
@@ -2609,7 +2610,7 @@ function CopyLinkButton({ page, onCopied, compact }) {
   return (
     <button type="button" onClick={copy} disabled={!page.is_published}
       title={page.is_published ? 'Copy public link' : 'Publish the page to get a link'}
-      style={{ ...btnTiny, padding:compact?'7px 9px':'6px 10px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:done?'#15803d':'var(--text-1)', opacity:page.is_published?1:0.45, cursor:page.is_published?'pointer':'not-allowed' }}>
+      style={{ ...btnTiny, padding:compact?'7px 9px':'6px 10px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:done?'var(--fin-positive)':'var(--text-1)', opacity:page.is_published?1:0.45, cursor:page.is_published?'pointer':'not-allowed' }}>
       {done ? <Check size={13} /> : <Link2 size={13} />}{!compact && (done ? 'Copied' : 'Copy link')}
     </button>
   )
@@ -2617,9 +2618,9 @@ function CopyLinkButton({ page, onCopied, compact }) {
 
 function StatusPill({ page }) {
   const expired = page.expires_at && msUntil(page.expires_at) <= 0
-  const s = expired ? { label:'Expired', bg:'#fef2f2', fg:'#b91c1c', dot:'#ef4444' }
-    : page.is_published ? { label:'Live', bg:'#ecfdf5', fg:'#047857', dot:'#10b981' }
-    : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'#94a3b8' }
+  const s = expired ? { label:'Expired', bg:'var(--fin-neg-bg)', fg:'var(--fin-negative)', dot:'var(--fin-negative)' }
+    : page.is_published ? { label:'Live', bg:'var(--fin-pos-bg)', fg:'var(--fin-positive)', dot:'var(--fin-positive)' }
+    : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'var(--text-3)' }
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'3px 10px', borderRadius:999, fontSize:12, fontWeight:600, background:s.bg, color:s.fg, whiteSpace:'nowrap' }}>
       <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }} />{s.label}
@@ -2663,7 +2664,7 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
       </td>
       <td style={{ ...cell, whiteSpace:'nowrap', textAlign:'right' }}>
         <div style={{ display:'inline-flex', gap:6, alignItems:'center' }}>
-          <button style={{ ...btnTiny, background:'var(--accent)', color:'#fff', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:600, fontSize:12, display:'inline-flex', alignItems:'center', gap:5 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
+          <button style={{ ...btnTiny, background:'var(--accent-btn)', color:'var(--accent-fg)', border:'none', padding:'6px 14px', borderRadius:8, fontWeight:600, fontSize:12, display:'inline-flex', alignItems:'center', gap:5 }} onClick={()=>onEdit(page)} disabled={openingId===page.id}>
             <PenLine size={12} /> {openingId===page.id ? 'Opening…' : 'Edit'}
           </button>
           <CopyLinkButton page={page} onCopied={onCopied} />
@@ -2905,13 +2906,13 @@ export default function PagesManager() {
       {pages.length>0&&(
         <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10, marginBottom:22 }}>
           {[
-            { label:'Total Pages', value:pages.length, Icon:Layers, accent:'#6366f1' },
-            { label:'Live', value:pages.filter(p=>p.is_published).length, Icon:CheckCircle2, accent:'#10b981' },
-            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'#f59e0b' },
-            { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'#3b82f6' },
+            { label:'Total Pages', value:pages.length, Icon:Layers, accent:'var(--accent)' },
+            { label:'Live', value:pages.filter(p=>p.is_published).length, Icon:CheckCircle2, accent:'var(--fin-positive)' },
+            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'var(--fin-warning)' },
+            { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'var(--accent)' },
           ].map(({ label, value, Icon, accent })=>(
             <div key={label} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ width:34, height:34, borderRadius:9, background:`${accent}14`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
+              <div style={{ width:34, height:34, borderRadius:9, background:`${tint(accent, 0.08)}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
                 <Icon size={16} strokeWidth={2} />
               </div>
               <div>
@@ -2933,7 +2934,7 @@ export default function PagesManager() {
           </div>
           <div style={{ display:'flex', gap:2, background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:10, padding:3 }}>
             {[['all','All'],['published','Live'],['drafts','Drafts'],['expired','Expired']].map(([val,label])=>(
-              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent)':'transparent', color:filterTab===val?'#fff':'var(--text-2)' }}>{label}</button>
+              <button key={val} onClick={()=>setFilterTab(val)} style={{ padding:'6px 14px', borderRadius:8, border:'none', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s', background:filterTab===val?'var(--accent-btn)':'transparent', color:filterTab===val?'var(--accent-fg)':'var(--text-2)' }}>{label}</button>
             ))}
           </div>
           <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginLeft:isMobile?0:'auto', fontSize:12, color:'var(--text-2)' }}>
@@ -2958,7 +2959,7 @@ export default function PagesManager() {
             const on = folderFilter===val
             return (
               <button key={val||'__all'} onClick={()=>setFolderFilter(val)} aria-pressed={on}
-                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card-bg)', color:on?'#fff':'var(--text-2)' }}>
+                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:999, fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', border:`1px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent-btn)':'var(--card-bg)', color:on?'var(--accent-fg)':'var(--text-2)' }}>
                 {val!=='' && val!==UNFILED && <Folder size={12} />}{label} <span style={{ opacity:0.7 }}>{n}</span>
               </button>
             )
@@ -2966,7 +2967,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {error&&<div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#991b1b', marginBottom:16 }}>{error}</div>}
+      {error&&<div style={{ background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'var(--fin-negative)', marginBottom:16 }}>{error}</div>}
 
       {loading ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -3040,7 +3041,7 @@ export default function PagesManager() {
       {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
 
       {toast.msg&&(
-        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'#1e293b':'#dc2626', color:'#f8fafc', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
+        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'var(--tooltip-bg)':'var(--danger-btn)', color:'var(--tooltip-fg)', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
           {toast.msg}
         </div>
       )}
@@ -3054,7 +3055,7 @@ export default function PagesManager() {
 const inputStyle = { display:'block', width:'100%', padding:'7px 10px', border:'1px solid var(--border)', borderRadius:'10px', background:'var(--card-bg)', color:'var(--text-1)', fontSize:13, outline:'none', boxSizing:'border-box' }
 const labelStyle = { display:'block', fontSize:10, fontWeight:600, color:'var(--text-2)', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.05em' }
 const btnBase = { border:'none', borderRadius:'10px', padding:'8px 16px', fontSize:13, fontWeight:600, cursor:'pointer' }
-const btnPrimary = { ...btnBase, background:'var(--accent)', color:'#fff' }
+const btnPrimary = { ...btnBase, background:'var(--accent-btn)', color:'var(--accent-fg)' }
 const btnSecondary = { ...btnBase, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }
 const btnGhost = { ...btnBase, background:'transparent', color:'var(--text-2)', padding:'7px 12px' }
 const btnTiny = { ...btnBase, padding:'4px 10px', fontSize:12, background:'var(--card-bg)', color:'var(--text-1)', border:'1px solid var(--border)' }
