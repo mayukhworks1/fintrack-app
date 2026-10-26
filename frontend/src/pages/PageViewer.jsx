@@ -5,6 +5,7 @@ import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import SheetView from '../components/sheet/SheetView'
+import { PublicBreadcrumbs, PublicSubPages } from '../components/pagetree/PublicPageFamily'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -365,7 +366,7 @@ function FloatingShare() {
 // ---------------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------------
-function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, children }) {
+function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, children, above }) {
   const toc = contentType === 'markdown' ? extractTOC(content || '') : []
   const showTOC = toc.length >= 3
   const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
@@ -418,6 +419,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
         <div style={{ flex:1, minWidth:0 }}>
           {title && (
             <header style={{ marginBottom: 36 }}>
+              {above}
               <h1 style={{ margin: 0, fontSize: 'clamp(24px,5vw,40px)', fontWeight: 900, lineHeight: 1.15, color: 'var(--pv-ink)', letterSpacing: '-0.03em' }}>{title}</h1>
               <div style={{ display:'flex', gap:16, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
                 {publishedAt && <span style={{ fontSize: 13, color: 'var(--pv-mute)' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
@@ -461,6 +463,7 @@ export default function PageViewer() {
   useEffect(() => {
     if (!slug) { setState('notfound'); return }
     setState('loading'); setPage(null)
+    viewLogged.current = false  // a sub-page link reuses this component
     api.pages.publicGet(slug)
       .then(data => {
         if (data?.expired) { setState('expired'); return }
@@ -630,8 +633,10 @@ export default function PageViewer() {
       isHtml={isHtml}
       contentType={page?.content_type}
       content={page?.content}
+      above={<PublicBreadcrumbs page={page} />}
     >
       <PageContent page={page} slug={slug} />
+      {!isHtml && <PublicSubPages page={page} />}
     </ViewerShell>
     </>
   )

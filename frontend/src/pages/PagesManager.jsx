@@ -24,6 +24,8 @@ import SkeletonList from '../components/SkeletonList'
 import SheetView from '../components/sheet/SheetView'
 import SheetEditor from '../components/sheet/SheetEditor'
 import { tint } from '../utils/color'
+import PageTreeShell from '../components/pagetree/PageTreeShell'
+import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -1841,7 +1843,7 @@ function snapOf(f) {
   })
 }
 
-function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
+function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenPage, onCreateChild }) {
   const confirm = useConfirm()
   const { hasPerm } = useAuth()
   const isMobile = useIsMobile()
@@ -2213,6 +2215,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         </div>
         )}
 
+        {currentId && <PageBreadcrumbs pageId={currentId} title={form.title} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} />}
+
         {/* Meta fields. On a phone the whole block is behind Settings and gets
             its own scroll, so opening it can never push the editor off screen. */}
         {(!isMobile || showSettings) && (
@@ -2421,6 +2425,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             </div>
           )}
         </div>
+        {currentId && tab !== 'history' && <SubPagesList pageId={currentId} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} onAdd={onCreateChild && (id=>{ flushAndClose(); onCreateChild(id) })} />}
         </>)}
       </div>
     </div>
@@ -2889,7 +2894,24 @@ export default function PagesManager() {
 
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
+  // Sub-pages, from the tree panel or the editor: made on the server under
+  // their parent, then opened like any new page.
+  const handleCreateChild = async (parentId) => {
+    try {
+      const created = await api.pageTree.createChild(parentId, { title:'Untitled' })
+      handleTreeCreated(created)
+    } catch (e) { showToast(e?.message||'Could not add a sub-page', false) }
+  }
+  const handleTreeCreated = (created) => {
+    if (!created?.id) return
+    setPages(prev=>[created, ...prev.filter(p=>p.id!==created.id)])
+    setDrawerPage(created)
+  }
+
   return (
+    <PageTreeShell isMobile={isMobile} refreshKey={pages} currentId={drawerPage?.id}
+      onOpen={openEdit} onNewPage={()=>setDrawerPage({content_type:'markdown'})}
+      onCreated={handleTreeCreated} onChanged={()=>loadPages(true, true)} onToast={showToast}>
     <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1480, margin:'0 auto' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
@@ -3034,7 +3056,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} />}
+      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
       {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
@@ -3046,6 +3068,7 @@ export default function PagesManager() {
         </div>
       )}
     </div>
+    </PageTreeShell>
   )
 }
 

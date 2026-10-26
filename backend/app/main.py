@@ -22,6 +22,7 @@ from .routers import insights as insights_router
 from .routers import status as status_router
 from .routers import shared_views as shared_views_router
 from .routers import storage as storage_router
+from .routers import page_tree as page_tree_router
 from .routers import pages as pages_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
@@ -365,6 +366,8 @@ app.include_router(insights_router.router)
 app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
 app.include_router(storage_router.router)
+# Before the pages router: /api/pages/tree etc. would otherwise match /api/pages/{page_id}.
+app.include_router(page_tree_router.router)
 app.include_router(pages_router.router)
 app.include_router(studio_router.router)
 
